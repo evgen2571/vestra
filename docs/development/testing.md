@@ -49,9 +49,9 @@ Schema changes need both `ve generate-schema --output PATH` and the schema-valid
 
 Effect generation checks require only the core metadata exporter and Python's
 standard library; they do not build renderers or the native Python extension.
-`just gen-effects-check` checks committed-artifact freshness and runs the stdlib
-generator tests. To run those tests separately and then check the frozen public
-contracts:
+`just gen-effects-check` checks committed-artifact freshness and runs the core
+exporter and stdlib generator tests. To run the Python generator tests separately
+and then check the frozen public contracts:
 
 ```bash
 uv run --no-project python -m unittest discover -s tests -p test_effect_generation.py

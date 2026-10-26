@@ -40,6 +40,11 @@ Direct Image and Video `sizing` and `crop` values are not supported in mask
 context and are rejected during Python authoring. Use `mask.transform` to
 position, scale, or rotate the intrinsic source mask. Video frame timing still
 follows the owning layer's local time.
+Video masks start at source time zero and play at normal speed for the owning
+layer's duration, independently of that layer's source offset and playback rate.
+Media preflight rejects a mask whose authored span exceeds the available video,
+including Video children and nested masks inside an owned Group. Video children
+retain their own source offsets, playback rates, and child-local durations.
 An owned Group is a nested composition with Group-local child timing. Omitted
 child duration inherits the containing Group lifetime; explicit child timing
 uses the normal half-open interval `[start, start + duration)`. Group children

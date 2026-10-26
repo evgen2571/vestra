@@ -23,6 +23,9 @@ owning clip in the message. Their pointer follows the canonical clip tree,
 including every nested group's `/source/clips/{index}`. For example,
 `/visual/clips/1/source/clips/2/source/clips/0` identifies the first child
 of a group nested inside the third child of the second root clip.
+Owned video masks point to `/masks/{index}/input/source` under their owning clip.
+Children of owned Group masks continue through `/input/source/clips/{index}`,
+including any further nested groups or masks.
 
 Tracing/logging is operational observability. `RenderEvent` progress describes
 operation state. Diagnostics and errors are structured, actionable failures;

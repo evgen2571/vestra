@@ -130,27 +130,60 @@ fn validate_video_layers(
 ) {
     for (index, clip) in clips.iter().enumerate() {
         let path = format!("{clips_path}/{index}");
-        if let vestra_core::project::VisualSource::Video { asset } = &clip.source
-            && let Some(&duration) = durations.get(asset)
-        {
-            let end = clip.source_start + clip.duration * clip.playback_rate;
-            if clip.source_start >= duration || end > duration + 1e-9 {
-                errors.push(Diagnostic::error(
-                    "VESTRA-VIDEO-TIMING",
-                    crate::Category::Semantic,
-                    format!("video layer '{}' exceeds available source media", clip.id),
-                    &path,
-                ));
+        validate_video_source(
+            &clip.source,
+            clip.source_start..clip.source_start + clip.duration * clip.playback_rate,
+            &clip.id,
+            &path,
+            &format!("{path}/source"),
+            durations,
+            errors,
+        );
+        for (mask_index, mask) in clip.masks.iter().enumerate() {
+            if let vestra_core::project::MaskInput::Source { source, .. } = &mask.input {
+                let source_path = format!("{path}/masks/{mask_index}/input/source");
+                // Owned sources compile with the owner's duration and neutral source timing.
+                validate_video_source(
+                    source,
+                    0.0..clip.duration,
+                    &clip.id,
+                    &source_path,
+                    &source_path,
+                    durations,
+                    errors,
+                );
             }
         }
-        if let vestra_core::project::VisualSource::Group(group) = &clip.source {
-            validate_video_layers(
-                &group.clips,
-                &format!("{path}/source/clips"),
-                durations,
-                errors,
-            );
-        }
+    }
+}
+
+fn validate_video_source(
+    source: &vestra_core::project::VisualSource,
+    source_span: std::ops::Range<f64>,
+    owner_id: &str,
+    diagnostic_path: &str,
+    source_path: &str,
+    durations: &std::collections::BTreeMap<String, f64>,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if let vestra_core::project::VisualSource::Video { asset } = source
+        && let Some(&duration) = durations.get(asset)
+        && (source_span.start >= duration || source_span.end > duration + 1e-9)
+    {
+        errors.push(Diagnostic::error(
+            "VESTRA-VIDEO-TIMING",
+            crate::Category::Semantic,
+            format!("video layer '{owner_id}' exceeds available source media"),
+            diagnostic_path,
+        ));
+    }
+    if let vestra_core::project::VisualSource::Group(group) = source {
+        validate_video_layers(
+            &group.clips,
+            &format!("{source_path}/clips"),
+            durations,
+            errors,
+        );
     }
 }
 

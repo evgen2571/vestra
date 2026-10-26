@@ -118,6 +118,9 @@ class _Property(Generic[T]):
         return data
 
     def _copy_to(self, other: "_Property[T]") -> None:
+        other._validate(self.value)
+        for frame in self._keyframes:
+            other._validate(frame.value)
         other.value = self.value
         other._keyframes = list(self._keyframes)
 

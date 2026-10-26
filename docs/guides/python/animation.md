@@ -26,6 +26,12 @@ decide whether the signal should replace, add to, or multiply the base and
 animated value. For a static edit, set the property directly and leave its
 keyframes empty.
 
+Where a setter accepts another property, assignment copies its base value and
+keyframes. Both must satisfy the destination's limits; a rejected copy leaves
+the destination's value, keyframes and bindings unchanged. Copies between
+bindable properties include their signal bindings, including point-component
+bindings. Subsequent edits to either property remain independent.
+
 Common mistakes are putting a child-composition time on the parent timeline,
 using a source object where a layer property is required, and keyframing an
 effect before adding that effect to its layer.

@@ -197,12 +197,24 @@ class EffectGenerationTests(unittest.TestCase):
             for path, content in expected.items():
                 with self.subTest(path=str(path)):
                     stale = root / path
-                    stale.write_text(content + "\n")
+                    if path.suffix == ".py":
+                        marker = (
+                            generator.BEGIN
+                            if generator.BEGIN in content
+                            else generator.HELPER_BEGIN
+                        )
+                        changed = content.replace(
+                            marker + "\n", marker + "\n# stale generated content\n", 1
+                        )
+                    else:
+                        changed = content + "\n"
+                    stale.write_text(changed)
                     modified = stale.stat().st_mtime_ns
+                    regenerated = generator.outputs(metadata(), root)
                     self.assertEqual(
-                        generator.synchronize(expected, root, check=True), [path]
+                        generator.synchronize(regenerated, root, check=True), [path]
                     )
-                    self.assertEqual(stale.read_text(), content + "\n")
+                    self.assertEqual(stale.read_text(), changed)
                     self.assertEqual(stale.stat().st_mtime_ns, modified)
                     stale.write_text(content)
 

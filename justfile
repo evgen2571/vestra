@@ -65,6 +65,7 @@ gen-effects:
 # Check generation without a renderer or native Python build.
 gen-effects-check:
     uv run --no-project python scripts/generate-effects.py --check
+    cargo test --locked --quiet -p vestra-core --example effect_metadata
     uv run --no-project python -m unittest discover -s tests -p test_effect_generation.py
 
 # Check local public documentation links.

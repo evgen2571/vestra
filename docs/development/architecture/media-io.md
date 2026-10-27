@@ -6,6 +6,12 @@ The crate uses `ffmpeg-next` for native FFmpeg format and software-scaling work.
 
 Preflight resolves the project-relative asset paths once, probes relevant media, and records dimensions/durations for plan compilation. Preparation decodes static resources, creates video decoder sessions and produces master-audio analysis when visuals need it. During rendering, the SDK supplies rendered frames to the frame sink while the audio graph produces the audio execution output. The media layer, not a renderer, owns muxing and encoded-output lifetime.
 
+`FrameSink::write_frame(frame_number, rgba)` borrows an RGBA byte slice for one
+write. The SDK retains the renderer's owned frame and supplies its number/bytes;
+media has no renderer type or crate dependency. `FfmpegSink` validates output
+order and expected buffer length before writing FFmpeg stdin. The SDK owns
+completion ordering, cancellation and scoped encoder-write overlap.
+
 Frame writing, encoder finalization and publication are deliberately separate. The sink writes a temporary target, finalizes the container, then `output` publishes it at the requested destination subject to overwrite policy. Each stage can fail and cleanup preserves the original destination where possible. Callers should use the stage, temporary path and destination in `RenderFailureContext` rather than assuming that "encoding completed" means the output exists.
 
 For frame selection, caching and concurrency contracts, see the [media pipeline](../media-pipeline.md).

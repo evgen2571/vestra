@@ -25,6 +25,12 @@ selection and strict hardware requirements. CI uses `nix develop .#wgpu-software
 
 `--software` selects the first discovered backend when none is requested and makes no hardware claim. It runs the general workspace suite without strict WGPU flags, then scopes `VESTRA_REQUIRE_WGPU=1` to renderer tests that need an adapter. `--hardware` rejects the selected backend unless discovery reports a `discrete_gpu` or `integrated_gpu`. It runs the general workspace suite without strict hardware assumptions, then scopes `VESTRA_REQUIRE_WGPU=1` and `VESTRA_REQUIRE_HARDWARE_WGPU=1` to adapter-dependent renderer tests and the strict CLI render regression. When no backend is supplied, `--hardware` selects the first discovered proven-hardware backend. It reports the selected discovery record before testing.
 
+Both modes collect private WGPU tests from `vestra-render-wgpu --lib gpu_` and
+cross-backend facade integration tests from `vestra-render --tests --all-features
+gpu_`. For focused development, run the relevant package with the same strict
+flags and selected API. Running only the facade library no longer collects the
+GPU implementation or integration parity suites.
+
 On some WSL installations, `vulkan` exposes llvmpipe while `gl`/GLES reaches NVIDIA through D3D12. That is an environment-specific result, not a universal rule. Start with `nvidia-smi`, `glxinfo -B` and `vulkaninfo --summary` when available, then trust adapter discovery. Set Vestra's `VESTRA_WGPU_BACKEND=gl` when the discovered GL path exposes the required hardware. Vestra does not read `WGPU_BACKEND` as a backend-selection variable.
 
 GL rendering requires compute shaders and storage buffers; discovery of a desktop

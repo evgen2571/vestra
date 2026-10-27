@@ -84,30 +84,21 @@ run_workspace_tests() {
   fi
 }
 
-run_targeted_wgpu_tests() {
+run_targeted_wgpu_tests() (
   local hardware_requirement=${1:-0}
-  if [[ "$hardware_requirement" == "1" && "$selected_backend" == "gl" ]]; then
-    VESTRA_REQUIRE_WGPU=1 \
-      VESTRA_REQUIRE_HARDWARE_WGPU=1 \
-      VESTRA_WGPU_BACKEND="$backend" \
-      cargo test -p vestra-render --lib --all-features gpu_ -- --nocapture --test-threads=1
-  elif [[ "$hardware_requirement" == "1" ]]; then
-    VESTRA_REQUIRE_WGPU=1 \
-      VESTRA_REQUIRE_HARDWARE_WGPU=1 \
-      VESTRA_WGPU_BACKEND="$backend" \
-      cargo test -p vestra-render --lib --all-features gpu_ -- --nocapture
-  elif [[ "$selected_backend" == "gl" ]]; then
-    env -u VESTRA_REQUIRE_HARDWARE_WGPU \
-      VESTRA_REQUIRE_WGPU=1 \
-      VESTRA_WGPU_BACKEND="$backend" \
-      cargo test -p vestra-render --lib --all-features gpu_ -- --nocapture --test-threads=1
+  export VESTRA_REQUIRE_WGPU=1 VESTRA_WGPU_BACKEND="$backend"
+  if [[ "$hardware_requirement" == "1" ]]; then
+    export VESTRA_REQUIRE_HARDWARE_WGPU=1
   else
-    env -u VESTRA_REQUIRE_HARDWARE_WGPU \
-      VESTRA_REQUIRE_WGPU=1 \
-      VESTRA_WGPU_BACKEND="$backend" \
-      cargo test -p vestra-render --lib --all-features gpu_ -- --nocapture
+    unset VESTRA_REQUIRE_HARDWARE_WGPU
   fi
-}
+  local test_arguments=(--nocapture)
+  if [[ "$selected_backend" == "gl" ]]; then
+    test_arguments+=(--test-threads=1)
+  fi
+  cargo test -p vestra-render-wgpu --lib gpu_ -- "${test_arguments[@]}"
+  cargo test -p vestra-render --tests --all-features gpu_ -- "${test_arguments[@]}"
+)
 
 if [[ "$mode" == "--hardware" ]]; then
   selected_adapter=$(grep -E "^backend=${selected_backend} .*classification=(discrete_gpu|integrated_gpu) " <<<"$adapters" | sed -n '1p' || true)

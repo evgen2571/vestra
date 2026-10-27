@@ -1,6 +1,6 @@
 # WGPU renderer
 
-The WGPU backend is a `RenderBackend` implementation that keeps GPU state inside one prepared render. It creates a WGPU instance, selects an adapter under the requested graphics API, requests the device and queue, then builds pipelines, textures, buffers, source resources and readback state. `AdapterInfo` records the actual graphics backend and device classification so the SDK can distinguish a hardware adapter from software WGPU.
+The WGPU backend in `vestra-render-wgpu` implements the common `RenderBackend` contract and keeps GPU state inside one prepared render. It creates a WGPU instance, selects an adapter under the requested graphics API, requests the device and queue, then builds pipelines, textures, buffers, source resources and readback state. `AdapterInfo` records the actual graphics backend and device classification so the SDK can distinguish a hardware adapter from software WGPU.
 
 Root instances are process-owned and shared by backend selection. This preserves
 WSL/Mesa GL's EGL instance lifetime; each prepared renderer still owns its device,
@@ -18,7 +18,7 @@ Preparation uploads static image/font/source data and creates reusable GPU resou
 The backend has bounded in-flight work. `VESTRA_WGPU_IN_FLIGHT` controls the implementation pipeline depth only when valid; it is not a semantic setting. Texture pools, source caches, staging buffers, pending static layers and readback slots are retained across a prepared operation. Release them only when their GPU completion token makes them safe to reuse. This is why a `PreparedProject` owns one backend instance and is not freely concurrent.
 
 The internal frame path has these owners, all inside
-`crates/vestra-render/src/wgpu/`:
+`crates/vestra-render-wgpu/src/wgpu/`:
 
 | Module | Owns |
 | --- | --- |
@@ -36,6 +36,12 @@ The private `FramePlanBuilder` owns the operation/layer vectors and shared
 parameter/value counters. Recursive calls retain explicit canvas and logical
 value transitions. Effect expansion and validation consume the same operation
 and texture definitions; this remains a fixed-slot planner.
+
+`support.rs` owns WGPU kernel/blend capability policy and plan validation.
+Common supplies kernel identifiers and operation/requirement mapping; the facade
+uses backend validation for selection and fallback. Shader source/labels and
+pipelines stay in WGPU, alongside private planning/resource tests. Cross-backend
+parity tests live in the facade and use public submission/completion contracts.
 
 Bind groups remain owned by the backend's frame slots. Most are prepared once;
 bindings for static cached textures are still created on demand during command

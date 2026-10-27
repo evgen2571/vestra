@@ -38,12 +38,32 @@ the category map and media-dependent example.
 
 For a fast edit loop, use `cargo test -p CRATE TEST_FILTER`, `cargo test -p vestra-cli --test cli_validation`, or `just python-test python-tests/TEST.py`. `just test` forwards Cargo/test arguments, such as `just test TEST_FILTER -- --nocapture`. Native Python work uses `just python-sync`, then `just python-test`; the test recipe syncs dependencies itself, imports the extension, and runs compileall after pytest. Build the extension/package through the repository's documented Nix/uv workflow, not a separate hand-maintained environment.
 
-For renderer feature isolation, run `cargo test -p vestra-render
---no-default-features --features cpu` and the same command with `--features wgpu`.
-`cargo test -p vestra-render --no-default-features` checks the shared renderer
-contracts consumed by media. CPU/WGPU parity suites require both features;
-WGPU-only tests retain planning, parameter, upload and resource-limit coverage.
-The adapter-list example requires the WGPU feature.
+Check renderer packages and facade feature selections independently:
+
+```bash
+cargo test -p vestra-render-common
+cargo test -p vestra-render-cpu
+cargo test -p vestra-render-wgpu
+cargo test -p vestra-render --no-default-features
+cargo test -p vestra-render --no-default-features --features cpu
+cargo test -p vestra-render --no-default-features --features wgpu
+cargo test -p vestra-render --no-default-features --features cpu,wgpu
+cargo test -p vestra-media
+```
+
+Common tests cover shared contracts/preparation. CPU and WGPU packages contain
+their implementation-private tests; cross-backend parity suites live in facade
+integration tests and require both features. WGPU-only coverage includes planning,
+parameter, upload and resource-limit checks. The facade defaults to both backends;
+its no-backend build preserves contracts and unavailable-backend behavior. The
+adapter-list example requires the WGPU feature.
+
+Use `cargo tree -p PACKAGE --edges normal,build,dev` for actual package activation.
+CPU-only tests must select neither the WGPU implementation nor WGPU libraries;
+WGPU-only tests must select no CPU implementation. Media's graph contains no
+renderer crate, including common. For extraction/dependency changes, also collect
+compiler artifacts from an isolated `CARGO_TARGET_DIR` build: a full workspace
+build unifies features and cannot prove single-backend isolation.
 
 Schema changes need both `ve generate-schema --output PATH` and the schema-validation test. CLI changes need current help and CLI integration tests. Rendering changes need CPU tests and source/effect-specific tests. Media tests need working native FFmpeg development libraries; runtime workflows may also need `ffmpeg`/`ffprobe` on `PATH`.
 
@@ -126,17 +146,25 @@ software-WGPU and named hardware-WGPU evidence separate.
 
 ## CI coverage
 
-CI has three validation jobs followed by the required `CI Success` gate:
+CI has four validation jobs followed by the required `CI Success` gate:
 
 - Style runs `just style` in `nix develop .#ci` to check Rust formatting, the maintained Python format/lint surface, public documentation file links, showcase/script formatting and lint, and `just gen-effects-check`. The generation check compiles only the core exporter and runs stdlib generator tests. Rust and Python jobs start only after it passes.
-- Rust runs `just lint-rust`, then `just wgpu-software` in `nix develop .#wgpu-software`. The WGPU recipe delegates to the verification script, which runs workspace tests once, followed by strict renderer WGPU tests. Clippy replaces separate compilation-check jobs. `just cli-smoke schema-freshness` checks CLI help and generated-schema freshness in the same job.
-- The Rust CI job disables debug symbols in Cargo's `dev` and `test` profiles to keep build artifacts within the hosted runner's disk budget. Debug assertions and the local development profiles remain unchanged.
+- Rust CPU checks normal/build/dev dependency activation, then tests common, CPU
+  and the CPU/no-backend facade in `nix develop .#ci`. Its Rust cache has a separate
+  CPU key; its dependency guard must select no WGPU package.
+- Rust Integration first checks and tests WGPU-only packages before workspace
+  feature unification, then runs `just lint-rust` and `just wgpu-software` in
+  `nix develop .#wgpu-software`. The verification script runs workspace tests once,
+  followed by strict WGPU-private and facade integration tests. Clippy replaces
+  separate compilation-check jobs. `just cli-smoke schema-freshness` checks CLI
+  help and generated-schema freshness in the same job.
+- Both Rust CI jobs disable debug symbols in Cargo's `dev` and `test` profiles to keep build artifacts within the hosted runner's disk budget. Debug assertions and the local development profiles remain unchanged.
 - Python runs `just python-test` and `just schema-validation` in `nix develop .#wgpu-software`, sharing the native extension build for pytest, schema validation, compileall,
   canonical-example validation and showcase smoke rendering. Script regression tests
   cover documentation links, asset checksum/cache behavior and benchmark comparison/recording. The software Vulkan shell makes WGPU tests strict and supplies the adapter they require. Pushes to main and manual runs additionally run `just wheel-smoke` in `nix develop .#ci` to build a wheel, install it in a clean environment, verify its import and typing marker, and render/probe a short AAC project. PRs defer this packaging check until main.
 
-Rust dependencies/build artifacts, uv downloads, and Nix builds are cached. Rust cache keys use the actual Nix toolchain and flake inputs; Python also includes its dependency inputs. Cold runs still need to populate the caches.
+Rust dependencies/build artifacts, uv downloads, and Nix builds are cached. Rust cache keys use the actual Nix toolchain and flake inputs; Python also includes its dependency inputs. CPU and integration cache keys are separate. The independent CPU runner duplicates some cold core/preparation compilation, and explicit WGPU-only tests add work before integration. Job separation establishes isolation; it does not by itself reduce total CI resource use. Cold runs still need to populate the caches.
 
-Changes limited to Markdown, `docs/`, and `LICENSE` skip Rust and Python jobs while Style and `CI Success` still run. All other paths (including manifests, locks, fixtures, scripts, and workflows) trigger both native jobs. Manual runs always execute every check. The gate rejects failed/cancelled jobs and allows skips only when change detection explicitly excludes native validation.
+Changes limited to Markdown, `docs/`, and `LICENSE` skip both Rust jobs and the Python job while Style and `CI Success` still run. All other paths (including manifests, locks, fixtures, scripts, and workflows) trigger all three native jobs. Manual runs always execute every check. The gate rejects failed/cancelled jobs and allows skips only when change detection explicitly excludes native validation.
 
 CI WGPU validation is explicitly software correctness. Hardware validation is separate: discover adapters, set a chosen `VESTRA_WGPU_BACKEND`, then run `scripts/verify-wgpu.sh --hardware` and report the actual adapter. See [GPU validation](gpu-validation.md).

@@ -55,7 +55,7 @@ No merge, push or PR. Preserve existing worktrees and unrelated changes.
 - [x] 2. Extract common with narrow accessors, unconditional Gaussian storage and
   shared mapping/requirements; common and facade feature checks. Review boundary.
 - [x] 3. Extract CPU with backend capability policy; CPU tests and isolation.
-- [ ] 4. Extract WGPU/shaders, split private/parity tests without losing assertions;
+- [x] 4. Extract WGPU/shaders, split private/parity tests without losing assertions;
   WGPU/facade tests, asset hashes and strict software/hardware execution.
 - [ ] 5. Complete facade, media/SDK borrowed sink migration (distinct commit),
   test discovery and CI with meaningful backend isolation.
@@ -143,6 +143,18 @@ assertion audit: parity-test-migration.json and parity-assertion-audit.json
 (stylization 144/144, crops 33/33, resources 66/66, parity 56/56 with one callback
 syntax adaptation). Pure shared literals are tests/render_effect_cases.rs, used
 independently by both owners, with no package edge. Strict runtime still pending.
+
+Step 4: WGPU implementation/shaders extracted, private tests independent of CPU
+including companion planning/resource cases. Backend package 142 passed/4 ignored.
+All facade modes pass: neither 4, CPU 4, WGPU 2, both 2 unit + 70 integration/
+11 ignored. Added focused unavailable-feature/CPU-selection contract tests so
+no-backend retains direct policy evidence after common unit tests move away.
+WGPU normal/build/dev graph excludes CPU. All 38 embedded assets byte-identical
+to 69e8eb6 (asset-comparison.json). Workspace all-target/all-feature Clippy passes
+with warnings denied. Removed unused test-only kernel bitset inspection rather
+than expose it. Actual strict runtime/frame/resource validation follows next.
+Historical report source-link targets follow relocated descendants; labels,
+findings and measurements remain unchanged. Docs links pass (436, zero missing).
 
 ## Decisions and discoveries
 

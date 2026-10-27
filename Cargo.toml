@@ -7,6 +7,7 @@ members = [
     "crates/vestra-render",
     "crates/vestra-render-common",
     "crates/vestra-render-cpu",
+    "crates/vestra-render-wgpu",
     "crates/vestra-media",
     "crates/vestra",
     "crates/vestra-python",

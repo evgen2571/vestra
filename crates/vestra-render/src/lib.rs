@@ -1,9 +1,9 @@
 //! Internal frame renderer for `vestra`.
 //!
-//! This crate turns core-owned evaluated frames into owned RGBA frames. It owns
-//! CPU and WGPU backends, decoded visual assets, renderer geometry, effect
-//! execution, resource management, and staged completion polling. It does not
-//! probe or encode media, publish files, or coordinate the application or CLI.
+//! This facade selects CPU/WGPU implementations and preserves shared renderer
+//! import paths. Common owns lifecycle/preparation; each implementation owns
+//! execution and capability policy. SDK orchestration and media I/O stay above
+//! and beside this renderer boundary.
 //! Its workspace API is intentionally unstable.
 
 #![allow(
@@ -18,9 +18,8 @@ pub use vestra_render_common::{
     RenderBackendKind, StagedMetrics, VideoDecoderFactory, VideoDecoderMetrics,
     VideoDecoderSession, VideoFrame, blend, decoded, geometry, metrics, plan, project, video,
 };
-use vestra_render_common::{
-    ascii, backend, gaussian, halftone, kernel, particle_raster, trace_milliseconds,
-};
+#[cfg(test)]
+mod selection_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
@@ -28,17 +27,15 @@ pub use vestra_core::timeline;
 #[cfg(feature = "cpu")]
 pub use vestra_render_cpu::cpu;
 pub mod effects;
-#[cfg(feature = "wgpu")]
-mod wgpu;
 #[cfg(feature = "cpu")]
 pub use vestra_render_cpu::CpuBackend;
 
 #[cfg(feature = "wgpu")]
 pub fn discover_wgpu_adapters() -> Vec<AdapterMetadata> {
-    wgpu::discover()
+    vestra_render_wgpu::discover()
 }
 #[cfg(feature = "wgpu")]
-pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};
+pub use vestra_render_wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderBackendPreference {
@@ -126,7 +123,7 @@ fn cpu_probe() -> Option<RenderBackendPreference> {
 
 #[cfg(feature = "wgpu")]
 fn wgpu_probe() -> Result<AdapterMetadata, Diagnostic> {
-    wgpu::probe()
+    vestra_render_wgpu::probe()
 }
 #[cfg(not(feature = "wgpu"))]
 fn wgpu_probe() -> Result<AdapterMetadata, Diagnostic> {
@@ -177,7 +174,7 @@ pub fn create_backend(
     }
 
     #[cfg(feature = "wgpu")]
-    if let Err(error) = wgpu::support::validate_plan(plan) {
+    if let Err(error) = vestra_render_wgpu::validate_plan(plan) {
         return match preference {
             RenderBackendPreference::Wgpu => Err(error),
             #[cfg(feature = "cpu")]

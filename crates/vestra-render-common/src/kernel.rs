@@ -95,12 +95,6 @@ impl EffectKernelSet {
             self.0 & (1 << kernel.index()) != 0
         })
     }
-
-    #[cfg(test)]
-    pub(crate) fn contains(self, kernel: EffectKernel) -> bool {
-        debug_assert!(kernel.index() < u64::BITS);
-        self.0 & (1 << kernel.index()) != 0
-    }
 }
 
 impl EffectKernel {

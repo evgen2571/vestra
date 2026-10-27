@@ -9,8 +9,8 @@ use super::{
 };
 use vestra_core::plan::{
     ActiveSchedule, ColourTransform, CompileOptions, CompiledEffect, CompiledScalarProperty,
-    CompiledSizing, CompiledVisualSource, EvaluatedEffect, EvaluatedFrame, EvaluatedSource,
-    RenderPlan, ScheduleAction, ScheduledItem, TimedEffect, compile,
+    CompiledSizing, CompiledVisualSource, EvaluatedEffect, EvaluatedFrame, RenderPlan,
+    ScheduleAction, ScheduledItem, TimedEffect, compile,
 };
 
 use super::effect_cases::{
@@ -19,7 +19,7 @@ use super::effect_cases::{
 use super::lifecycle::RenderFrame;
 use crate::{
     animation::Track,
-    domain::{Crop, Point},
+    domain::Point,
     render::{CpuBackend, RenderBackend},
     test_support::{ValidationOptions, load_and_validate},
 };

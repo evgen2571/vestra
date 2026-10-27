@@ -9,7 +9,7 @@ publish = false
 [features]
 default = ["cpu", "wgpu"]
 cpu = ["dep:vestra-render-cpu"]
-wgpu = ["dep:bytemuck", "dep:naga", "dep:pollster", "dep:wgpu"]
+wgpu = ["dep:vestra-render-wgpu"]
 
 [[test]]
 name = "parity"
@@ -23,15 +23,10 @@ required-features = ["wgpu"]
 vestra-core = { path = "../vestra-core" }
 vestra-render-common = { path = "../vestra-render-common" }
 vestra-render-cpu = { path = "../vestra-render-cpu", optional = true }
-bytemuck = { version = "1", features = ["derive"], optional = true }
-image = { version = "0.25", default-features = true }
-naga = { version = "23", features = ["wgsl-in"], optional = true }
-pollster = { version = "0.4", optional = true }
-serde = { version = "1", features = ["derive"] }
-wgpu = { version = "23.0.1", optional = true }
-tracing = "0.1"
+vestra-render-wgpu = { path = "../vestra-render-wgpu", optional = true }
 
 [dev-dependencies]
+image = { version = "0.25", default-features = false }
 serde_json = "1"
 
 [lints.rust]

@@ -1,18 +1,17 @@
 //! Adapter-dependent WGPU resource and readback tests.
 
+use vestra_render_common::StagedMetrics;
+
 use std::sync::Arc;
 
-use super::{
-    compare_rgba,
-    gpu::{wgpu_backend_or_skip, wgpu_backend_or_skip_depth},
-};
+use super::gpu::{wgpu_backend_or_skip, wgpu_backend_or_skip_depth};
 use vestra_core::plan::{
     ColourTransform, CompileOptions, EvaluatedFrame, EvaluatedLayer, EvaluatedSource,
     TemporalDependency, compile,
 };
 
 use crate::{
-    render::{CompletedFrame, PollMode, RenderBackend, StagedMetrics, WgpuBackend},
+    render::{CompletedFrame, PollMode, RenderBackend, WgpuBackend},
     test_support::{ValidationOptions, load_and_validate},
 };
 use image::RgbaImage;

@@ -127,18 +127,18 @@ pub fn probe() -> Result<crate::AdapterMetadata, crate::Diagnostic> {
     })
 }
 
-#[cfg(all(test, feature = "cpu"))]
+#[cfg(test)]
 #[path = "tests/crops_gpu.rs"]
 mod crop_gpu_tests;
 #[cfg(test)]
 #[path = "tests/gpu.rs"]
 mod gpu;
-#[cfg(all(test, feature = "cpu"))]
+#[cfg(test)]
 #[path = "tests/parity_gpu.rs"]
 mod parity_gpu_tests;
 #[cfg(test)]
 #[path = "tests/resources_gpu.rs"]
 mod resource_gpu_tests;
-#[cfg(all(test, feature = "cpu"))]
+#[cfg(test)]
 #[path = "tests/stylization.rs"]
 mod stylization_tests;

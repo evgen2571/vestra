@@ -1,4 +1,4 @@
-//! Deterministic CPU preparation of source-local procedural shapes.
+//! Shared deterministic preparation of source-local procedural shapes.
 
 use image::{Rgba, RgbaImage};
 use tiny_skia::{Color, LineCap, LineJoin, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};

@@ -10,7 +10,7 @@ use vestra_media::{FrameSink, MediaError, SinkResult};
 use crate::{
     plan::{CompileOptions, compile},
     project::{ValidationOptions, load_and_validate},
-    render::{CompletedFrame, RenderBackendPreference, RenderObserverControl, RenderOptions},
+    render::{RenderBackendPreference, RenderObserverControl, RenderOptions},
 };
 
 use super::super::runner::prepare;
@@ -80,11 +80,11 @@ struct NullSink {
 }
 
 impl FrameSink for NullSink {
-    fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
+    fn write_frame(&mut self, _frame_number: u64, rgba: &[u8]) -> Result<(), MediaError> {
         self.frames += 1;
         self.checksum = self
             .checksum
-            .wrapping_add(u64::from(frame.rgba.first().copied().unwrap_or_default()));
+            .wrapping_add(u64::from(rgba.first().copied().unwrap_or_default()));
         Ok(())
     }
 

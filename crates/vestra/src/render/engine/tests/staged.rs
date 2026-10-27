@@ -642,11 +642,11 @@ struct PixelSink {
 }
 
 impl FrameSink for PixelSink {
-    fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
+    fn write_frame(&mut self, _frame_number: u64, rgba: &[u8]) -> Result<(), MediaError> {
         self.frames
             .lock()
             .expect("pixel sink lock")
-            .push(frame.rgba.clone());
+            .push(rgba.to_vec());
         Ok(())
     }
 
@@ -693,15 +693,15 @@ impl RecordingSink {
 }
 
 impl FrameSink for RecordingSink {
-    fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
-        if self.fail_on_frame == Some(frame.frame_number) {
+    fn write_frame(&mut self, frame_number: u64, _rgba: &[u8]) -> Result<(), MediaError> {
+        if self.fail_on_frame == Some(frame_number) {
             return Err(MediaError::FrameInputClosed);
         }
         self.probe
             .frames
             .lock()
             .expect("sink lock")
-            .push(frame.frame_number);
+            .push(frame_number);
         Ok(())
     }
 

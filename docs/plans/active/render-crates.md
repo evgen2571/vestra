@@ -87,12 +87,21 @@ measurements. Fresh no-backend baseline passed: 54 tests.
 
 Step 1: CPU timings, composition counters/surface execution and host CRT moved
 under cpu. Reference surface test follows execution. Focused feature tests pass:
-CPU 238/9 ignored; neither 51/0; WGPU 196/3. Two CRT tests and one surface test
-now correctly require CPU (WGPU previously included CRT, surface remains in CPU).
+CPU 238/9 ignored; neither 52/0; WGPU 196/3. One CRT test and one surface test
+now correctly require CPU (both previously ran in no-backend/WGPU builds).
 Source-only relocation preserves reports and numerical bodies. No strict GPU
 runtime claim is made by the plain-shell WGPU test run. Logs: step1-*.log.
 The new media borrowed-slice tests reject the old CompletedFrame signature
 (E0061), before implementation; media-borrowed-red.log records that check.
+
+Media migration (early, distinct commit): FrameSink/FfmpegSink accept borrowed
+RGBA plus frame number; all SDK/test/benchmark sinks and calls updated. Static
+allocation/drop timing and copy metrics are preserved, and scoped writes borrow
+the existing completed frame through join. Media tests: 112 passed/4 ignored;
+SDK CPU engine 72 passed; application render 5 passed. New test overwrites and
+reuses one caller buffer after writes, then verifies both encoded frames; ordering
+and invalid-size tests exercise the sink and retry without advancing ordering.
+Normal/build/dev media tree saved to media-tree.txt; isolated build still pending.
 
 ## Decisions and discoveries
 

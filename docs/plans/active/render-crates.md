@@ -1,6 +1,6 @@
 # Renderer crate extraction
 
-Status: in progress
+Status: completed — implementation and required local validation passed
 Branch / baseline: `refactor/render-crates`, stacked on completed Phase 2
 `69e8eb6` (`refactor/render-boundaries`).
 
@@ -59,7 +59,7 @@ No merge, push or PR. Preserve existing worktrees and unrelated changes.
   WGPU/facade tests, asset hashes and strict software/hardware execution.
 - [x] 5. Complete facade, media/SDK borrowed sink migration (distinct commit),
   test discovery and CI with meaningful backend isolation.
-- [ ] 6. Complete compatibility, packaging, benchmark/memory/build measurements
+- [x] 6. Complete compatibility, packaging, benchmark/memory/build measurements
   and permanent documentation; record final evidence and limitations.
 
 ## Acceptance criteria
@@ -99,7 +99,8 @@ RGBA plus frame number; all SDK/test/benchmark sinks and calls updated. Static
 allocation/drop timing and copy metrics are preserved, and scoped writes borrow
 the existing completed frame through join. Media tests: 112 passed/4 ignored;
 SDK CPU engine 72 passed; application render 5 passed. New test overwrites and
-reuses one caller buffer after writes, then verifies both encoded frames; ordering
+reuses one caller buffer after two accepted writes; it checks ordering state,
+not encoded pixels. Existing encoding/SDK/CLI tests cover output. Ordering
 and invalid-size tests exercise the sink and retry without advancing ordering.
 Normal/build/dev media tree saved to media-tree.txt; isolated build still pending.
 
@@ -172,6 +173,65 @@ font/license and CPU include table. Cargo's package file discovery omits the
 shared repo-level Rust test cases; added exactly that file as an explicit sdist
 include. Rebuild/archive extraction/wheel smoke remain in final acceptance.
 
+Strict software wrapper passes on llvmpipe Vulkan (LLVM 21.1.8, Mesa 26.1.5): full
+workspace plus 28 targeted WGPU-private tests/4 ignored and 70 facade parity/
+11 ignored. Hardware conformance skips remain explicit on software. NVIDIA run
+started using explicit ICD and Vulkan, with software fallback unset.
+Final normal/build/dev graph inspection confirms media has no renderer,
+cosmic-text, fontdb or tiny-skia package. Common/CPU graph has no WGPU/Naga;
+WGPU graph has no CPU. Final fresh sdist inventory contains shared test source,
+all required manifests and all 38 exact asset hashes; extracted source retained.
+Independent focused read-only review found no blocking production issue; its
+single evidence-text correction above is applied. See independent-review.md in
+ignored evidence. Runtime/performance/isolated compiler/wheel gates remain open.
+
+Final compatibility gates on source through 07d6096: NVIDIA strict wrapper passes
+(GTX 1650 SUPER, Vulkan, driver 595.71.05), including targeted 28 WGPU-private/
+4 ignored, 70 facade/11 ignored and encoded CLI comparison 1 passed. No hardware
+runtime skip markers. Fresh native extension rebuild completed in 126.69 s;
+Python has 1,205 passes/zero skips on each NVIDIA and software runtime, plus
+compileall. `just check` passes format/generation/exporter/generator/workspace
+check/Clippy/schema/docs: 1,149 Rust passes including 6 exporter tests, 30 ignored;
+12 generator tests and no stale artifacts. These ignored occurrences include
+four new split resource companions; original tests/assertions are retained.
+
+All 54 raw RGBA frames match the final Phase 2 capture byte-for-byte (12,441,600
+bytes), including repeated/backward requests. Official mask/ASCII comparisons
+at zero tolerance report MAE/max error/mismatched pixels all zero. The current
+CPU/software/NVIDIA contact sheet was visually inspected. This before/after
+proof is separate from existing cross-backend tolerance/literal tests.
+Media normal/build/dev unique packages: 173 before -> 65 after, with renderer
+and preparation-font packages absent. Facade normal/build packages: neither
+143, CPU 144, WGPU 184, both 185 (before 142/142/182/182).
+Canonical CPU/NVIDIA performance and process memory capture are now running
+serially with existing tooling; isolated compiler and installed packages next.
+
+Final validation completed: the [18-point results report](render-crates-results.md)
+records actual commands/results, layouts, graphs, compatibility, packaging,
+performance/memory/build measurements and limitations. Runtime sources match both
+measured candidate fingerprints; subsequent changes are documentation/skill only.
+All 18 cold/warm/incremental compiler records were validated against real artifact
+sets. Media cold/warm builds select no renderer/font preparation; CPU/WGPU builds
+exclude their sibling. Source snapshots preserve the actual checkout and Git refs.
+
+Matched canonical CPU/NVIDIA comparisons pass the unchanged comparer. The first
+CPU invocation had different runtime variables and was rejected, retained, then
+rerun correctly. Flagged CPU particles/GPU combined/groups wall deltas were
+investigated with hash-verified retained binaries in A/B/B/A order; no consistent
+slowdown repeated. All 220 selected resource/copy medians match. One matched 20 ms
+process-tree RSS sample is 760,975,360 bytes versus 777,908,224 baseline; no causal
+memory-saving claim is made. WGPU-only Gaussian retention remains explicitly
+nonzero, bounded and distinct from those CPU/combined measurements.
+
+Both fresh CPython 3.13 Linux wheels (workspace and extracted sdist) install and
+pass clean font/audio/encoding smoke tests. Installed sdist-wheel WGPU raw frames
+match CPU and encoded three-frame outputs probe correctly on software and NVIDIA.
+All 143 renderer files are in the sdist; non-manifest source/assets are byte-exact.
+All ten Python-reachable manifests resolve within the extracted source. No mandatory
+Python dependency was added. SDK neither/CPU/WGPU checks and CLI/schema/40 examples
+pass. Final just style passes; the WGPU skill's moved test destinations validate.
+Ignored stress/other-platform/hosted-CI/device-memory limits remain in the report.
+
 ## Decisions and discoveries
 
 2026-10-27: Keep the existing checkout/cache on the explicitly requested feature
@@ -180,6 +240,8 @@ of renderer file moves; keep its diff and commit distinct.
 
 ## Completion / handoff
 
-Implementation in progress. Required final validations are not yet performed.
-Retain active evidence through handoff; follow PLANS.md transfer/removal before
-any later, separately authorized merge.
+Four renderer crates and renderer-independent media are implemented, committed and
+locally validated. See the results report for the complete evidence and deliberate
+limits. Finalization records the report commit and clean-tree/protected-ref check.
+No push, merge, PR or CI polling occurred. Retain active evidence through handoff;
+follow PLANS.md transfer/removal before any later, separately authorized merge.

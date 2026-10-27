@@ -149,13 +149,6 @@ fn large_graph_settings(mix: AudioMixPlan) -> EncoderSettings {
     }
 }
 
-fn frame(number: u64) -> CompletedFrame {
-    CompletedFrame {
-        frame_number: number,
-        rgba: vec![0; 4],
-    }
-}
-
 #[test]
 fn multi_input_mix_muxes_aac_audio_with_raw_video() {
     let directory = tempfile::tempdir().expect("temporary render directory");
@@ -213,11 +206,7 @@ fn multi_input_mix_muxes_aac_audio_with_raw_video() {
     let output = directory.path().join("mixed.mp4");
     let mut sink = FfmpegSink::start(&settings, &output).expect("starts multi-input ffmpeg");
     for number in 0..30 {
-        sink.write_frame(&CompletedFrame {
-            frame_number: number,
-            rgba: vec![0; 16],
-        })
-        .expect("writes frame");
+        sink.write_frame(number, &[0; 16]).expect("writes frame");
     }
     sink.finish().expect("FFmpeg muxes AAC output");
     let probe = Command::new("ffprobe")
@@ -322,11 +311,7 @@ fn production_aac_decodes_automation_and_equal_power_crossfade() {
     let output = directory.path().join("mixed.mp4");
     let mut sink = FfmpegSink::start(&settings, &output).expect("starts AAC render");
     for number in 0..60 {
-        sink.write_frame(&CompletedFrame {
-            frame_number: number,
-            rgba: vec![0; 16],
-        })
-        .expect("writes frame");
+        sink.write_frame(number, &[0; 16]).expect("writes frame");
     }
     sink.finish().expect("AAC render succeeds");
     let decoded = Command::new("ffmpeg")
@@ -532,11 +517,7 @@ fn executes_a_large_filtergraph_from_a_temporary_file() {
     let mut sink = FfmpegSink::start(&settings, &output).expect("large graph starts FFmpeg");
     let graph_paths = filtergraph_paths(directory.path());
     assert_eq!(graph_paths.len(), 1, "large graph is file-backed");
-    sink.write_frame(&CompletedFrame {
-        frame_number: 0,
-        rgba: vec![0; 16],
-    })
-    .expect("writes frame");
+    sink.write_frame(0, &[0; 16]).expect("writes frame");
     sink.finish().expect("FFmpeg consumes large graph file");
     assert!(output.exists());
     assert!(fs::metadata(&output).expect("output metadata").len() > 0);
@@ -726,11 +707,35 @@ fn aborting_static_sink_removes_static_input() {
 
 #[test]
 fn rejects_out_of_order_frames_before_writing() {
-    let error = MediaError::FrameOutOfOrder {
-        expected: 0,
-        actual: 1,
-    };
+    let mut sink = active_test_sink();
+    let error = sink
+        .write_frame(1, &[0; 4])
+        .expect_err("out-of-order frame rejected");
+    assert!(matches!(
+        error,
+        MediaError::FrameOutOfOrder {
+            expected: 0,
+            actual: 1,
+        }
+    ));
     assert!(error.to_string().contains("out of order"));
+    assert_eq!(sink.expected_frame, 0);
+    sink.write_frame(0, &[0; 4])
+        .expect("rejection does not consume the expected frame");
+    sink.abort().expect("cleanup test child");
+}
+
+#[test]
+fn writes_borrowed_rgba_slices_without_retaining_the_buffer() {
+    let mut sink = active_test_sink();
+    let mut rgba = [255; 8];
+    sink.write_frame(0, &rgba[4..])
+        .expect("writes a borrowed RGBA pixel");
+    rgba.fill(0);
+    sink.write_frame(1, &rgba[..4])
+        .expect("caller can reuse its buffer after the write");
+    assert_eq!(sink.expected_frame, 2);
+    sink.abort().expect("cleanup test child");
 }
 
 #[test]
@@ -754,11 +759,7 @@ fn finished_sink_rejects_further_writes_and_finishes() {
         static_image: None,
         static_frame_count: None,
     };
-    let frame = CompletedFrame {
-        frame_number: 0,
-        rgba: vec![0; 4],
-    };
-    assert!(sink.write_frame(&frame).is_err());
+    assert!(sink.write_frame(0, &[0; 4]).is_err());
     assert!(sink.finish().is_err());
     sink.abort().expect("finished abort is a no-op");
 }
@@ -769,7 +770,7 @@ fn abort_is_idempotent_and_blocks_later_writes_and_finish() {
     sink.abort().expect("first abort");
     sink.abort().expect("second abort is a no-op");
     assert_eq!(sink.state, SinkState::Aborted);
-    assert!(sink.write_frame(&frame(0)).is_err());
+    assert!(sink.write_frame(0, &[0; 4]).is_err());
     assert!(sink.finish().is_err());
 }
 
@@ -806,12 +807,17 @@ fn dropping_an_active_sink_terminates_its_child() {
 fn rejects_wrong_frame_size_before_writing() {
     let mut sink = active_test_sink();
     let error = sink
-        .write_frame(&CompletedFrame {
-            frame_number: 0,
-            rgba: vec![0; 3],
-        })
+        .write_frame(0, &[0; 3])
         .expect_err("wrong byte count rejected");
-    assert!(matches!(error, MediaError::InvalidFrameSize { .. }));
+    assert!(matches!(
+        error,
+        MediaError::InvalidFrameSize {
+            frame_number: 0,
+            expected: 4,
+            actual: 3,
+        }
+    ));
+    assert_eq!(sink.expected_frame, 0);
     sink.abort().expect("cleanup test child");
 }
 
@@ -823,7 +829,7 @@ fn write_failure_includes_captured_stderr_after_the_process_exits() {
         .expect("test child")
         .wait()
         .expect("test child exits");
-    let error = sink.write_frame(&frame(0)).expect_err("write fails");
+    let error = sink.write_frame(0, &[0; 4]).expect_err("write fails");
     assert!(matches!(
         error,
         MediaError::ProcessFailed { ref stderr, .. } if stderr.contains("encoder-broke")

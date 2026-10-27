@@ -2723,7 +2723,6 @@ dependencies = [
  "tracing",
  "uuid",
  "vestra-core",
- "vestra-render",
 ]
 
 [[package]]
@@ -2763,17 +2762,52 @@ dependencies = [
 name = "vestra-render"
 version = "0.1.3"
 dependencies = [
- "bytemuck",
+ "image",
+ "serde_json",
+ "vestra-core",
+ "vestra-render-common",
+ "vestra-render-cpu",
+ "vestra-render-wgpu",
+]
+
+[[package]]
+name = "vestra-render-common"
+version = "0.1.3"
+dependencies = [
  "cosmic-text",
  "fontdb",
  "image",
- "naga",
- "pollster",
  "serde",
  "serde_json",
  "tiny-skia",
  "tracing",
  "vestra-core",
+]
+
+[[package]]
+name = "vestra-render-cpu"
+version = "0.1.3"
+dependencies = [
+ "image",
+ "serde_json",
+ "tracing",
+ "vestra-core",
+ "vestra-render-common",
+]
+
+[[package]]
+name = "vestra-render-wgpu"
+version = "0.1.3"
+dependencies = [
+ "bytemuck",
+ "image",
+ "naga",
+ "pollster",
+ "serde",
+ "serde_json",
+ "tracing",
+ "vestra-core",
+ "vestra-render-common",
  "wgpu",
 ]
 

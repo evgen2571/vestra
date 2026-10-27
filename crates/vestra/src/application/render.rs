@@ -340,10 +340,7 @@ mod tests {
     use vestra_media::{FrameSink, MediaError, SinkResult};
 
     use super::*;
-    use crate::{
-        project::{ValidationOptions, load_and_validate},
-        render::CompletedFrame,
-    };
+    use crate::project::{ValidationOptions, load_and_validate};
 
     type CapturedFrames = Arc<Mutex<Vec<(u64, Vec<u8>)>>>;
 
@@ -410,11 +407,11 @@ mod tests {
     }
 
     impl FrameSink for CaptureSink {
-        fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
+        fn write_frame(&mut self, frame_number: u64, rgba: &[u8]) -> Result<(), MediaError> {
             self.frames
                 .lock()
                 .expect("capture lock")
-                .push((frame.frame_number, frame.rgba.clone()));
+                .push((frame_number, rgba.to_vec()));
             Ok(())
         }
 
@@ -432,7 +429,7 @@ mod tests {
     }
 
     impl FrameSink for CountingSink {
-        fn write_frame(&mut self, _frame: &CompletedFrame) -> Result<(), MediaError> {
+        fn write_frame(&mut self, _frame_number: u64, _rgba: &[u8]) -> Result<(), MediaError> {
             self.frames += 1;
             Ok(())
         }

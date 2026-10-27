@@ -9,8 +9,6 @@ use std::{
     },
 };
 
-use vestra_render::CompletedFrame;
-
 use crate::{EncoderSettings, FrameSink, MediaError, SinkResult, audio_graph, effective_parent};
 
 /// Keep the generated filtergraph comfortably below common command-line
@@ -420,28 +418,28 @@ impl FfmpegSink {
 }
 
 impl FrameSink for FfmpegSink {
-    fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
+    fn write_frame(&mut self, frame_number: u64, rgba: &[u8]) -> Result<(), MediaError> {
         if self.state != SinkState::Active {
             return Err(MediaError::InvalidSinkState);
         }
-        if frame.frame_number != self.expected_frame {
+        if frame_number != self.expected_frame {
             return Err(MediaError::FrameOutOfOrder {
                 expected: self.expected_frame,
-                actual: frame.frame_number,
+                actual: frame_number,
             });
         }
-        if frame.rgba.len() != self.expected_bytes {
+        if rgba.len() != self.expected_bytes {
             return Err(MediaError::InvalidFrameSize {
-                frame_number: frame.frame_number,
+                frame_number,
                 expected: self.expected_bytes,
-                actual: frame.rgba.len(),
+                actual: rgba.len(),
             });
         }
         if let Err(source) = self
             .stdin
             .as_mut()
             .ok_or(MediaError::FrameInputClosed)?
-            .write_all(&frame.rgba)
+            .write_all(rgba)
         {
             if let Some(status) = self
                 .child

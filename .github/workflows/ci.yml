@@ -46,8 +46,45 @@ jobs:
       - name: Check Rust/Python formatting and Python lint
         run: nix develop .#ci --command just style
 
+  rust-cpu:
+    name: Rust CPU
+    needs: style
+    if: needs.style.outputs.native == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v19
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cmd-format: nix develop .#ci --command {0}
+          prefix-key: v1-rust-compact
+          shared-key: cpu
+          key: ${{ hashFiles('flake.nix', 'flake.lock') }}
+      - name: Test common, CPU and facade without WGPU
+        run: |
+          nix develop .#ci --command bash -euo pipefail <<'SCRIPT'
+            mkdir -p target
+            cargo tree --locked -p vestra-render-common -p vestra-render-cpu \
+              --edges normal,build,dev --prefix none --format '{p}' > target/ci-cpu-dependencies.txt
+            cargo tree --locked -p vestra-render --no-default-features --features cpu \
+              --edges normal,build,dev --prefix none --format '{p}' >> target/ci-cpu-dependencies.txt
+            if grep -E '^(vestra-render-wgpu|wgpu|wgpu-core|wgpu-hal|wgpu-types|naga) ' target/ci-cpu-dependencies.txt; then
+              echo "CPU-only validation selected WGPU dependencies" >&2
+              exit 1
+            fi
+            cargo test --locked -p vestra-render-common
+            cargo test --locked -p vestra-render-cpu
+            cargo test --locked -p vestra-render --no-default-features --features cpu
+            cargo test --locked -p vestra-render --no-default-features
+          SCRIPT
+
   rust:
-    name: Rust
+    name: Rust Integration
     needs: style
     if: needs.style.outputs.native == 'true'
     runs-on: ubuntu-24.04
@@ -67,6 +104,7 @@ jobs:
           cmd-format: nix develop .#wgpu-software --command {0}
           # Avoid restoring large artifacts built with the previous debug profile.
           prefix-key: v1-rust-compact
+          shared-key: integration
           key: ${{ hashFiles('flake.nix', 'flake.lock') }}
       - name: Verify native build environment
         run: |
@@ -79,6 +117,21 @@ jobs:
               printf "%s=" "$library"
               pkg-config --modversion "$library"
             done
+          SCRIPT
+      - name: Test WGPU-only packages before workspace feature unification
+        run: |
+          nix develop .#wgpu-software --command bash -euo pipefail <<'SCRIPT'
+            mkdir -p target
+            cargo tree --locked -p vestra-render-wgpu \
+              --edges normal,build,dev --prefix none --format '{p}' > target/ci-wgpu-dependencies.txt
+            cargo tree --locked -p vestra-render --no-default-features --features wgpu \
+              --edges normal,build,dev --prefix none --format '{p}' >> target/ci-wgpu-dependencies.txt
+            if grep -E '^vestra-render-cpu ' target/ci-wgpu-dependencies.txt; then
+              echo "WGPU-only validation selected the CPU implementation" >&2
+              exit 1
+            fi
+            cargo test --locked -p vestra-render-wgpu
+            cargo test --locked -p vestra-render --no-default-features --features wgpu
           SCRIPT
       - name: Run Clippy (includes workspace compilation checks)
         run: nix develop .#wgpu-software --command just lint-rust
@@ -132,7 +185,7 @@ jobs:
   ci-success:
     name: CI Success
     if: ${{ always() }}
-    needs: [style, rust, python]
+    needs: [style, rust-cpu, rust, python]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -140,16 +193,19 @@ jobs:
         env:
           STYLE_RESULT: ${{ needs.style.result }}
           NATIVE_REQUIRED: ${{ needs.style.outputs.native }}
+          RUST_CPU_RESULT: ${{ needs.rust-cpu.result }}
           RUST_RESULT: ${{ needs.rust.result }}
           PYTHON_RESULT: ${{ needs.python.result }}
         run: |
           test "$STYLE_RESULT" = success
           case "$NATIVE_REQUIRED" in
             true)
+              test "$RUST_CPU_RESULT" = success
               test "$RUST_RESULT" = success
               test "$PYTHON_RESULT" = success
               ;;
             false)
+              test "$RUST_CPU_RESULT" = skipped
               test "$RUST_RESULT" = skipped
               test "$PYTHON_RESULT" = skipped
               ;;

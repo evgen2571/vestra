@@ -1,22 +1,28 @@
 # CPU renderer
 
-The CPU backend implements `RenderBackend` for prepared resources and evaluated frame plans. It receives decoded image/video data and renderer-independent evaluated sources. It does not parse project JSON or decide which layers are active. Its job is to turn one evaluated frame into an owned RGBA frame for a caller or media sink.
+The CPU backend in `vestra-render-cpu` implements the common `RenderBackend` contract for prepared resources and evaluated frame plans. It receives decoded image/video data and renderer-independent evaluated sources. It does not parse project JSON or decide which layers are active. Its job is to turn one evaluated frame into an owned RGBA frame for a caller or the SDK's media bridge.
 
-The backend prepares raster assets, font/text state, video decoder sessions and source-specific resources before the hot loop. A frame then dispatches evaluated sources, including images, video frames, shapes, text, Spectrum2D, particles and recursively evaluated groups. Geometry and crop adaptation feed tiny-skia raster/compositing work. Ordered layers and effect passes are composited into the output surface; nested compositions render their child-local work before their parent presentation is applied.
+Common preparation creates immutable image/shape/text pixels and glyph atlases shared by `Arc`. The CPU backend prepares worker-local raster views, video decoder sessions and source-specific resources before the hot loop. A frame then dispatches evaluated sources, including images, video frames, shapes, text, Spectrum2D, particles and recursively evaluated groups. Shared geometry and crop adaptation feed CPU sampling/compositing work; tiny-skia shape rasterization belongs to common preparation. Ordered layers and effect passes are composited into the output surface; nested compositions render their child-local work before their parent presentation is applied.
 
 The implementation keeps reusable surfaces, decoded data, worker-local state, bitmap/static-layer caches and source resources around the prepared render. Video decode remains a media-facing session but its pixels are consumed through prepared renderer resources. Reuse is important because a frame path that repeatedly allocates a canvas, opens a file, reparses a font, or rebuilds an effect state will distort both performance and renderer parity.
 
-`cpu/compositor.rs` keeps recursive composition, masks/mattes and cache
+Under `crates/vestra-render-cpu/src/`, `cpu/compositor.rs` keeps recursive composition, masks/mattes and cache
 presentation in one `ComposeContext`, which borrows the prepared assets and
 surface pools. `cpu/effects.rs` keeps ordered pass execution with its convolution
 implementation. Their pixel, ordering, cache and surface-reuse tests live in
 `cpu/compositor/tests.rs` and `cpu/effects/tests.rs`, alongside test-only helpers.
 
-`particle_raster.rs` and the pixel color transform in `blend.rs` are shared
-renderer utilities. WGPU's additive-particle compatibility path uses this same
-rasterizer, so it is available with either backend feature. CPU/WGPU comparison
-test modules require both features; WGPU planning, packing and resource-limit
-tests also run in WGPU-only configurations.
+`particle_raster.rs` and the pixel color transform in `blend.rs` belong to
+`vestra-render-common`. WGPU's additive-particle compatibility path uses this same
+rasterizer. CPU surface blending/counters, host CRT sampling and worker profiling
+stay in the CPU implementation. CPU/WGPU comparison tests live in facade
+integration modules and require both features; WGPU planning, packing and
+resource-limit tests live in the WGPU package and run independently of CPU.
+
+CPU capability validation belongs to `cpu/support.rs`; it currently accepts all
+declared effect kernels. Common supplies only kernel identifiers, operation
+mapping and required-kernel collection. The facade calls CPU/WGPU validation
+before selecting or falling back to an implementation.
 
 Preserve these boundaries when changing CPU code:
 

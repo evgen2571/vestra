@@ -26,9 +26,12 @@ Python / Rust / canonical JSON authoring
 | Compile/evaluate | `crates/vestra-core/src/plan/compiler/effects.rs`, `plan/evaluation/effects.rs` |
 | Logical operations and resource relationships | `crates/vestra-core/src/plan/effect_passes/mod.rs` |
 | Conservative compiled topology and evaluated pass construction | `crates/vestra-core/src/plan/effect_passes/compiled.rs`, `evaluated.rs` |
-| CPU | `crates/vestra-render/src/cpu/effects.rs` and surface pools |
-| WGPU | `crates/vestra-render/src/wgpu/frame_plan/effects.rs`, `parameters/effects.rs`, `pipeline.rs`, `bind_groups.rs`, `executor.rs` |
-| Shader source | `crates/vestra-render/src/shaders/effects/` and kernel registration |
+| Shared kernel identifiers, operation mapping and required-kernel collection | `crates/vestra-render-common/src/kernel.rs` |
+| Backend capability policy | `crates/vestra-render-cpu/src/cpu/support.rs`, `crates/vestra-render-wgpu/src/wgpu/support.rs` |
+| CPU | `crates/vestra-render-cpu/src/cpu/effects.rs` and surface pools |
+| WGPU | `crates/vestra-render-wgpu/src/wgpu/frame_plan/effects.rs`, `parameters/effects.rs`, `pipeline.rs`, `bind_groups.rs`, `executor.rs` |
+| Shader source | `crates/vestra-render-wgpu/src/shaders/effects/` and kernel registration |
+| Renderer selection/fallback and cross-backend tests | `crates/vestra-render/src/lib.rs`, `crates/vestra-render/tests/` |
 | High-level Python | `python/vestra/effects/`, authoring and lowering |
 | Generated project schema | `schemas/project.schema.json` |
 
@@ -38,6 +41,13 @@ catalog entries authoritative: descriptors derive scalar bounds from property
 targets, and validation and compilation consume those same definitions. The
 compile/evaluate dispatches remain exhaustive matches over authored/compiled
 effects; their private test modules live in adjacent directories.
+
+Prepared image/shape/text pixels, glyph atlases and shared geometry belong to
+common. Backends borrow these resources without duplicating buffers. Gaussian
+coefficients use the same numerical calculation, integer normalization and
+16-entry thread-local eviction policy in every configuration. Floating weights
+are retained unconditionally, including WGPU-only builds; that retained storage
+is small and nonzero, and is not a rendering-speed improvement.
 
 ## Ordering and spaces
 

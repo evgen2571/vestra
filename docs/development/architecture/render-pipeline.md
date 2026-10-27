@@ -16,7 +16,7 @@ ProjectSnapshot / Project
 
 `PreparedProject` owns the coordinated prepared state and its stable `PreparationReport`: compiled plan, decoded/prepared resources, selected renderer, adapter data, warnings and preparation timings. It can render individual frames or accept a `PreparedVideoRenderRequest` without repeating preparation. It is deliberately a runtime object rather than a serializable project. The Python wrapper protects one prepared state with a mutex, so concurrent use reports `PreparedProjectBusyError` instead of racing its backend resources.
 
-The frame loop evaluates plan work at each timeline frame, submits it to the selected backend, writes owned RGBA output to the media sink, and emits `RenderEvent` values for callers. `CancellationToken` is cooperative. The loop checks it across the operation and a cancellation observed before publication cannot yield a successful result.
+The frame loop evaluates plan work at each timeline frame, submits it to the selected backend, borrows each owned frame's RGBA output for the media sink write, and emits `RenderEvent` values for callers. Renderer and media remain independent; the SDK owns the frame until any scoped writer has joined. `CancellationToken` is cooperative. The loop checks it across the operation and a cancellation observed before publication cannot yield a successful result.
 
 Within each layer, presentation ordering is source sizing/crop or child
 precomposition, pre-transform Motion Tile, final transform, post-transform

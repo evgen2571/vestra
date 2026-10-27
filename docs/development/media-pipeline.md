@@ -21,7 +21,11 @@ Semantic validation in `vestra-core` does not touch files or devices. SDK
 preflight resolves project-relative paths, probes media, checks the operation's
 resources and output policy, and supplies media facts to compilation.
 `vestra-media` owns probing, native FFmpeg decoding, audio execution, encoding,
-and publication. `vestra-render` owns CPU/WGPU rendering resources.
+and publication. `vestra-render-common` owns shared prepared rendering assets,
+while `vestra-render-cpu` and `vestra-render-wgpu` own backend execution/resources.
+The `vestra-render` facade owns backend selection and fallback. Media depends on
+no renderer crate: the SDK passes a completed frame's number and borrowed RGBA
+bytes to the sink and keeps them alive until the write completes.
 
 A prepared project retains the compiled plan, static image/text resources,
 audio analysis, renderer state, and video decoder sessions. Individual frame

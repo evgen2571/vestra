@@ -44,6 +44,7 @@ python-packages = ["vestra"]
 include = [
   { path = "vendor/ffmpeg-sys-next/**/*", format = "sdist" },
   { path = "scripts/effects/schema.rs", format = "sdist" },
+  { path = "tests/render_effect_cases.rs", format = "sdist" },
   { path = "schemas/project.schema.json", format = "sdist" },
   { path = "THIRD_PARTY_NOTICES.md", format = "wheel" },
   { path = "THIRD_PARTY_NOTICES.md", format = "sdist" },

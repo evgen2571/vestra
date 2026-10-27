@@ -559,11 +559,12 @@ fn run_static<S: FrameSink + ?Sized>(
             );
         }
         let started = Instant::now();
+        let frame = CompletedFrame {
+            frame_number,
+            rgba: rgba.to_vec(),
+        };
         encoder
-            .write_frame(&CompletedFrame {
-                frame_number,
-                rgba: rgba.to_vec(),
-            })
+            .write_frame(frame.frame_number, &frame.rgba)
             .map_err(|error| {
                 let cleanup = abort_sink(encoder);
                 cleanup_error(
@@ -583,6 +584,7 @@ fn run_static<S: FrameSink + ?Sized>(
                     ),
                 )
             })?;
+        drop(frame);
         write += started.elapsed();
         backend.record_written(frame_number);
         performance.rendered_frame_count = frame_number + 1;
@@ -608,8 +610,8 @@ fn run_static<S: FrameSink + ?Sized>(
         encoder_write: write,
         static_visual_hits: hits,
         static_visual_misses: misses,
-        // Every generic sink frame receives its own owned Vec from the immutable
-        // template, including frame zero after a first-operation population.
+        // Preserve the template copy for each generic sink write, including frame
+        // zero, so extraction keeps the existing allocation and metric behavior.
         static_visual_copy_bytes: plan.frame_count.saturating_mul(bytes as u64),
         static_visual_budget_bypasses: budget_bypasses,
     })
@@ -743,7 +745,9 @@ fn write_with_overlap<S: FrameSink + Send + ?Sized>(
             .spawn_scoped(scope, move || {
                 let _entered = span.enter();
                 let started = Instant::now();
-                encoder.write_frame(frame).map(|()| started.elapsed())
+                encoder
+                    .write_frame(frame.frame_number, &frame.rgba)
+                    .map(|()| started.elapsed())
             })
             .map_err(MediaError::FrameWrite)?;
         work();
@@ -803,7 +807,9 @@ fn write_ready_frames<S: FrameSink + Send + ?Sized>(
             })
         } else {
             let started = Instant::now();
-            encoder.write_frame(&frame).map(|()| started.elapsed())
+            encoder
+                .write_frame(frame.frame_number, &frame.rgba)
+                .map(|()| started.elapsed())
         };
         let write_duration = match write_result {
             Ok(duration) => duration,

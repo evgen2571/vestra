@@ -1,8 +1,8 @@
 //! Internal media integration for `vestra`.
 //!
-//! This crate probes media with FFprobe, streams renderer-owned completed RGBA
-//! frames to FFmpeg, and manages temporary encoded output and publication. It
-//! deliberately does not render pixels, evaluate plans, coordinate progress,
+//! This crate probes media with FFprobe, streams borrowed RGBA frames to FFmpeg,
+//! and manages temporary encoded output and publication. It deliberately does
+//! not render pixels, evaluate plans, coordinate progress,
 //! or present CLI diagnostics. Its workspace API is unstable.
 
 mod audio_analysis;

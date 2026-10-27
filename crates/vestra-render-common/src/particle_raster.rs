@@ -14,7 +14,7 @@ use vestra_core::plan::CompiledParticleSystem;
 /// Rasterizes particles into an already-cleared procedural source surface.
 /// Positions and sizes are normalized canvas values; one scalar pixel scale is
 /// used for both axes so discs remain circular on non-square surfaces.
-pub(crate) fn rasterize_instances(
+pub fn rasterize_instances(
     target: &mut RgbaImage,
     particles: impl IntoIterator<Item = vestra_core::plan::EvaluatedParticleInstance>,
     primitive: ParticlePrimitive,

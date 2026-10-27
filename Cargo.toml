@@ -5,6 +5,7 @@ members = [
     "crates/vestra-progress",
     "crates/vestra-observability",
     "crates/vestra-render",
+    "crates/vestra-render-common",
     "crates/vestra-media",
     "crates/vestra",
     "crates/vestra-python",

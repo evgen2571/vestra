@@ -513,7 +513,8 @@ fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel,
     let width = source.width() as usize;
     let height = source.height() as usize;
     let row_stride = width * 4;
-    let (left, right, top, bottom) = convolution_bounds(source, kernel.radius as usize, horizontal);
+    let (left, right, top, bottom) =
+        convolution_bounds(source, kernel.radius() as usize, horizontal);
     let source_data = source.as_raw();
     let target_data: &mut [u8] = target.as_mut();
     if (left, right, top, bottom) != (0, width, 0, height) {
@@ -524,7 +525,7 @@ fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel,
         for x in left..right {
             let mut premultiplied = [0.0; 3];
             let mut alpha = 0.0;
-            for (index, offset) in (-kernel.radius..=kernel.radius).enumerate() {
+            for (index, offset) in (-kernel.radius()..=kernel.radius()).enumerate() {
                 let source_index = if horizontal {
                     let sample_x = (x as i32 + offset).clamp(0, width as i32 - 1) as usize;
                     source_row + sample_x * 4
@@ -533,7 +534,7 @@ fn convolve(source: &RgbaImage, target: &mut RgbaImage, kernel: &GaussianKernel,
                     sample_y * row_stride + x * 4
                 };
                 let pixel = &source_data[source_index..source_index + 4];
-                let weight = kernel.weights[index];
+                let weight = kernel.weights()[index];
                 let sample_alpha = NORMALIZED_CHANNELS[usize::from(pixel[3])];
                 alpha += sample_alpha * weight;
                 for channel in 0..3 {
@@ -566,14 +567,14 @@ fn convolve_integer(
     let (width, height) = source.dimensions();
     for (x, y, output) in target.enumerate_pixels_mut() {
         let mut sum = [0_u32; 4];
-        for offset in -kernel.radius..=kernel.radius {
+        for offset in -kernel.radius()..=kernel.radius() {
             let (sx, sy) = if horizontal {
                 ((x as i32 + offset).clamp(0, width as i32 - 1) as u32, y)
             } else {
                 (x, (y as i32 + offset).clamp(0, height as i32 - 1) as u32)
             };
             let pixel = source.get_pixel(sx, sy).0.map(u32::from);
-            let weight = kernel.integer_weights[offset.unsigned_abs() as usize];
+            let weight = kernel.integer_weights()[offset.unsigned_abs() as usize];
             sum[3] += pixel[3] * weight;
             for c in 0..3 {
                 sum[c] += pixel[c] * pixel[3] * weight;

@@ -334,7 +334,7 @@ pub(crate) fn draw_image(
     opacity: f64,
     colour_transform: ColourTransform,
 ) {
-    let resolved = geometry::resolve_raster_geometry(
+    let resolved = geometry::resolve_raster_geometry_with_motion_tile(
         geometry::IntrinsicSize::new(source.width(), source.height()),
         crop,
         false,
@@ -345,6 +345,7 @@ pub(crate) fn draw_image(
         transform,
         canvas.width(),
         canvas.height(),
+        None,
     );
     draw_resolved_raster(canvas, source, &resolved, opacity, colour_transform);
 }
@@ -468,7 +469,7 @@ pub(crate) fn visible_bounds(
     canvas_width: u32,
     canvas_height: u32,
 ) -> (u32, u32, u32, u32) {
-    let geometry = geometry::resolve_raster_geometry(
+    let geometry = geometry::resolve_raster_geometry_with_motion_tile(
         geometry::IntrinsicSize::new(source_width as u32, source_height as u32),
         Crop {
             x: 0.0,
@@ -481,6 +482,7 @@ pub(crate) fn visible_bounds(
         transform,
         canvas_width,
         canvas_height,
+        None,
     );
     geometry::visible_bounds(&geometry.transformed_corners, canvas_width, canvas_height)
 }

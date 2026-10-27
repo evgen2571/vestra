@@ -109,7 +109,7 @@ pub(super) fn resolve(
 ) {
     let columns = source.width().div_ceil(p.cell_width);
     let level = crate::ascii::coverage_level(p.cell_width, p.cell_height);
-    let atlas = &atlas.levels[level as usize];
+    let atlas = &atlas.levels()[level as usize];
     for (x, y, output) in target.enumerate_pixels_mut() {
         let input = source.get_pixel(x, y).0;
         if input[3] == 0 {
@@ -250,9 +250,7 @@ fn coverage(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vestra_core::{
-        ascii::GlyphAtlasSpec, stylization::EvaluatedPalette, validation::ResourceLimits,
-    };
+    use vestra_core::{ascii::GlyphAtlasSpec, stylization::EvaluatedPalette};
     fn parameters() -> AsciiParameters {
         AsciiParameters {
             atlas: 0,
@@ -276,17 +274,18 @@ mod tests {
         }
     }
     fn atlas(characters: &str) -> std::sync::Arc<crate::ascii::PreparedGlyphAtlas> {
-        crate::ascii::prepare(
-            &GlyphAtlasSpec {
-                font: None,
-                characters: characters.into(),
-                edge_characters: "-|/\\".into(),
-            },
-            &[],
-            0,
-            &ResourceLimits::default(),
+        let input = crate::test_support::load_and_validate(
+            std::path::Path::new("tests/fixtures/wgpu-small-rgba.json"),
+            &crate::test_support::ValidationOptions::default(),
         )
-        .unwrap()
+        .unwrap();
+        let mut plan = vestra_core::plan::compile(input, Default::default()).unwrap();
+        plan.glyph_atlases = vec![GlyphAtlasSpec {
+            font: None,
+            characters: characters.into(),
+            edge_characters: "-|/\\".into(),
+        }];
+        std::sync::Arc::clone(&crate::DecodedAssets::build(&plan).unwrap().glyph_atlases()[0])
     }
     #[test]
     fn cell_means_ignore_hidden_rgb_and_include_partial_borders() {

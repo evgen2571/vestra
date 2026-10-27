@@ -20,3 +20,5 @@ pub(super) mod surfaces;
 pub(super) mod vignette;
 pub(super) mod worker;
 pub(super) mod zoom_blur;
+
+pub(crate) mod support;

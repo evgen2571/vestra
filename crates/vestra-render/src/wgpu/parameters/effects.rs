@@ -558,11 +558,11 @@ fn gaussian_parameters(
     let (support, weights) = if integer {
         crate::gaussian::with_gaussian_kernel(radius, |kernel| {
             (
-                kernel.radius as u32,
+                kernel.radius() as u32,
                 std::array::from_fn(|row| {
                     std::array::from_fn(|column| {
                         kernel
-                            .integer_weights
+                            .integer_weights()
                             .get(row * 4 + column)
                             .copied()
                             .unwrap_or(0)

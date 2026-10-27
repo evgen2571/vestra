@@ -106,7 +106,7 @@ impl SourceResources {
         }
         for (shape_index, _) in plan.shapes.iter().enumerate() {
             let prepared = decoded.shape(shape_index);
-            let image = prepared.pixels.as_ref();
+            let image = prepared.pixels().as_ref();
             if image.width() > max_texture_dimension_2d || image.height() > max_texture_dimension_2d
             {
                 return Err(Diagnostic::error(
@@ -154,12 +154,12 @@ impl SourceResources {
             textures.push(PreparedRasterTexture {
                 _texture: texture,
                 view,
-                intrinsic_size: prepared.intrinsic_size,
+                intrinsic_size: prepared.intrinsic_size(),
             });
         }
         for text_index in 0..plan.texts.len() {
             let prepared = decoded.text(text_index);
-            let image = prepared.pixels.as_ref();
+            let image = prepared.pixels().as_ref();
             if image.width() > max_texture_dimension_2d || image.height() > max_texture_dimension_2d
             {
                 return Err(Diagnostic::error(
@@ -207,7 +207,7 @@ impl SourceResources {
             textures.push(PreparedRasterTexture {
                 _texture: texture,
                 view,
-                intrinsic_size: prepared.intrinsic_size,
+                intrinsic_size: prepared.intrinsic_size(),
             });
         }
         for image in dynamic_frames {
@@ -263,7 +263,7 @@ impl SourceResources {
         }
         let mut glyph_atlases = Vec::with_capacity(plan.glyph_atlases.len());
         for atlas in decoded.glyph_atlases() {
-            let image = &atlas.levels[0];
+            let image = &atlas.levels()[0];
             if image.width() > max_texture_dimension_2d || image.height() > max_texture_dimension_2d
             {
                 return Err(Diagnostic::error(
@@ -287,7 +287,7 @@ impl SourceResources {
                 usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
-            for (level, image) in atlas.levels.iter().enumerate() {
+            for (level, image) in atlas.levels().iter().enumerate() {
                 queue.write_texture(
                     wgpu::ImageCopyTexture {
                         texture: &texture,

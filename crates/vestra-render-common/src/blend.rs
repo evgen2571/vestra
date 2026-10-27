@@ -1,10 +1,8 @@
 use image::Rgba;
 
-#[cfg(any(feature = "cpu", feature = "wgpu"))]
 use vestra_core::plan::ColourTransform;
 
-#[cfg(any(feature = "cpu", feature = "wgpu"))]
-pub(crate) fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTransform) -> Rgba<u8> {
+pub fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTransform) -> Rgba<u8> {
     let input = [
         f64::from(pixel[0]),
         f64::from(pixel[1]),
@@ -22,7 +20,7 @@ pub(crate) fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTrans
 }
 
 /// Composites straight-alpha source pixels over a straight-alpha destination.
-pub(crate) fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgba<u8> {
+pub fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) -> Rgba<u8> {
     if source[3] == u8::MAX && opacity == 1.0 {
         return source;
     }
@@ -51,7 +49,7 @@ pub(crate) fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64)
     Rgba(result)
 }
 
-pub(crate) fn blend_pixel(
+pub fn blend_pixel(
     destination: Rgba<u8>,
     source: Rgba<u8>,
     mode: crate::project::BlendMode,

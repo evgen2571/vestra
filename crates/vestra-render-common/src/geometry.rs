@@ -1,4 +1,7 @@
 //! Renderer-neutral image geometry.
+//!
+//! Public scalar records are allocation-free inputs/results shared by backend
+//! implementations. Preparation details and forward construction stay private.
 
 use vestra_core::plan::CompiledSizing;
 
@@ -9,10 +12,10 @@ use crate::{
 
 /// Dimensions of prepared source-local raster content.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct IntrinsicSize {
+pub struct IntrinsicSize {
     /// Prepared raster pixel dimensions.
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+    pub width: u32,
+    pub height: u32,
     /// Logical source-local layout dimensions used for Layer anchor/transform.
     pub(crate) logical_width: f64,
     pub(crate) logical_height: f64,
@@ -26,7 +29,7 @@ pub(crate) struct IntrinsicSize {
 
 impl IntrinsicSize {
     #[must_use]
-    pub(crate) fn new(width: u32, height: u32) -> Self {
+    pub fn new(width: u32, height: u32) -> Self {
         Self {
             width,
             height,
@@ -44,7 +47,7 @@ impl IntrinsicSize {
         reason = "the compact intrinsic-size constructor keeps renderer geometry allocation-free"
     )]
     #[must_use]
-    pub(crate) const fn with_logical_bounds_and_anchor(
+    pub const fn with_logical_bounds_and_anchor(
         width: u32,
         height: u32,
         logical_width: f64,
@@ -69,35 +72,35 @@ impl IntrinsicSize {
 
 /// Integer source region produced by the project's normalized crop rule.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct CropBounds {
-    pub(crate) x: u32,
-    pub(crate) y: u32,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+pub struct CropBounds {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Source coordinates after applying the project's crop-cache policy.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct ResolvedSourceRegion {
-    pub(crate) origin_x: u32,
-    pub(crate) origin_y: u32,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) normalized_crop: Crop,
+pub struct ResolvedSourceRegion {
+    pub origin_x: u32,
+    pub origin_y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub normalized_crop: Crop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct MotionTileParameters {
-    pub(crate) width_factor: f64,
-    pub(crate) height_factor: f64,
-    pub(crate) center_x: f64,
-    pub(crate) center_y: f64,
-    pub(crate) mirror_edges: bool,
+pub struct MotionTileParameters {
+    pub width_factor: f64,
+    pub height_factor: f64,
+    pub center_x: f64,
+    pub center_y: f64,
+    pub mirror_edges: bool,
 }
 
 /// Materializes a normalized crop with the renderer's stable floor/ceil rule.
 #[must_use]
-pub(crate) fn crop_bounds(source_width: u32, source_height: u32, crop: Crop) -> CropBounds {
+pub fn crop_bounds(source_width: u32, source_height: u32, crop: Crop) -> CropBounds {
     let x = (crop.x * f64::from(source_width))
         .floor()
         .clamp(0.0, f64::from(source_width - 1)) as u32;
@@ -120,7 +123,7 @@ pub(crate) fn crop_bounds(source_width: u32, source_height: u32, crop: Crop) -> 
 
 /// Resolves the untransformed size drawn for an image source region.
 #[must_use]
-pub(crate) fn effective_dimensions(
+fn effective_dimensions(
     sizing: &CompiledSizing,
     source_width: f64,
     source_height: f64,
@@ -146,29 +149,29 @@ pub(crate) fn effective_dimensions(
 
 /// Inverse transform from canvas coordinates to unscaled image coordinates.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct InverseAffine {
-    pub(crate) m00: f64,
-    pub(crate) m01: f64,
-    pub(crate) m02: f64,
-    pub(crate) m10: f64,
-    pub(crate) m11: f64,
-    pub(crate) m12: f64,
+pub struct InverseAffine {
+    pub m00: f64,
+    pub m01: f64,
+    pub m02: f64,
+    pub m10: f64,
+    pub m11: f64,
+    pub m12: f64,
 }
 
 /// Forward transform from unscaled image coordinates to canvas coordinates.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ForwardAffine {
-    pub(crate) m00: f64,
-    pub(crate) m01: f64,
-    pub(crate) m02: f64,
-    pub(crate) m10: f64,
-    pub(crate) m11: f64,
-    pub(crate) m12: f64,
+struct ForwardAffine {
+    pub m00: f64,
+    pub m01: f64,
+    pub m02: f64,
+    pub m10: f64,
+    pub m11: f64,
+    pub m12: f64,
 }
 
 impl ForwardAffine {
     #[must_use]
-    pub(crate) fn map(self, x: f64, y: f64) -> Point {
+    fn map(self, x: f64, y: f64) -> Point {
         Point {
             x: self.m00 * x + self.m01 * y + self.m02,
             y: self.m10 * x + self.m11 * y + self.m12,
@@ -178,28 +181,24 @@ impl ForwardAffine {
 
 /// All renderer-neutral geometry required to draw an evaluated image layer.
 #[derive(Clone, Debug)]
-pub(crate) struct ResolvedRasterGeometry {
-    pub(crate) source: ResolvedSourceRegion,
-    pub(crate) logical_origin_x: f64,
-    pub(crate) logical_origin_y: f64,
-    pub(crate) effective_width: f64,
-    pub(crate) effective_height: f64,
-    pub(crate) raster_effective_width: f64,
-    pub(crate) raster_effective_height: f64,
-    pub(crate) forward: ForwardAffine,
-    pub(crate) inverse: InverseAffine,
-    pub(crate) transformed_corners: [Point; 4],
-    pub(crate) motion_tile: Option<MotionTileParameters>,
+pub struct ResolvedRasterGeometry {
+    pub source: ResolvedSourceRegion,
+    pub logical_origin_x: f64,
+    pub logical_origin_y: f64,
+    pub effective_width: f64,
+    pub effective_height: f64,
+    pub raster_effective_width: f64,
+    pub raster_effective_height: f64,
+    forward: ForwardAffine,
+    pub inverse: InverseAffine,
+    pub transformed_corners: [Point; 4],
+    pub motion_tile: Option<MotionTileParameters>,
 }
 
 impl ResolvedRasterGeometry {
     /// Returns CPU raster bounds from the shared forward transform and corners.
     #[must_use]
-    pub(crate) fn visible_bounds(
-        &self,
-        canvas_width: u32,
-        canvas_height: u32,
-    ) -> (u32, u32, u32, u32) {
+    pub fn visible_bounds(&self, canvas_width: u32, canvas_height: u32) -> (u32, u32, u32, u32) {
         debug_assert_eq!(
             self.transformed_corners,
             [
@@ -252,7 +251,7 @@ pub(crate) fn resolve_raster_geometry(
     clippy::too_many_arguments,
     reason = "geometry inputs stay explicit at the renderer boundary"
 )]
-pub(crate) fn resolve_raster_geometry_with_motion_tile(
+pub fn resolve_raster_geometry_with_motion_tile(
     intrinsic: IntrinsicSize,
     crop: Crop,
     cacheable_crop: bool,
@@ -371,7 +370,7 @@ pub(crate) fn resolve_raster_geometry_with_motion_tile(
 
 impl InverseAffine {
     #[must_use]
-    pub(crate) fn for_transform(
+    pub fn for_transform(
         transform: Transform2D,
         canvas_width: u32,
         canvas_height: u32,
@@ -400,7 +399,7 @@ impl InverseAffine {
     }
 
     #[must_use]
-    pub(crate) fn map(self, x: f64, y: f64) -> Point {
+    pub fn map(self, x: f64, y: f64) -> Point {
         Point {
             x: self.m00 * x + self.m01 * y + self.m02,
             y: self.m10 * x + self.m11 * y + self.m12,
@@ -410,7 +409,7 @@ impl InverseAffine {
 
 impl ForwardAffine {
     #[must_use]
-    pub(crate) fn for_transform(
+    fn for_transform(
         transform: Transform2D,
         canvas_width: u32,
         canvas_height: u32,
@@ -441,7 +440,7 @@ impl ForwardAffine {
 
 /// Applies the CPU rasterizer's stable visible-bound rounding to shared corners.
 #[must_use]
-pub(crate) fn visible_bounds(
+pub fn visible_bounds(
     corners: &[Point; 4],
     canvas_width: u32,
     canvas_height: u32,

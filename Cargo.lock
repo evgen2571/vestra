@@ -2763,17 +2763,29 @@ name = "vestra-render"
 version = "0.1.3"
 dependencies = [
  "bytemuck",
- "cosmic-text",
- "fontdb",
  "image",
  "naga",
  "pollster",
  "serde",
  "serde_json",
+ "tracing",
+ "vestra-core",
+ "vestra-render-common",
+ "wgpu",
+]
+
+[[package]]
+name = "vestra-render-common"
+version = "0.1.3"
+dependencies = [
+ "cosmic-text",
+ "fontdb",
+ "image",
+ "serde",
+ "serde_json",
  "tiny-skia",
  "tracing",
  "vestra-core",
- "wgpu",
 ]
 
 [[package]]

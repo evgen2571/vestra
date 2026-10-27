@@ -5,12 +5,9 @@ use vestra_core::plan::RenderPlan;
 use crate::{
     Diagnostic,
     backend::RenderBackendKind,
-    kernel::{required_effect_kernels, validate_required_kernels},
+    kernel::{EffectKernel, required_effect_kernels},
     project::BlendMode,
 };
-
-#[cfg(test)]
-use crate::kernel::EffectKernel;
 
 /// Validate the renderer-owned mappings before adapter creation.  Adapter
 /// limits remain the responsibility of `GpuRequirements`, but a future effect
@@ -23,10 +20,7 @@ pub(crate) fn validate_plan(plan: &RenderPlan) -> Result<(), Diagnostic> {
     for layer in &plan.layers {
         validate_blend_mode(layer.blend_mode)?;
     }
-    validate_required_kernels(
-        RenderBackendKind::Wgpu,
-        required_effect_kernels(plan).iter(),
-    )?;
+    validate_kernel_capabilities(required_effect_kernels(plan).iter())?;
     Ok(())
 }
 
@@ -34,17 +28,12 @@ pub(crate) fn validate_plan(plan: &RenderPlan) -> Result<(), Diagnostic> {
     clippy::result_large_err,
     reason = "backend selection preserves the existing structured diagnostic"
 )]
-#[cfg(test)]
 pub(crate) fn validate_kernel_capabilities(
-    backend: RenderBackendKind,
     kernels: impl IntoIterator<Item = EffectKernel>,
 ) -> Result<(), Diagnostic> {
-    validate_kernel_capabilities_with(backend, kernels, |kernel| {
-        crate::kernel::supports_kernel(backend, kernel)
-    })
+    validate_kernel_capabilities_with(RenderBackendKind::Wgpu, kernels, supports_kernel)
 }
 
-#[cfg(test)]
 fn validate_kernel_capabilities_with(
     backend: RenderBackendKind,
     kernels: impl IntoIterator<Item = EffectKernel>,
@@ -87,6 +76,12 @@ mod tests {
     use vestra_core::plan::{CompileOptions, compile};
 
     #[test]
+    fn every_declared_kernel_is_supported_by_wgpu() {
+        assert!(EffectKernel::ALL.into_iter().all(super::supports_kernel));
+        assert!(super::supports_kernel(EffectKernel::Composite));
+    }
+
+    #[test]
     fn current_advanced_transition_preset_and_post_effect_plan_does_not_force_cpu_fallback() {
         let validated = load_and_validate(
             std::path::Path::new("examples/projects/effects-showcase.json"),
@@ -113,10 +108,7 @@ mod tests {
             result.expect_err("unsupported kernel").code,
             "RENDER-UNSUPPORTED-KERNEL"
         );
-        assert!(
-            validate_kernel_capabilities(RenderBackendKind::Wgpu, [EffectKernel::Composite])
-                .is_ok()
-        );
+        assert!(validate_kernel_capabilities([EffectKernel::Composite]).is_ok());
     }
 
     #[test]
@@ -130,7 +122,11 @@ mod tests {
         .expect("effects fixture validates");
         let plan = compile(validated, CompileOptions::default()).expect("effects fixture compiles");
         let required = required_effect_kernels(&plan);
-        assert!(!required.contains(EffectKernel::MotionBlur));
+        assert!(
+            !required
+                .iter()
+                .any(|kernel| kernel == EffectKernel::MotionBlur)
+        );
         validate_kernel_capabilities_with(RenderBackendKind::Wgpu, required.iter(), |kernel| {
             kernel != EffectKernel::MotionBlur
         })
@@ -147,4 +143,8 @@ mod tests {
         validate_kernel_capabilities_with(RenderBackendKind::Cpu, required, |_| true)
             .expect("CPU supports the required test kernel");
     }
+}
+
+pub(crate) const fn supports_kernel(_kernel: EffectKernel) -> bool {
+    true
 }

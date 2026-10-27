@@ -1,0 +1,22 @@
+[package]
+name = "vestra-render-common"
+version.workspace = true
+edition = "2024"
+description = "Shared internal renderer contracts and prepared resources for vestra"
+license = "MIT"
+publish = false
+
+[dependencies]
+vestra-core = { path = "../vestra-core" }
+image = { version = "0.25", default-features = true }
+cosmic-text = "0.19"
+fontdb = "0.23"
+tiny-skia = "0.11"
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

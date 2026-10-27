@@ -16,7 +16,7 @@ use crate::text::PreparedText;
 use crate::video::VideoDecoderFactory;
 use crate::{
     Category, Diagnostic,
-    render::metrics::{PreparationStats, PreparationTimings},
+    metrics::{PreparationStats, PreparationTimings},
 };
 
 /// Decoded source bytes shared by all render backends for one render.
@@ -233,7 +233,7 @@ impl DecodedAssets {
     }
 
     #[must_use]
-    pub(crate) fn glyph_atlases(&self) -> &[Arc<crate::ascii::PreparedGlyphAtlas>] {
+    pub fn glyph_atlases(&self) -> &[Arc<crate::ascii::PreparedGlyphAtlas>] {
         &self.glyph_atlases
     }
 
@@ -247,12 +247,12 @@ impl DecodedAssets {
     }
 
     #[must_use]
-    pub(crate) fn video_factory(&self) -> Option<Arc<dyn VideoDecoderFactory>> {
+    pub fn video_factory(&self) -> Option<Arc<dyn VideoDecoderFactory>> {
         self.video_factory.clone()
     }
 
     #[must_use]
-    pub(crate) fn video_asset(&self, asset: usize) -> Option<&vestra_core::plan::VideoAsset> {
+    pub fn video_asset(&self, asset: usize) -> Option<&vestra_core::plan::VideoAsset> {
         self.video_assets().get(asset)
     }
 
@@ -262,27 +262,27 @@ impl DecodedAssets {
     }
 
     #[must_use]
-    pub(crate) fn shape(&self, shape: usize) -> &PreparedShape {
+    pub fn shape(&self, shape: usize) -> &PreparedShape {
         &self.shapes[shape]
     }
 
     #[must_use]
-    pub(crate) fn text(&self, text: usize) -> &PreparedText {
+    pub fn text(&self, text: usize) -> &PreparedText {
         &self.texts[text]
     }
 
     #[must_use]
-    pub(crate) fn texts_len(&self) -> usize {
+    pub fn texts_len(&self) -> usize {
         self.texts.len()
     }
 
     #[must_use]
-    pub(crate) fn videos_len(&self) -> usize {
+    pub fn videos_len(&self) -> usize {
         self.videos.len()
     }
 
     #[must_use]
-    pub(crate) const fn image_count(&self) -> usize {
+    pub const fn image_count(&self) -> usize {
         self.images.len()
     }
 

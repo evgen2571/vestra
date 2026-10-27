@@ -6,8 +6,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use super::support::supports_kernel;
 use crate::Diagnostic;
-use crate::{backend::RenderBackendKind, kernel::supports_kernel};
 
 use super::{
     bind_groups::{FrameBindGroups, composite_group},
@@ -431,7 +431,7 @@ pub(super) fn encode_and_submit(
                 pass,
                 ..
             } => {
-                if !supports_kernel(RenderBackendKind::Wgpu, *kernel) {
+                if !supports_kernel(*kernel) {
                     return Err(Diagnostic::error(
                         "RENDER-UNSUPPORTED-KERNEL",
                         crate::Category::Backend,

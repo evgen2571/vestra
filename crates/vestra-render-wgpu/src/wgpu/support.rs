@@ -65,6 +65,10 @@ fn validate_blend_mode(mode: BlendMode) -> Result<(), Diagnostic> {
     }
 }
 
+pub(crate) const fn supports_kernel(_kernel: EffectKernel) -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::{validate_kernel_capabilities, validate_kernel_capabilities_with, validate_plan};
@@ -143,8 +147,4 @@ mod tests {
         validate_kernel_capabilities_with(RenderBackendKind::Cpu, required, |_| true)
             .expect("CPU supports the required test kernel");
     }
-}
-
-pub(crate) const fn supports_kernel(_kernel: EffectKernel) -> bool {
-    true
 }

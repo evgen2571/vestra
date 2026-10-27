@@ -5,28 +5,6 @@ use std::sync::Arc;
 use super::WgpuBackend;
 use crate::{AdapterPerformanceClass, render::RenderBackend};
 
-pub(super) fn hardware_wgpu_backend_or_skip(
-    plan: &vestra_core::plan::RenderPlan,
-    decoded: Arc<crate::DecodedAssets>,
-) -> Option<WgpuBackend> {
-    let backend = wgpu_backend_or_skip(plan, decoded)?;
-    let adapter = backend.adapter().expect("WGPU backend reports its adapter");
-    match hardware_conformance_policy(adapter.performance_class(), require_hardware_wgpu()) {
-        Ok(true) => Some(backend),
-        Ok(false) => {
-            eprintln!(
-                "WGPU_RUNTIME_SKIPPED reason=software-adapter hardware-conformance adapter={} backend={} device_type={}",
-                adapter.adapter_name, adapter.graphics_backend, adapter.device_type
-            );
-            None
-        }
-        Err(message) => panic!(
-            "{message}: adapter={} backend={} device_type={}",
-            adapter.adapter_name, adapter.graphics_backend, adapter.device_type
-        ),
-    }
-}
-
 pub(super) fn wgpu_backend_or_skip(
     plan: &vestra_core::plan::RenderPlan,
     decoded: Arc<crate::DecodedAssets>,

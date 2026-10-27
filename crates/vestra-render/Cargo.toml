@@ -8,8 +8,12 @@ publish = false
 
 [features]
 default = ["cpu", "wgpu"]
-cpu = []
+cpu = ["dep:vestra-render-cpu"]
 wgpu = ["dep:bytemuck", "dep:naga", "dep:pollster", "dep:wgpu"]
+
+[[test]]
+name = "parity"
+required-features = ["cpu", "wgpu"]
 
 [[example]]
 name = "wgpu_adapters"
@@ -18,6 +22,7 @@ required-features = ["wgpu"]
 [dependencies]
 vestra-core = { path = "../vestra-core" }
 vestra-render-common = { path = "../vestra-render-common" }
+vestra-render-cpu = { path = "../vestra-render-cpu", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 image = { version = "0.25", default-features = true }
 naga = { version = "23", features = ["wgsl-in"], optional = true }

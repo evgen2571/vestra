@@ -26,12 +26,12 @@ mod test_support;
 #[cfg(test)]
 pub use vestra_core::timeline;
 #[cfg(feature = "cpu")]
-pub mod cpu;
+pub use vestra_render_cpu::cpu;
 pub mod effects;
 #[cfg(feature = "wgpu")]
 mod wgpu;
 #[cfg(feature = "cpu")]
-pub use cpu::backend::CpuBackend;
+pub use vestra_render_cpu::CpuBackend;
 
 #[cfg(feature = "wgpu")]
 pub fn discover_wgpu_adapters() -> Vec<AdapterMetadata> {
@@ -168,12 +168,12 @@ pub fn create_backend(
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
     #[cfg(feature = "cpu")]
     if matches!(preference, RenderBackendPreference::Cpu) {
-        cpu::support::validate_plan(plan)?;
+        vestra_render_cpu::validate_plan(plan)?;
     }
 
     #[cfg(all(feature = "cpu", not(feature = "wgpu")))]
     if matches!(preference, RenderBackendPreference::Auto) {
-        cpu::support::validate_plan(plan)?;
+        vestra_render_cpu::validate_plan(plan)?;
     }
 
     #[cfg(feature = "wgpu")]
@@ -182,7 +182,7 @@ pub fn create_backend(
             RenderBackendPreference::Wgpu => Err(error),
             #[cfg(feature = "cpu")]
             RenderBackendPreference::Auto => {
-                cpu::support::validate_plan(plan)?;
+                vestra_render_cpu::validate_plan(plan)?;
                 Ok((
                     Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
                     Some(BackendFallback {
@@ -236,7 +236,7 @@ pub fn create_backend(
             match WgpuBackend::new(plan, std::sync::Arc::clone(decoded)) {
                 Ok(backend) => Ok((Box::new(backend), None)),
                 Err(error) => {
-                    cpu::support::validate_plan(plan)?;
+                    vestra_render_cpu::validate_plan(plan)?;
                     Ok((
                         Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
                         Some(BackendFallback {

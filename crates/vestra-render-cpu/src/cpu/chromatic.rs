@@ -2,7 +2,7 @@
 
 use image::{GenericImage, Rgba, RgbaImage};
 
-use crate::effects::effect_amount_is_identity;
+use vestra_core::effects::effect_amount_is_identity;
 
 pub(crate) fn apply(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
     if effect_amount_is_identity(amount) {
@@ -107,7 +107,7 @@ mod tests {
     use super::apply;
 
     fn apply_reference(source: &RgbaImage, target: &mut RgbaImage, amount: f64, angle: f64) {
-        if crate::effects::effect_amount_is_identity(amount) {
+        if vestra_core::effects::effect_amount_is_identity(amount) {
             target.copy_from(source, 0, 0).expect("same dimensions");
             return;
         }

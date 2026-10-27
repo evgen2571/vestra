@@ -1,0 +1,19 @@
+[package]
+name = "vestra-render-cpu"
+version.workspace = true
+edition = "2024"
+description = "Internal CPU frame rendering for vestra"
+license = "MIT"
+publish = false
+
+[dependencies]
+vestra-core = { path = "../vestra-core" }
+vestra-render-common = { path = "../vestra-render-common" }
+image = { version = "0.25", default-features = false }
+tracing = "0.1"
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

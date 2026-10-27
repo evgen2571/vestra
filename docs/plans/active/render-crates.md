@@ -54,7 +54,7 @@ No merge, push or PR. Preserve existing worktrees and unrelated changes.
 - [x] 1. Separate CPU timings, blend execution and host CRT; focused renderer tests.
 - [x] 2. Extract common with narrow accessors, unconditional Gaussian storage and
   shared mapping/requirements; common and facade feature checks. Review boundary.
-- [ ] 3. Extract CPU with backend capability policy; CPU tests and isolation.
+- [x] 3. Extract CPU with backend capability policy; CPU tests and isolation.
 - [ ] 4. Extract WGPU/shaders, split private/parity tests without losing assertions;
   WGPU/facade tests, asset hashes and strict software/hardware execution.
 - [ ] 5. Complete facade, media/SDK borrowed sink migration (distinct commit),
@@ -125,6 +125,24 @@ backend-owned. WGPU-only added retention is at most 16 * 65 * 8 = 8,320 coeffici
 payload bytes per populated thread plus 16 Vec headers (384 bytes on this 64-bit
 host), allocator overhead and cache-container effects; this is not a measured RSS
 delta. CPU allocation/calculation and cache policy are unchanged.
+
+Step 3: CPU package extracted with workers/effects/composition/profile/CRT and
+BlueNoise include. Facade forwards its optional CPU feature and type/module
+compatibility paths; validation is an explicit CPU-owned function. CPU package
+175 passed/6 ignored, facade CPU/neither compile and pass. Saved normal/build/dev
+tree excludes WGPU implementation/stack and Naga. Fresh isolated artifact proof
+is part of final validation, not inferred from this warm package build.
+
+Moved parity tests alongside this step because CPU's existing cfg(test)
+render_frame helper cannot be called across a crate boundary. Facade uses a local
+test adapter built only from submit/poll/flush; no production hook. Both-feature
+facade unit and integration suites compile/pass; parity integration 70 passed/
+11 ignored in plain shell. All 81 original facade parity tests remain; private
+planning/resource assertions stay WGPU-owned. Source inventory and normalized
+assertion audit: parity-test-migration.json and parity-assertion-audit.json
+(stylization 144/144, crops 33/33, resources 66/66, parity 56/56 with one callback
+syntax adaptation). Pure shared literals are tests/render_effect_cases.rs, used
+independently by both owners, with no package edge. Strict runtime still pending.
 
 ## Decisions and discoveries
 

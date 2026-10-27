@@ -5,9 +5,9 @@ use crate::{animation::Transform2D, domain::Crop, render::geometry};
 
 use super::*;
 use crate::blend::{blend_pixel, source_over};
-use crate::effects::effect_pass_plan;
 use vestra_core::plan::EvaluatedComposition;
 use vestra_core::plan::EvaluatedEffect;
+use vestra_core::plan::effect_pass_plan;
 
 fn apply_sequential(mut rgb: [f64; 3], effects: &[EvaluatedEffect]) -> [f64; 3] {
     for effect in effects {

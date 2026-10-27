@@ -57,7 +57,7 @@ No merge, push or PR. Preserve existing worktrees and unrelated changes.
 - [x] 3. Extract CPU with backend capability policy; CPU tests and isolation.
 - [x] 4. Extract WGPU/shaders, split private/parity tests without losing assertions;
   WGPU/facade tests, asset hashes and strict software/hardware execution.
-- [ ] 5. Complete facade, media/SDK borrowed sink migration (distinct commit),
+- [x] 5. Complete facade, media/SDK borrowed sink migration (distinct commit),
   test discovery and CI with meaningful backend isolation.
 - [ ] 6. Complete compatibility, packaging, benchmark/memory/build measurements
   and permanent documentation; record final evidence and limitations.
@@ -155,6 +155,22 @@ with warnings denied. Removed unused test-only kernel bitset inspection rather
 than expose it. Actual strict runtime/frame/resource validation follows next.
 Historical report source-link targets follow relocated descendants; labels,
 findings and measurements remain unchanged. Docs links pass (436, zero missing).
+
+Step 5: strict wrapper explicitly collects WGPU-private and facade integration
+gpu_ tests under the same strict/software/hardware/GL policy. Grouped CPU CI job
+uses its own Rust cache and guards actual normal/build/dev trees; integration
+checks GPU-only graphs before full-workspace unification. Full workspace/Python/
+generation and docs-only/manual routing retained. Shell syntax/ShellCheck pass;
+fake-Cargo checks four route/thread/flag cases, hardware software rejection,
+list-only and 22 CI result-gate cases. Hosted CI cost remains unmeasured: the
+extra CPU job duplicates some common/core/preparation cold work across caches.
+Permanent architecture/extension/testing/media/GPU docs, generator destinations
+and font notices updated. Generator output routing and syntax pass.
+
+Initial fresh sdist inspection finds all four crates, all 36 WGSL files, common
+font/license and CPU include table. Cargo's package file discovery omits the
+shared repo-level Rust test cases; added exactly that file as an explicit sdist
+include. Rebuild/archive extraction/wheel smoke remain in final acceptance.
 
 ## Decisions and discoveries
 

@@ -1,17 +1,21 @@
 # Stylization temporal diagnostics
 
-The renderer's `gpu_stylization` tests save canonical projects, synthetic source
-images, corresponding CPU/WGPU frames, parity metrics, adapter metadata and resource byte estimates to
+The facade's `gpu_stylization` parity tests save canonical projects, synthetic source
+images, corresponding CPU/WGPU frames, parity metrics and adapter metadata to
 `target/stylization/frames/<requested-api>/`. Temporal fixtures additionally save adjacent-frame
 RGBA differences in `temporal.json`. Sources are original deterministic fixtures;
 no downloaded media is needed.
+
+WGPU-private resource-limit companions in `vestra-render-wgpu` write
+`resources.json` for their corresponding cases in the same artifact tree.
+Resource estimates are separate from facade pixel-parity artifacts.
 
 Run the focused tests with an actual adapter, selecting the API discovered by
 [GPU validation](../gpu-validation.md). GL requires serialized tests:
 
 ```bash
 VESTRA_WGPU_BACKEND=gl VESTRA_REQUIRE_WGPU=1 cargo test \
-  -p vestra-render --lib --all-features gpu_stylization_temporal \
+  -p vestra-render --test parity --all-features gpu_stylization_temporal \
   -- --test-threads=1 --nocapture
 
 uv run --no-project --with 'Pillow>=10,<13' python \
@@ -74,16 +78,22 @@ Run full-resolution correctness separately:
 
 ```bash
 VESTRA_WGPU_BACKEND=gl VESTRA_REQUIRE_WGPU=1 cargo test \
-  -p vestra-render --lib --all-features \
+  -p vestra-render --test parity --all-features \
   gpu_stylization_all_families_1080p_and_4k_resource_validation \
+  -- --ignored --test-threads=1 --nocapture
+
+VESTRA_WGPU_BACKEND=gl VESTRA_REQUIRE_WGPU=1 cargo test \
+  -p vestra-render-wgpu --lib gpu_stylization_ \
   -- --ignored --test-threads=1 --nocapture
 ```
 
-This explicit test renders every new family at 1920×1080 and 3840×2160,
-compares actual CPU/WGPU output, and records persistent, working, effect,
-parameter and readback byte estimates. Estimates exclude driver metadata and
-device texture padding. The test is correctness/resource validation; PNG saving
-and debug builds make its elapsed time unsuitable as a performance benchmark.
+The facade test renders every new family at 1920×1080 and 3840×2160 and compares
+actual CPU/WGPU output. The WGPU companions retain the resource-limit checks for
+nonuniform stops, Oklab interpolation, input tone and input detail, recording
+persistent, working, effect, parameter and readback byte estimates. Estimates
+exclude driver metadata and device texture padding. These are correctness/resource
+checks; PNG saving and debug builds make their elapsed time unsuitable as a
+performance benchmark.
 
 To isolate CRT curvature at sub-byte transparent border coverage, run
 `gpu_stylization_crt_1080p_and_4k_transparent_border_parity` with the same

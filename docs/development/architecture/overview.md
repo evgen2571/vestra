@@ -1,6 +1,6 @@
 # Architecture overview
 
-Vestra separates project meaning from the code that renders or reads media. Put a rule about project JSON, timelines, effects, transitions, or signals in `vestra-core`. Put pixels and GPU state in `vestra-render`; put media formats, FFmpeg and output files in `vestra-media`. The `vestra` crate is the public Rust SDK that coordinates those layers. `vestra-python` exposes that SDK through PyO3, and `vestra-cli` presents the same SDK operations as `ve`.
+Vestra separates project meaning from the code that renders or reads media. Put a rule about project JSON, timelines, effects, transitions, or signals in `vestra-core`. Shared rendering contracts and prepared assets belong in `vestra-render-common`, execution in `vestra-render-cpu` or `vestra-render-wgpu`, and selection/fallback in the `vestra-render` facade. Put media formats, FFmpeg and output files in `vestra-media`. The `vestra` crate is the public Rust SDK that coordinates those layers. `vestra-python` exposes that SDK through PyO3, and `vestra-cli` presents the same SDK operations as `ve`.
 
 ```text
 high-level Python ─┐
@@ -14,6 +14,6 @@ The ordinary render path is `Project` load or lowering, semantic validation, tar
 
 `vestra-core` owns the canonical schema-v1 model, semantic validation, checked time and frame conversions, plan compilation, frame-time evaluation, animation, signal definitions, and effect/audio-effect descriptors. `vestra-render` consumes evaluated work; it must not reinterpret public project rules. CPU and WGPU are two implementations of the same prepared plan, not two project evaluators.
 
-`vestra-media` owns the boundary where paths become media. It probes and decodes assets, builds and executes audio work, receives rendered RGBA frames through a sink, finalizes temporary encoder output, and publishes the requested file. A successful frame loop is therefore not a successful render until publication succeeds.
+`vestra-media` owns the boundary where paths become media. It probes and decodes assets, builds and executes audio work, receives a frame number and borrowed RGBA bytes through a sink, finalizes temporary encoder output, and publishes the requested file. It has no renderer dependency; the SDK bridges owned renderer frames to media writes. A successful frame loop is therefore not a successful render until publication succeeds.
 
 For the next level of detail, read [crate ownership](crates.md), [project to plan](project-to-plan.md), and [render pipeline](render-pipeline.md).

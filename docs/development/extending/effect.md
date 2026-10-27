@@ -23,12 +23,14 @@ shader or changing working resources, read the
 4. **Design resource flow.** For multi-pass operations, map live inputs,
    outputs, original-image retention and temporary resources before
    extending the bounded working set. Check GPU preparation requirements,
-   aliases, device limits and failure paths.
-5. **Implement CPU.** Extend `crates/vestra-render/src/cpu/effects.rs`
+   aliases, device limits and failure paths. Add shared operation-to-kernel
+   mapping/requirements in `vestra-render-common`; keep capability policy in
+   the respective backend's `support.rs`.
+5. **Implement CPU.** Extend `crates/vestra-render-cpu/src/cpu/effects.rs`
    and reusable surfaces/resources. Define border, alpha, color and
    deterministic time behavior.
 6. **Implement WGPU.** Add WGSL kernels under
-   `crates/vestra-render/src/shaders/effects/`, shader/kernel registration,
+   `crates/vestra-render-wgpu/src/shaders/effects/`, shader/kernel registration,
    parameter layouts, pipeline preparation, frame planning and execution.
    Match Rust/WGSL layouts and avoid unneeded allocations/readbacks.
 7. **Expose the authoring API.** Add Python-specific names, argument order and
@@ -130,8 +132,11 @@ See the [effect recipes](../../reference/effects.md).
 - Representative benchmark/resource-limit checks for costly effects.
 - Python/Rust/JSON API use, examples, documentation, and asset licenses.
 
-Use `cargo test -p vestra-core` / `cargo test -p vestra-render` with
-focused filters during development. Then run applicable `just check`,
+Use focused `cargo test -p vestra-core`, `cargo test -p vestra-render-common`,
+`cargo test -p vestra-render-cpu` or `cargo test -p vestra-render-wgpu` during
+development. Cross-backend tests run through `cargo test -p vestra-render
+--test parity --all-features`; preserve the independent backend dependency
+graphs. Then run applicable `just check`,
 `just python-test`, `just docs-check`, `just wgpu-software`, and
 `just wgpu-hardware` when real hardware is available. See
 [Testing](../testing.md), [GPU validation](../gpu-validation.md) and

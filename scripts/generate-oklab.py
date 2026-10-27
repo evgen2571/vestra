@@ -84,7 +84,7 @@ def generate():
             wgsl += f"const {name}_{i}: vec3<{kind}> = vec3<{kind}>(" + ", ".join(map(str, row)) + ");\n"
         rust += "];\n"
     (root / "crates/vestra-core/src/oklab_constants.in").write_text(rust)
-    (root / "crates/vestra-render/src/shaders/effects/oklab_constants.wgsl").write_text(wgsl)
+    (root / "crates/vestra-render-wgpu/src/shaders/effects/oklab_constants.wgsl").write_text(wgsl)
     print("Generated 256 sRGB entries and forward Q15, inverse Q15/Q12 matrices")
 
 

@@ -15,9 +15,18 @@ use vestra_core::{
 use crate::geometry::IntrinsicSize;
 
 #[derive(Clone, Debug)]
-pub(crate) struct PreparedText {
+pub struct PreparedText {
     pub(crate) pixels: Arc<RgbaImage>,
     pub(crate) intrinsic_size: IntrinsicSize,
+}
+
+impl PreparedText {
+    pub fn pixels(&self) -> &Arc<RgbaImage> {
+        &self.pixels
+    }
+    pub fn intrinsic_size(&self) -> IntrinsicSize {
+        self.intrinsic_size
+    }
 }
 
 pub(crate) fn load_font(font_path: &Path) -> Result<FontSystem, Diagnostic> {

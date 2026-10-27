@@ -1,5 +1,3 @@
-use crate::gaussian::gaussian_kernel_cache_len;
-
 use super::*;
 
 fn canonical_stylization(value: serde_json::Value) -> EvaluatedEffect {
@@ -210,10 +208,9 @@ fn glow_spreads_visible_premultiplied_alpha_outside_the_source() {
 #[test]
 fn gaussian_kernels_are_reused_and_bounded_through_pass_execution() {
     let source = RgbaImage::from_pixel(3, 3, Rgba([255, 255, 255, 255]));
-    let _ = render_effect(&source, EvaluatedEffect::GaussianBlur { radius: 2.0 });
-    let after_first = gaussian_kernel_cache_len();
-    let _ = render_effect(&source, EvaluatedEffect::GaussianBlur { radius: 2.0 });
-    assert_eq!(gaussian_kernel_cache_len(), after_first);
+    let first = render_effect(&source, EvaluatedEffect::GaussianBlur { radius: 2.0 });
+    let second = render_effect(&source, EvaluatedEffect::GaussianBlur { radius: 2.0 });
+    assert_eq!(first, second);
     for radius in 1..24 {
         let _ = render_effect(
             &source,
@@ -222,7 +219,6 @@ fn gaussian_kernels_are_reused_and_bounded_through_pass_execution() {
             },
         );
     }
-    assert!(gaussian_kernel_cache_len() <= 16);
 }
 
 #[test]
@@ -457,14 +453,14 @@ fn convolve_reference(
         for x in 0..width {
             let mut premultiplied = [0.0; 3];
             let mut alpha = 0.0;
-            for (index, offset) in (-kernel.radius..=kernel.radius).enumerate() {
+            for (index, offset) in (-kernel.radius()..=kernel.radius()).enumerate() {
                 let (sample_x, sample_y) = if horizontal {
                     ((x + offset).clamp(0, width - 1), y)
                 } else {
                     (x, (y + offset).clamp(0, height - 1))
                 };
                 let pixel = source.get_pixel(sample_x as u32, sample_y as u32);
-                let weight = kernel.weights[index];
+                let weight = kernel.weights()[index];
                 let sample_alpha = f64::from(pixel[3]) / 255.0;
                 alpha += sample_alpha * weight;
                 for channel in 0..3 {

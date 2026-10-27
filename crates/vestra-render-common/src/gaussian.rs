@@ -4,8 +4,7 @@ use std::cell::RefCell;
 use vestra_core::effects::canonical_gaussian_radius;
 
 #[derive(Clone)]
-pub(crate) struct GaussianKernel {
-    #[cfg(feature = "cpu")]
+pub struct GaussianKernel {
     pub(crate) weights: Vec<f64>,
     pub(crate) integer_weights: [u32; 33],
     pub(crate) radius: i32,
@@ -15,7 +14,7 @@ thread_local! {
     static GAUSSIAN_KERNEL_CACHE: RefCell<Vec<(u16, GaussianKernel)>> = const { RefCell::new(Vec::new()) };
 }
 
-pub(crate) fn with_gaussian_kernel<T>(radius: f64, work: impl FnOnce(&GaussianKernel) -> T) -> T {
+pub fn with_gaussian_kernel<T>(radius: f64, work: impl FnOnce(&GaussianKernel) -> T) -> T {
     let key = (canonical_gaussian_radius(radius) * 4.0) as u16;
     GAUSSIAN_KERNEL_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
@@ -33,13 +32,22 @@ pub(crate) fn with_gaussian_kernel<T>(radius: f64, work: impl FnOnce(&GaussianKe
     })
 }
 
-#[cfg(all(test, feature = "cpu"))]
+#[cfg(test)]
 pub(crate) fn gaussian_kernel_cache_len() -> usize {
     GAUSSIAN_KERNEL_CACHE.with(|cache| cache.borrow().len())
 }
 
 impl GaussianKernel {
-    pub(crate) fn new(radius: f64) -> Self {
+    pub fn weights(&self) -> &[f64] {
+        &self.weights
+    }
+    pub fn integer_weights(&self) -> &[u32; 33] {
+        &self.integer_weights
+    }
+    pub fn radius(&self) -> i32 {
+        self.radius
+    }
+    pub fn new(radius: f64) -> Self {
         let radius = radius.clamp(0.0, 32.0);
         let support = radius.ceil().max(1.0) as i32;
         let sigma = (radius / 3.0).max(0.5);
@@ -59,7 +67,6 @@ impl GaussianKernel {
         }
         integer_weights[0] = 65536 - 2 * integer_weights[1..].iter().sum::<u32>();
         Self {
-            #[cfg(feature = "cpu")]
             weights,
             integer_weights,
             radius: support,
@@ -70,6 +77,28 @@ impl GaussianKernel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn kernels_reuse_canonical_radii_and_keep_the_original_eviction_bound() {
+        GAUSSIAN_KERNEL_CACHE.with(|cache| cache.borrow_mut().clear());
+        with_gaussian_kernel(2.0, |first| {
+            assert_eq!(first.weights.len(), (first.radius * 2 + 1) as usize);
+            assert!((first.weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+        });
+        let after_first = gaussian_kernel_cache_len();
+        with_gaussian_kernel(2.0, |_| {});
+        assert_eq!(gaussian_kernel_cache_len(), after_first);
+        for radius in 1..24 {
+            with_gaussian_kernel(f64::from(radius), |_| {});
+        }
+        assert!(gaussian_kernel_cache_len() <= 16);
+        GAUSSIAN_KERNEL_CACHE.with(|cache| {
+            let cache = cache.borrow();
+            assert_eq!(cache.len(), 16);
+            assert_eq!(cache.first().unwrap().0, 8 * 4);
+            assert_eq!(cache.last().unwrap().0, 23 * 4);
+        });
+    }
+
     #[test]
     fn integer_weights_are_normalized_symmetric_and_bound_byte_accumulation() {
         for quarter in 0..=128 {

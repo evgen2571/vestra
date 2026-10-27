@@ -106,18 +106,18 @@ impl GpuRequirements {
         let max_source_dimension = (0..plan.images.len())
             .flat_map(|asset| [decoded.image(asset).width(), decoded.image(asset).height()])
             .chain((0..plan.shapes.len()).flat_map(|shape| {
-                let image = decoded.shape(shape).pixels.as_ref();
+                let image = decoded.shape(shape).pixels().as_ref();
                 [image.width(), image.height()]
             }))
             .chain((0..plan.texts.len()).flat_map(|text| {
-                let image = decoded.text(text).pixels.as_ref();
+                let image = decoded.text(text).pixels().as_ref();
                 [image.width(), image.height()]
             }))
             .chain(
                 decoded
                     .glyph_atlases()
                     .iter()
-                    .flat_map(|atlas| [atlas.levels[0].width(), atlas.levels[0].height()]),
+                    .flat_map(|atlas| [atlas.levels()[0].width(), atlas.levels()[0].height()]),
             )
             .chain(
                 plan.videos
@@ -214,13 +214,13 @@ impl GpuRequirements {
                 .ok_or_else(|| resource_overflow("source texture total overflow"))?;
         }
         for shape in 0..plan.shapes.len() {
-            let image = decoded.shape(shape).pixels.as_ref();
+            let image = decoded.shape(shape).pixels().as_ref();
             source_texture_bytes = source_texture_bytes
                 .checked_add(image_bytes(image.width(), image.height())?)
                 .ok_or_else(|| resource_overflow("source texture total overflow"))?;
         }
         for text in 0..plan.texts.len() {
-            let image = decoded.text(text).pixels.as_ref();
+            let image = decoded.text(text).pixels().as_ref();
             source_texture_bytes = source_texture_bytes
                 .checked_add(image_bytes(image.width(), image.height())?)
                 .ok_or_else(|| resource_overflow("source texture total overflow"))?;

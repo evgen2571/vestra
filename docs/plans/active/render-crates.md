@@ -52,7 +52,7 @@ No merge, push or PR. Preserve existing worktrees and unrelated changes.
 ## Milestones
 
 - [x] 1. Separate CPU timings, blend execution and host CRT; focused renderer tests.
-- [ ] 2. Extract common with narrow accessors, unconditional Gaussian storage and
+- [x] 2. Extract common with narrow accessors, unconditional Gaussian storage and
   shared mapping/requirements; common and facade feature checks. Review boundary.
 - [ ] 3. Extract CPU with backend capability policy; CPU tests and isolation.
 - [ ] 4. Extract WGPU/shaders, split private/parity tests without losing assertions;
@@ -102,6 +102,29 @@ SDK CPU engine 72 passed; application render 5 passed. New test overwrites and
 reuses one caller buffer after writes, then verifies both encoded frames; ordering
 and invalid-size tests exercise the sink and retry without advancing ordering.
 Normal/build/dev media tree saved to media-tree.txt; isolated build still pending.
+
+Step 2: common now owns contracts/preparation, immutable Arc resources, geometry,
+shared pixel/particle/numerical helpers, snapshots/cache and kernel mapping/sets.
+Prepared fields stay crate-private with borrowed getters; font/text/shape builder
+functions remain private. Geometry exposes needed scalar value records but keeps
+logical preparation bounds and forward construction private. Kernel bitset mutation
+is private. No new abstraction, frame copy, duplicate cache or ownership transfer.
+Backend policy moved to CPU/WGPU support modules; selection still calls explicitly.
+Gaussian calculations are unchanged, float weights retained in every build and
+cache eviction tested inside common; CPU tests use existing shared preparation
+and raster APIs instead of promoting cfg(test) hooks. Common: 63 passed/3 ignored;
+facade lib CPU 175/6, WGPU 131/0, both 379/17, neither 0/0, all pass in the plain
+shell (runtime adapter skips possible). CPU+common totals preserve 238/9 and
+combined+common preserve 442/20. Follow-up WGPU-owned all-kernel support assertion
+also restored; strict actual-adapter validation remains pending.
+
+Common boundary review: dependencies contain only core and original preparation
+libraries/serde/tracing; no execution, workers, GPU resources or media. The shared
+cache type remains because both backends already use it, while instances remain
+backend-owned. WGPU-only added retention is at most 16 * 65 * 8 = 8,320 coefficient
+payload bytes per populated thread plus 16 Vec headers (384 bytes on this 64-bit
+host), allocator overhead and cache-container effects; this is not a measured RSS
+delta. CPU allocation/calculation and cache policy are unchanged.
 
 ## Decisions and discoveries
 

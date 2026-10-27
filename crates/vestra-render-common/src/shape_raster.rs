@@ -9,9 +9,18 @@ use crate::geometry::IntrinsicSize;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
-pub(crate) struct PreparedShape {
+pub struct PreparedShape {
     pub(crate) pixels: Arc<RgbaImage>,
     pub(crate) intrinsic_size: IntrinsicSize,
+}
+
+impl PreparedShape {
+    pub fn pixels(&self) -> &Arc<RgbaImage> {
+        &self.pixels
+    }
+    pub fn intrinsic_size(&self) -> IntrinsicSize {
+        self.intrinsic_size
+    }
 }
 
 pub(crate) fn raster_dimensions(source: &ShapeSource) -> Option<(u32, u32)> {

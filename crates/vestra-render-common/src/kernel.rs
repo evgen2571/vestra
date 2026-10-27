@@ -2,7 +2,7 @@ use vestra_core::plan::{EffectOperation, RenderPlan, compiled_effect_pass_plan};
 
 /// Renderer-owned implementation families for logical effect operations.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) enum EffectKernel {
+pub enum EffectKernel {
     AsciiAnalyze,
     AsciiResolve,
     HalftoneAnalyze,
@@ -26,7 +26,7 @@ pub(crate) enum EffectKernel {
 
 /// The single renderer mapping from logical operations to backend kernels.
 #[must_use]
-pub(crate) const fn kernel_for_operation(operation: &EffectOperation) -> EffectKernel {
+pub const fn kernel_for_operation(operation: &EffectOperation) -> EffectKernel {
     match operation {
         EffectOperation::AsciiAnalyze { .. } => EffectKernel::AsciiAnalyze,
         EffectOperation::AsciiResolve { .. } => EffectKernel::AsciiResolve,
@@ -53,7 +53,7 @@ pub(crate) const fn kernel_for_operation(operation: &EffectOperation) -> EffectK
 }
 
 impl EffectKernel {
-    pub(crate) const ALL: [Self; 19] = [
+    pub const ALL: [Self; 19] = [
         Self::AsciiAnalyze,
         Self::AsciiResolve,
         Self::HalftoneAnalyze,
@@ -74,29 +74,22 @@ impl EffectKernel {
         Self::ColorAdjust,
         Self::MotionBlur,
     ];
-
-    pub(crate) const fn supports_cpu(self) -> bool {
-        true
-    }
-    pub(crate) const fn supports_wgpu(self) -> bool {
-        true
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct EffectKernelSet(u64);
+pub struct EffectKernelSet(u64);
 
 impl EffectKernelSet {
-    pub(crate) const fn new() -> Self {
+    const fn new() -> Self {
         Self(0)
     }
 
-    pub(crate) fn insert(&mut self, kernel: EffectKernel) {
+    fn insert(&mut self, kernel: EffectKernel) {
         debug_assert!(kernel.index() < u64::BITS);
         self.0 |= 1 << kernel.index();
     }
 
-    pub(crate) fn iter(self) -> impl Iterator<Item = EffectKernel> {
+    pub fn iter(self) -> impl Iterator<Item = EffectKernel> {
         EffectKernel::ALL.into_iter().filter(move |kernel| {
             debug_assert!(kernel.index() < u64::BITS);
             self.0 & (1 << kernel.index()) != 0
@@ -136,7 +129,7 @@ impl EffectKernel {
     }
 }
 
-pub(crate) fn required_effect_kernels(plan: &RenderPlan) -> EffectKernelSet {
+pub fn required_effect_kernels(plan: &RenderPlan) -> EffectKernelSet {
     let mut required = EffectKernelSet::new();
     for effect in plan
         .layers
@@ -149,52 +142,6 @@ pub(crate) fn required_effect_kernels(plan: &RenderPlan) -> EffectKernelSet {
         }
     }
     required
-}
-
-pub(crate) fn validate_plan_capabilities(
-    plan: &RenderPlan,
-    backend: crate::backend::RenderBackendKind,
-) -> Result<(), crate::Diagnostic> {
-    validate_required_kernels(backend, required_effect_kernels(plan).iter())
-}
-
-pub(crate) fn validate_required_kernels(
-    backend: crate::backend::RenderBackendKind,
-    kernels: impl IntoIterator<Item = EffectKernel>,
-) -> Result<(), crate::Diagnostic> {
-    validate_required_kernels_with(backend, kernels, |kernel| supports_kernel(backend, kernel))
-}
-
-fn validate_required_kernels_with(
-    backend: crate::backend::RenderBackendKind,
-    kernels: impl IntoIterator<Item = EffectKernel>,
-    supports: impl Fn(EffectKernel) -> bool,
-) -> Result<(), crate::Diagnostic> {
-    for kernel in kernels {
-        if !supports(kernel) {
-            return Err(crate::Diagnostic::error(
-                "RENDER-UNSUPPORTED-KERNEL",
-                crate::Category::Backend,
-                format!(
-                    "{} backend does not support effect kernel {kernel:?}",
-                    backend.as_str()
-                ),
-                "",
-            ));
-        }
-    }
-    Ok(())
-}
-
-#[must_use]
-pub(crate) const fn supports_kernel(
-    backend: crate::backend::RenderBackendKind,
-    kernel: EffectKernel,
-) -> bool {
-    match backend {
-        crate::backend::RenderBackendKind::Cpu => kernel.supports_cpu(),
-        crate::backend::RenderBackendKind::Wgpu => kernel.supports_wgpu(),
-    }
 }
 
 #[cfg(test)]
@@ -227,46 +174,6 @@ mod tests {
                 kernel_for_operation(&EffectOperation::Composite { mode, amount: 1.0 }),
                 EffectKernel::Composite
             );
-        }
-    }
-
-    #[test]
-    fn every_declared_kernel_is_supported_by_both_backends() {
-        assert!(
-            EffectKernel::ALL
-                .into_iter()
-                .all(EffectKernel::supports_cpu)
-        );
-        assert!(
-            EffectKernel::ALL
-                .into_iter()
-                .all(EffectKernel::supports_wgpu)
-        );
-    }
-
-    #[test]
-    fn capability_queries_are_backend_typed() {
-        assert!(supports_kernel(
-            crate::backend::RenderBackendKind::Cpu,
-            EffectKernel::Composite
-        ));
-        assert!(supports_kernel(
-            crate::backend::RenderBackendKind::Wgpu,
-            EffectKernel::Composite
-        ));
-    }
-
-    #[test]
-    fn unsupported_kernels_use_the_backend_neutral_diagnostic_for_both_backends() {
-        for backend in [
-            crate::backend::RenderBackendKind::Cpu,
-            crate::backend::RenderBackendKind::Wgpu,
-        ] {
-            let diagnostic =
-                validate_required_kernels_with(backend, [EffectKernel::Composite], |_| false)
-                    .expect_err("injected unsupported kernel");
-            assert_eq!(diagnostic.code, "RENDER-UNSUPPORTED-KERNEL");
-            assert!(diagnostic.message.contains(backend.as_str()));
         }
     }
 
@@ -738,7 +645,7 @@ mod tests {
                 .iter()
                 .map(|pass| kernel_for_operation(&pass.operation))
                 .collect::<Vec<_>>();
-            for pass in crate::render::effects::effect_pass_plan(&evaluated).iter() {
+            for pass in vestra_core::plan::effect_pass_plan(&evaluated).iter() {
                 assert!(
                     required.contains(&kernel_for_operation(&pass.operation)),
                     "runtime kernel was omitted from conservative requirements"
@@ -820,7 +727,7 @@ mod tests {
         ];
         for (compiled, evaluated) in cases {
             let required = compiled_effect_pass_plan(&compiled);
-            for pass in crate::render::effects::effect_pass_plan(&evaluated).iter() {
+            for pass in vestra_core::plan::effect_pass_plan(&evaluated).iter() {
                 assert!(required.iter().any(|candidate| {
                     kernel_for_operation(&candidate.operation)
                         == kernel_for_operation(&pass.operation)

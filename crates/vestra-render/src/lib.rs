@@ -12,57 +12,26 @@
 )]
 
 pub use vestra_core::{Category, Diagnostic, Severity, animation, domain};
-mod ascii;
-#[cfg(any(feature = "cpu", feature = "wgpu"))]
-mod gaussian;
-mod halftone;
-mod kernel;
-#[cfg(any(feature = "cpu", feature = "wgpu"))]
-mod particle_raster;
-
-pub(crate) fn trace_milliseconds(duration: std::time::Duration) -> u64 {
-    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
-}
-/// Core-owned planning types exposed through the renderer's established path.
-pub mod plan {
-    pub use vestra_core::plan::*;
-}
-
-/// Internal project values used by renderer tests and pixel production.
-/// Production path resolution and environment preflight belong to the SDK.
-pub mod project {
-    pub use vestra_core::project::*;
-}
+pub use vestra_render_common::{
+    AdapterMetadata, AdapterPerformanceClass, ByteLruCache, CacheStats, CompletedFrame,
+    DecodedAssets, PollMode, PreparationStats, PreparationTimings, RenderBackend,
+    RenderBackendKind, StagedMetrics, VideoDecoderFactory, VideoDecoderMetrics,
+    VideoDecoderSession, VideoFrame, blend, decoded, geometry, metrics, plan, project, video,
+};
+use vestra_render_common::{
+    ascii, backend, gaussian, halftone, kernel, particle_raster, trace_milliseconds,
+};
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
 pub use vestra_core::timeline;
-
-mod backend;
-pub mod blend;
-mod cache;
 #[cfg(feature = "cpu")]
 pub mod cpu;
-pub mod decoded;
 pub mod effects;
-pub mod geometry;
-pub mod metrics;
-pub(crate) mod shape_raster;
-pub(crate) mod text;
-pub mod video;
 #[cfg(feature = "wgpu")]
 mod wgpu;
-
-pub use backend::{
-    AdapterMetadata, AdapterPerformanceClass, CompletedFrame, PollMode, RenderBackend,
-    RenderBackendKind,
-};
-pub use cache::{ByteLruCache, CacheStats};
 #[cfg(feature = "cpu")]
 pub use cpu::backend::CpuBackend;
-pub use decoded::DecodedAssets;
-pub use metrics::{PreparationStats, PreparationTimings, StagedMetrics};
-pub use video::{VideoDecoderFactory, VideoDecoderMetrics, VideoDecoderSession, VideoFrame};
 
 #[cfg(feature = "wgpu")]
 pub fn discover_wgpu_adapters() -> Vec<AdapterMetadata> {
@@ -199,12 +168,12 @@ pub fn create_backend(
 ) -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic> {
     #[cfg(feature = "cpu")]
     if matches!(preference, RenderBackendPreference::Cpu) {
-        kernel::validate_plan_capabilities(plan, RenderBackendKind::Cpu)?;
+        cpu::support::validate_plan(plan)?;
     }
 
     #[cfg(all(feature = "cpu", not(feature = "wgpu")))]
     if matches!(preference, RenderBackendPreference::Auto) {
-        kernel::validate_plan_capabilities(plan, RenderBackendKind::Cpu)?;
+        cpu::support::validate_plan(plan)?;
     }
 
     #[cfg(feature = "wgpu")]
@@ -213,7 +182,7 @@ pub fn create_backend(
             RenderBackendPreference::Wgpu => Err(error),
             #[cfg(feature = "cpu")]
             RenderBackendPreference::Auto => {
-                kernel::validate_plan_capabilities(plan, RenderBackendKind::Cpu)?;
+                cpu::support::validate_plan(plan)?;
                 Ok((
                     Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
                     Some(BackendFallback {
@@ -267,7 +236,7 @@ pub fn create_backend(
             match WgpuBackend::new(plan, std::sync::Arc::clone(decoded)) {
                 Ok(backend) => Ok((Box::new(backend), None)),
                 Err(error) => {
-                    kernel::validate_plan_capabilities(plan, RenderBackendKind::Cpu)?;
+                    cpu::support::validate_plan(plan)?;
                     Ok((
                         Box::new(CpuBackend::new(plan, std::sync::Arc::clone(decoded))),
                         Some(BackendFallback {

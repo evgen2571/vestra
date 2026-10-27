@@ -1,10 +1,9 @@
 //! Prepared texture pipelines and bind-group layouts.
 
+use super::support::supports_kernel;
+
 use super::parameters::PARAMETER_RECORD_BYTES;
-use crate::{
-    backend::RenderBackendKind,
-    kernel::{EffectKernel, supports_kernel},
-};
+use crate::kernel::EffectKernel;
 
 pub(super) struct GpuPipelines {
     pub(super) layer: wgpu::ComputePipeline,
@@ -308,7 +307,7 @@ impl GpuPipelines {
 fn supported_kernels() -> impl Iterator<Item = EffectKernel> {
     EffectKernel::ALL
         .into_iter()
-        .filter(|&kernel| supports_kernel(RenderBackendKind::Wgpu, kernel))
+        .filter(|&kernel| supports_kernel(kernel))
 }
 
 const fn kernel_label(kernel: EffectKernel) -> &'static str {

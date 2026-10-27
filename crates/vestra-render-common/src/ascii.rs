@@ -7,18 +7,21 @@ use vestra_core::{
 };
 
 #[derive(Debug)]
-pub(crate) struct PreparedGlyphAtlas {
+pub struct PreparedGlyphAtlas {
     pub(crate) levels: Vec<Arc<RgbaImage>>,
 }
 impl PreparedGlyphAtlas {
-    pub(crate) fn byte_len(&self) -> u64 {
+    pub fn levels(&self) -> &[Arc<RgbaImage>] {
+        &self.levels
+    }
+    pub fn byte_len(&self) -> u64 {
         self.levels
             .iter()
             .map(|image| u64::from(image.width()) * u64::from(image.height()) * 4)
             .sum()
     }
 }
-pub(crate) fn coverage_level(width: u32, height: u32) -> u32 {
+pub fn coverage_level(width: u32, height: u32) -> u32 {
     (32 / width).min(48 / height).max(1).ilog2().min(4)
 }
 

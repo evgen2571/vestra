@@ -106,15 +106,18 @@ impl PreparedAssets {
             .enumerate()
             .map(|(index, _)| {
                 let shape = decoded.shape(index);
-                PreparedRasterSource::from_pixels(Arc::clone(&shape.pixels), shape.intrinsic_size)
+                PreparedRasterSource::from_pixels(
+                    Arc::clone(shape.pixels()),
+                    shape.intrinsic_size(),
+                )
             })
             .collect();
         let texts = (0..decoded.texts_len())
             .map(|index| {
                 let prepared = decoded.text(index);
                 PreparedRasterSource::from_pixels(
-                    Arc::clone(&prepared.pixels),
-                    prepared.intrinsic_size,
+                    Arc::clone(prepared.pixels()),
+                    prepared.intrinsic_size(),
                 )
             })
             .collect();

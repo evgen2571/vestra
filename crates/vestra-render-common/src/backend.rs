@@ -10,7 +10,7 @@ use vestra_core::plan::EvaluatedFrame;
 
 use crate::{
     Diagnostic,
-    render::metrics::{PreparationStats, PreparationTimings},
+    metrics::{PreparationStats, PreparationTimings},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

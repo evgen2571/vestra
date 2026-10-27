@@ -1214,7 +1214,16 @@ fn particle_pixels_pass_through_the_cpu_effect_chain() {
     };
     let mut surfaces = EffectSurfacePool::new(4, 4);
     surfaces.clear();
-    crate::particle_raster::rasterize(surfaces.current(), &system, 0, ColourTransform::default());
+    crate::particle_raster::rasterize_instances(
+        surfaces.current(),
+        system.evaluated_particles_at_with_appearance(
+            0,
+            vestra_core::plan::EvaluatedParticleAppearance::default(),
+        ),
+        system.primitive,
+        system.blend_mode,
+        ColourTransform::default(),
+    );
     let before = surfaces.current().clone();
     effects::apply_chain(
         &mut surfaces,

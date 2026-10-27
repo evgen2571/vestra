@@ -51,7 +51,7 @@ No merge, push or PR. Preserve existing worktrees and unrelated changes.
 
 ## Milestones
 
-- [ ] 1. Separate CPU timings, blend execution and host CRT; focused renderer tests.
+- [x] 1. Separate CPU timings, blend execution and host CRT; focused renderer tests.
 - [ ] 2. Extract common with narrow accessors, unconditional Gaussian storage and
   shared mapping/requirements; common and facade feature checks. Review boundary.
 - [ ] 3. Extract CPU with backend capability policy; CPU tests and isolation.
@@ -83,7 +83,16 @@ branches and clean tree. Distinguish actual results from unverified claims.
 
 2026-10-27: Verified clean checkpoint/history/refs and created requested stacked
 branch. Read the approved design and recorded amendments without altering Phase 2
-measurements. Fresh no-backend baseline test started; result pending.
+measurements. Fresh no-backend baseline passed: 54 tests.
+
+Step 1: CPU timings, composition counters/surface execution and host CRT moved
+under cpu. Reference surface test follows execution. Focused feature tests pass:
+CPU 238/9 ignored; neither 51/0; WGPU 196/3. Two CRT tests and one surface test
+now correctly require CPU (WGPU previously included CRT, surface remains in CPU).
+Source-only relocation preserves reports and numerical bodies. No strict GPU
+runtime claim is made by the plain-shell WGPU test run. Logs: step1-*.log.
+The new media borrowed-slice tests reject the old CompletedFrame signature
+(E0061), before implementation; media-borrowed-red.log records that check.
 
 ## Decisions and discoveries
 

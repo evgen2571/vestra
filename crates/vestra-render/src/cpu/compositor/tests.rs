@@ -92,7 +92,7 @@ fn render_frame_with_plan(
         &mut effects,
         &mut compositions,
         &mut cache,
-        &mut crate::render::metrics::CpuHotPathTimings::default(),
+        &mut crate::cpu::metrics::CpuHotPathTimings::default(),
         false,
     );
     canvas
@@ -321,7 +321,7 @@ fn static_group_is_cached_at_the_complete_layer_stage() {
     let mut surfaces = EffectSurfacePool::new(frame.width, frame.height);
     let mut compositions = CompositionSurfacePool::new();
     let mut cache = ByteLruCache::new(u64::from(frame.width) * u64::from(frame.height) * 4 * 4);
-    let mut timings = crate::render::metrics::CpuHotPathTimings::default();
+    let mut timings = crate::cpu::metrics::CpuHotPathTimings::default();
 
     let first = compose(
         &frame,
@@ -378,7 +378,7 @@ fn dynamic_group_never_reuses_a_static_surface() {
     let mut surfaces = EffectSurfacePool::new(first_frame.width, first_frame.height);
     let mut compositions = CompositionSurfacePool::new();
     let mut cache = ByteLruCache::new(16 * 16 * 4 * 4);
-    let mut timings = crate::render::metrics::CpuHotPathTimings::default();
+    let mut timings = crate::cpu::metrics::CpuHotPathTimings::default();
 
     compose(
         &first_frame,
@@ -540,7 +540,7 @@ fn group_opacity_is_applied_once_to_the_isolated_child_result() {
         &mut effects,
         &mut compositions,
         &mut cache,
-        &mut crate::render::metrics::CpuHotPathTimings::default(),
+        &mut crate::cpu::metrics::CpuHotPathTimings::default(),
         false,
     );
 
@@ -1219,7 +1219,7 @@ fn particle_pixels_pass_through_the_cpu_effect_chain() {
     effects::apply_chain(
         &mut surfaces,
         &[EvaluatedEffect::Brightness { amount: 0.2 }],
-        &mut crate::render::metrics::CpuHotPathTimings::default(),
+        &mut crate::cpu::metrics::CpuHotPathTimings::default(),
         false,
         &[],
     );

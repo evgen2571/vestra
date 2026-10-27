@@ -1,4 +1,4 @@
-use image::{Rgba, RgbaImage};
+use image::Rgba;
 
 #[cfg(any(feature = "cpu", feature = "wgpu"))]
 use vestra_core::plan::ColourTransform;
@@ -19,32 +19,6 @@ pub(crate) fn apply_colour_transform(mut pixel: Rgba<u8>, transform: ColourTrans
             .clamp(0.0, 255.0) as u8;
     }
     pixel
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct CompositionCaseCounts {
-    pub(crate) source_alpha_zero: u64,
-    pub(crate) source_alpha_opaque: u64,
-    pub(crate) destination_alpha_zero: u64,
-    pub(crate) destination_alpha_opaque: u64,
-    pub(crate) general_partial_alpha: u64,
-}
-
-impl CompositionCaseCounts {
-    pub(crate) fn record(&mut self, destination: Rgba<u8>, source: Rgba<u8>, opacity: f64) {
-        let source_alpha = f64::from(source[3]) / 255.0 * opacity;
-        if source_alpha == 0.0 {
-            self.source_alpha_zero += 1;
-        } else if source_alpha == 1.0 {
-            self.source_alpha_opaque += 1;
-        } else if destination[3] == 0 {
-            self.destination_alpha_zero += 1;
-        } else if destination[3] == u8::MAX {
-            self.destination_alpha_opaque += 1;
-        } else {
-            self.general_partial_alpha += 1;
-        }
-    }
 }
 
 /// Composites straight-alpha source pixels over a straight-alpha destination.
@@ -75,34 +49,6 @@ pub(crate) fn source_over(destination: Rgba<u8>, source: Rgba<u8>, opacity: f64)
     }
     result[3] = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;
     Rgba(result)
-}
-
-pub(crate) fn blend_surface(
-    canvas: &mut RgbaImage,
-    source: &RgbaImage,
-    mode: crate::project::BlendMode,
-    opacity: f64,
-    cases: Option<&mut CompositionCaseCounts>,
-) {
-    if matches!(mode, crate::project::BlendMode::Normal) {
-        match cases {
-            Some(cases) => {
-                for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
-                    cases.record(*destination, *source, opacity);
-                    *destination = source_over(*destination, *source, opacity);
-                }
-            }
-            None => {
-                for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
-                    *destination = source_over(*destination, *source, opacity);
-                }
-            }
-        }
-    } else {
-        for (destination, source) in canvas.pixels_mut().zip(source.pixels()) {
-            *destination = blend_pixel(*destination, *source, mode, opacity);
-        }
-    }
 }
 
 pub(crate) fn blend_pixel(
@@ -221,46 +167,6 @@ mod tests {
                     }
                 }
             }
-        }
-    }
-
-    #[test]
-    fn normal_surface_is_byte_identical_to_reference_surface() {
-        let width = 37;
-        let height = 29;
-        let mut optimized = RgbaImage::new(width, height);
-        let mut reference = RgbaImage::new(width, height);
-        let source = RgbaImage::from_fn(width, height, |x, y| {
-            Rgba([
-                ((x * 17 + y * 3) % 256) as u8,
-                ((x * 5 + y * 23) % 256) as u8,
-                ((x * 31 + y * 7) % 256) as u8,
-                ((x * 11 + y * 19) % 256) as u8,
-            ])
-        });
-        for (index, pixel) in optimized.pixels_mut().enumerate() {
-            *pixel = Rgba([
-                ((index * 13) % 256) as u8,
-                ((index * 29 + 7) % 256) as u8,
-                ((index * 47 + 3) % 256) as u8,
-                ((index * 61) % 256) as u8,
-            ]);
-        }
-        reference.clone_from(&optimized);
-        for opacity in [0.0, 0.125, 0.5, 0.996_093_75, 1.0] {
-            let mut expected = reference.clone();
-            for (destination, source) in expected.pixels_mut().zip(source.pixels()) {
-                *destination = source_over_reference(*destination, *source, opacity);
-            }
-            let mut actual = reference.clone();
-            blend_surface(
-                &mut actual,
-                &source,
-                crate::project::BlendMode::Normal,
-                opacity,
-                None,
-            );
-            assert_eq!(actual, expected, "opacity {opacity}");
         }
     }
 

@@ -1,13 +1,11 @@
+use crate::cpu::metrics::CpuHotPathTimings;
 use std::time::Instant;
 
 use image::{GenericImage, Rgba, RgbaImage};
 use vestra_core::plan::{ColourTransform, EffectOperation, EffectResource, EvaluatedEffect};
 
-use crate::{
-    render::effects::{
-        EffectPass, effect_pass_plan, gaussian_radius_is_identity, sampling_blur_radius_is_identity,
-    },
-    render::metrics::CpuHotPathTimings,
+use crate::render::effects::{
+    EffectPass, effect_pass_plan, gaussian_radius_is_identity, sampling_blur_radius_is_identity,
 };
 
 use super::surfaces::EffectSurfacePool;

@@ -1,11 +1,12 @@
+use crate::cpu::metrics::CpuHotPathTimings;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::{
-    blend::blend_surface,
+    cpu::blend::blend_surface,
     cpu::{assets::PreparedAssets, effects, raster::draw_layer},
-    render::{ByteLruCache, metrics::CpuHotPathTimings},
+    render::ByteLruCache,
 };
 use vestra_core::plan::{
     ColourTransform, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedMaskInput,
@@ -412,7 +413,7 @@ fn composite_cached_surface(
     cached: &CachedCpuLayerSurface,
     layer: &EvaluatedLayer,
     stats: &mut ComposeStats,
-    cases: Option<&mut crate::blend::CompositionCaseCounts>,
+    cases: Option<&mut crate::cpu::blend::CompositionCaseCounts>,
 ) {
     if is_opaque_copy(layer, cached, canvas.width(), canvas.height()) {
         canvas.as_mut().copy_from_slice(cached.image.as_raw());

@@ -363,7 +363,7 @@ pub(super) fn crt(source: &RgbaImage, target: &mut RgbaImage, operation: EffectO
     };
     let phase = phase as f32;
     let seed = (seed as u32) ^ ((seed >> 32) as u32);
-    let sampling = crate::crt::Sampling::new(curvature, jitter, seed, phase);
+    let sampling = crate::cpu::crt::Sampling::new(curvature, jitter, seed, phase);
     let width = source.width() as f32;
     let height = source.height() as f32;
     for (x, y, out) in target.enumerate_pixels_mut() {

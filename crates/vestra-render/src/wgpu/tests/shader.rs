@@ -20,8 +20,8 @@ fn texture_shaders_parse_without_a_gpu_adapter() {
         .expect("mask coverage WGSL must parse independently of adapter availability");
     naga::front::wgsl::parse_str(include_str!("../../shaders/mask_feather.wgsl"))
         .expect("mask feather WGSL must parse independently of adapter availability");
-    for source in crate::kernel::EffectKernel::ALL {
-        naga::front::wgsl::parse_str(source.source())
+    for kernel in crate::kernel::EffectKernel::ALL {
+        naga::front::wgsl::parse_str(super::pipeline::kernel_source(kernel))
             .expect("effect kernel WGSL must parse independently of adapter availability");
     }
 }

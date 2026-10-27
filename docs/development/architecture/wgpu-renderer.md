@@ -43,6 +43,12 @@ encoding. Keeping that timing preserves the existing allocation and metric
 scopes. Topology, requirements, pipelines, texture pools and readback retain
 their separate resource responsibilities.
 
+Shader labels and WGSL source mappings are WGPU-owned free functions in
+`pipeline.rs`; kernel identifiers and operation requirements stay backend-neutral.
+Shared shape rasterization prepares immutable pixels consumed by both backends.
+WGPU resource tests run with the WGPU feature alone. Tests comparing CPU and
+WGPU output additionally require CPU.
+
 Metrics distinguish initialization, command encoding/submission, uploads, readback waits and row repacking. A request for WGPU can still fail at adapter, device, pipeline, upload or runtime-pass boundaries. Automatic renderer selection may report `VESTRA-WGPU-FALLBACK` and use CPU; an explicit request follows preflight policy. Do not hide either case behind a generic "GPU" label.
 
 This page describes implementation ownership. For adapter commands and hardware classification, use [GPU validation](../gpu-validation.md). For user recovery steps, use [WGPU troubleshooting](../../troubleshooting/wgpu.md). The public selection contract is in [Backends](../../reference/backends.md).

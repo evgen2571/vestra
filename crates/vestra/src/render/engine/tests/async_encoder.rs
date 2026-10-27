@@ -10,14 +10,14 @@ struct WaitingSink {
 }
 
 impl FrameSink for WaitingSink {
-    fn write_frame(&mut self, frame: &CompletedFrame) -> Result<(), MediaError> {
+    fn write_frame(&mut self, frame_number: u64, rgba: &[u8]) -> Result<(), MediaError> {
         loop {
             let submitted = self
                 .submitted
                 .recv_timeout(Duration::from_secs(1))
                 .map_err(|_| MediaError::FrameInputClosed)?;
-            if submitted > frame.frame_number {
-                assert_eq!(submitted, frame.frame_number + 1);
+            if submitted > frame_number {
+                assert_eq!(submitted, frame_number + 1);
                 break;
             }
         }
@@ -27,7 +27,7 @@ impl FrameSink for WaitingSink {
             Err(std::sync::mpsc::TryRecvError::Empty)
         ));
         assert!(!self.panic_on_write, "injected writer panic");
-        self.inner.write_frame(frame)
+        self.inner.write_frame(frame_number, rgba)
     }
 
     fn finish(&mut self) -> Result<SinkResult, MediaError> {

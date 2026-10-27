@@ -1,5 +1,6 @@
 //! Fully prepared CPU backend lifecycle.
 
+use crate::cpu::metrics::CpuHotPathTimings;
 use std::{
     sync::{
         Arc,
@@ -18,7 +19,7 @@ use crate::{
     Diagnostic,
     render::{
         AdapterMetadata, CompletedFrame, DecodedAssets, PollMode, RenderBackend, RenderBackendKind,
-        metrics::{CpuHotPathTimings, PreparationStats, PreparationTimings, StagedMetrics},
+        metrics::{PreparationStats, PreparationTimings, StagedMetrics},
     },
 };
 

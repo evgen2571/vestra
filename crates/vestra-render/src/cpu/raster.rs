@@ -1,5 +1,6 @@
 //! CPU layer rasterization and image sampling.
 
+use crate::cpu::metrics::CpuHotPathTimings;
 use image::{Rgba, RgbaImage};
 use vestra_core::plan::{ColourTransform, EvaluatedEffect, EvaluatedLayer, EvaluatedSource};
 
@@ -10,7 +11,6 @@ use crate::{
         blend::{apply_colour_transform, source_over},
         cpu::{assets::PreparedAssets, spectrum2d},
         geometry,
-        metrics::CpuHotPathTimings,
     },
 };
 

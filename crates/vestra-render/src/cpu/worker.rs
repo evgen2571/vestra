@@ -1,5 +1,6 @@
 //! State owned by one CPU render worker.
 
+use crate::cpu::metrics::CpuHotPathTimings;
 use std::{
     panic::AssertUnwindSafe,
     sync::{Arc, mpsc::SyncSender},
@@ -10,7 +11,7 @@ use vestra_core::plan::{EvaluatedFrame, RenderPlan};
 
 use crate::render::{
     ByteLruCache, CompletedFrame, DecodedAssets,
-    metrics::{CpuHotPathTimings, PreparationStats, PreparationTimings},
+    metrics::{PreparationStats, PreparationTimings},
 };
 
 use super::{assets::PreparedAssets, compositor};

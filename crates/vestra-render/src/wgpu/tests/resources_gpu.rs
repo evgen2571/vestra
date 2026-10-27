@@ -11,8 +11,10 @@ use vestra_core::plan::{
     TemporalDependency, compile,
 };
 
+#[cfg(feature = "cpu")]
+use crate::render::CpuBackend;
 use crate::{
-    render::{CompletedFrame, CpuBackend, PollMode, RenderBackend, StagedMetrics, WgpuBackend},
+    render::{CompletedFrame, PollMode, RenderBackend, StagedMetrics, WgpuBackend},
     test_support::{ValidationOptions, load_and_validate},
 };
 use image::RgbaImage;
@@ -236,6 +238,7 @@ fn gpu_multi_key_pending_cache_reservations_stay_within_budget_when_an_adapter_i
     assert_eq!(gpu.stats().static_cache_entries, 0);
 }
 
+#[cfg(feature = "cpu")]
 #[test]
 fn gpu_readback_preserves_padded_rows_when_an_adapter_is_available() {
     let validated = load_and_validate(

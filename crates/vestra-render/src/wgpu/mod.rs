@@ -136,7 +136,7 @@ mod gpu;
 #[cfg(all(test, feature = "cpu"))]
 #[path = "tests/parity_gpu.rs"]
 mod parity_gpu_tests;
-#[cfg(all(test, feature = "cpu"))]
+#[cfg(test)]
 #[path = "tests/resources_gpu.rs"]
 mod resource_gpu_tests;
 #[cfg(all(test, feature = "cpu"))]

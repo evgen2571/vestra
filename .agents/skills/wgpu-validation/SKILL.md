@@ -20,8 +20,9 @@ of building a competing adapter validation framework.
 3. Separate **software correctness** (`just wgpu-software`)
    from **hardware verification** (`just wgpu-hardware`).
    The strict hardware recipe requires an integrated or discrete adapter.
-4. While iterating, run filtered `cargo test -p vestra-render --lib
-   --all-features` and shader/parameter/resource tests. Follow
+4. While iterating, run filtered `cargo test -p vestra-render-wgpu --lib`
+   for shader/parameter/resource tests and `cargo test -p vestra-render
+   --test parity --all-features` for cross-backend comparisons. Follow
    `scripts/verify-wgpu.sh` for adapter-required test flags and GL test
    serialization; don't force hardware requirements onto general tests.
 5. Investigate shader parse and binding errors, WGSL/Rust parameter

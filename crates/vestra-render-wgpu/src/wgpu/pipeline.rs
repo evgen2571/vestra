@@ -554,6 +554,143 @@ mod tests {
     use super::*;
 
     #[test]
+    fn effect_shader_labels_and_composed_bytes_match_the_registration_baseline() {
+        let baseline = [
+            (
+                EffectKernel::HalftoneAnalyze,
+                "vestra.effect.halftoneanalyze",
+                4764,
+                0x6a0aee56e15eff6b,
+            ),
+            (
+                EffectKernel::Halftone,
+                "vestra.effect.halftone",
+                5232,
+                0x02c85a992c052a48,
+            ),
+            (
+                EffectKernel::PixelSort,
+                "vestra.effect.pixelsort",
+                4397,
+                0xc04aca79a8dee498,
+            ),
+            (
+                EffectKernel::Crt,
+                "vestra.effect.crt",
+                4349,
+                0x986eaf12bd56d63e,
+            ),
+            (
+                EffectKernel::AsciiAnalyze,
+                "vestra.effect.ascii-analyze",
+                6737,
+                0x546d5c3659dfe960,
+            ),
+            (
+                EffectKernel::AsciiResolve,
+                "vestra.effect.ascii-resolve",
+                8720,
+                0xc12c0b7ca88d0c57,
+            ),
+            (
+                EffectKernel::PaletteInputAnalyze,
+                "vestra.effect.palette-input-analyze",
+                3122,
+                0x761c192efcd0b35b,
+            ),
+            (
+                EffectKernel::PaletteMap,
+                "vestra.effect.palette-map",
+                14174,
+                0xd21e997744c4d8a9,
+            ),
+            (
+                EffectKernel::OrderedDither,
+                "vestra.effect.ordered-dither",
+                20352,
+                0x6d56afefd456f32e,
+            ),
+            (
+                EffectKernel::ColourTransform,
+                "vestra.effect.colour-transform",
+                2305,
+                0x3bdeb0d582fe814e,
+            ),
+            (
+                EffectKernel::GaussianBlur,
+                "vestra.effect.gaussian-blur",
+                3703,
+                0x6b15caf7e36a4675,
+            ),
+            (
+                EffectKernel::HighlightExtract,
+                "vestra.effect.highlight-extract",
+                2269,
+                0x6221ff18ec8ac0a6,
+            ),
+            (
+                EffectKernel::Composite,
+                "vestra.effect.composite",
+                2732,
+                0x685332c80cd10b24,
+            ),
+            (
+                EffectKernel::DirectionalBlur,
+                "vestra.effect.directional-blur",
+                2728,
+                0xf1f47ae546f8b064,
+            ),
+            (
+                EffectKernel::ZoomBlur,
+                "vestra.effect.zoom-blur",
+                3060,
+                0x5142903d4b9df482,
+            ),
+            (
+                EffectKernel::ChromaticAberration,
+                "vestra.effect.chromatic-aberration",
+                2301,
+                0xfa32550b5fea5d82,
+            ),
+            (
+                EffectKernel::Vignette,
+                "vestra.effect.vignette",
+                2393,
+                0x26d242f21e3f09c0,
+            ),
+            (
+                EffectKernel::ColorAdjust,
+                "vestra.effect.color-adjust",
+                2455,
+                0xf02f6b14c5b90142,
+            ),
+            (
+                EffectKernel::MotionBlur,
+                "vestra.effect.motion-blur",
+                2728,
+                0xf1f47ae546f8b064,
+            ),
+        ];
+        assert_eq!(baseline.len(), EffectKernel::ALL.len());
+        for (kernel, label, length, fingerprint) in baseline {
+            assert_eq!(kernel_label(kernel), label);
+            let source = kernel_source(kernel).as_bytes();
+            assert_eq!(source.len(), length, "{kernel:?}");
+            let actual = source.iter().fold(0xcbf29ce484222325_u64, |hash, byte| {
+                (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+            });
+            assert_eq!(actual, fingerprint, "{kernel:?}");
+        }
+    }
+
+    #[test]
+    fn reported_base_counts_preserve_the_existing_counter_contract() {
+        // Nine base resources are created; correcting their report is separate work.
+        assert_eq!(GpuPipelines::BASE_SHADER_MODULE_COUNT, 8);
+        assert_eq!(GpuPipelines::BASE_PIPELINE_COUNT, 8);
+    }
+
+    #[test]
     fn effect_shader_sources_isolate_kernel_algorithms() {
         assert!(kernel_source(EffectKernel::GaussianBlur).contains("fn gaussian"));
         assert!(!kernel_source(EffectKernel::ColorAdjust).contains("fn gaussian"));

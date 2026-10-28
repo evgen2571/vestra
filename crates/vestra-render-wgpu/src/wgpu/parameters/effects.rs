@@ -763,6 +763,82 @@ mod effect_parameter_layout_tests {
     use std::mem::{align_of, offset_of, size_of};
 
     #[test]
+    fn effect_record_sizes_match_the_existing_abi() {
+        let baseline = [
+            (
+                size_of::<AnalogParameters>(),
+                96,
+                align_of::<AnalogParameters>(),
+            ),
+            (
+                size_of::<AsciiParameters>(),
+                128,
+                align_of::<AsciiParameters>(),
+            ),
+            (
+                size_of::<PaletteParameters>(),
+                256,
+                align_of::<PaletteParameters>(),
+            ),
+            (
+                size_of::<InputAnalysisParameters>(),
+                16,
+                align_of::<InputAnalysisParameters>(),
+            ),
+            (
+                size_of::<ColourTransformParameters>(),
+                80,
+                align_of::<ColourTransformParameters>(),
+            ),
+            (
+                size_of::<GaussianBlurParameters>(),
+                176,
+                align_of::<GaussianBlurParameters>(),
+            ),
+            (
+                size_of::<HighlightExtractParameters>(),
+                48,
+                align_of::<HighlightExtractParameters>(),
+            ),
+            (
+                size_of::<CompositeParameters>(),
+                32,
+                align_of::<CompositeParameters>(),
+            ),
+            (
+                size_of::<LineBlurParameters>(),
+                32,
+                align_of::<LineBlurParameters>(),
+            ),
+            (
+                size_of::<ZoomBlurParameters>(),
+                48,
+                align_of::<ZoomBlurParameters>(),
+            ),
+            (
+                size_of::<ChromaticAberrationParameters>(),
+                32,
+                align_of::<ChromaticAberrationParameters>(),
+            ),
+            (
+                size_of::<VignetteParameters>(),
+                48,
+                align_of::<VignetteParameters>(),
+            ),
+            (
+                size_of::<ColorAdjustParameters>(),
+                32,
+                align_of::<ColorAdjustParameters>(),
+            ),
+        ];
+        assert_eq!(baseline.len(), 13);
+        for (actual, expected, alignment) in baseline {
+            assert_eq!(actual, expected);
+            assert_eq!(alignment, 16);
+        }
+    }
+
+    #[test]
     fn ascii_record_matches_shared_wgsl_layout() {
         assert_eq!(offset_of!(AsciiParameters, glyph_count), 16);
         assert_eq!(offset_of!(AsciiParameters, foreground), 32);
@@ -855,3 +931,7 @@ mod effect_parameter_layout_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "effect_registration_tests.rs"]
+mod registration_tests;

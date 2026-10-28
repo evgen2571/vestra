@@ -144,6 +144,39 @@ mod tests {
     use vestra_core::plan::{CompositeMode, EffectOperation};
 
     #[test]
+    fn kernel_inventory_preserves_order_and_private_bit_assignments() {
+        let expected = [
+            (EffectKernel::AsciiAnalyze, 15),
+            (EffectKernel::AsciiResolve, 16),
+            (EffectKernel::HalftoneAnalyze, 12),
+            (EffectKernel::Halftone, 13),
+            (EffectKernel::PixelSort, 14),
+            (EffectKernel::Crt, 17),
+            (EffectKernel::PaletteInputAnalyze, 18),
+            (EffectKernel::PaletteMap, 10),
+            (EffectKernel::OrderedDither, 11),
+            (EffectKernel::ColourTransform, 0),
+            (EffectKernel::GaussianBlur, 1),
+            (EffectKernel::HighlightExtract, 2),
+            (EffectKernel::Composite, 3),
+            (EffectKernel::DirectionalBlur, 4),
+            (EffectKernel::ZoomBlur, 5),
+            (EffectKernel::ChromaticAberration, 6),
+            (EffectKernel::Vignette, 7),
+            (EffectKernel::ColorAdjust, 8),
+            (EffectKernel::MotionBlur, 9),
+        ];
+        assert_eq!(EffectKernel::ALL, expected.map(|(kernel, _)| kernel));
+        let mut set = EffectKernelSet::default();
+        for (kernel, bit) in expected {
+            assert_eq!(kernel.index(), bit);
+            set.insert(kernel);
+        }
+        assert_eq!(set.0.count_ones(), EffectKernel::ALL.len() as u32);
+        assert_eq!(set.iter().collect::<Vec<_>>(), EffectKernel::ALL);
+    }
+
+    #[test]
     fn gaussian_directions_share_a_kernel() {
         assert_eq!(
             kernel_for_operation(&EffectOperation::GaussianHorizontal {
@@ -172,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn every_executable_operation_has_one_kernel_mapping() {
+    fn representative_executable_operations_have_kernel_mappings() {
         let operations = [
             EffectOperation::ApplyColourTransform {
                 transform: Default::default(),

@@ -58,6 +58,9 @@ pub const fn compiled_effect_pass_requirements(effect: &CompiledEffect) -> Effec
 pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
     let current = EffectResource::Current;
     match effect {
+        CompiledEffect::Vignette { .. } => crate::effects::vignette::compiled_passes(effect),
+        CompiledEffect::CameraShake { .. } => crate::effects::camera_shake::compiled_passes(effect),
+        CompiledEffect::Glow { .. } => crate::effects::glow::compiled_passes(effect),
         CompiledEffect::Ascii { parameters, .. } => ascii_pass_plan(*parameters),
         CompiledEffect::PixelSort { .. } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::PixelSort {
@@ -223,7 +226,7 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             ),
         ]),
         CompiledEffect::MotionTile { .. } => EffectPassPlan::new(&[]),
-        CompiledEffect::Glow { .. } | CompiledEffect::Bloom { .. } => EffectPassPlan::new(&[
+        CompiledEffect::Bloom { .. } => EffectPassPlan::new(&[
             EffectPass::new(
                 EffectOperation::HighlightExtract {
                     threshold: 0.0,
@@ -305,16 +308,6 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             current,
             current,
         )]),
-        CompiledEffect::Vignette { .. } => EffectPassPlan::new(&[EffectPass::new(
-            EffectOperation::Vignette {
-                amount: 1.0,
-                radius: 1.0,
-                softness: 1.0,
-                colour: [0; 4],
-            },
-            current,
-            current,
-        )]),
         CompiledEffect::ColorAdjust { .. } => EffectPassPlan::new(&[EffectPass::new(
             EffectOperation::ColorAdjust {
                 exposure: 0.0,
@@ -334,11 +327,10 @@ pub fn compiled_effect_pass_plan(effect: &CompiledEffect) -> EffectPassPlan {
             current,
             current,
         )]),
-        CompiledEffect::CameraShake { .. } => EffectPassPlan::new(&[]),
     }
 }
 
-const fn compiled_scalar_is_constant(
+pub(crate) const fn compiled_scalar_is_constant(
     property: &crate::plan::CompiledScalarProperty,
     value: f64,
 ) -> bool {
@@ -347,14 +339,14 @@ const fn compiled_scalar_is_constant(
         && property.modifiers.is_empty()
 }
 
-const fn compiled_palette_input_is_identity(
+pub(crate) const fn compiled_palette_input_is_identity(
     exposure: &crate::plan::CompiledScalarProperty,
     gamma: &crate::plan::CompiledScalarProperty,
 ) -> bool {
     compiled_scalar_is_constant(exposure, 0.0) && compiled_scalar_is_constant(gamma, 1.0)
 }
 
-const fn compiled_palette_detail_is_identity(
+pub(crate) const fn compiled_palette_detail_is_identity(
     detail: &crate::plan::CompiledScalarProperty,
     radius: &crate::plan::CompiledScalarProperty,
 ) -> bool {

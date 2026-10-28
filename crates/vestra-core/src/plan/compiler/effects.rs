@@ -14,6 +14,13 @@ pub(super) fn compile(
         };
     }
     Ok(match effect {
+        crate::project::Effect::Vignette { .. } => {
+            crate::effects::vignette::compile(effect, id, interner)?
+        }
+        crate::project::Effect::CameraShake { .. } => {
+            crate::effects::camera_shake::compile(effect, id, interner)?
+        }
+        crate::project::Effect::Glow { .. } => crate::effects::glow::compile(effect, id, interner)?,
         crate::project::Effect::Ascii {
             characters,
             edge_characters,
@@ -356,25 +363,6 @@ pub(super) fn compile(
                 center: compile_point(center, id, interner)?,
             }
         }
-        crate::project::Effect::Glow {
-            threshold,
-            radius,
-            intensity,
-            colour,
-            ..
-        } => crate::plan::CompiledEffect::Glow {
-            threshold: scalar!(threshold, ScalarPropertyTarget::GlowThreshold),
-            radius: scalar!(radius, ScalarPropertyTarget::GlowRadius),
-            intensity: scalar!(intensity, ScalarPropertyTarget::GlowIntensity),
-            colour: parse_colour(colour).ok_or_else(|| {
-                Diagnostic::error(
-                    "VESTRA-PLAN-EFFECT-COLOUR",
-                    Category::Internal,
-                    "validated glow color is invalid",
-                    "",
-                )
-            })?,
-        },
         crate::project::Effect::Bloom {
             threshold,
             radius,
@@ -396,25 +384,6 @@ pub(super) fn compile(
                 ScalarPropertyTarget::ChromaticAberrationAngleDegrees
             ),
         },
-        crate::project::Effect::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-            ..
-        } => crate::plan::CompiledEffect::Vignette {
-            amount: scalar!(amount, ScalarPropertyTarget::VignetteAmount),
-            radius: scalar!(radius, ScalarPropertyTarget::VignetteRadius),
-            softness: crate::plan::tracks::compile(softness, id)?,
-            colour: parse_colour(colour).ok_or_else(|| {
-                Diagnostic::error(
-                    "VESTRA-PLAN-EFFECT-COLOUR",
-                    Category::Internal,
-                    "validated vignette color is invalid",
-                    "",
-                )
-            })?,
-        },
         crate::project::Effect::Sharpen { amount, radius, .. } => {
             crate::plan::CompiledEffect::Sharpen {
                 amount: scalar!(amount, ScalarPropertyTarget::SharpenAmount),
@@ -433,30 +402,6 @@ pub(super) fn compile(
             black_point: crate::plan::tracks::compile(black_point, id)?,
             white_point: crate::plan::tracks::compile(white_point, id)?,
         },
-        crate::project::Effect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            seed,
-            attack,
-            decay,
-            ..
-        } => crate::plan::CompiledEffect::CameraShake {
-            position_amount: scalar!(
-                position_amount,
-                ScalarPropertyTarget::CameraShakePositionAmount
-            ),
-            rotation_degrees: scalar!(
-                rotation_degrees,
-                ScalarPropertyTarget::CameraShakeRotationDegrees
-            ),
-            scale_amount: scalar!(scale_amount, ScalarPropertyTarget::CameraShakeScaleAmount),
-            frequency: scalar!(frequency, ScalarPropertyTarget::CameraShakeFrequency),
-            seed: *seed,
-            attack: *attack,
-            decay: *decay,
-        },
         crate::project::Effect::MotionBlur {
             intensity,
             shutter_angle,
@@ -472,7 +417,7 @@ pub(super) fn compile(
     })
 }
 
-fn compile_point(
+pub(crate) fn compile_point(
     property: &crate::project::PointProperty,
     id: &str,
     interner: &mut ScalarSignalInterner,

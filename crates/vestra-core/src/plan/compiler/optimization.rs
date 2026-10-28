@@ -78,6 +78,9 @@ fn normalize_source(layer: &mut CompiledLayer) -> usize {
 
 fn normalize_effect(effect: &mut CompiledEffect) -> usize {
     match effect {
+        CompiledEffect::Vignette { .. } => crate::effects::vignette::normalize(effect),
+        CompiledEffect::CameraShake { .. } => crate::effects::camera_shake::normalize(effect),
+        CompiledEffect::Glow { .. } => crate::effects::glow::normalize(effect),
         CompiledEffect::Ascii {
             amount,
             phase,
@@ -182,23 +185,11 @@ fn normalize_effect(effect: &mut CompiledEffect) -> usize {
             amount: radius,
             angle_degrees,
         } => normalize_track(radius) + normalize_track(angle_degrees),
-        CompiledEffect::Glow {
-            threshold,
-            radius,
-            intensity,
-            ..
-        } => normalize_track(threshold) + normalize_track(radius) + normalize_track(intensity),
         CompiledEffect::Bloom {
             threshold,
             radius,
             intensity,
         } => normalize_track(threshold) + normalize_track(radius) + normalize_track(intensity),
-        CompiledEffect::Vignette {
-            amount,
-            radius,
-            softness,
-            ..
-        } => normalize_track(amount) + normalize_track(radius) + normalize_track(softness),
         CompiledEffect::Sharpen { amount, radius } => {
             normalize_track(amount) + normalize_track(radius)
         }
@@ -212,18 +203,6 @@ fn normalize_effect(effect: &mut CompiledEffect) -> usize {
                 + normalize_track(gamma)
                 + normalize_track(black_point)
                 + normalize_track(white_point)
-        }
-        CompiledEffect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            ..
-        } => {
-            normalize_track(position_amount)
-                + normalize_track(rotation_degrees)
-                + normalize_track(scale_amount)
-                + normalize_track(frequency)
         }
         CompiledEffect::MotionBlur {
             intensity,
@@ -257,6 +236,9 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         return false;
     }
     match effect {
+        CompiledEffect::Vignette { .. } => crate::effects::vignette::static_identity(effect),
+        CompiledEffect::CameraShake { .. } => crate::effects::camera_shake::static_identity(effect),
+        CompiledEffect::Glow { .. } => crate::effects::glow::static_identity(effect),
         CompiledEffect::ColourTransform { transform } => *transform == ColourTransform::default(),
         CompiledEffect::Brightness { amount } => {
             !amount.has_modifiers()
@@ -318,21 +300,12 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
                 && center.y_modifiers.is_empty()
                 && sampling_blur_radius_is_identity(radius.base_value)
         }
-        CompiledEffect::Glow {
-            radius, intensity, ..
-        } => {
-            radius.keyframes.is_empty()
-                && intensity.keyframes.is_empty()
-                && (gaussian_radius_is_identity(radius.base_value)
-                    || effect_amount_is_identity(intensity.base_value))
-        }
         CompiledEffect::Bloom { intensity, .. } => {
             intensity.keyframes.is_empty() && effect_amount_is_identity(intensity.base_value)
         }
         CompiledEffect::Ascii { amount, .. }
         | CompiledEffect::PaletteMap { amount, .. }
-        | CompiledEffect::OrderedDither { amount, .. }
-        | CompiledEffect::Vignette { amount, .. } => {
+        | CompiledEffect::OrderedDither { amount, .. } => {
             amount.keyframes.is_empty() && effect_amount_is_identity(amount.base_value)
         }
         CompiledEffect::Sharpen { amount, radius } => {
@@ -358,19 +331,6 @@ fn is_static_identity(effect: &CompiledEffect) -> bool {
         }
         CompiledEffect::MotionBlur { intensity, .. } => {
             intensity.keyframes.is_empty() && effect_amount_is_identity(intensity.base_value)
-        }
-        CompiledEffect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            ..
-        } => {
-            position_amount.keyframes.is_empty()
-                && rotation_degrees.keyframes.is_empty()
-                && scale_amount.keyframes.is_empty()
-                && position_amount.base_value == 0.0
-                && rotation_degrees.base_value == 0.0
-                && scale_amount.base_value == 0.0
         }
     }
 }
@@ -417,7 +377,7 @@ fn fuse_static_colour_chain(layer: &mut CompiledLayer) {
     }];
 }
 
-fn normalize_track<T: Interpolate + PartialEq>(track: &mut Track<T>) -> usize {
+pub(crate) fn normalize_track<T: Interpolate + PartialEq>(track: &mut Track<T>) -> usize {
     let had_keyframes = !track.keyframes.is_empty();
     *track = track.clone().normalized_from_zero();
     usize::from(had_keyframes && track.keyframes.is_empty())

@@ -58,6 +58,9 @@ impl EvaluatedEffect {
     #[must_use]
     pub fn is_identity(&self) -> bool {
         match self {
+            Self::Vignette { .. } => crate::effects::vignette::evaluated_identity(self),
+            Self::CameraShake { .. } => crate::effects::camera_shake::evaluated_identity(self),
+            Self::Glow { .. } => crate::effects::glow::evaluated_identity(self),
             Self::Ascii { parameters } => {
                 effect_amount_is_identity(parameters.amount) || parameters.source_mix == 1.0
             }
@@ -67,8 +70,7 @@ impl EvaluatedEffect {
             Self::PaletteMap { amount, .. }
             | Self::OrderedDither { amount, .. }
             | Self::Tint { amount, .. }
-            | Self::ChromaticAberration { amount, .. }
-            | Self::Vignette { amount, .. } => effect_amount_is_identity(*amount),
+            | Self::ChromaticAberration { amount, .. } => effect_amount_is_identity(*amount),
             Self::Halftone { amount, .. } => effect_amount_is_identity(*amount),
             Self::PixelSort { amount, .. } => effect_amount_is_identity(*amount),
             Self::Crt { amount, .. } => effect_amount_is_identity(*amount),
@@ -82,9 +84,6 @@ impl EvaluatedEffect {
             | Self::ZoomBlur { radius, .. }
             | Self::MotionBlur { radius, .. } => sampling_blur_radius_is_identity(*radius),
             Self::RadialBlur { amount, .. } => sampling_blur_radius_is_identity(*amount),
-            Self::Glow {
-                radius, intensity, ..
-            } => gaussian_radius_is_identity(*radius) || effect_amount_is_identity(*intensity),
             Self::Bloom { intensity, .. } => effect_amount_is_identity(*intensity),
             Self::Sharpen { amount, radius } => {
                 effect_amount_is_identity(*amount) || gaussian_radius_is_identity(*radius)
@@ -95,7 +94,6 @@ impl EvaluatedEffect {
                 black_point,
                 white_point,
             } => *exposure == 0.0 && *gamma == 1.0 && *black_point == 0.0 && *white_point == 1.0,
-            Self::CameraShake { .. } => true,
         }
     }
 
@@ -115,6 +113,15 @@ pub fn evaluate(
     context: &EvaluationContext<'_>,
 ) -> Result<EvaluatedEffect, EvaluationError> {
     Ok(match effect {
+        CompiledEffect::Vignette { .. } => {
+            crate::effects::vignette::evaluate(effect, authored_time, project_time, context)?
+        }
+        CompiledEffect::CameraShake { .. } => {
+            crate::effects::camera_shake::evaluate(effect, authored_time, project_time, context)?
+        }
+        CompiledEffect::Glow { .. } => {
+            crate::effects::glow::evaluate(effect, authored_time, project_time, context)?
+        }
         CompiledEffect::ColourTransform { transform } => EvaluatedEffect::ColourTransform {
             transform: *transform,
         },
@@ -379,17 +386,6 @@ pub fn evaluate(
             amount: amount.evaluate(authored_time, project_time, context)?,
             center: evaluate_point(center, authored_time, project_time, context)?,
         },
-        CompiledEffect::Glow {
-            threshold,
-            radius,
-            intensity,
-            colour,
-        } => EvaluatedEffect::Glow {
-            threshold: threshold.evaluate(authored_time, project_time, context)?,
-            radius: radius.evaluate(authored_time, project_time, context)?,
-            intensity: intensity.evaluate(authored_time, project_time, context)?,
-            colour: *colour,
-        },
         CompiledEffect::Bloom {
             threshold,
             radius,
@@ -406,17 +402,6 @@ pub fn evaluate(
             amount: amount.evaluate(authored_time, project_time, context)?,
             angle_degrees: angle_degrees.evaluate(authored_time, project_time, context)?,
         },
-        CompiledEffect::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-        } => EvaluatedEffect::Vignette {
-            amount: amount.evaluate(authored_time, project_time, context)?,
-            radius: radius.evaluate(authored_time, project_time, context)?,
-            softness: softness.evaluate(authored_time),
-            colour: *colour,
-        },
         CompiledEffect::Sharpen { amount, radius } => EvaluatedEffect::Sharpen {
             amount: amount.evaluate(authored_time, project_time, context)?,
             radius: radius.evaluate(authored_time, project_time, context)?,
@@ -431,26 +416,6 @@ pub fn evaluate(
             gamma: gamma.evaluate(authored_time, project_time, context)?,
             black_point: black_point.evaluate(authored_time),
             white_point: white_point.evaluate(authored_time),
-        },
-        CompiledEffect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            seed,
-            attack,
-            decay,
-        } => EvaluatedEffect::CameraShake {
-            local_time: authored_time,
-            position_amount: position_amount.evaluate(authored_time, project_time, context)?,
-            rotation_radians: rotation_degrees
-                .evaluate(authored_time, project_time, context)?
-                .to_radians(),
-            scale_amount: scale_amount.evaluate(authored_time, project_time, context)?,
-            frequency: frequency.evaluate(authored_time, project_time, context)?,
-            seed: *seed,
-            attack: *attack,
-            decay: *decay,
         },
         CompiledEffect::MotionBlur {
             intensity,
@@ -468,7 +433,7 @@ pub fn evaluate(
     })
 }
 
-fn evaluate_point(
+pub(crate) fn evaluate_point(
     property: &CompiledPointProperty,
     authored_time: u128,
     project_time: u128,

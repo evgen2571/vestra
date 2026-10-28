@@ -2,7 +2,7 @@
 
 mod attachments;
 mod parameters;
-mod properties;
+pub(crate) mod properties;
 
 pub(super) use attachments::{validate_assets, validate_clip, validate_global};
 pub(super) use parameters::validate_parameters;

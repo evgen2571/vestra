@@ -310,6 +310,9 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
     let scalar = |property: &mut ScalarProperty| map_project_track(&mut property.track, duration);
     let track = |value: &mut crate::project::Track<f64>| map_project_track(value, duration);
     match effect {
+        Effect::Vignette { .. } => crate::effects::vignette::remap(effect, duration),
+        Effect::CameraShake { .. } => crate::effects::camera_shake::remap(effect, duration),
+        Effect::Glow { .. } => crate::effects::glow::remap(effect, duration),
         Effect::Ascii {
             amount,
             phase,
@@ -413,13 +416,7 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
         }
         Effect::ZoomBlur { radius, .. } => scalar(radius),
         Effect::RadialBlur { amount, .. } => scalar(amount),
-        Effect::Glow {
-            threshold,
-            radius,
-            intensity,
-            ..
-        }
-        | Effect::Bloom {
+        Effect::Bloom {
             threshold,
             radius,
             intensity,
@@ -437,16 +434,6 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
             scalar(amount);
             scalar(angle_degrees);
         }
-        Effect::Vignette {
-            amount,
-            radius,
-            softness,
-            ..
-        } => {
-            scalar(amount);
-            scalar(radius);
-            track(softness);
-        }
         Effect::Sharpen { amount, radius, .. } => {
             scalar(amount);
             scalar(radius);
@@ -463,21 +450,6 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
             track(black_point);
             track(white_point);
         }
-        Effect::CameraShake {
-            timing,
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            ..
-        } => {
-            timing.start *= duration;
-            timing.duration = timing.duration.map(|value| value * duration);
-            scalar(position_amount);
-            scalar(rotation_degrees);
-            scalar(scale_amount);
-            scalar(frequency);
-        }
         Effect::MotionBlur {
             intensity,
             shutter_angle,
@@ -491,7 +463,7 @@ fn map_effect_times(effect: &mut Effect, duration: f64) {
     }
 }
 
-fn map_project_track<T>(track: &mut crate::project::Track<T>, duration: f64) {
+pub(crate) fn map_project_track<T>(track: &mut crate::project::Track<T>, duration: f64) {
     for keyframe in &mut track.keyframes {
         keyframe.time *= duration;
     }

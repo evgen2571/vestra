@@ -1,9 +1,9 @@
 //! Deterministic compilation and per-frame evaluation for renderer backends.
 
 pub mod audio;
-mod compiler;
-mod effect_passes;
-mod evaluation;
+pub(crate) mod compiler;
+pub(crate) mod effect_passes;
+pub(crate) mod evaluation;
 mod input;
 mod model;
 mod particles;

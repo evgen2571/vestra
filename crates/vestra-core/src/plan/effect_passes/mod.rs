@@ -1,7 +1,7 @@
 //! Backend-neutral logical effect operations and their resource flow.
 
-mod compiled;
-mod evaluated;
+pub(crate) mod compiled;
+pub(crate) mod evaluated;
 
 pub(crate) use compiled::compiled_palette_input_pass_count;
 pub use compiled::{compiled_effect_pass_plan, compiled_effect_pass_requirements};
@@ -232,7 +232,7 @@ impl EffectPass {
         }
     }
 
-    fn composite(mode: CompositeMode, amount: f64, processed: EffectResource) -> Self {
+    pub(crate) fn composite(mode: CompositeMode, amount: f64, processed: EffectResource) -> Self {
         Self {
             operation: EffectOperation::Composite { mode, amount },
             inputs: EffectPassInputs::OriginalAnd(processed),
@@ -249,7 +249,7 @@ pub struct EffectPassPlan {
 }
 
 impl EffectPassPlan {
-    fn new(passes: &[EffectPass]) -> Self {
+    pub(crate) fn new(passes: &[EffectPass]) -> Self {
         Self {
             passes: SmallVec::from_slice(passes),
         }

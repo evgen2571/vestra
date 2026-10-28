@@ -140,17 +140,17 @@ fn effect_has_modifiers(effect: &CompiledEffect) -> bool {
     has_modifiers
 }
 
-fn point_property_has_modifiers(property: &crate::plan::CompiledPointProperty) -> bool {
+pub(crate) fn point_property_has_modifiers(property: &crate::plan::CompiledPointProperty) -> bool {
     !property.modifiers.is_empty()
         || !property.x_modifiers.is_empty()
         || !property.y_modifiers.is_empty()
 }
 
-fn static_point_property(property: &crate::plan::CompiledPointProperty) -> bool {
+pub(crate) fn static_point_property(property: &crate::plan::CompiledPointProperty) -> bool {
     static_track(&property.authored_track) && !point_property_has_modifiers(property)
 }
 
-fn static_track<T>(track: &Track<T>) -> bool {
+pub(crate) fn static_track<T>(track: &Track<T>) -> bool {
     track.keyframes.is_empty()
 }
 

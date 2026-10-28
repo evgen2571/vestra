@@ -3,7 +3,7 @@
 use crate::Diagnostic;
 use crate::plan::ScalarPropertyTarget;
 use crate::project::parse_colour;
-use crate::validation::{self as validation, nonnegative, positive, tracks, unit};
+use crate::validation::{self as validation, positive, tracks, unit};
 
 use super::properties::{
     invalid_effect, plain_track, point_property, validate_channel_levels, validate_palette,
@@ -38,6 +38,30 @@ pub(in crate::validation) fn validate_parameters(
         );
     };
     match effect {
+        crate::project::Effect::Vignette { .. } => crate::effects::vignette::validate(
+            effect,
+            active_duration,
+            path,
+            maximum_keyframes,
+            errors,
+            has_authored_audio,
+        ),
+        crate::project::Effect::CameraShake { .. } => crate::effects::camera_shake::validate(
+            effect,
+            active_duration,
+            path,
+            maximum_keyframes,
+            errors,
+            has_authored_audio,
+        ),
+        crate::project::Effect::Glow { .. } => crate::effects::glow::validate(
+            effect,
+            active_duration,
+            path,
+            maximum_keyframes,
+            errors,
+            has_authored_audio,
+        ),
         crate::project::Effect::Ascii {
             characters,
             edge_characters,
@@ -573,36 +597,6 @@ pub(in crate::validation) fn validate_parameters(
                 has_authored_audio,
             );
         }
-        crate::project::Effect::Glow {
-            threshold,
-            radius,
-            intensity,
-            colour,
-            ..
-        } => {
-            if parse_colour(colour).is_none() {
-                invalid_effect(
-                    errors,
-                    "VESTRA-GLOW-COLOUR",
-                    "glow colour must use #RRGGBB or #RRGGBBAA",
-                    path,
-                    "colour",
-                );
-            }
-            track(
-                threshold,
-                "threshold",
-                ScalarPropertyTarget::GlowThreshold,
-                errors,
-            );
-            track(radius, "radius", ScalarPropertyTarget::GlowRadius, errors);
-            track(
-                intensity,
-                "intensity",
-                ScalarPropertyTarget::GlowIntensity,
-                errors,
-            );
-        }
         crate::project::Effect::ChromaticAberration {
             amount,
             angle_degrees,
@@ -618,43 +612,6 @@ pub(in crate::validation) fn validate_parameters(
                 angle_degrees,
                 "angle_degrees",
                 ScalarPropertyTarget::ChromaticAberrationAngleDegrees,
-                errors,
-            );
-        }
-        crate::project::Effect::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-            ..
-        } => {
-            if parse_colour(colour).is_none() {
-                invalid_effect(
-                    errors,
-                    "VESTRA-VIGNETTE-COLOUR",
-                    "vignette colour must use #RRGGBB or #RRGGBBAA",
-                    path,
-                    "colour",
-                );
-            }
-            track(
-                amount,
-                "amount",
-                ScalarPropertyTarget::VignetteAmount,
-                errors,
-            );
-            track(
-                radius,
-                "radius",
-                ScalarPropertyTarget::VignetteRadius,
-                errors,
-            );
-            plain_track(
-                softness,
-                active_duration,
-                &format!("{path}/softness"),
-                maximum_keyframes,
-                crate::effect_definition::PlainTrackTarget::VignetteSoftness,
                 errors,
             );
         }
@@ -708,49 +665,6 @@ pub(in crate::validation) fn validate_parameters(
                 errors,
             );
             super::validate_colour_points(black_point, white_point, path, errors);
-        }
-        crate::project::Effect::CameraShake {
-            position_amount,
-            rotation_degrees,
-            scale_amount,
-            frequency,
-            attack,
-            decay,
-            ..
-        } => {
-            track(
-                position_amount,
-                "position_amount",
-                ScalarPropertyTarget::CameraShakePositionAmount,
-                errors,
-            );
-            track(
-                rotation_degrees,
-                "rotation_degrees",
-                ScalarPropertyTarget::CameraShakeRotationDegrees,
-                errors,
-            );
-            track(
-                scale_amount,
-                "scale_amount",
-                ScalarPropertyTarget::CameraShakeScaleAmount,
-                errors,
-            );
-            track(
-                frequency,
-                "frequency",
-                ScalarPropertyTarget::CameraShakeFrequency,
-                errors,
-            );
-            if !nonnegative(*attack) || !positive(*decay) {
-                invalid_effect(
-                    errors,
-                    "VESTRA-SHAKE-ENVELOPE",
-                    "camera shake attack must be non-negative and decay positive",
-                    path,
-                    "",
-                );
-            }
         }
         crate::project::Effect::MotionBlur {
             intensity,

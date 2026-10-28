@@ -10,7 +10,7 @@ use crate::{
 };
 
 mod colour;
-mod effects;
+pub(crate) mod effects;
 mod motion;
 mod transform;
 

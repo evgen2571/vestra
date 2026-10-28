@@ -76,9 +76,9 @@ changes, new public effects or unrelated statistics corrections.
 - [ ] 1. Implement Vignette, Glow and Camera Shake pilots, verify them, then
   migrate all core effects and remove old mechanical integration. Check all
   property descriptors against visitors and semantic paths.
-- [ ] 2. Consolidate common kernels and deliberate CPU/WGPU capabilities.
-- [ ] 3. Consolidate WGPU shaders/parameters/uploads and automatic ABI checks.
-- [ ] 4. Consolidate CPU registration without execution lifecycle changes.
+- [x] 2. Consolidate common kernels and deliberate CPU/WGPU capabilities.
+- [x] 3. Consolidate WGPU shaders/parameters/uploads and automatic ABI checks.
+- [x] 4. Consolidate CPU registration without execution lifecycle changes.
 - [ ] 5. Complete Python generation and exhaustive/structural checks; preserve
   existing `gen-effects` commands and frozen compatibility fixtures.
 - [ ] 6. Exercise temporary ordinary FilmGrain-style addition through every
@@ -113,6 +113,29 @@ secondary/original surface liveness; typed Rust/WGSL ABI and upload identity.
 - Python worker is running the frozen pre-generation compatibility tests before
   expanding generation; frozen fixtures will not be refreshed.
 - Hardware, pixels, packaging, performance and integrated validation pending.
+- Core representations now expand from `catalog_entries.rs`; enums remain in
+  their original defining modules and public property enum discriminants are
+  pinned explicitly. All 345 unit tests, the integration test, six exporter
+  tests, frozen specimen hashes and warnings-denied core Clippy passed.
+- Vignette/Glow/Camera Shake semantic pilots pass core tests and all 175 CPU
+  tests. Full migration follows after this independently verified pilot.
+- Renderer commits integrated through `c8ab41d`. Worker validation: common
+  64 passed/3 ignored, CPU 175 passed/6 ignored, WGPU 150 passed/4 ignored;
+  all three crates Clippy all-targets with warnings denied and formatting pass.
+  Strict WGPU used actual GTX 1650 SUPER / Vulkan / NVIDIA 595.71.05.
+  Mutation probes reject duplicate kernel bits, missing CPU/WGPU rows and
+  swapped same-type uniform fields. These are structural/compile checks,
+  separate from representative packed-value and rendered-pixel checks.
+- Before-render artifacts secured under ignored
+  `target/effect-architecture-baseline/`: exact baseline Python/native package,
+  80 frame requests across ten scenes on each CPU/software/hardware backend,
+  repeated/backward-request assertions, raw RGBA/PNG/hashes and timing samples.
+  Use `before-fit` and `before-hardware-fit`; initial natural-size captures
+  were superseded because Vignette did not visibly affect that small source.
+- Hardware setup: in `nix develop .#wgpu-software`, unset
+  `VESTRA_WGPU_FORCE_FALLBACK` and set
+  `VK_ICD_FILENAMES=/run/opengl-driver/share/vulkan/icd.d/nvidia_icd.json`.
+  Software shell uses llvmpipe/Mesa 26.1.5; never mix its timings with hardware.
 
 ## Decisions and discoveries
 

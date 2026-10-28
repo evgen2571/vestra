@@ -8,7 +8,7 @@ use crate::{
     plan::{ColourTransform, EvaluatedEffect},
 };
 
-fn highlight_bloom_pass_plan(
+pub(crate) fn highlight_bloom_pass_plan(
     threshold: f64,
     radius: f64,
     intensity: f64,
@@ -53,6 +53,11 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
     }
     let current = EffectResource::Current;
     match effect {
+        EvaluatedEffect::Vignette { .. } => crate::effects::vignette::evaluated_passes(effect),
+        EvaluatedEffect::CameraShake { .. } => {
+            crate::effects::camera_shake::evaluated_passes(effect)
+        }
+        EvaluatedEffect::Glow { .. } => crate::effects::glow::evaluated_passes(effect),
         EvaluatedEffect::Ascii { parameters } => ascii_pass_plan(*parameters),
         EvaluatedEffect::PixelSort {
             lower_threshold,
@@ -236,12 +241,6 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             ),
         ]),
         EvaluatedEffect::MotionTile { .. } => EffectPassPlan::new(&[]),
-        EvaluatedEffect::Glow {
-            threshold,
-            radius,
-            intensity,
-            colour,
-        } => highlight_bloom_pass_plan(*threshold, *radius, *intensity, *colour),
         EvaluatedEffect::Bloom {
             threshold,
             radius,
@@ -323,21 +322,6 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             current,
             current,
         )]),
-        EvaluatedEffect::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-        } => EffectPassPlan::new(&[EffectPass::new(
-            EffectOperation::Vignette {
-                amount: *amount,
-                radius: *radius,
-                softness: *softness,
-                colour: *colour,
-            },
-            current,
-            current,
-        )]),
         EvaluatedEffect::ColorAdjust {
             exposure,
             gamma,
@@ -367,11 +351,10 @@ pub fn effect_pass_plan(effect: &EvaluatedEffect) -> EffectPassPlan {
             current,
             current,
         )]),
-        EvaluatedEffect::CameraShake { .. } => EffectPassPlan::new(&[]),
     }
 }
 
-pub(super) fn palette_input_pass_plan(
+pub(crate) fn palette_input_pass_plan(
     mut operation: EffectOperation,
     exposure: f64,
     gamma: f64,
@@ -454,7 +437,7 @@ pub(super) fn palette_input_pass_plan(
     plan
 }
 
-pub(super) fn ascii_pass_plan(parameters: crate::ascii::AsciiParameters) -> EffectPassPlan {
+pub(crate) fn ascii_pass_plan(parameters: crate::ascii::AsciiParameters) -> EffectPassPlan {
     EffectPassPlan::new(&[
         EffectPass::new(
             EffectOperation::AsciiAnalyze { parameters },

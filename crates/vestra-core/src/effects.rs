@@ -39,3 +39,7 @@ mod tests {
         assert!(!sampling_blur_radius_is_identity(0.011));
     }
 }
+
+pub(crate) mod camera_shake;
+pub(crate) mod glow;
+pub(crate) mod vignette;

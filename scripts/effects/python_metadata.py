@@ -3,6 +3,9 @@
 Names, kinds, constraints and wire defaults come from the core-only export.
 Only Python module/argument layout and authoring differences are maintained here.
 No Vestra runtime module imports this file.
+
+New effects default to the stylize module with derived classes, enums and helpers.
+Omit export positions for new names; historical positions preserve public order.
 """
 
 # Shared Python layout only; semantic defaults still come from Rust descriptors.
@@ -122,6 +125,8 @@ PYTHON = {
             "period": "owner-local seconds",
             "phase": "cycles",
         },
+        "advanced_base": "PaletteMapEffect",
+        "exports": {"root": 149, "effects": 0, "authoring": 92},
     },
     "halftone": {
         "module": "analog",
@@ -142,6 +147,7 @@ PYTHON = {
             "cell_size": "output px",
             "softness": "output px",
         },
+        "exports": {"root": 143, "effects": 23, "authoring": 86},
     },
     "pixel_sort": {
         "module": "analog",
@@ -154,6 +160,7 @@ PYTHON = {
             "segment_length": 64,
         },
         "helper": "stylized",
+        "exports": {"root": 144, "effects": 24, "authoring": 87},
     },
     "crt": {
         "module": "analog",
@@ -182,6 +189,7 @@ PYTHON = {
             "rolling_width": "fraction of canvas height",
             "scanline_spacing": "output px",
         },
+        "exports": {"root": 145, "effects": 25, "authoring": 88},
     },
     "palette_map": {
         "module": "palette",
@@ -193,6 +201,7 @@ PYTHON = {
         "helper": "palette",
         "helper_order": PALETTE_HELPER_ARGUMENTS,
         "units": {"period": "owner-local seconds", "phase": "cycles"},
+        "exports": {"root": 155, "effects": 29, "authoring": 96},
     },
     "ordered_dither": {
         "module": "palette",
@@ -215,15 +224,36 @@ PYTHON = {
             "phase": "cycles",
             "scale": "output px per threshold cell",
         },
+        "exports": {"root": 156, "effects": 30, "authoring": 97},
     },
-    "brightness": {"module": "color", "base": "_AmountEffect", "helper": "amount"},
-    "contrast": {"module": "color", "base": "_AmountEffect", "helper": "amount"},
-    "saturation": {"module": "color", "base": "_AmountEffect", "helper": "amount"},
-    "tint": {"module": "color", "helper": "positional"},
+    "brightness": {
+        "module": "color",
+        "base": "_AmountEffect",
+        "exports": {"root": 125, "effects": 9, "authoring": 15, "source": 0},
+    },
+    "contrast": {
+        "module": "color",
+        "base": "_AmountEffect",
+        "advanced_serialization": "direct",
+        "exports": {"root": 126, "effects": 10, "authoring": 21, "source": 1},
+    },
+    "saturation": {
+        "module": "color",
+        "base": "_AmountEffect",
+        "advanced_serialization": "direct",
+        "exports": {"root": 127, "effects": 11, "authoring": 70, "source": 2},
+    },
+    "tint": {
+        "module": "color",
+        "advanced_base": "_AmountEffect",
+        "advanced_serialization": "direct",
+        "exports": {"root": 128, "effects": 12, "authoring": 82, "source": 3},
+    },
     "gaussian_blur": {
         "module": "blur",
-        "helper": "positional",
         "units": {"radius": "output px"},
+        "advanced_serialization": "direct",
+        "exports": {"root": 129, "effects": 13, "authoring": 31, "source": 1},
     },
     "motion_tile": {
         "module": "blur",
@@ -234,47 +264,54 @@ PYTHON = {
             "output_width_percent": "%",
             "tile_center": "normalized unit point",
         },
+        "exports": {"root": 141, "effects": 15, "source": 2},
     },
     "directional_blur": {
         "module": "blur",
-        "helper": "positional",
         "units": {"angle_degrees": "degrees", "radius": "output px"},
+        "advanced_serialization": "direct",
+        "exports": {"root": 130, "effects": 14, "authoring": 28, "source": 0},
     },
     "zoom_blur": {
         "module": "blur",
         "enums": {"direction": "ZoomBlurDirection"},
         "annotations": {"direction": "ZoomBlurDirection"},
-        "helper": "positional",
         "units": {"anchor": "normalized unit point", "radius": "output px"},
+        "exports": {"root": 131, "effects": 16, "authoring": 85, "source": 3},
     },
     "radial_blur": {
         "module": "blur",
         "defaults": {"center": (0.5, 0.5)},
         "helper": None,
         "units": {"amount": "output px", "center": "normalized unit point"},
+        "exports": {"root": 142, "effects": 17, "source": 4},
     },
     "glow": {
-        "module": "stylize",
-        "helper": "positional",
         "units": {"radius": "output px"},
+        "exports": {"root": 133, "effects": 19, "authoring": 32, "source": 2},
     },
     "bloom": {
-        "module": "stylize",
-        "helper": "positional",
         "units": {"radius": "output px"},
+        "exports": {"root": 134, "effects": 20, "authoring": 16, "source": 0},
     },
     "chromatic_aberration": {
-        "module": "stylize",
-        "helper": "positional",
         "units": {"amount": "output px", "angle_degrees": "degrees"},
+        "advanced_serialization": "direct",
+        "exports": {"root": 135, "effects": 21, "authoring": 18, "source": 1},
     },
-    "vignette": {"module": "stylize", "helper": "positional"},
+    "vignette": {
+        "advanced_serialization": "direct",
+        "exports": {"root": 136, "effects": 22, "authoring": 83, "source": 4},
+    },
     "sharpen": {
-        "module": "stylize",
-        "helper": "positional",
         "units": {"radius": "output px"},
+        "advanced_serialization": "direct",
+        "exports": {"root": 137, "effects": 35, "authoring": 71, "source": 3},
     },
-    "color_adjust": {"module": "stylize", "helper": "positional"},
+    "color_adjust": {
+        "source_export": False,
+        "exports": {"root": 138, "effects": 36, "authoring": 20},
+    },
     "camera_shake": {
         "module": "camera",
         "order": [
@@ -288,7 +325,6 @@ PYTHON = {
             "active_interval",
         ],
         "expressions": {"active_interval": "ActiveInterval()"},
-        "helper": "positional",
         "helper_order": [
             "active_interval",
             "position_amount",
@@ -305,10 +341,28 @@ PYTHON = {
             "decay": "seconds",
             "rotation_degrees": "degrees",
         },
+        "exports": {"root": 139, "effects": 37, "authoring": 17, "source": 0},
     },
     "motion_blur": {
         "module": "motion",
-        "helper": "positional",
         "units": {"max_radius": "output px", "shutter_angle": "degrees"},
+        "advanced_serialization": "direct",
+        "exports": {"root": 140, "effects": 38, "authoring": 62, "source": 0},
     },
+}
+
+
+# Public enum placement is Python compatibility layout, independent of Rust order.
+ENUM_EXPORTS = {
+    "AsciiMode": {"root": 151, "effects": 4, "authoring": 93},
+    "AsciiGlyphStyle": {"root": 153, "effects": 3, "authoring": 95},
+    "AsciiColorMode": {"root": 152, "effects": 5, "authoring": 94},
+    "HalftoneMode": {"root": 146, "effects": 26, "authoring": 89},
+    "PixelSortDirection": {"root": 147, "effects": 27, "authoring": 90},
+    "PixelSortOrder": {"root": 148, "effects": 28, "authoring": 91},
+    "PaletteMode": {"root": 157, "effects": 31, "authoring": 98},
+    "PaletteInterpolation": {"effects": 33, "authoring": 100},
+    "PaletteInputFilter": {"effects": 32, "authoring": 99},
+    "DitherMatrix": {"root": 158, "effects": 34, "authoring": 101},
+    "ZoomBlurDirection": {"root": 132, "effects": 18, "authoring": 84},
 }

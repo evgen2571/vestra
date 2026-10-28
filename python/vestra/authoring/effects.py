@@ -42,72 +42,74 @@ class ActiveInterval:
         return data
 
 
-class ZoomBlurDirection(Enum):
-    INWARD = "inward"
-    OUTWARD = "outward"
-    CENTERED = "centered"
-
-
+# BEGIN GENERATED EFFECT ENUMS
 class AsciiGlyphStyle(Enum):
-    CHARACTERS = "characters"
-    GEOMETRIC = "geometric"
+    CHARACTERS = 'characters'
+    GEOMETRIC = 'geometric'
 
 
 class AsciiMode(Enum):
-    FILL = "fill"
-    EDGES = "edges"
-    HYBRID = "hybrid"
+    FILL = 'fill'
+    EDGES = 'edges'
+    HYBRID = 'hybrid'
 
 
 class AsciiColorMode(Enum):
-    MONOCHROME = "monochrome"
-    SOURCE = "source"
-    PALETTE = "palette"
-    RAINBOW = "rainbow"
-
-
-class PaletteInputFilter(Enum):
-    NEAREST = "nearest"
-    LINEAR = "linear"
-    AREA = "area"
-
-
-class PaletteInterpolation(Enum):
-    RGB = "rgb"
-    OKLAB = "oklab"
-
-
-class PaletteMode(Enum):
-    GRADIENT = "gradient"
-    NEAREST = "nearest"
-    RAINBOW = "rainbow"
-    NEAREST_RGB = "nearest_rgb"
-    NEAREST_HUE = "nearest_hue"
-    RGB_CHANNELS = "rgb_channels"
-    NEAREST_OKLAB = "nearest_oklab"
+    MONOCHROME = 'monochrome'
+    SOURCE = 'source'
+    PALETTE = 'palette'
+    RAINBOW = 'rainbow'
 
 
 class HalftoneMode(Enum):
-    LUMINANCE = "luminance"
-    SOURCE = "source"
-    RGB = "rgb"
+    LUMINANCE = 'luminance'
+    SOURCE = 'source'
+    RGB = 'rgb'
 
 
 class PixelSortDirection(Enum):
-    HORIZONTAL = "horizontal"
-    VERTICAL = "vertical"
+    HORIZONTAL = 'horizontal'
+    VERTICAL = 'vertical'
 
 
 class PixelSortOrder(Enum):
-    ASCENDING = "ascending"
-    DESCENDING = "descending"
+    ASCENDING = 'ascending'
+    DESCENDING = 'descending'
+
+
+class PaletteInterpolation(Enum):
+    RGB = 'rgb'
+    OKLAB = 'oklab'
+
+
+class PaletteMode(Enum):
+    GRADIENT = 'gradient'
+    NEAREST = 'nearest'
+    RAINBOW = 'rainbow'
+    NEAREST_RGB = 'nearest_rgb'
+    NEAREST_HUE = 'nearest_hue'
+    RGB_CHANNELS = 'rgb_channels'
+    NEAREST_OKLAB = 'nearest_oklab'
+
+
+class PaletteInputFilter(Enum):
+    NEAREST = 'nearest'
+    LINEAR = 'linear'
+    AREA = 'area'
 
 
 class DitherMatrix(Enum):
-    BAYER2 = "bayer2"
-    BAYER4 = "bayer4"
-    BAYER8 = "bayer8"
-    BLUE_NOISE = "blue_noise"
+    BAYER2 = 'bayer2'
+    BAYER4 = 'bayer4'
+    BAYER8 = 'bayer8'
+    BLUE_NOISE = 'blue_noise'
+
+
+class ZoomBlurDirection(Enum):
+    INWARD = 'inward'
+    OUTWARD = 'outward'
+    CENTERED = 'centered'
+# END GENERATED EFFECT ENUMS
 
 
 @lru_cache(maxsize=1)
@@ -423,10 +425,7 @@ class GenericEffect(Effect):
         parameters = cast(tuple[Mapping[str, object], ...], definition["parameters"])
         for parameter in parameters:
             name = str(parameter["name"])
-            if parameter["kind"] in {"point2d", "point_property"} and name in {
-                "tile_center",
-                "center",
-            }:
+            if parameter["kind"] == "point_property":
                 canonical = instance._data.get(name)
                 if not isinstance(canonical, Mapping):
                     continue
@@ -570,6 +569,14 @@ class GenericEffect(Effect):
         track = self.parameter_point_track(name)
         return track.x if component == "x" else track.y
 
+    def _set_parameter(self, name: str, value: object) -> None:
+        parameter = _parameter_descriptor(effect_definition(self.kind), name)
+        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
+        if parameter["kind"] in {"period", "font", "palette_stops"} and canonical is None:
+            self._data.pop(name, None)
+        else:
+            self._data[name] = canonical
+
 
 class _AmountEffect(Effect):
     """Private implementation shared only by effects with one amount track."""
@@ -594,9 +601,480 @@ class _AmountEffect(Effect):
         return {**self._canonical(), "amount": self.amount.to_canonical()}
 
 
+# BEGIN GENERATED EFFECT HANDLES
+class HalftoneEffect(GenericEffect):
+    __slots__ = ()
+    _effect_type = 'halftone'
+
+    @classmethod
+    def _create_stylized(
+        cls, owner: _Owner, scope: object, identifier: str,
+        parameters: Mapping[str, object],
+    ) -> Self:
+        definition = effect_definition(cls._effect_type)
+        values = _build_registered_effect(
+            cls._effect_type, owner, scope, identifier,
+            parameters, validate_descriptor_values=True,
+        )
+        values.pop('id')
+        values.pop('type')
+        return cast(Self, super()._create(owner, scope, identifier, definition, values))
+
+    @property
+    def cell_size(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('cell_size'))
+
+    @property
+    def angle_degrees(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('angle_degrees'))
+
+    @property
+    def softness(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('softness'))
+
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('amount'))
+
+    @property
+    def mode(self) -> HalftoneMode:
+        return HalftoneMode(self._data['mode'])
+
+    @mode.setter
+    def mode(self, value: HalftoneMode | str) -> None:
+        self._set_parameter('mode', value)
+
+    @property
+    def foreground(self) -> str:
+        return cast(str, self._data['foreground'])
+
+    @foreground.setter
+    def foreground(self, value: Color | str) -> None:
+        self._set_parameter('foreground', value)
+
+    @property
+    def background(self) -> str:
+        return cast(str, self._data['background'])
+
+    @background.setter
+    def background(self, value: Color | str) -> None:
+        self._set_parameter('background', value)
+
+    @property
+    def invert(self) -> bool:
+        return cast(bool, self._data['invert'])
+
+    @invert.setter
+    def invert(self, value: bool) -> None:
+        self._set_parameter('invert', value)
+
+
+class PixelSortEffect(GenericEffect):
+    __slots__ = ()
+    _effect_type = 'pixel_sort'
+
+    @classmethod
+    def _create_stylized(
+        cls, owner: _Owner, scope: object, identifier: str,
+        parameters: Mapping[str, object],
+    ) -> Self:
+        definition = effect_definition(cls._effect_type)
+        values = _build_registered_effect(
+            cls._effect_type, owner, scope, identifier,
+            parameters, validate_descriptor_values=True,
+        )
+        values.pop('id')
+        values.pop('type')
+        return cast(Self, super()._create(owner, scope, identifier, definition, values))
+
+    @property
+    def lower_threshold(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('lower_threshold'))
+
+    @property
+    def upper_threshold(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('upper_threshold'))
+
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('amount'))
+
+    @property
+    def direction(self) -> PixelSortDirection:
+        return PixelSortDirection(self._data['direction'])
+
+    @direction.setter
+    def direction(self, value: PixelSortDirection | str) -> None:
+        self._set_parameter('direction', value)
+
+    @property
+    def order(self) -> PixelSortOrder:
+        return PixelSortOrder(self._data['order'])
+
+    @order.setter
+    def order(self, value: PixelSortOrder | str) -> None:
+        self._set_parameter('order', value)
+
+    @property
+    def segment_length(self) -> int:
+        return cast(int, self._data['segment_length'])
+
+    @segment_length.setter
+    def segment_length(self, value: int) -> None:
+        self._set_parameter('segment_length', value)
+
+
+class CrtEffect(GenericEffect):
+    __slots__ = ()
+    _effect_type = 'crt'
+
+    @classmethod
+    def _create_stylized(
+        cls, owner: _Owner, scope: object, identifier: str,
+        parameters: Mapping[str, object],
+    ) -> Self:
+        definition = effect_definition(cls._effect_type)
+        values = _build_registered_effect(
+            cls._effect_type, owner, scope, identifier,
+            parameters, validate_descriptor_values=True,
+        )
+        values.pop('id')
+        values.pop('type')
+        return cast(Self, super()._create(owner, scope, identifier, definition, values))
+
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('amount'))
+
+    @property
+    def curvature(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('curvature'))
+
+    @property
+    def scanline_strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('scanline_strength'))
+
+    @property
+    def scanline_spacing(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('scanline_spacing'))
+
+    @property
+    def mask_strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('mask_strength'))
+
+    @property
+    def grain(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('grain'))
+
+    @property
+    def jitter(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('jitter'))
+
+    @property
+    def flicker(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('flicker'))
+
+    @property
+    def rolling_strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('rolling_strength'))
+
+    @property
+    def rolling_width(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('rolling_width'))
+
+    @property
+    def phase(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('phase'))
+
+    @property
+    def mask_spacing(self) -> int:
+        return cast(int, self._data['mask_spacing'])
+
+    @mask_spacing.setter
+    def mask_spacing(self, value: int) -> None:
+        self._set_parameter('mask_spacing', value)
+
+    @property
+    def period(self) -> float | None:
+        return cast(float | None, self._data.get('period'))
+
+    @period.setter
+    def period(self, value: int | float | None) -> None:
+        self._set_parameter('period', value)
+
+    @property
+    def seed(self) -> int:
+        return cast(int, self._data['seed'])
+
+    @seed.setter
+    def seed(self, value: int) -> None:
+        self._set_parameter('seed', value)
+
+
+class PaletteMapEffect(GenericEffect):
+    __slots__ = ()
+    _effect_type = 'palette_map'
+
+    @classmethod
+    def _create_palette(
+        cls, owner: _Owner, scope: object, identifier: str,
+        parameters: Mapping[str, object],
+    ) -> Self:
+        definition = effect_definition(cls._effect_type)
+        values = _build_registered_effect(
+            cls._effect_type, owner, scope, identifier,
+            parameters, validate_descriptor_values=True,
+        )
+        values.pop('id')
+        values.pop('type')
+        return cast(Self, super()._create(owner, scope, identifier, definition, values))
+
+    @property
+    def palette(self) -> tuple[str, ...]:
+        return tuple(cast(list[str], self._data['palette']))
+
+    @palette.setter
+    def palette(self, value: Sequence[Color | str]) -> None:
+        self._set_parameter('palette', value)
+
+    @property
+    def stops(self) -> tuple[float, ...] | None:
+        value = self._data.get('stops')
+        return None if value is None else tuple(cast(list[float], value))
+
+    @stops.setter
+    def stops(self, value: Sequence[int | float] | None) -> None:
+        self._set_parameter('stops', value)
+
+    @property
+    def interpolation(self) -> PaletteInterpolation:
+        return PaletteInterpolation(self._data['interpolation'])
+
+    @interpolation.setter
+    def interpolation(self, value: PaletteInterpolation | str) -> None:
+        self._set_parameter('interpolation', value)
+
+    @property
+    def levels(self) -> int:
+        return cast(int, self._data['levels'])
+
+    @levels.setter
+    def levels(self, value: int) -> None:
+        self._set_parameter('levels', value)
+
+    @property
+    def mode(self) -> PaletteMode:
+        return PaletteMode(self._data['mode'])
+
+    @mode.setter
+    def mode(self, value: PaletteMode | str) -> None:
+        self._set_parameter('mode', value)
+
+    @property
+    def input_exposure(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('input_exposure'))
+
+    @property
+    def input_gamma(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('input_gamma'))
+
+    @property
+    def input_detail(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('input_detail'))
+
+    @property
+    def input_detail_radius(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('input_detail_radius'))
+
+    @property
+    def input_scale(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('input_scale'))
+
+    @property
+    def input_filter(self) -> PaletteInputFilter:
+        return PaletteInputFilter(self._data['input_filter'])
+
+    @input_filter.setter
+    def input_filter(self, value: PaletteInputFilter | str) -> None:
+        self._set_parameter('input_filter', value)
+
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('amount'))
+
+    @property
+    def phase(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('phase'))
+
+    @property
+    def period(self) -> float | None:
+        return cast(float | None, self._data.get('period'))
+
+    @period.setter
+    def period(self, value: int | float | None) -> None:
+        self._set_parameter('period', value)
+
+
+class AsciiEffect(PaletteMapEffect):
+    __slots__ = ()
+    _effect_type = 'ascii'
+
+    @property
+    def amount(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('amount'))
+
+    @property
+    def phase(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('phase'))
+
+    @property
+    def cell_width(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('cell_width'))
+
+    @property
+    def cell_height(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('cell_height'))
+
+    @property
+    def edge_threshold(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('edge_threshold'))
+
+    @property
+    def edge_strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('edge_strength'))
+
+    @property
+    def source_mix(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('source_mix'))
+
+    @property
+    def characters(self) -> str:
+        return cast(str, self._data.get('characters'))
+
+    @characters.setter
+    def characters(self, value: str) -> None:
+        self._set_parameter('characters', value)
+
+    @property
+    def edge_characters(self) -> str:
+        return cast(str, self._data.get('edge_characters'))
+
+    @edge_characters.setter
+    def edge_characters(self, value: str) -> None:
+        self._set_parameter('edge_characters', value)
+
+    @property
+    def font(self) -> str | None:
+        return cast(str | None, self._data.get('font'))
+
+    @font.setter
+    def font(self, value: FontAsset | None) -> None:
+        self._set_parameter('font', value)
+
+    @property
+    def glyph_style(self) -> AsciiGlyphStyle:
+        return AsciiGlyphStyle(self._data['glyph_style'])
+
+    @glyph_style.setter
+    def glyph_style(self, value: AsciiGlyphStyle | str) -> None:
+        self._set_parameter('glyph_style', value)
+
+    @property
+    def mode(self) -> AsciiMode:
+        return AsciiMode(self._data['mode'])
+
+    @mode.setter
+    def mode(self, value: AsciiMode | str) -> None:
+        self._set_parameter('mode', value)
+
+    @property
+    def color_mode(self) -> AsciiColorMode:
+        return AsciiColorMode(self._data['color_mode'])
+
+    @color_mode.setter
+    def color_mode(self, value: AsciiColorMode | str) -> None:
+        self._set_parameter('color_mode', value)
+
+    @property
+    def foreground(self) -> str:
+        return cast(str, self._data.get('foreground'))
+
+    @foreground.setter
+    def foreground(self, value: Color | str) -> None:
+        self._set_parameter('foreground', value)
+
+    @property
+    def background(self) -> str:
+        return cast(str, self._data.get('background'))
+
+    @background.setter
+    def background(self, value: Color | str) -> None:
+        self._set_parameter('background', value)
+
+    @property
+    def palette(self) -> tuple[str, ...]:
+        return tuple(cast(list[str], self._data['palette']))
+
+    @palette.setter
+    def palette(self, value: Sequence[Color | str]) -> None:
+        self._set_parameter('palette', value)
+
+    @property
+    def invert(self) -> bool:
+        return cast(bool, self._data.get('invert'))
+
+    @invert.setter
+    def invert(self, value: bool) -> None:
+        self._set_parameter('invert', value)
+
+    @property
+    def period(self) -> float | None:
+        return cast(float | None, self._data.get('period'))
+
+    @period.setter
+    def period(self, value: int | float | None) -> None:
+        self._set_parameter('period', value)
+
+
+class OrderedDitherEffect(PaletteMapEffect):
+    __slots__ = ()
+    _effect_type = 'ordered_dither'
+
+    @property
+    def strength(self) -> ModulatableScalarTrack:
+        return cast(ModulatableScalarTrack, self.parameter_track('strength'))
+
+    @property
+    def matrix(self) -> DitherMatrix:
+        return DitherMatrix(self._data['matrix'])
+
+    @matrix.setter
+    def matrix(self, value: DitherMatrix | str) -> None:
+        self._set_parameter('matrix', value)
+
+    @property
+    def scale(self) -> int:
+        return cast(int, self._data['scale'])
+
+    @scale.setter
+    def scale(self, value: int) -> None:
+        self._set_parameter('scale', value)
+
+    @property
+    def seed(self) -> int:
+        return cast(int, self._data['seed'])
+
+    @seed.setter
+    def seed(self, value: int) -> None:
+        self._set_parameter('seed', value)
+
+
 class BrightnessEffect(_AmountEffect):
+
     def to_canonical(self) -> dict[str, object]:
-        return _canonical_typed_effect(self, {"amount": self.amount})
+        return _canonical_typed_effect(self, {
+            'amount': self.amount,
+        })
 
 
 class ContrastEffect(_AmountEffect):
@@ -608,17 +1086,19 @@ class SaturationEffect(_AmountEffect):
 
 
 class TintEffect(_AmountEffect):
-    __slots__ = ("_colour",)
+    __slots__ = ('_colour',)
     _colour: str
 
     @classmethod
     def _create(
-        cls, owner: _Owner, scope: object, identifier: str, colour: Color | str, amount: int | float
+        cls, owner: _Owner, scope: object, identifier: str,
+        colour: Color | str,
+        amount: int | float,
     ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "tint")
-        instance._amount = ModulatableScalarTrack._create(owner, amount)
+        instance._initialize(owner, scope, identifier, 'tint')
         instance._colour = color_to_canonical(colour)
+        instance._amount = ModulatableScalarTrack._create(owner, amount)
         return instance
 
     @property
@@ -630,17 +1110,23 @@ class TintEffect(_AmountEffect):
         self._colour = color_to_canonical(value)
 
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "colour": self.colour, "amount": self.amount.to_canonical()}
+        return {**self._canonical(),
+            'colour': self.colour,
+            'amount': self.amount.to_canonical(),
+        }
 
 
 class GaussianBlurEffect(Effect):
-    __slots__ = ("_radius",)
+    __slots__ = ('_radius',)
     _radius: ModulatableScalarTrack
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, radius: int | float) -> Self:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        radius: int | float,
+    ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "gaussian_blur")
+        instance._initialize(owner, scope, identifier, 'gaussian_blur')
         instance._radius = ModulatableScalarTrack._create(owner, radius)
         return instance
 
@@ -649,20 +1135,24 @@ class GaussianBlurEffect(Effect):
         return self._radius
 
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "radius": self.radius.to_canonical()}
+        return {**self._canonical(),
+            'radius': self.radius.to_canonical(),
+        }
 
 
 class DirectionalBlurEffect(Effect):
-    __slots__ = ("_radius", "_angle_degrees")
+    __slots__ = ('_radius', '_angle_degrees')
     _radius: ModulatableScalarTrack
     _angle_degrees: ModulatableScalarTrack
 
     @classmethod
     def _create(
-        cls, owner: _Owner, scope: object, identifier: str, radius: int | float, angle_degrees: int | float
+        cls, owner: _Owner, scope: object, identifier: str,
+        radius: int | float,
+        angle_degrees: int | float,
     ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "directional_blur")
+        instance._initialize(owner, scope, identifier, 'directional_blur')
         instance._radius = ModulatableScalarTrack._create(owner, radius)
         instance._angle_degrees = ModulatableScalarTrack._create(owner, angle_degrees)
         return instance
@@ -676,11 +1166,14 @@ class DirectionalBlurEffect(Effect):
         return self._angle_degrees
 
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "radius": self.radius.to_canonical(), "angle_degrees": self.angle_degrees.to_canonical()}
+        return {**self._canonical(),
+            'radius': self.radius.to_canonical(),
+            'angle_degrees': self.angle_degrees.to_canonical(),
+        }
 
 
 class ZoomBlurEffect(Effect):
-    __slots__ = ("_radius", "_samples", "_anchor", "_direction")
+    __slots__ = ('_radius', '_samples', '_anchor', '_direction')
     _radius: ModulatableScalarTrack
     _samples: int
     _anchor: Point
@@ -688,60 +1181,86 @@ class ZoomBlurEffect(Effect):
 
     @classmethod
     def _create(
-        cls, owner: _Owner, scope: object, identifier: str, radius: int | float, samples: int,
-        anchor: Point, direction: ZoomBlurDirection,
+        cls, owner: _Owner, scope: object, identifier: str,
+        radius: int | float,
+        samples: int,
+        anchor: Point,
+        direction: ZoomBlurDirection,
     ) -> Self:
         if not isinstance(anchor, Point):
-            raise TypeError("anchor must be Point")
+            raise TypeError('anchor must be Point')
         if not 0 <= anchor.x <= 1 or not 0 <= anchor.y <= 1:
-            raise ValueError("anchor must be within unit space")
+            raise ValueError('anchor must be within unit space')
         if not isinstance(direction, ZoomBlurDirection):
-            raise TypeError("direction must be ZoomBlurDirection")
+            raise TypeError('direction must be ZoomBlurDirection')
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "zoom_blur")
+        instance._initialize(owner, scope, identifier, 'zoom_blur')
         instance._radius = ModulatableScalarTrack._create(owner, radius)
-        instance._samples = _integer_in_range(samples, "samples", 2, 32)
+        instance._samples = _integer_in_range(samples, 'samples', 2, 32)
         instance._anchor = Point(anchor.x, anchor.y)
         instance._direction = direction
         return instance
 
     @property
-    def radius(self) -> ModulatableScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack:
+        return self._radius
+
     @property
-    def samples(self) -> int: return self._samples
+    def samples(self) -> int:
+        return self._samples
+
     @samples.setter
-    def samples(self, value: int) -> None: self._samples = _integer_in_range(value, "samples", 2, 32)
+    def samples(self, value: int) -> None:
+        self._samples = _integer_in_range(value, 'samples', 2, 32)
+
     @property
-    def anchor(self) -> Point: return self._anchor
+    def anchor(self) -> Point:
+        return self._anchor
+
     @anchor.setter
     def anchor(self, value: Point) -> None:
-        if not isinstance(value, Point): raise TypeError("anchor must be Point")
-        if not 0 <= value.x <= 1 or not 0 <= value.y <= 1: raise ValueError("anchor must be within unit space")
+        if not isinstance(value, Point):
+            raise TypeError('anchor must be Point')
+        if not 0 <= value.x <= 1 or not 0 <= value.y <= 1:
+            raise ValueError('anchor must be within unit space')
         self._anchor = Point(value.x, value.y)
+
     @property
-    def direction(self) -> ZoomBlurDirection: return self._direction
+    def direction(self) -> ZoomBlurDirection:
+        return self._direction
+
     @direction.setter
     def direction(self, value: ZoomBlurDirection) -> None:
-        if not isinstance(value, ZoomBlurDirection): raise TypeError("direction must be ZoomBlurDirection")
+        if not isinstance(value, ZoomBlurDirection):
+            raise TypeError('direction must be ZoomBlurDirection')
         self._direction = value
+
     def to_canonical(self) -> dict[str, object]:
         return _canonical_typed_effect(self, {
-            "radius": self.radius, "samples": self.samples, "anchor": self.anchor, "direction": self.direction,
+            'radius': self.radius,
+            'samples': self.samples,
+            'anchor': self.anchor,
+            'direction': self.direction,
         })
 
 
 class GlowEffect(Effect):
-    __slots__ = ("_threshold", "_radius", "_intensity", "_colour")
+    __slots__ = ('_threshold', '_radius', '_intensity', '_colour')
     _threshold: ModulatableScalarTrack
     _radius: ModulatableScalarTrack
     _intensity: ModulatableScalarTrack
     _colour: str
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, threshold: int | float,
-                radius: int | float, intensity: int | float, colour: Color | str) -> Self:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        threshold: int | float,
+        radius: int | float,
+        intensity: int | float,
+        colour: Color | str,
+    ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "glow")
+        instance._initialize(owner, scope, identifier, 'glow')
         instance._threshold = ModulatableScalarTrack._create(owner, threshold)
         instance._radius = ModulatableScalarTrack._create(owner, radius)
         instance._intensity = ModulatableScalarTrack._create(owner, intensity)
@@ -749,81 +1268,123 @@ class GlowEffect(Effect):
         return instance
 
     @property
-    def threshold(self) -> ModulatableScalarTrack: return self._threshold
+    def threshold(self) -> ModulatableScalarTrack:
+        return self._threshold
+
     @property
-    def radius(self) -> ModulatableScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack:
+        return self._radius
+
     @property
-    def intensity(self) -> ModulatableScalarTrack: return self._intensity
+    def intensity(self) -> ModulatableScalarTrack:
+        return self._intensity
+
     @property
-    def colour(self) -> str: return self._colour
+    def colour(self) -> str:
+        return self._colour
+
     @colour.setter
-    def colour(self, value: Color | str) -> None: self._colour = color_to_canonical(value)
+    def colour(self, value: Color | str) -> None:
+        self._colour = color_to_canonical(value)
+
     def to_canonical(self) -> dict[str, object]:
         return _canonical_typed_effect(self, {
-            "threshold": self.threshold, "radius": self.radius, "intensity": self.intensity, "colour": self.colour,
+            'threshold': self.threshold,
+            'radius': self.radius,
+            'intensity': self.intensity,
+            'colour': self.colour,
         })
 
 
 class BloomEffect(Effect):
-    __slots__ = ("_threshold", "_radius", "_intensity")
+    __slots__ = ('_threshold', '_radius', '_intensity')
     _threshold: ModulatableScalarTrack
     _radius: ModulatableScalarTrack
     _intensity: ModulatableScalarTrack
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, threshold: int | float, radius: int | float, intensity: int | float) -> Self:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        threshold: int | float,
+        radius: int | float,
+        intensity: int | float,
+    ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "bloom")
+        instance._initialize(owner, scope, identifier, 'bloom')
         instance._threshold = ModulatableScalarTrack._create(owner, threshold)
         instance._radius = ModulatableScalarTrack._create(owner, radius)
         instance._intensity = ModulatableScalarTrack._create(owner, intensity)
         return instance
 
     @property
-    def threshold(self) -> ModulatableScalarTrack: return self._threshold
+    def threshold(self) -> ModulatableScalarTrack:
+        return self._threshold
+
     @property
-    def radius(self) -> ModulatableScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack:
+        return self._radius
+
     @property
-    def intensity(self) -> ModulatableScalarTrack: return self._intensity
+    def intensity(self) -> ModulatableScalarTrack:
+        return self._intensity
 
     def to_canonical(self) -> dict[str, object]:
-        return _canonical_typed_effect(self, {"threshold": self.threshold, "radius": self.radius, "intensity": self.intensity})
+        return _canonical_typed_effect(self, {
+            'threshold': self.threshold,
+            'radius': self.radius,
+            'intensity': self.intensity,
+        })
 
 
 class ChromaticAberrationEffect(Effect):
-    __slots__ = ("_amount", "_angle_degrees")
+    __slots__ = ('_amount', '_angle_degrees')
     _amount: ModulatableScalarTrack
     _angle_degrees: ModulatableScalarTrack
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float,
-                angle_degrees: int | float) -> Self:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        amount: int | float,
+        angle_degrees: int | float,
+    ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "chromatic_aberration")
+        instance._initialize(owner, scope, identifier, 'chromatic_aberration')
         instance._amount = ModulatableScalarTrack._create(owner, amount)
         instance._angle_degrees = ModulatableScalarTrack._create(owner, angle_degrees)
         return instance
 
     @property
-    def amount(self) -> ModulatableScalarTrack: return self._amount
+    def amount(self) -> ModulatableScalarTrack:
+        return self._amount
+
     @property
-    def angle_degrees(self) -> ModulatableScalarTrack: return self._angle_degrees
+    def angle_degrees(self) -> ModulatableScalarTrack:
+        return self._angle_degrees
+
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "amount": self.amount.to_canonical(), "angle_degrees": self.angle_degrees.to_canonical()}
+        return {**self._canonical(),
+            'amount': self.amount.to_canonical(),
+            'angle_degrees': self.angle_degrees.to_canonical(),
+        }
 
 
 class VignetteEffect(Effect):
-    __slots__ = ("_amount", "_radius", "_softness", "_colour")
+    __slots__ = ('_amount', '_radius', '_softness', '_colour')
     _amount: ModulatableScalarTrack
     _radius: ModulatableScalarTrack
     _softness: ScalarTrack
     _colour: str
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float,
-                radius: int | float, softness: int | float, colour: Color | str) -> Self:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        amount: int | float,
+        radius: int | float,
+        softness: int | float,
+        colour: Color | str,
+    ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "vignette")
+        instance._initialize(owner, scope, identifier, 'vignette')
         instance._amount = ModulatableScalarTrack._create(owner, amount)
         instance._radius = ModulatableScalarTrack._create(owner, radius)
         instance._softness = ScalarTrack._create(owner, softness)
@@ -831,54 +1392,83 @@ class VignetteEffect(Effect):
         return instance
 
     @property
-    def amount(self) -> ModulatableScalarTrack: return self._amount
+    def amount(self) -> ModulatableScalarTrack:
+        return self._amount
+
     @property
-    def radius(self) -> ModulatableScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack:
+        return self._radius
+
     @property
-    def softness(self) -> ScalarTrack: return self._softness
+    def softness(self) -> ScalarTrack:
+        return self._softness
+
     @property
-    def colour(self) -> str: return self._colour
+    def colour(self) -> str:
+        return self._colour
+
     @colour.setter
-    def colour(self, value: Color | str) -> None: self._colour = color_to_canonical(value)
+    def colour(self, value: Color | str) -> None:
+        self._colour = color_to_canonical(value)
+
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "amount": self.amount.to_canonical(), "radius": self.radius.to_canonical(),
-                "softness": self.softness.to_canonical(), "colour": self.colour}
+        return {**self._canonical(),
+            'amount': self.amount.to_canonical(),
+            'radius': self.radius.to_canonical(),
+            'softness': self.softness.to_canonical(),
+            'colour': self.colour,
+        }
 
 
 class SharpenEffect(Effect):
-    __slots__ = ("_amount", "_radius")
+    __slots__ = ('_amount', '_radius')
     _amount: ModulatableScalarTrack
     _radius: ModulatableScalarTrack
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, amount: int | float,
-                radius: int | float) -> Self:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        amount: int | float,
+        radius: int | float,
+    ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "sharpen")
+        instance._initialize(owner, scope, identifier, 'sharpen')
         instance._amount = ModulatableScalarTrack._create(owner, amount)
         instance._radius = ModulatableScalarTrack._create(owner, radius)
         return instance
 
     @property
-    def amount(self) -> ModulatableScalarTrack: return self._amount
+    def amount(self) -> ModulatableScalarTrack:
+        return self._amount
+
     @property
-    def radius(self) -> ModulatableScalarTrack: return self._radius
+    def radius(self) -> ModulatableScalarTrack:
+        return self._radius
+
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "amount": self.amount.to_canonical(), "radius": self.radius.to_canonical()}
+        return {**self._canonical(),
+            'amount': self.amount.to_canonical(),
+            'radius': self.radius.to_canonical(),
+        }
 
 
 class ColorAdjustEffect(Effect):
-    __slots__ = ("_exposure", "_gamma", "_black_point", "_white_point")
+    __slots__ = ('_exposure', '_gamma', '_black_point', '_white_point')
     _exposure: ModulatableScalarTrack
     _gamma: ModulatableScalarTrack
     _black_point: ScalarTrack
     _white_point: ScalarTrack
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, exposure: int | float,
-                gamma: int | float, black_point: int | float, white_point: int | float) -> Self:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        exposure: int | float,
+        gamma: int | float,
+        black_point: int | float,
+        white_point: int | float,
+    ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "color_adjust")
+        instance._initialize(owner, scope, identifier, 'color_adjust')
         instance._exposure = ModulatableScalarTrack._create(owner, exposure)
         instance._gamma = ModulatableScalarTrack._create(owner, gamma)
         instance._black_point = ScalarTrack._create(owner, black_point)
@@ -886,20 +1476,32 @@ class ColorAdjustEffect(Effect):
         return instance
 
     @property
-    def exposure(self) -> ModulatableScalarTrack: return self._exposure
+    def exposure(self) -> ModulatableScalarTrack:
+        return self._exposure
+
     @property
-    def gamma(self) -> ModulatableScalarTrack: return self._gamma
+    def gamma(self) -> ModulatableScalarTrack:
+        return self._gamma
+
     @property
-    def black_point(self) -> ScalarTrack: return self._black_point
+    def black_point(self) -> ScalarTrack:
+        return self._black_point
+
     @property
-    def white_point(self) -> ScalarTrack: return self._white_point
+    def white_point(self) -> ScalarTrack:
+        return self._white_point
+
     def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "exposure": self.exposure.to_canonical(), "gamma": self.gamma.to_canonical(),
-                "black_point": self.black_point.to_canonical(), "white_point": self.white_point.to_canonical()}
+        return _canonical_typed_effect(self, {
+            'exposure': self.exposure,
+            'gamma': self.gamma,
+            'black_point': self.black_point,
+            'white_point': self.white_point,
+        })
 
 
 class CameraShakeEffect(Effect):
-    __slots__ = ("_active_interval", "_position_amount", "_rotation_degrees", "_scale_amount", "_frequency", "_seed", "_attack", "_decay")
+    __slots__ = ('_active_interval', '_position_amount', '_rotation_degrees', '_scale_amount', '_frequency', '_seed', '_attack', '_decay')
     _active_interval: ActiveInterval
     _position_amount: ModulatableScalarTrack
     _rotation_degrees: ModulatableScalarTrack
@@ -910,524 +1512,147 @@ class CameraShakeEffect(Effect):
     _decay: float
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, active_interval: ActiveInterval,
-                position_amount: int | float, rotation_degrees: int | float, scale_amount: int | float,
-                frequency: int | float, seed: int, attack: int | float, decay: int | float) -> Self:
-        if not isinstance(active_interval, ActiveInterval): raise TypeError("active_interval must be ActiveInterval")
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        active_interval: ActiveInterval,
+        position_amount: int | float,
+        rotation_degrees: int | float,
+        scale_amount: int | float,
+        frequency: int | float,
+        seed: int,
+        attack: int | float,
+        decay: int | float,
+    ) -> Self:
+        if not isinstance(active_interval, ActiveInterval):
+            raise TypeError('active_interval must be ActiveInterval')
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "camera_shake")
+        instance._initialize(owner, scope, identifier, 'camera_shake')
         instance._active_interval = active_interval
         instance._position_amount = ModulatableScalarTrack._create(owner, position_amount)
         instance._rotation_degrees = ModulatableScalarTrack._create(owner, rotation_degrees)
         instance._scale_amount = ModulatableScalarTrack._create(owner, scale_amount)
         instance._frequency = ModulatableScalarTrack._create(owner, frequency)
-        instance._seed = _integer_in_range(seed, "seed", 0, 2**64 - 1)
-        instance._attack = _number(attack, "attack")
-        instance._decay = _number(decay, "decay")
+        instance._seed = _integer_in_range(seed, 'seed', 0, 18446744073709551615)
+        instance._attack = _number(attack, 'attack')
+        instance._decay = _number(decay, 'decay')
         return instance
 
     @property
-    def active_interval(self) -> ActiveInterval: return self._active_interval
+    def active_interval(self) -> ActiveInterval:
+        return self._active_interval
+
     @active_interval.setter
     def active_interval(self, value: ActiveInterval) -> None:
-        if not isinstance(value, ActiveInterval): raise TypeError("active_interval must be ActiveInterval")
+        if not isinstance(value, ActiveInterval):
+            raise TypeError('active_interval must be ActiveInterval')
         self._active_interval = value
+
     @property
-    def position_amount(self) -> ModulatableScalarTrack: return self._position_amount
+    def position_amount(self) -> ModulatableScalarTrack:
+        return self._position_amount
+
     @property
-    def rotation_degrees(self) -> ModulatableScalarTrack: return self._rotation_degrees
+    def rotation_degrees(self) -> ModulatableScalarTrack:
+        return self._rotation_degrees
+
     @property
-    def scale_amount(self) -> ModulatableScalarTrack: return self._scale_amount
+    def scale_amount(self) -> ModulatableScalarTrack:
+        return self._scale_amount
+
     @property
-    def frequency(self) -> ModulatableScalarTrack: return self._frequency
+    def frequency(self) -> ModulatableScalarTrack:
+        return self._frequency
+
     @property
-    def seed(self) -> int: return self._seed
+    def seed(self) -> int:
+        return self._seed
+
     @seed.setter
-    def seed(self, value: int) -> None: self._seed = _integer_in_range(value, "seed", 0, 2**64 - 1)
+    def seed(self, value: int) -> None:
+        self._seed = _integer_in_range(value, 'seed', 0, 18446744073709551615)
+
     @property
-    def attack(self) -> float: return self._attack
+    def attack(self) -> float:
+        return self._attack
+
     @attack.setter
-    def attack(self, value: int | float) -> None: self._attack = _number(value, "attack")
+    def attack(self, value: int | float) -> None:
+        self._attack = _number(value, 'attack')
+
     @property
-    def decay(self) -> float: return self._decay
+    def decay(self) -> float:
+        return self._decay
+
     @decay.setter
-    def decay(self, value: int | float) -> None: self._decay = _number(value, "decay")
+    def decay(self, value: int | float) -> None:
+        self._decay = _number(value, 'decay')
+
     def to_canonical(self) -> dict[str, object]:
         return _canonical_typed_effect(self, {
-            "active_interval": self.active_interval, "position_amount": self.position_amount,
-            "rotation_degrees": self.rotation_degrees, "scale_amount": self.scale_amount,
-            "frequency": self.frequency, "seed": self.seed, "attack": self.attack, "decay": self.decay,
+            'active_interval': self.active_interval,
+            'position_amount': self.position_amount,
+            'rotation_degrees': self.rotation_degrees,
+            'scale_amount': self.scale_amount,
+            'frequency': self.frequency,
+            'seed': self.seed,
+            'attack': self.attack,
+            'decay': self.decay,
         })
 
 
 class MotionBlurEffect(Effect):
-    __slots__ = ("_intensity", "_shutter_angle", "_max_radius", "_samples")
+    __slots__ = ('_intensity', '_shutter_angle', '_max_radius', '_samples')
     _intensity: ModulatableScalarTrack
     _shutter_angle: ModulatableScalarTrack
     _max_radius: ModulatableScalarTrack
     _samples: int
 
     @classmethod
-    def _create(cls, owner: _Owner, scope: object, identifier: str, intensity: int | float,
-                shutter_angle: int | float, max_radius: int | float, samples: int) -> Self:
+    def _create(
+        cls, owner: _Owner, scope: object, identifier: str,
+        intensity: int | float,
+        shutter_angle: int | float,
+        max_radius: int | float,
+        samples: int,
+    ) -> Self:
         instance = object.__new__(cls)
-        instance._initialize(owner, scope, identifier, "motion_blur")
+        instance._initialize(owner, scope, identifier, 'motion_blur')
         instance._intensity = ModulatableScalarTrack._create(owner, intensity)
         instance._shutter_angle = ModulatableScalarTrack._create(owner, shutter_angle)
         instance._max_radius = ModulatableScalarTrack._create(owner, max_radius)
-        instance._samples = _integer_in_range(samples, "samples", 2, 32)
+        instance._samples = _integer_in_range(samples, 'samples', 2, 32)
         return instance
 
     @property
-    def intensity(self) -> ModulatableScalarTrack: return self._intensity
-    @property
-    def shutter_angle(self) -> ModulatableScalarTrack: return self._shutter_angle
-    @property
-    def max_radius(self) -> ModulatableScalarTrack: return self._max_radius
-    @property
-    def samples(self) -> int: return self._samples
-    @samples.setter
-    def samples(self, value: int) -> None: self._samples = _integer_in_range(value, "samples", 2, 32)
-    def to_canonical(self) -> dict[str, object]:
-        return {**self._canonical(), "intensity": self.intensity.to_canonical(), "shutter_angle": self.shutter_angle.to_canonical(),
-                "max_radius": self.max_radius.to_canonical(), "samples": self.samples}
+    def intensity(self) -> ModulatableScalarTrack:
+        return self._intensity
 
+    @property
+    def shutter_angle(self) -> ModulatableScalarTrack:
+        return self._shutter_angle
+
+    @property
+    def max_radius(self) -> ModulatableScalarTrack:
+        return self._max_radius
+
+    @property
+    def samples(self) -> int:
+        return self._samples
+
+    @samples.setter
+    def samples(self, value: int) -> None:
+        self._samples = _integer_in_range(value, 'samples', 2, 32)
+
+    def to_canonical(self) -> dict[str, object]:
+        return {**self._canonical(),
+            'intensity': self.intensity.to_canonical(),
+            'shutter_angle': self.shutter_angle.to_canonical(),
+            'max_radius': self.max_radius.to_canonical(),
+            'samples': self.samples,
+        }
+# END GENERATED EFFECT HANDLES
 
 EffectType = TypeVar("EffectType", bound=Effect)
-
-
-class HalftoneEffect(GenericEffect):
-    __slots__ = ()
-    _effect_type = "halftone"
-
-    @classmethod
-    def _create_stylized(cls, owner: _Owner, scope: object, identifier: str, parameters: Mapping[str, object]) -> Self:
-        definition = effect_definition(cls._effect_type)
-        values = _build_registered_effect(cls._effect_type, owner, scope, identifier, parameters, validate_descriptor_values=True)
-        values.pop("id")
-        values.pop("type")
-        return cast(Self, super()._create(owner, scope, identifier, definition, values))
-
-    @property
-    def cell_size(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("cell_size"))
-
-    @property
-    def angle_degrees(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("angle_degrees"))
-
-    @property
-    def softness(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("softness"))
-
-    @property
-    def amount(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("amount"))
-
-    @property
-    def mode(self) -> HalftoneMode:
-        return HalftoneMode(self._data["mode"])
-
-    @mode.setter
-    def mode(self, value: HalftoneMode | str) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "mode")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("mode", None)
-        else:
-            self._data["mode"] = canonical
-
-    @property
-    def foreground(self) -> str:
-        return cast(str, self._data["foreground"])
-
-    @foreground.setter
-    def foreground(self, value: Color | str) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "foreground")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("foreground", None)
-        else:
-            self._data["foreground"] = canonical
-
-    @property
-    def background(self) -> str:
-        return cast(str, self._data["background"])
-
-    @background.setter
-    def background(self, value: Color | str) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "background")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("background", None)
-        else:
-            self._data["background"] = canonical
-
-    @property
-    def invert(self) -> bool:
-        return cast(bool, self._data["invert"])
-
-    @invert.setter
-    def invert(self, value: bool) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "invert")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("invert", None)
-        else:
-            self._data["invert"] = canonical
-
-class PixelSortEffect(GenericEffect):
-    __slots__ = ()
-    _effect_type = "pixel_sort"
-
-    @classmethod
-    def _create_stylized(cls, owner: _Owner, scope: object, identifier: str, parameters: Mapping[str, object]) -> Self:
-        definition = effect_definition(cls._effect_type)
-        values = _build_registered_effect(cls._effect_type, owner, scope, identifier, parameters, validate_descriptor_values=True)
-        values.pop("id")
-        values.pop("type")
-        return cast(Self, super()._create(owner, scope, identifier, definition, values))
-
-    @property
-    def lower_threshold(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("lower_threshold"))
-
-    @property
-    def upper_threshold(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("upper_threshold"))
-
-    @property
-    def amount(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("amount"))
-
-    @property
-    def direction(self) -> PixelSortDirection:
-        return PixelSortDirection(self._data["direction"])
-
-    @direction.setter
-    def direction(self, value: PixelSortDirection | str) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "direction")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("direction", None)
-        else:
-            self._data["direction"] = canonical
-
-    @property
-    def order(self) -> PixelSortOrder:
-        return PixelSortOrder(self._data["order"])
-
-    @order.setter
-    def order(self, value: PixelSortOrder | str) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "order")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("order", None)
-        else:
-            self._data["order"] = canonical
-
-    @property
-    def segment_length(self) -> int:
-        return cast(int, self._data["segment_length"])
-
-    @segment_length.setter
-    def segment_length(self, value: int) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "segment_length")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("segment_length", None)
-        else:
-            self._data["segment_length"] = canonical
-
-class CrtEffect(GenericEffect):
-    __slots__ = ()
-    _effect_type = "crt"
-
-    @classmethod
-    def _create_stylized(cls, owner: _Owner, scope: object, identifier: str, parameters: Mapping[str, object]) -> Self:
-        definition = effect_definition(cls._effect_type)
-        values = _build_registered_effect(cls._effect_type, owner, scope, identifier, parameters, validate_descriptor_values=True)
-        values.pop("id")
-        values.pop("type")
-        return cast(Self, super()._create(owner, scope, identifier, definition, values))
-
-    @property
-    def amount(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("amount"))
-
-    @property
-    def curvature(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("curvature"))
-
-    @property
-    def scanline_strength(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("scanline_strength"))
-
-    @property
-    def scanline_spacing(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("scanline_spacing"))
-
-    @property
-    def mask_strength(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("mask_strength"))
-
-    @property
-    def grain(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("grain"))
-
-    @property
-    def jitter(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("jitter"))
-
-    @property
-    def flicker(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("flicker"))
-
-    @property
-    def rolling_strength(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("rolling_strength"))
-
-    @property
-    def rolling_width(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("rolling_width"))
-
-    @property
-    def phase(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("phase"))
-
-    @property
-    def mask_spacing(self) -> int:
-        return cast(int, self._data["mask_spacing"])
-
-    @mask_spacing.setter
-    def mask_spacing(self, value: int) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "mask_spacing")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("mask_spacing", None)
-        else:
-            self._data["mask_spacing"] = canonical
-
-    @property
-    def period(self) -> float | None:
-        return cast(float | None, self._data.get("period"))
-
-    @period.setter
-    def period(self, value: int | float | None) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "period")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("period", None)
-        else:
-            self._data["period"] = canonical
-
-    @property
-    def seed(self) -> int:
-        return cast(int, self._data["seed"])
-
-    @seed.setter
-    def seed(self, value: int) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), "seed")
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if canonical is None:
-            self._data.pop("seed", None)
-        else:
-            self._data["seed"] = canonical
-
-class PaletteMapEffect(GenericEffect):
-    """Palette coloring with builder-owned animatable amount and phase tracks."""
-
-    __slots__ = ()
-    _effect_type = "palette_map"
-
-    @classmethod
-    def _create_palette(
-        cls, owner: _Owner, scope: object, identifier: str, parameters: Mapping[str, object],
-    ) -> Self:
-        definition = effect_definition(cls._effect_type)
-        values = _build_registered_effect(
-            cls._effect_type, owner, scope, identifier, parameters,
-            validate_descriptor_values=True,
-        )
-        values.pop("id")
-        values.pop("type")
-        return cast(Self, super()._create(owner, scope, identifier, definition, values))
-
-    def _set_parameter(self, name: str, value: object) -> None:
-        parameter = _parameter_descriptor(effect_definition(self.kind), name)
-        canonical = _canonical_parameter(parameter, value, self._owner, validate_descriptor_values=True)
-        if parameter["kind"] in {"period", "font", "palette_stops"} and canonical is None:
-            self._data.pop(name, None)
-        else:
-            self._data[name] = canonical
-
-    @property
-    def palette(self) -> tuple[str, ...]: return tuple(cast(list[str], self._data["palette"]))
-    @palette.setter
-    def palette(self, value: Sequence[Color | str]) -> None: self._set_parameter("palette", value)
-    @property
-    def amount(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("amount"))
-    @property
-    def phase(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("phase"))
-    @property
-    def period(self) -> float | None: return cast(float | None, self._data.get("period"))
-    @period.setter
-    def period(self, value: int | float | None) -> None: self._set_parameter("period", value)
-    @property
-    def mode(self) -> PaletteMode: return PaletteMode(self._data["mode"])
-    @mode.setter
-    def mode(self, value: PaletteMode | str) -> None: self._set_parameter("mode", value)
-
-    @property
-    def input_exposure(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_exposure"))
-    @property
-    def input_gamma(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_gamma"))
-
-    @property
-    def input_detail(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_detail"))
-    @property
-    def input_detail_radius(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_detail_radius"))
-
-    @property
-    def input_scale(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("input_scale"))
-    @property
-    def input_filter(self) -> PaletteInputFilter: return PaletteInputFilter(self._data["input_filter"])
-    @input_filter.setter
-    def input_filter(self, value: PaletteInputFilter | str) -> None: self._set_parameter("input_filter", value)
-
-    @property
-    def interpolation(self) -> PaletteInterpolation: return PaletteInterpolation(self._data["interpolation"])
-    @interpolation.setter
-    def interpolation(self, value: PaletteInterpolation | str) -> None: self._set_parameter("interpolation", value)
-
-    @property
-    def stops(self) -> tuple[float, ...] | None:
-        value = self._data.get("stops")
-        return None if value is None else tuple(cast(list[float], value))
-    @stops.setter
-    def stops(self, value: Sequence[int | float] | None) -> None: self._set_parameter("stops", value)
-
-    @property
-    def levels(self) -> int: return cast(int, self._data["levels"])
-    @levels.setter
-    def levels(self, value: int) -> None: self._set_parameter("levels", value)
-
-
-class OrderedDitherEffect(PaletteMapEffect):
-    """Bayer/blue-noise quantization with a palette-independent threshold pattern."""
-
-    __slots__ = ()
-    _effect_type = "ordered_dither"
-
-    @property
-    def strength(self) -> ModulatableScalarTrack: return cast(ModulatableScalarTrack, self.parameter_track("strength"))
-    @property
-    def matrix(self) -> DitherMatrix: return DitherMatrix(self._data["matrix"])
-    @matrix.setter
-    def matrix(self, value: DitherMatrix | str) -> None: self._set_parameter("matrix", value)
-    @property
-    def scale(self) -> int: return cast(int, self._data["scale"])
-    @scale.setter
-    def scale(self, value: int) -> None: self._set_parameter("scale", value)
-
-    @property
-    def seed(self) -> int: return cast(int, self._data["seed"])
-    @seed.setter
-    def seed(self, value: int) -> None: self._set_parameter("seed", value)
-
-
-class AsciiEffect(PaletteMapEffect):
-    """Builder-owned ASCII controls and reusable prepared glyph resources."""
-    __slots__ = ()
-    _effect_type = "ascii"
-
-    @property
-    def cell_width(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("cell_width"))
-    @property
-    def cell_height(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("cell_height"))
-    @property
-    def edge_threshold(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("edge_threshold"))
-    @property
-    def edge_strength(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("edge_strength"))
-    @property
-    def source_mix(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("source_mix"))
-    @property
-    def amount(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("amount"))
-    @property
-    def phase(self) -> ModulatableScalarTrack:
-        return cast(ModulatableScalarTrack, self.parameter_track("phase"))
-    @property
-    def characters(self) -> str:
-        return cast(str, self._data.get("characters"))
-    @characters.setter
-    def characters(self, value: str) -> None:
-        self._set_parameter("characters", value)
-    @property
-    def edge_characters(self) -> str:
-        return cast(str, self._data.get("edge_characters"))
-    @edge_characters.setter
-    def edge_characters(self, value: str) -> None:
-        self._set_parameter("edge_characters", value)
-    @property
-    def glyph_style(self) -> AsciiGlyphStyle:
-        return AsciiGlyphStyle(self._data["glyph_style"])
-    @glyph_style.setter
-    def glyph_style(self, value: AsciiGlyphStyle | str) -> None:
-        self._set_parameter("glyph_style", value)
-    @property
-    def mode(self) -> AsciiMode:
-        return AsciiMode(self._data["mode"])
-    @mode.setter
-    def mode(self, value: AsciiMode | str) -> None:
-        self._set_parameter("mode", value)
-    @property
-    def color_mode(self) -> AsciiColorMode:
-        return AsciiColorMode(self._data["color_mode"])
-    @color_mode.setter
-    def color_mode(self, value: AsciiColorMode | str) -> None:
-        self._set_parameter("color_mode", value)
-    @property
-    def foreground(self) -> str:
-        return cast(str, self._data.get("foreground"))
-    @foreground.setter
-    def foreground(self, value: Color | str) -> None:
-        self._set_parameter("foreground", value)
-    @property
-    def background(self) -> str:
-        return cast(str, self._data.get("background"))
-    @background.setter
-    def background(self, value: Color | str) -> None:
-        self._set_parameter("background", value)
-    @property
-    def palette(self) -> tuple[str, ...]:
-        return tuple(cast(list[str], self._data["palette"]))
-    @palette.setter
-    def palette(self, value: Sequence[Color | str]) -> None:
-        self._set_parameter("palette", value)
-    @property
-    def invert(self) -> bool:
-        return cast(bool, self._data.get("invert"))
-    @invert.setter
-    def invert(self, value: bool) -> None:
-        self._set_parameter("invert", value)
-    @property
-    def period(self) -> float | None:
-        return cast(float | None, self._data.get("period"))
-    @period.setter
-    def period(self, value: int | float | None) -> None:
-        self._set_parameter("period", value)
-    @property
-    def font(self) -> str | None:
-        return cast(str | None, self._data.get("font"))
-    @font.setter
-    def font(self, value: FontAsset | None) -> None:
-        self._set_parameter("font", value)
 
 
 class _EffectCollection:

@@ -3,15 +3,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence as Sequence
-
 from typing import cast as cast
 
-from ..authoring.effects import DitherMatrix as DitherMatrix, PaletteMode as PaletteMode, PaletteInputFilter as PaletteInputFilter, PaletteInterpolation as PaletteInterpolation
+from collections.abc import Sequence as Sequence
+
+from ..properties import BindableScalarProperty as BindableScalarProperty, ScalarProperty as ScalarProperty
 
 from ..authoring.values import Color as Color
 
-from ..properties import BindableScalarProperty as BindableScalarProperty, ScalarProperty as ScalarProperty
+from ..authoring.effects import DitherMatrix as DitherMatrix, PaletteInputFilter as PaletteInputFilter, PaletteInterpolation as PaletteInterpolation, PaletteMode as PaletteMode
 
 from .base import Effect as Effect
 

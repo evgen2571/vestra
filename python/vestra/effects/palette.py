@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+# BEGIN GENERATED EFFECT IMPORTS
 from typing import cast
-
-from ..authoring.effects import DitherMatrix, PaletteMode, PaletteInputFilter, PaletteInterpolation
-from ..authoring.values import Color
+from collections.abc import Sequence
 from ..properties import BindableScalarProperty, ScalarProperty
+from ..authoring.values import Color
+from ..authoring.effects import DitherMatrix, PaletteInputFilter, PaletteInterpolation, PaletteMode
 from .base import Effect
+# END GENERATED EFFECT IMPORTS
+
 
 
 # BEGIN GENERATED EFFECTS

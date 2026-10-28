@@ -1,25 +1,104 @@
 """Public visual effect descriptors for the high-level editing API."""
 
-from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, PaletteInputFilter, PaletteInterpolation, DitherMatrix
-from .ascii import Ascii, PseudoAscii, CHARACTER_SETS
-from ..authoring.effects import AsciiGlyphStyle, AsciiMode, AsciiColorMode
+# BEGIN GENERATED EFFECT IMPORTS
+from ..authoring.effects import (
+    AsciiColorMode,
+    AsciiGlyphStyle,
+    AsciiMode,
+    DitherMatrix,
+    HalftoneMode,
+    PaletteInputFilter,
+    PaletteInterpolation,
+    PaletteMode,
+    PixelSortDirection,
+    PixelSortOrder,
+    ZoomBlurDirection,
+)
+from .analog import (
+    Crt,
+    Halftone,
+    PixelSort,
+)
+from .ascii import (
+    Ascii,
+)
+from .blur import (
+    DirectionalBlur,
+    GaussianBlur,
+    MotionTile,
+    RadialBlur,
+    ZoomBlur,
+)
+from .camera import (
+    CameraShake,
+)
+from .color import (
+    Brightness,
+    Contrast,
+    Saturation,
+    Tint,
+)
+from .motion import (
+    MotionBlur,
+)
+from .palette import (
+    OrderedDither,
+    PaletteMap,
+)
+from .stylize import (
+    Bloom,
+    ChromaticAberration,
+    ColorAdjust,
+    Glow,
+    Sharpen,
+    Vignette,
+)
+# END GENERATED EFFECT IMPORTS
+from ..authoring.effects import ActiveInterval
+from .ascii import PseudoAscii, CHARACTER_SETS
 from .base import Effect, EffectStack, available_effects
-from .blur import DirectionalBlur, GaussianBlur, MotionTile, RadialBlur, ZoomBlur
-from .camera import CameraShake
-from .color import Brightness, Contrast, Saturation, Tint
-from .motion import MotionBlur
-from .palette import PaletteMap, OrderedDither
-from .analog import Halftone, PixelSort, Crt
-from ..authoring.effects import HalftoneMode, PixelSortDirection, PixelSortOrder
-from .stylize import Bloom, ChromaticAberration, ColorAdjust, Glow, Sharpen, Vignette
 
 __all__ = [
-    "Ascii", "PseudoAscii", "CHARACTER_SETS", "AsciiGlyphStyle", "AsciiMode", "AsciiColorMode",
-    "ActiveInterval", "Effect", "EffectStack", "Brightness", "Contrast",
-    "Saturation", "Tint", "GaussianBlur", "DirectionalBlur", "MotionTile", "ZoomBlur", "RadialBlur",
-    "ZoomBlurDirection", "Glow", "Bloom", "ChromaticAberration", "Vignette",
-    "Halftone", "PixelSort", "Crt", "HalftoneMode", "PixelSortDirection", "PixelSortOrder",
-    "PaletteMap", "OrderedDither", "PaletteMode", "PaletteInputFilter", "PaletteInterpolation", "DitherMatrix", "Sharpen", "ColorAdjust", "CameraShake", "MotionBlur", "available_effects",
+    "Ascii",
+    "PseudoAscii",
+    "CHARACTER_SETS",
+    "AsciiGlyphStyle",
+    "AsciiMode",
+    "AsciiColorMode",
+    "ActiveInterval",
+    "Effect",
+    "EffectStack",
+    "Brightness",
+    "Contrast",
+    "Saturation",
+    "Tint",
+    "GaussianBlur",
+    "DirectionalBlur",
+    "MotionTile",
+    "ZoomBlur",
+    "RadialBlur",
+    "ZoomBlurDirection",
+    "Glow",
+    "Bloom",
+    "ChromaticAberration",
+    "Vignette",
+    "Halftone",
+    "PixelSort",
+    "Crt",
+    "HalftoneMode",
+    "PixelSortDirection",
+    "PixelSortOrder",
+    "PaletteMap",
+    "OrderedDither",
+    "PaletteMode",
+    "PaletteInputFilter",
+    "PaletteInterpolation",
+    "DitherMatrix",
+    "Sharpen",
+    "ColorAdjust",
+    "CameraShake",
+    "MotionBlur",
+    "available_effects",
 ]
 
 for _name in __all__:

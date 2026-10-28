@@ -5,9 +5,9 @@ from typing import cast as cast
 
 from ..properties import BindablePointProperty as BindablePointProperty, BindableScalarProperty as BindableScalarProperty, ScalarProperty as ScalarProperty
 
-from ..authoring.effects import ZoomBlurDirection as ZoomBlurDirection
-
 from ..authoring.values import Point as Point
+
+from ..authoring.effects import ZoomBlurDirection as ZoomBlurDirection
 
 from .base import Effect as Effect
 

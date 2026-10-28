@@ -140,155 +140,224 @@ fn resource_value_is_live(resource: EffectResource, remaining: &[EffectPass]) ->
     false
 }
 
-fn execute_effect_pass(
-    source: &RgbaImage,
-    secondary: Option<&RgbaImage>,
-    target: &mut RgbaImage,
-    pass: &EffectPass,
-    atlases: &[std::sync::Arc<crate::ascii::PreparedGlyphAtlas>],
-) {
-    match pass.operation {
-        EffectOperation::AsciiAnalyze { parameters } => {
-            super::ascii::analyze(source, target, parameters)
+// A row is both an explicit capability decision and its typed execution path.
+macro_rules! cpu_effect_kernels {
+    (
+        |$source:ident, $secondary:ident, $target:ident, $pass:ident, $atlases:ident|
+        registered {
+            $($kernel:ident: $supported:literal => {
+                $($operation:pat => $execute:expr),+ $(,)?
+            }),+ $(,)?
         }
-        EffectOperation::AsciiResolve { parameters } => super::ascii::resolve(
-            source,
-            secondary.expect("ASCII analysis"),
-            target,
-            &atlases[parameters.atlas],
-            parameters,
-        ),
-        EffectOperation::HalftoneAnalyze {
-            cell_size,
-            angle_degrees,
-            mode,
-        } => super::analog::analyze(source, target, cell_size, angle_degrees, mode),
-        EffectOperation::Halftone { .. } => super::analog::halftone(
-            source,
-            secondary.expect("halftone analysis"),
-            target,
-            pass.operation,
-        ),
-        EffectOperation::PixelSort { .. } => {
-            super::analog::pixel_sort(source, target, pass.operation)
+        unsupported {
+            $($unsupported:ident => [$($unsupported_operation:pat),+]),* $(,)?
         }
-        EffectOperation::Crt { .. } => super::analog::crt(source, target, pass.operation),
-        EffectOperation::PaletteMap {
-            input_adjusted,
-            input_scale,
-            interpolation,
-            stops,
-            palette,
-            amount,
-            mode,
-            levels,
-        } => super::stylization::palette_map(
-            source,
-            if input_adjusted {
-                Some(secondary.expect("prepared palette input"))
-            } else {
-                None
-            },
-            input_scale,
-            target,
-            &palette,
-            stops.as_ref(),
-            amount,
-            mode,
-            levels,
-            interpolation,
-        ),
-        EffectOperation::OrderedDither {
-            input_adjusted,
-            input_scale,
-            interpolation: _,
-            stops,
-            mode,
-            levels,
-            palette,
-            amount,
-            strength,
-            matrix,
-            scale,
-            seed,
-        } => super::stylization::ordered_dither(
-            source,
-            if input_adjusted {
-                Some(secondary.expect("prepared palette input"))
-            } else {
-                None
-            },
-            input_scale,
-            target,
-            &palette,
-            stops.as_ref(),
-            amount,
-            strength,
-            matrix,
-            scale,
-            seed,
-            mode,
-            levels,
-        ),
-        EffectOperation::PaletteInputAnalyze { scale, filter } => {
-            super::input_analysis::analyze(source, target, scale, filter)
-        }
-        EffectOperation::ApplyColourTransform { transform } => {
-            apply_colour_transform(source, target, transform)
-        }
-        EffectOperation::GaussianHorizontal { radius, integer } => {
-            gaussian_pass(source, target, radius, true, integer)
-        }
-        EffectOperation::GaussianVertical { radius, integer } => {
-            gaussian_pass(source, target, radius, false, integer)
-        }
-        EffectOperation::HighlightExtract { threshold, colour } => {
-            highlight_extract(source, target, threshold, colour)
-        }
-        EffectOperation::Composite { mode, amount } => {
-            let base = source;
-            let overlay = secondary.expect("composite passes declare two inputs");
-            match mode {
-                crate::render::effects::CompositeMode::Additive => {
-                    glow_composite(base, overlay, target, amount)
-                }
-                crate::render::effects::CompositeMode::Unsharp => {
-                    unsharp_composite(base, overlay, target, amount)
-                }
+    ) => {
+        pub(crate) const fn supports_kernel(kernel: crate::kernel::EffectKernel) -> bool {
+            match kernel {
+                $(crate::kernel::EffectKernel::$kernel => $supported,)+
+                $(crate::kernel::EffectKernel::$unsupported => false,)*
             }
         }
-        EffectOperation::DirectionalBlur {
-            radius,
-            angle_degrees,
-        } => blur(source, target, radius, Some(angle_degrees), None),
-        EffectOperation::ZoomBlur {
-            radius,
-            samples,
-            anchor,
-            direction,
-        } => super::zoom_blur::apply(source, target, radius, samples, anchor, direction),
-        EffectOperation::ChromaticAberration {
-            amount,
-            angle_degrees,
-        } => super::chromatic::apply(source, target, amount, angle_degrees),
-        EffectOperation::Vignette {
-            amount,
-            radius,
-            softness,
-            colour,
-        } => super::vignette::apply(source, target, amount, radius, softness, colour),
-        EffectOperation::ColorAdjust {
-            exposure,
-            gamma,
-            black_point,
-            white_point,
-        } => super::colour_adjust::apply(source, target, exposure, gamma, black_point, white_point),
-        EffectOperation::MotionBlur {
-            radius,
-            angle_degrees,
-            samples,
-        } => blur(source, target, radius, Some(angle_degrees), Some(samples)),
+
+        fn execute_effect_pass(
+            $source: &RgbaImage,
+            $secondary: Option<&RgbaImage>,
+            $target: &mut RgbaImage,
+            $pass: &EffectPass,
+            $atlases: &[std::sync::Arc<crate::ascii::PreparedGlyphAtlas>],
+        ) {
+            match $pass.operation {
+                $($($operation => $execute,)+)+
+                $($($unsupported_operation)|+ => unreachable!("CPU capability validation rejects this kernel"),)*
+            }
+        }
+    };
+}
+
+cpu_effect_kernels! {
+    |source, secondary, target, pass, atlases|
+    registered {
+        AsciiAnalyze: true => {
+            EffectOperation::AsciiAnalyze { parameters } => {
+                super::ascii::analyze(source, target, parameters)
+            },
+        },
+        AsciiResolve: true => {
+            EffectOperation::AsciiResolve { parameters } => super::ascii::resolve(
+                source,
+                secondary.expect("ASCII analysis"),
+                target,
+                &atlases[parameters.atlas],
+                parameters,
+            ),
+        },
+        HalftoneAnalyze: true => {
+            EffectOperation::HalftoneAnalyze {
+                cell_size,
+                angle_degrees,
+                mode,
+            } => super::analog::analyze(source, target, cell_size, angle_degrees, mode),
+        },
+        Halftone: true => {
+            EffectOperation::Halftone { .. } => super::analog::halftone(
+                source,
+                secondary.expect("halftone analysis"),
+                target,
+                pass.operation,
+            ),
+        },
+        PixelSort: true => {
+            EffectOperation::PixelSort { .. } => {
+                super::analog::pixel_sort(source, target, pass.operation)
+            },
+        },
+        Crt: true => {
+            EffectOperation::Crt { .. } => super::analog::crt(source, target, pass.operation),
+        },
+        PaletteMap: true => {
+            EffectOperation::PaletteMap {
+                input_adjusted,
+                input_scale,
+                interpolation,
+                stops,
+                palette,
+                amount,
+                mode,
+                levels,
+            } => super::stylization::palette_map(
+                source,
+                if input_adjusted {
+                    Some(secondary.expect("prepared palette input"))
+                } else {
+                    None
+                },
+                input_scale,
+                target,
+                &palette,
+                stops.as_ref(),
+                amount,
+                mode,
+                levels,
+                interpolation,
+            ),
+        },
+        OrderedDither: true => {
+            EffectOperation::OrderedDither {
+                input_adjusted,
+                input_scale,
+                interpolation: _,
+                stops,
+                mode,
+                levels,
+                palette,
+                amount,
+                strength,
+                matrix,
+                scale,
+                seed,
+            } => super::stylization::ordered_dither(
+                source,
+                if input_adjusted {
+                    Some(secondary.expect("prepared palette input"))
+                } else {
+                    None
+                },
+                input_scale,
+                target,
+                &palette,
+                stops.as_ref(),
+                amount,
+                strength,
+                matrix,
+                scale,
+                seed,
+                mode,
+                levels,
+            ),
+        },
+        PaletteInputAnalyze: true => {
+            EffectOperation::PaletteInputAnalyze { scale, filter } => {
+                super::input_analysis::analyze(source, target, scale, filter)
+            },
+        },
+        ColourTransform: true => {
+            EffectOperation::ApplyColourTransform { transform } => {
+                apply_colour_transform(source, target, transform)
+            },
+        },
+        GaussianBlur: true => {
+            EffectOperation::GaussianHorizontal { radius, integer } => {
+                gaussian_pass(source, target, radius, true, integer)
+            },
+            EffectOperation::GaussianVertical { radius, integer } => {
+                gaussian_pass(source, target, radius, false, integer)
+            },
+        },
+        HighlightExtract: true => {
+            EffectOperation::HighlightExtract { threshold, colour } => {
+                highlight_extract(source, target, threshold, colour)
+            },
+        },
+        Composite: true => {
+            EffectOperation::Composite { mode, amount } => {
+                let base = source;
+                let overlay = secondary.expect("composite passes declare two inputs");
+                match mode {
+                    crate::render::effects::CompositeMode::Additive => {
+                        glow_composite(base, overlay, target, amount)
+                    }
+                    crate::render::effects::CompositeMode::Unsharp => {
+                        unsharp_composite(base, overlay, target, amount)
+                    }
+                }
+            },
+        },
+        DirectionalBlur: true => {
+            EffectOperation::DirectionalBlur {
+                radius,
+                angle_degrees,
+            } => blur(source, target, radius, Some(angle_degrees), None),
+        },
+        ZoomBlur: true => {
+            EffectOperation::ZoomBlur {
+                radius,
+                samples,
+                anchor,
+                direction,
+            } => super::zoom_blur::apply(source, target, radius, samples, anchor, direction),
+        },
+        ChromaticAberration: true => {
+            EffectOperation::ChromaticAberration {
+                amount,
+                angle_degrees,
+            } => super::chromatic::apply(source, target, amount, angle_degrees),
+        },
+        Vignette: true => {
+            EffectOperation::Vignette {
+                amount,
+                radius,
+                softness,
+                colour,
+            } => super::vignette::apply(source, target, amount, radius, softness, colour),
+        },
+        ColorAdjust: true => {
+            EffectOperation::ColorAdjust {
+                exposure,
+                gamma,
+                black_point,
+                white_point,
+            } => super::colour_adjust::apply(source, target, exposure, gamma, black_point, white_point),
+        },
+        MotionBlur: true => {
+            EffectOperation::MotionBlur {
+                radius,
+                angle_degrees,
+                samples,
+            } => blur(source, target, radius, Some(angle_degrees), Some(samples)),
+        },
     }
+    unsupported {}
 }
 
 fn gaussian_pass(

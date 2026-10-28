@@ -5,9 +5,7 @@ use crate::{
 };
 use vestra_core::plan::RenderPlan;
 
-pub(crate) const fn supports_kernel(_kernel: EffectKernel) -> bool {
-    true
-}
+pub(crate) use super::effects::supports_kernel;
 
 pub(crate) fn validate_plan(plan: &RenderPlan) -> Result<(), Diagnostic> {
     validate_required_kernels_with(required_effect_kernels(plan).iter(), supports_kernel)

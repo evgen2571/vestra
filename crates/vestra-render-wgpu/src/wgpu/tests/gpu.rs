@@ -1,10 +1,15 @@
 //! Shared adapter setup for WGPU tests.
 
+#[cfg(feature = "adapter-tests")]
 use std::sync::Arc;
 
+#[cfg(feature = "adapter-tests")]
 use super::WgpuBackend;
-use crate::{AdapterPerformanceClass, render::RenderBackend};
+use crate::AdapterPerformanceClass;
+#[cfg(feature = "adapter-tests")]
+use crate::render::RenderBackend;
 
+#[cfg(feature = "adapter-tests")]
 pub(super) fn wgpu_backend_or_skip(
     plan: &vestra_core::plan::RenderPlan,
     decoded: Arc<crate::DecodedAssets>,
@@ -51,6 +56,7 @@ pub(super) fn wgpu_backend_or_skip(
     }
 }
 
+#[cfg(feature = "adapter-tests")]
 pub(super) fn wgpu_backend_or_skip_depth(
     plan: &vestra_core::plan::RenderPlan,
     decoded: Arc<crate::DecodedAssets>,
@@ -98,10 +104,12 @@ pub(super) fn wgpu_backend_or_skip_depth(
     }
 }
 
+#[cfg(feature = "adapter-tests")]
 fn require_hardware_wgpu() -> bool {
     std::env::var_os("VESTRA_REQUIRE_HARDWARE_WGPU").is_some()
 }
 
+#[cfg(feature = "adapter-tests")]
 fn strict_wgpu_required() -> bool {
     std::env::var_os("VESTRA_REQUIRE_WGPU").is_some() || require_hardware_wgpu()
 }
@@ -125,6 +133,7 @@ fn hardware_conformance_policy(
     }
 }
 
+#[cfg(feature = "adapter-tests")]
 fn is_environment_unavailable(error: &crate::Diagnostic) -> bool {
     matches!(
         error.code.as_str(),

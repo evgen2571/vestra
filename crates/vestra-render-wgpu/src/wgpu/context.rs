@@ -166,7 +166,7 @@ impl GpuContext {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "adapter-tests"))]
 mod tests {
     #[test]
     fn gpu_queue_identity_survives_a_retained_device() {

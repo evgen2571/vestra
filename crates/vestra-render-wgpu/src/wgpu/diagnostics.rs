@@ -38,6 +38,11 @@ fn instance_slot(backends: wgpu::Backends) -> InstanceSlot {
 /// EGL instance destruction after tests. Renderer resources, devices, queues,
 /// and decoder sessions still have ordinary deterministic ownership.
 pub(super) fn instance_for_backends(backends: wgpu::Backends) -> &'static wgpu::Instance {
+    #[cfg(test)]
+    assert!(
+        cfg!(feature = "adapter-tests"),
+        "adapter initialization requires the adapter-tests feature"
+    );
     let descriptor = || wgpu::InstanceDescriptor {
         backends,
         ..wgpu::InstanceDescriptor::default()
@@ -118,6 +123,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "adapter-tests")]
     #[test]
     fn initialization_order_cannot_narrow_the_all_instance() {
         let gl = super::instance_for_backends(wgpu::Backends::GL);
@@ -127,5 +133,12 @@ mod tests {
             all,
             super::instance_for_backends(wgpu::Backends::all())
         ));
+    }
+
+    #[cfg(not(feature = "adapter-tests"))]
+    #[test]
+    #[should_panic(expected = "adapter initialization requires the adapter-tests feature")]
+    fn adapter_free_tests_reject_instance_initialization() {
+        super::instance_for_backends(wgpu::Backends::all());
     }
 }

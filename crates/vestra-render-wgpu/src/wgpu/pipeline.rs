@@ -300,7 +300,7 @@ impl GpuPipelines {
         Self::BASE_PIPELINE_COUNT + self.effects.len()
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "adapter-tests"))]
     pub(super) fn declared_supported_kernel_count() -> usize {
         supported_kernels().count()
     }

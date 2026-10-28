@@ -70,11 +70,11 @@ gen-effects-check:
     cargo test --locked --quiet -p vestra-core --example effect_metadata
     uv run --no-project python -m unittest discover -s tests -p test_effect_generation.py
 
-# Check effect declarations, registration, CPU pixels and focused WGPU contracts.
+# Check effect declarations, registration, CPU pixels and adapter-free WGPU contracts.
 effect-check: gen-effects-check
     rustfmt --edition 2024 --check crates/vestra-core/src/effects/*.rs
     cargo test --locked -p vestra-core -p vestra-render-common -p vestra-render-cpu
-    cargo test --locked -p vestra-render-wgpu --lib -- --skip gpu_
+    cargo test --locked -p vestra-render-wgpu --lib --no-default-features
 
 # Check local public documentation links.
 docs-check:

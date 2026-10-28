@@ -296,7 +296,7 @@ impl ReadbackRing {
         None
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "adapter-tests"))]
     pub(super) fn take_ready(&mut self) -> Option<CompletedFrame> {
         self.take_ready_with_token().map(|(_, frame)| frame)
     }
@@ -450,8 +450,8 @@ fn readback_state_error(message: &str) -> Diagnostic {
     Diagnostic::error("WGPU-READBACK-STATE", Category::Backend, message, "")
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(all(test, feature = "adapter-tests"))]
+mod adapter_tests {
     use super::*;
 
     struct ReadbackTestResources {
@@ -466,10 +466,15 @@ mod tests {
         let instance = super::super::diagnostics::instance_for_backends(
             super::super::diagnostics::requested_backends(),
         );
-        let Some(adapter) =
-            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-        else {
-            if std::env::var_os("VESTRA_REQUIRE_WGPU").is_some() {
+        let options = wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            force_fallback_adapter: std::env::var_os("VESTRA_WGPU_FORCE_FALLBACK").is_some(),
+            compatible_surface: None,
+        };
+        let Some(adapter) = pollster::block_on(instance.request_adapter(&options)) else {
+            if std::env::var_os("VESTRA_REQUIRE_WGPU").is_some()
+                || std::env::var_os("VESTRA_REQUIRE_HARDWARE_WGPU").is_some()
+            {
                 panic!("strict WGPU verification requires an adapter for callback queue tests");
             }
             eprintln!("WGPU_RUNTIME_SKIPPED reason=no-compatible-adapter callback=readback");
@@ -479,6 +484,15 @@ mod tests {
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
                 .expect("adapter was found but device request failed");
         let info = adapter.get_info();
+        if std::env::var_os("VESTRA_REQUIRE_HARDWARE_WGPU").is_some() {
+            assert!(
+                matches!(
+                    info.device_type,
+                    wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu
+                ),
+                "hardware callback verification requires a proven hardware adapter: {info:?}"
+            );
+        }
         eprintln!(
             "WGPU_RUNTIME_EXECUTED adapter={:?} backend={:?} device_type={:?} callback=readback",
             info.name, info.backend, info.device_type

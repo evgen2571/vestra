@@ -38,6 +38,16 @@ fn pre_refactor_effect_specimens_preserve_serde_compilation_evaluation_and_topol
             let effect: crate::project::Effect = serde_json::from_value(specimen).unwrap();
             let compiled =
                 compile(&effect, "baseline", &mut ScalarSignalInterner::default()).unwrap();
+            let mut authored_targets = Vec::new();
+            effect.for_each_scalar_property(|target, property| {
+                authored_targets.push(target);
+                assert_eq!(
+                    serde_json::to_value(property).unwrap(),
+                    serde_json::to_value(&effect).unwrap()[target.name()],
+                    "{name}: authored field association"
+                );
+            });
+            assert_eq!(authored_targets, effect.definition().scalar_properties);
             let mut properties = Vec::new();
             compiled.for_each_scalar_property(|target, property| {
                 properties.push(format!("{target:?}:{property:?}"));

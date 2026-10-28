@@ -11,10 +11,10 @@ pub use catalog::visual_effect_descriptors;
 pub use descriptors::{
     EffectParameterDefault, EffectParameterDescriptor, EffectParameterKind, VisualEffectDescriptor,
 };
+pub(crate) use properties::ScalarAuthoredValidation;
 pub use properties::{
     MIN_POSITIVE_PROPERTY_VALUE, PlainTrackTarget, ScalarPropertyConstraint, ScalarPropertyTarget,
 };
-pub(crate) use properties::{ScalarAuthoredValidation, ScalarPropertyDefinition};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

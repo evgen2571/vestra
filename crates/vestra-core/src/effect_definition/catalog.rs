@@ -1,4 +1,4 @@
-//! Authoritative visual effect catalog shared by authored and compiled models.
+//! Compile-time catalog derived from the authoritative effect declarations.
 
 use super::{
     EffectClass, EffectDefinition, EffectParameterDefault, EffectParameterDescriptor,
@@ -6,58 +6,54 @@ use super::{
     ScalarPropertyTarget, VisualEffectDescriptor,
 };
 
+macro_rules! definition {
+    ({id: $id:literal, class: $class:ident, scope: $scope:ident, stage: $stage:ident,
+      passes: $passes:literal, temporal: $temporal:ident, retains_original: $retains:literal,
+      parameters: [$($parameter:expr),* $(,)?]}, [$($target:ident),*], [$($plain:ident),*]) => {{
+        static PARAMETERS: &[EffectParameterDescriptor] = &[$($parameter),*];
+        EffectDefinition {
+            id: $id, class: EffectClass::$class, scope: EffectScope::$scope,
+            stage: EffectStage::$stage, estimated_pass_count: $passes,
+            temporal_policy: EffectTemporalPolicy::$temporal, retains_original: $retains,
+            scalar_properties: &[$(ScalarPropertyTarget::$target),*],
+            plain_tracks: &[$(PlainTrackTarget::$plain),*], parameters: PARAMETERS,
+        }
+    }};
+}
 macro_rules! visual_effect_catalog {
-    ($($kind:ident => {
-        id: $id:literal,
-        class: $class:ident,
-        scope: $scope:ident,
-        stage: $stage:ident,
-        passes: $passes:literal,
-        temporal: $temporal:ident,
-        retains_original: $retains_original:literal,
-        scalar_properties: [$($target:ident),* $(,)?],
-        plain_tracks: [$($plain_target:ident),* $(,)?]
-        , parameters: [$($parameter:expr),* $(,)?]
+    ($internal:ident => {
+        definition: $internal_definition:tt,
+        compiled: $internal_compiled:tt,
+        evaluated: $internal_evaluated:tt
+    }; $( $kind:ident => {
+        module: $module:ident,
+        definition: $definition:tt,
+        authored: $authored:tt,
+        compiled: $compiled:tt,
+        evaluated: $evaluated:tt,
+        scalars: [$($field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
+        tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
     }),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        pub(crate) enum VisualEffectKind {
-            $($kind),+
-        }
-
+        pub(crate) enum VisualEffectKind { $internal, $($kind),+ }
         impl VisualEffectKind {
-            #[must_use]
             pub(crate) const fn definition(self) -> EffectDefinition {
                 match self {
-                    $(Self::$kind => {
-                        static PARAMETERS: &[EffectParameterDescriptor] = &[$($parameter),*];
-                        EffectDefinition {
-                            id: $id,
-                            class: EffectClass::$class,
-                            scope: EffectScope::$scope,
-                            stage: EffectStage::$stage,
-                            estimated_pass_count: $passes,
-                            temporal_policy: EffectTemporalPolicy::$temporal,
-                            retains_original: $retains_original,
-                            scalar_properties: &[$(ScalarPropertyTarget::$target),*],
-                            plain_tracks: &[$(PlainTrackTarget::$plain_target),*],
-                            parameters: PARAMETERS,
-                        }
-                    }),+
+                    Self::$internal => definition!($internal_definition, [], []),
+                    $(Self::$kind => definition!($definition, [$($target),*], [$($plain_target),*])),+
                 }
             }
-
-            #[must_use]
             pub const fn descriptor(self) -> VisualEffectDescriptor {
                 let definition = self.definition();
-                VisualEffectDescriptor {
-                    id: definition.id,
-                    class: definition.class,
-                    scope: definition.scope,
-                    parameters: definition.parameters,
-                }
+                VisualEffectDescriptor { id: definition.id, class: definition.class,
+                    scope: definition.scope, parameters: definition.parameters }
             }
-
-            pub const ALL: &'static [Self] = &[$(Self::$kind),+];
+            pub const ALL: &'static [Self] = &[Self::$internal, $(Self::$kind),+];
+        }
+        impl crate::project::Effect {
+            pub(crate) const fn kind(&self) -> VisualEffectKind {
+                match self { $(Self::$kind { .. } => VisualEffectKind::$kind),+ }
+            }
         }
     };
 }
@@ -70,35 +66,4 @@ pub fn visual_effect_descriptors() -> impl Iterator<Item = VisualEffectDescripto
         .copied()
         .filter(|kind| !matches!(kind, VisualEffectKind::ColourTransform))
         .map(|kind| kind.descriptor())
-}
-
-impl crate::project::Effect {
-    #[must_use]
-    pub(crate) const fn kind(&self) -> VisualEffectKind {
-        match self {
-            Self::Ascii { .. } => VisualEffectKind::Ascii,
-            Self::Halftone { .. } => VisualEffectKind::Halftone,
-            Self::PixelSort { .. } => VisualEffectKind::PixelSort,
-            Self::Crt { .. } => VisualEffectKind::Crt,
-            Self::PaletteMap { .. } => VisualEffectKind::PaletteMap,
-            Self::OrderedDither { .. } => VisualEffectKind::OrderedDither,
-            Self::Brightness { .. } => VisualEffectKind::Brightness,
-            Self::Contrast { .. } => VisualEffectKind::Contrast,
-            Self::Saturation { .. } => VisualEffectKind::Saturation,
-            Self::Tint { .. } => VisualEffectKind::Tint,
-            Self::GaussianBlur { .. } => VisualEffectKind::GaussianBlur,
-            Self::MotionTile { .. } => VisualEffectKind::MotionTile,
-            Self::DirectionalBlur { .. } => VisualEffectKind::DirectionalBlur,
-            Self::ZoomBlur { .. } => VisualEffectKind::ZoomBlur,
-            Self::RadialBlur { .. } => VisualEffectKind::RadialBlur,
-            Self::Glow { .. } => VisualEffectKind::Glow,
-            Self::Bloom { .. } => VisualEffectKind::Bloom,
-            Self::ChromaticAberration { .. } => VisualEffectKind::ChromaticAberration,
-            Self::Vignette { .. } => VisualEffectKind::Vignette,
-            Self::Sharpen { .. } => VisualEffectKind::Sharpen,
-            Self::ColorAdjust { .. } => VisualEffectKind::ColorAdjust,
-            Self::CameraShake { .. } => VisualEffectKind::CameraShake,
-            Self::MotionBlur { .. } => VisualEffectKind::MotionBlur,
-        }
-    }
 }

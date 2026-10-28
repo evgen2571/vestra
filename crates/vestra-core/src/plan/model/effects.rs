@@ -34,216 +34,43 @@ pub struct CompiledPointProperty {
     pub y_modifiers: Vec<CompiledScalarModifier>,
 }
 
-#[derive(Clone, Debug)]
-pub enum CompiledEffect {
-    Ascii {
-        glyphs: crate::ascii::GlyphAtlasSpec,
-        parameters: crate::ascii::AsciiParameters,
-        period: Option<f64>,
-        amount: CompiledScalarProperty,
-        phase: CompiledScalarProperty,
-        cell_width: CompiledScalarProperty,
-        cell_height: CompiledScalarProperty,
-        edge_threshold: CompiledScalarProperty,
-        edge_strength: CompiledScalarProperty,
-        source_mix: CompiledScalarProperty,
-    },
+macro_rules! compiled_effect {
+    ($internal:ident $internal_fields:tt; $first:ident $first_fields:tt $(, $kind:ident $fields:tt)*) => {
+        #[derive(Clone, Debug)]
+        pub enum CompiledEffect { $first $first_fields, $internal $internal_fields, $($kind $fields),* }
+    };
+}
+macro_rules! visual_effect_catalog {
+    ($internal:ident => {
+        definition: $internal_definition:tt,
+        compiled: $internal_compiled:tt,
+        evaluated: $internal_evaluated:tt
+    }; $( $kind:ident => {
+        module: $module:ident,
+        definition: $definition:tt,
+        authored: $authored:tt,
+        compiled: $compiled:tt,
+        evaluated: $evaluated:tt,
+        scalars: [$($field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
+        tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
+    }),+ $(,)?) => {
+        compiled_effect! { $internal $internal_compiled; $($kind $compiled),+ }
+        impl CompiledEffect {
+            pub(crate) const fn kind(&self) -> crate::effect_definition::VisualEffectKind {
+                match self {
+                    Self::$internal { .. } => crate::effect_definition::VisualEffectKind::$internal,
+                    $(Self::$kind { .. } => crate::effect_definition::VisualEffectKind::$kind),+
+                }
+            }
 
-    /// A compiler-fused contiguous static basic-colour chain.
-    ColourTransform {
-        transform: ColourTransform,
-    },
-    Halftone {
-        cell_size: CompiledScalarProperty,
-        angle_degrees: CompiledScalarProperty,
-        softness: CompiledScalarProperty,
-        amount: CompiledScalarProperty,
-        mode: crate::project::HalftoneMode,
-        foreground: [u8; 4],
-        background: [u8; 4],
-        invert: bool,
-    },
-    PixelSort {
-        lower_threshold: CompiledScalarProperty,
-        upper_threshold: CompiledScalarProperty,
-        amount: CompiledScalarProperty,
-        direction: crate::project::PixelSortDirection,
-        order: crate::project::PixelSortOrder,
-        segment_length: u16,
-    },
-    Crt {
-        amount: CompiledScalarProperty,
-        curvature: CompiledScalarProperty,
-        scanline_strength: CompiledScalarProperty,
-        scanline_spacing: CompiledScalarProperty,
-        mask_strength: CompiledScalarProperty,
-        grain: CompiledScalarProperty,
-        jitter: CompiledScalarProperty,
-        flicker: CompiledScalarProperty,
-        rolling_strength: CompiledScalarProperty,
-        rolling_width: CompiledScalarProperty,
-        phase: CompiledScalarProperty,
-        mask_spacing: u8,
-        period: Option<f64>,
-        seed: u64,
-    },
-    PaletteMap {
-        interpolation: crate::project::PaletteInterpolation,
-        input_exposure: CompiledScalarProperty,
-        input_gamma: CompiledScalarProperty,
-        input_detail: CompiledScalarProperty,
-        input_detail_radius: CompiledScalarProperty,
-        input_scale: CompiledScalarProperty,
-        input_filter: crate::project::PaletteInputFilter,
-        stops: Option<[u16; 16]>,
-        palette: crate::stylization::EvaluatedPalette,
-        mode: crate::project::PaletteMode,
-        levels: u16,
-        amount: CompiledScalarProperty,
-        phase: CompiledScalarProperty,
-        period: Option<f64>,
-    },
-    OrderedDither {
-        interpolation: crate::project::PaletteInterpolation,
-        input_exposure: CompiledScalarProperty,
-        input_gamma: CompiledScalarProperty,
-        input_detail: CompiledScalarProperty,
-        input_detail_radius: CompiledScalarProperty,
-        input_scale: CompiledScalarProperty,
-        input_filter: crate::project::PaletteInputFilter,
-        stops: Option<[u16; 16]>,
-        palette: crate::stylization::EvaluatedPalette,
-        mode: crate::project::PaletteMode,
-        levels: u16,
-        amount: CompiledScalarProperty,
-        phase: CompiledScalarProperty,
-        period: Option<f64>,
-        strength: CompiledScalarProperty,
-        matrix: crate::project::DitherMatrix,
-        scale: u8,
-        seed: u32,
-    },
-    Brightness {
-        amount: CompiledScalarProperty,
-    },
-    Contrast {
-        amount: CompiledScalarProperty,
-    },
-    Saturation {
-        amount: CompiledScalarProperty,
-    },
-    Tint {
-        colour: [u8; 4],
-        amount: CompiledScalarProperty,
-    },
-    GaussianBlur {
-        radius: CompiledScalarProperty,
-    },
-    MotionTile {
-        output_width_percent: CompiledScalarProperty,
-        output_height_percent: CompiledScalarProperty,
-        tile_center: CompiledPointProperty,
-        mirror_edges: bool,
-    },
-    DirectionalBlur {
-        radius: CompiledScalarProperty,
-        angle_degrees: CompiledScalarProperty,
-    },
-    ZoomBlur {
-        radius: CompiledScalarProperty,
-        samples: u8,
-        anchor: Point,
-        direction: crate::project::ZoomBlurDirection,
-    },
-    RadialBlur {
-        amount: CompiledScalarProperty,
-        center: CompiledPointProperty,
-    },
-    Glow {
-        threshold: CompiledScalarProperty,
-        radius: CompiledScalarProperty,
-        intensity: CompiledScalarProperty,
-        colour: [u8; 4],
-    },
-    Bloom {
-        threshold: CompiledScalarProperty,
-        radius: CompiledScalarProperty,
-        intensity: CompiledScalarProperty,
-    },
-    ChromaticAberration {
-        amount: CompiledScalarProperty,
-        angle_degrees: CompiledScalarProperty,
-    },
-    Vignette {
-        amount: CompiledScalarProperty,
-        radius: CompiledScalarProperty,
-        softness: Track<f64>,
-        colour: [u8; 4],
-    },
-    Sharpen {
-        amount: CompiledScalarProperty,
-        radius: CompiledScalarProperty,
-    },
-    ColorAdjust {
-        exposure: CompiledScalarProperty,
-        gamma: CompiledScalarProperty,
-        black_point: Track<f64>,
-        white_point: Track<f64>,
-    },
-    CameraShake {
-        position_amount: CompiledScalarProperty,
-        rotation_degrees: CompiledScalarProperty,
-        scale_amount: CompiledScalarProperty,
-        frequency: CompiledScalarProperty,
-        seed: u64,
-        attack: f64,
-        decay: f64,
-    },
-    MotionBlur {
-        intensity: CompiledScalarProperty,
-        shutter_angle: CompiledScalarProperty,
-        max_radius: CompiledScalarProperty,
-        samples: u8,
-    },
+
+        }
+    };
 }
 
-impl CompiledEffect {
-    #[must_use]
-    pub(crate) const fn kind(&self) -> crate::effect_definition::VisualEffectKind {
-        match self {
-            Self::ColourTransform { .. } => {
-                crate::effect_definition::VisualEffectKind::ColourTransform
-            }
-            Self::Ascii { .. } => crate::effect_definition::VisualEffectKind::Ascii,
-            Self::Halftone { .. } => crate::effect_definition::VisualEffectKind::Halftone,
-            Self::PixelSort { .. } => crate::effect_definition::VisualEffectKind::PixelSort,
-            Self::Crt { .. } => crate::effect_definition::VisualEffectKind::Crt,
-            Self::PaletteMap { .. } => crate::effect_definition::VisualEffectKind::PaletteMap,
-            Self::OrderedDither { .. } => crate::effect_definition::VisualEffectKind::OrderedDither,
-            Self::Brightness { .. } => crate::effect_definition::VisualEffectKind::Brightness,
-            Self::Contrast { .. } => crate::effect_definition::VisualEffectKind::Contrast,
-            Self::Saturation { .. } => crate::effect_definition::VisualEffectKind::Saturation,
-            Self::Tint { .. } => crate::effect_definition::VisualEffectKind::Tint,
-            Self::GaussianBlur { .. } => crate::effect_definition::VisualEffectKind::GaussianBlur,
-            Self::MotionTile { .. } => crate::effect_definition::VisualEffectKind::MotionTile,
-            Self::DirectionalBlur { .. } => {
-                crate::effect_definition::VisualEffectKind::DirectionalBlur
-            }
-            Self::ZoomBlur { .. } => crate::effect_definition::VisualEffectKind::ZoomBlur,
-            Self::RadialBlur { .. } => crate::effect_definition::VisualEffectKind::RadialBlur,
-            Self::Glow { .. } => crate::effect_definition::VisualEffectKind::Glow,
-            Self::Bloom { .. } => crate::effect_definition::VisualEffectKind::Bloom,
-            Self::ChromaticAberration { .. } => {
-                crate::effect_definition::VisualEffectKind::ChromaticAberration
-            }
-            Self::Vignette { .. } => crate::effect_definition::VisualEffectKind::Vignette,
-            Self::Sharpen { .. } => crate::effect_definition::VisualEffectKind::Sharpen,
-            Self::ColorAdjust { .. } => crate::effect_definition::VisualEffectKind::ColorAdjust,
-            Self::CameraShake { .. } => crate::effect_definition::VisualEffectKind::CameraShake,
-            Self::MotionBlur { .. } => crate::effect_definition::VisualEffectKind::MotionBlur,
-        }
-    }
+include!("../../effect_definition/catalog_entries.rs");
 
+impl CompiledEffect {
     #[must_use]
     pub(crate) const fn definition(&self) -> crate::effect_definition::EffectDefinition {
         self.kind().definition()

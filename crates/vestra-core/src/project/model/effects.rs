@@ -27,273 +27,49 @@ pub enum PixelSortOrder {
     Descending,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Effect {
-    Ascii {
-        id: String,
-        characters: String,
-        edge_characters: String,
-        #[serde(default)]
-        font: Option<String>,
-        glyph_style: AsciiGlyphStyle,
-        mode: AsciiMode,
-        color_mode: AsciiColorMode,
-        foreground: String,
-        background: String,
-        palette: Vec<String>,
-        invert: bool,
-        #[serde(default)]
-        period: Option<f64>,
-        amount: ScalarProperty,
-        phase: ScalarProperty,
-        cell_width: ScalarProperty,
-        cell_height: ScalarProperty,
-        edge_threshold: ScalarProperty,
-        edge_strength: ScalarProperty,
-        source_mix: ScalarProperty,
-    },
-
-    Halftone {
-        id: String,
-        cell_size: ScalarProperty,
-        angle_degrees: ScalarProperty,
-        softness: ScalarProperty,
-        amount: ScalarProperty,
-        #[serde(default)]
-        mode: HalftoneMode,
-        foreground: String,
-        background: String,
-        invert: bool,
-    },
-    PixelSort {
-        id: String,
-        lower_threshold: ScalarProperty,
-        upper_threshold: ScalarProperty,
-        amount: ScalarProperty,
-        #[serde(default)]
-        direction: PixelSortDirection,
-        #[serde(default)]
-        order: PixelSortOrder,
-        segment_length: u16,
-    },
-    Crt {
-        id: String,
-        amount: ScalarProperty,
-        curvature: ScalarProperty,
-        scanline_strength: ScalarProperty,
-        scanline_spacing: ScalarProperty,
-        mask_strength: ScalarProperty,
-        grain: ScalarProperty,
-        jitter: ScalarProperty,
-        flicker: ScalarProperty,
-        rolling_strength: ScalarProperty,
-        rolling_width: ScalarProperty,
-        phase: ScalarProperty,
-        mask_spacing: u8,
-        #[serde(default)]
-        period: Option<f64>,
-        seed: u64,
-    },
-    PaletteMap {
-        id: String,
-        palette: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        stops: Option<Vec<f64>>,
-        #[serde(default)]
-        interpolation: PaletteInterpolation,
-        #[serde(default = "default_input_exposure")]
-        input_exposure: ScalarProperty,
-        #[serde(default = "default_input_gamma")]
-        input_gamma: ScalarProperty,
-        #[serde(default = "default_input_detail")]
-        input_detail: ScalarProperty,
-        #[serde(default = "default_input_detail_radius")]
-        input_detail_radius: ScalarProperty,
-        #[serde(default = "default_input_scale")]
-        input_scale: ScalarProperty,
-        #[serde(default)]
-        input_filter: PaletteInputFilter,
-        #[serde(default)]
-        mode: PaletteMode,
-        #[serde(default = "default_channel_levels")]
-        levels: u16,
-        amount: ScalarProperty,
-        phase: ScalarProperty,
-        #[serde(default)]
-        period: Option<f64>,
-    },
-    OrderedDither {
-        id: String,
-        palette: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        stops: Option<Vec<f64>>,
-        #[serde(default)]
-        interpolation: PaletteInterpolation,
-        #[serde(default = "default_input_exposure")]
-        input_exposure: ScalarProperty,
-        #[serde(default = "default_input_gamma")]
-        input_gamma: ScalarProperty,
-        #[serde(default = "default_input_detail")]
-        input_detail: ScalarProperty,
-        #[serde(default = "default_input_detail_radius")]
-        input_detail_radius: ScalarProperty,
-        #[serde(default = "default_input_scale")]
-        input_scale: ScalarProperty,
-        #[serde(default)]
-        input_filter: PaletteInputFilter,
-        #[serde(default = "default_dither_palette_mode")]
-        mode: PaletteMode,
-        #[serde(default = "default_channel_levels")]
-        levels: u16,
-        amount: ScalarProperty,
-        phase: ScalarProperty,
-        #[serde(default)]
-        period: Option<f64>,
-        strength: ScalarProperty,
-        #[serde(default)]
-        matrix: DitherMatrix,
-        scale: u8,
-        #[serde(default)]
-        seed: u32,
-    },
-    Brightness {
-        id: String,
-        amount: ScalarProperty,
-    },
-    Contrast {
-        id: String,
-        amount: ScalarProperty,
-    },
-    Saturation {
-        id: String,
-        amount: ScalarProperty,
-    },
-    Tint {
-        id: String,
-        colour: String,
-        amount: ScalarProperty,
-    },
-    GaussianBlur {
-        id: String,
-        radius: ScalarProperty,
-    },
-    MotionTile {
-        id: String,
-        output_width_percent: ScalarProperty,
-        output_height_percent: ScalarProperty,
-        tile_center: PointProperty,
-        mirror_edges: bool,
-    },
-    DirectionalBlur {
-        id: String,
-        radius: ScalarProperty,
-        angle_degrees: ScalarProperty,
-    },
-    ZoomBlur {
-        id: String,
-        radius: ScalarProperty,
-        samples: u8,
-        anchor: Point,
-        #[serde(default)]
-        direction: ZoomBlurDirection,
-    },
-    RadialBlur {
-        id: String,
-        amount: ScalarProperty,
-        center: PointProperty,
-    },
-    Glow {
-        id: String,
-        threshold: ScalarProperty,
-        radius: ScalarProperty,
-        intensity: ScalarProperty,
-        colour: String,
-    },
-    Bloom {
-        id: String,
-        threshold: ScalarProperty,
-        radius: ScalarProperty,
-        intensity: ScalarProperty,
-    },
-    ChromaticAberration {
-        id: String,
-        amount: ScalarProperty,
-        angle_degrees: ScalarProperty,
-    },
-    Vignette {
-        id: String,
-        amount: ScalarProperty,
-        radius: ScalarProperty,
-        softness: Track<f64>,
-        colour: String,
-    },
-    Sharpen {
-        id: String,
-        amount: ScalarProperty,
-        radius: ScalarProperty,
-    },
-    ColorAdjust {
-        id: String,
-        exposure: ScalarProperty,
-        gamma: ScalarProperty,
-        black_point: Track<f64>,
-        white_point: Track<f64>,
-    },
-    CameraShake {
-        id: String,
-        #[serde(flatten)]
-        timing: ActiveInterval,
-        position_amount: ScalarProperty,
-        rotation_degrees: ScalarProperty,
-        scale_amount: ScalarProperty,
-        frequency: ScalarProperty,
-        seed: u64,
-        attack: f64,
-        decay: f64,
-    },
-    MotionBlur {
-        id: String,
-        intensity: ScalarProperty,
-        shutter_angle: ScalarProperty,
-        max_radius: ScalarProperty,
-        samples: u8,
-    },
+macro_rules! authored_effect {
+    ($($kind:ident $fields:tt),+) => {
+        #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+        #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+        pub enum Effect { $($kind $fields),+ }
+    };
 }
+macro_rules! visual_effect_catalog {
+    ($internal:ident => {
+        definition: $internal_definition:tt,
+        compiled: $internal_compiled:tt,
+        evaluated: $internal_evaluated:tt
+    }; $( $kind:ident => {
+        module: $module:ident,
+        definition: $definition:tt,
+        authored: $authored:tt,
+        compiled: $compiled:tt,
+        evaluated: $evaluated:tt,
+        scalars: [$($field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
+        tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
+    }),+ $(,)?) => {
+        authored_effect! { $($kind $authored),+ }
+        impl Effect {
+            #[must_use]
+            pub fn id(&self) -> &str { match self { $(Self::$kind { id, .. } => id),+ } }
+            #[cfg(test)]
+            pub(crate) fn for_each_scalar_property(
+                &self, mut visitor: impl FnMut(crate::effect_definition::ScalarPropertyTarget, &ScalarProperty)
+            ) {
+                match self { $(Self::$kind { $($field,)* .. } => {
+                    $(visitor(crate::effect_definition::ScalarPropertyTarget::$target, $field);)*
+                }),+ }
+            }
+        }
+    };
+}
+
+include!("../../effect_definition/catalog_entries.rs");
 
 impl Effect {
     #[must_use]
     pub(crate) const fn definition(&self) -> crate::effect_definition::EffectDefinition {
         self.kind().definition()
-    }
-
-    #[must_use]
-    pub fn id(&self) -> &str {
-        match self {
-            Self::Halftone { id, .. } => id,
-            Self::PixelSort { id, .. } => id,
-            Self::Crt { id, .. } => id,
-            Self::Ascii { id, .. }
-            | Self::PaletteMap { id, .. }
-            | Self::OrderedDither { id, .. }
-            | Self::Brightness { id, .. }
-            | Self::Contrast { id, .. }
-            | Self::Saturation { id, .. }
-            | Self::Tint { id, .. }
-            | Self::GaussianBlur { id, .. }
-            | Self::MotionTile { id, .. }
-            | Self::DirectionalBlur { id, .. }
-            | Self::ZoomBlur { id, .. }
-            | Self::RadialBlur { id, .. }
-            | Self::Glow { id, .. }
-            | Self::Bloom { id, .. }
-            | Self::ChromaticAberration { id, .. }
-            | Self::Vignette { id, .. }
-            | Self::Sharpen { id, .. }
-            | Self::ColorAdjust { id, .. }
-            | Self::CameraShake { id, .. }
-            | Self::MotionBlur { id, .. } => id,
-        }
     }
 
     #[must_use]

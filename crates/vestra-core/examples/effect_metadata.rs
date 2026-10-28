@@ -39,21 +39,36 @@ struct CatalogExecution {
 }
 
 // Consume the same catalog input without compiling private runtime parameter expressions.
-macro_rules! visual_effect_catalog {
-    ($($kind:ident => {
-        id: $id:literal,
-        class: $class:ident, scope: $scope:ident, stage: $stage:ident, passes: $passes:literal,
-        temporal: $temporal:ident, retains_original: $retains_original:literal,
-        scalar_properties: $scalar_properties:tt, plain_tracks: $plain_tracks:tt,
-        parameters: $parameters:tt
-    }),+ $(,)?) => {
-        const CATALOG_EXECUTION: &[CatalogExecution] = &[$(CatalogExecution {
+macro_rules! execution {
+    ({id: $id:literal, class: $class:ident, scope: $scope:ident, stage: $stage:ident,
+      passes: $passes:literal, temporal: $temporal:ident, retains_original: $retains:literal,
+      parameters: $parameters:tt}) => {
+        CatalogExecution {
             id: $id,
             stage: Stage::$stage,
             temporal_policy: TemporalPolicy::$temporal,
             estimated_pass_count: $passes,
-            retains_original: $retains_original,
-        }),+];
+            retains_original: $retains,
+        }
+    };
+}
+macro_rules! visual_effect_catalog {
+    ($internal:ident => {
+        definition: $internal_definition:tt,
+        compiled: $internal_compiled:tt,
+        evaluated: $internal_evaluated:tt
+    }; $( $kind:ident => {
+        module: $module:ident,
+        definition: $definition:tt,
+        authored: $authored:tt,
+        compiled: $compiled:tt,
+        evaluated: $evaluated:tt,
+        scalars: [$($field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
+        tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
+    }),+ $(,)?) => {
+        const CATALOG_EXECUTION: &[CatalogExecution] = &[
+            execution!($internal_definition), $(execution!($definition)),+
+        ];
     };
 }
 

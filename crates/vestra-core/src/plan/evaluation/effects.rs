@@ -12,170 +12,47 @@ use crate::{
     project::ZoomBlurDirection,
 };
 
-#[derive(Clone, Debug)]
-pub enum EvaluatedEffect {
-    Ascii {
-        parameters: crate::ascii::AsciiParameters,
-    },
-    ColourTransform {
-        transform: ColourTransform,
-    },
-    Halftone {
-        cell_size: f64,
-        angle_degrees: f64,
-        softness: f64,
-        amount: f64,
-        mode: crate::project::HalftoneMode,
-        foreground: [u8; 4],
-        background: [u8; 4],
-        invert: bool,
-    },
-    PixelSort {
-        lower_threshold: f64,
-        upper_threshold: f64,
-        amount: f64,
-        direction: crate::project::PixelSortDirection,
-        order: crate::project::PixelSortOrder,
-        segment_length: u16,
-    },
-    Crt {
-        amount: f64,
-        curvature: f64,
-        scanline_strength: f64,
-        scanline_spacing: f64,
-        mask_strength: f64,
-        grain: f64,
-        jitter: f64,
-        flicker: f64,
-        rolling_strength: f64,
-        rolling_width: f64,
-        phase: f64,
-        mask_spacing: u8,
-        seed: u64,
-    },
-    PaletteMap {
-        interpolation: crate::project::PaletteInterpolation,
-        input_exposure: f64,
-        input_gamma: f64,
-        input_detail: f64,
-        input_detail_radius: f64,
-        input_scale: f64,
-        input_filter: crate::project::PaletteInputFilter,
-        stops: Option<[u16; 16]>,
-        palette: crate::stylization::EvaluatedPalette,
-        amount: f64,
-        mode: crate::project::PaletteMode,
-        levels: u16,
-    },
-    OrderedDither {
-        interpolation: crate::project::PaletteInterpolation,
-        input_exposure: f64,
-        input_gamma: f64,
-        input_detail: f64,
-        input_detail_radius: f64,
-        input_scale: f64,
-        input_filter: crate::project::PaletteInputFilter,
-        stops: Option<[u16; 16]>,
-        palette: crate::stylization::EvaluatedPalette,
-        amount: f64,
-        strength: f64,
-        mode: crate::project::PaletteMode,
-        levels: u16,
-        matrix: crate::project::DitherMatrix,
-        scale: u8,
-        seed: u32,
-    },
-    Brightness {
-        amount: f64,
-    },
-    Contrast {
-        amount: f64,
-    },
-    Saturation {
-        amount: f64,
-    },
-    Tint {
-        colour: [u8; 4],
-        amount: f64,
-    },
-    GaussianBlur {
-        radius: f64,
-    },
-    MotionTile {
-        output_width_percent: f64,
-        output_height_percent: f64,
-        tile_center: Point,
-        mirror_edges: bool,
-    },
-    DirectionalBlur {
-        radius: f64,
-        angle_degrees: f64,
-    },
-    ZoomBlur {
-        radius: f64,
-        samples: u8,
-        anchor: Point,
-        direction: ZoomBlurDirection,
-    },
-    RadialBlur {
-        amount: f64,
-        center: Point,
-    },
-    Glow {
-        threshold: f64,
-        radius: f64,
-        intensity: f64,
-        colour: [u8; 4],
-    },
-    Bloom {
-        threshold: f64,
-        radius: f64,
-        intensity: f64,
-    },
-    ChromaticAberration {
-        amount: f64,
-        angle_degrees: f64,
-    },
-    Vignette {
-        amount: f64,
-        radius: f64,
-        softness: f64,
-        colour: [u8; 4],
-    },
-    Sharpen {
-        amount: f64,
-        radius: f64,
-    },
-    ColorAdjust {
-        exposure: f64,
-        gamma: f64,
-        black_point: f64,
-        white_point: f64,
-    },
-    CameraShake {
-        local_time: u128,
-        position_amount: f64,
-        rotation_radians: f64,
-        scale_amount: f64,
-        frequency: f64,
-        seed: u64,
-        attack: f64,
-        decay: f64,
-    },
-    MotionBlur {
-        radius: f64,
-        angle_degrees: f64,
-        intensity: f64,
-        shutter_angle: f64,
-        max_radius: f64,
-        samples: u8,
-    },
+macro_rules! evaluated_effect {
+    ($internal:ident $internal_fields:tt; $first:ident $first_fields:tt $(, $kind:ident $fields:tt)*) => {
+        #[derive(Clone, Debug)]
+        pub enum EvaluatedEffect { $first $first_fields, $internal $internal_fields, $($kind $fields),* }
+    };
 }
+macro_rules! visual_effect_catalog {
+    ($internal:ident => {
+        definition: $internal_definition:tt,
+        compiled: $internal_compiled:tt,
+        evaluated: $internal_evaluated:tt
+    }; $( $kind:ident => {
+        module: $module:ident,
+        definition: $definition:tt,
+        authored: $authored:tt,
+        compiled: $compiled:tt,
+        evaluated: $evaluated:tt,
+        scalars: [$($field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
+        tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
+    }),+ $(,)?) => {
+        evaluated_effect! { $internal $internal_evaluated; $($kind $evaluated),+ }
+        impl EvaluatedEffect {
+            pub(crate) const fn kind(&self) -> crate::effect_definition::VisualEffectKind {
+                match self {
+                    Self::$internal { .. } => crate::effect_definition::VisualEffectKind::$internal,
+                    $(Self::$kind { .. } => crate::effect_definition::VisualEffectKind::$kind),+
+                }
+            }
+        }
+    };
+}
+
+include!("../../effect_definition/catalog_entries.rs");
 
 impl EvaluatedEffect {
     #[must_use]
     pub const fn is_pre_transform(&self) -> bool {
-        matches!(self, Self::MotionTile { .. })
+        matches!(
+            self.kind().definition().stage,
+            crate::effect_definition::EffectStage::PreTransform
+        )
     }
 
     #[must_use]
@@ -225,12 +102,8 @@ impl EvaluatedEffect {
     #[must_use]
     pub const fn is_basic_colour_effect(&self) -> bool {
         matches!(
-            self,
-            Self::Brightness { .. }
-                | Self::Contrast { .. }
-                | Self::Saturation { .. }
-                | Self::Tint { .. }
-                | Self::ColourTransform { .. }
+            self.kind().definition().class,
+            crate::effect_definition::EffectClass::BasicColour
         )
     }
 }

@@ -153,6 +153,7 @@ macro_rules! cpu_effect_kernels {
             $($unsupported:ident => [$($unsupported_operation:pat),+]),* $(,)?
         }
     ) => {
+        #[deny(unreachable_patterns)]
         pub(crate) const fn supports_kernel(kernel: crate::kernel::EffectKernel) -> bool {
             match kernel {
                 $(crate::kernel::EffectKernel::$kernel => $supported,)+
@@ -160,6 +161,7 @@ macro_rules! cpu_effect_kernels {
             }
         }
 
+        #[deny(unreachable_patterns)]
         fn execute_effect_pass(
             $source: &RgbaImage,
             $secondary: Option<&RgbaImage>,

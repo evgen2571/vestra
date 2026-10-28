@@ -284,6 +284,7 @@ fn assert_shader_abi(
     kernel: EffectKernel,
     size: usize,
     rust_layout: Vec<(usize, naga::ScalarKind)>,
+    field_offsets: &[(&str, usize, usize)],
 ) {
     let module = naga::front::wgsl::parse_str(crate::wgpu::registry::kernel_source(kernel))
         .expect("registered shader parses");
@@ -306,10 +307,24 @@ fn assert_shader_abi(
             binding: 3
         })
     );
-    let naga::TypeInner::Struct { span, .. } = &module.types[parameters.ty].inner else {
+    let naga::TypeInner::Struct { span, members } = &module.types[parameters.ty].inner else {
         panic!("{kernel:?} parameters must be a struct");
     };
     assert_eq!(size, *span as usize, "{kernel:?} record size");
+    for &(name, rust_offset, component_offset) in field_offsets {
+        if name.starts_with('_') {
+            continue;
+        }
+        let member = members
+            .iter()
+            .find(|member| member.name.as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("{kernel:?} shader has no parameter field {name}"));
+        assert_eq!(
+            rust_offset,
+            member.offset as usize + component_offset,
+            "{kernel:?}.{name} named byte offset"
+        );
+    }
     let mut shader_layout = Vec::new();
     wgsl_scalar_layout(&module, parameters.ty, 0, &mut shader_layout);
     assert_eq!(
@@ -337,6 +352,7 @@ macro_rules! registered_parameter_tests {
                     kernel,
                     std::mem::size_of::<$parameters>(),
                     $parameters::scalar_layout(),
+                    $parameters::field_offsets(),
                 );
                 let parameters = EffectKernelParameters::$kernel($parameters::zeroed());
                 assert_eq!(parameters.kernel(), kernel);
@@ -363,6 +379,7 @@ fn shader_abi_check_rejects_a_same_size_record_with_the_wrong_scalar_kind() {
         EffectKernel::Vignette,
         std::mem::size_of::<VignetteParameters>(),
         layout,
+        VignetteParameters::field_offsets(),
     );
 }
 
@@ -375,5 +392,19 @@ fn shader_abi_check_rejects_a_record_with_the_wrong_member_offset() {
         EffectKernel::Vignette,
         std::mem::size_of::<VignetteParameters>(),
         layout,
+        VignetteParameters::field_offsets(),
+    );
+}
+
+#[test]
+#[should_panic(expected = "named byte offset")]
+fn shader_abi_check_rejects_a_same_kind_field_at_the_wrong_named_offset() {
+    let mut fields = VignetteParameters::field_offsets().to_vec();
+    fields[3].1 += 4;
+    assert_shader_abi(
+        EffectKernel::Vignette,
+        std::mem::size_of::<VignetteParameters>(),
+        VignetteParameters::scalar_layout(),
+        &fields,
     );
 }

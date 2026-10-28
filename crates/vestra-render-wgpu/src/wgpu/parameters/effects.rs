@@ -9,7 +9,7 @@ use crate::{
 };
 
 macro_rules! effect_parameters {
-    ($name:ident { $($field:ident : $ty:ty),+ $(,)? }) => {
+    ($name:ident { $($field:ident : $ty:ty $(=> ($shader_field:ident, $component:literal))?),+ $(,)? }) => {
         #[repr(C, align(16))]
         #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
         pub(in crate::wgpu) struct $name {
@@ -24,6 +24,10 @@ macro_rules! effect_parameters {
 
         #[cfg(test)]
         impl $name {
+            fn field_offsets() -> &'static [(&'static str, usize, usize)] {
+                &[$(effect_parameters!(@field $name, $field $(=> ($shader_field, $component))?),)+]
+            }
+
             fn scalar_layout() -> Vec<(usize, naga::ScalarKind)> {
                 let mut fields = Vec::new();
                 $(registration_tests::rust_scalar_layout::<$ty>(
@@ -32,6 +36,12 @@ macro_rules! effect_parameters {
                 fields
             }
         }
+    };
+    (@field $record:ident, $field:ident) => {
+        (stringify!($field), std::mem::offset_of!($record, $field), 0)
+    };
+    (@field $record:ident, $field:ident => ($shader_field:ident, $component:literal)) => {
+        (stringify!($shader_field), std::mem::offset_of!($record, $field), $component)
     };
 }
 
@@ -141,8 +151,8 @@ effect_parameters!(ZoomBlurParameters {
     _padding: [u32; 2],
     radius: f32,
     samples: u32,
-    anchor_x: f32,
-    anchor_y: f32,
+    anchor_x: f32 => (anchor, 0),
+    anchor_y: f32 => (anchor, 4),
     direction: u32,
     _padding1: [u32; 3]
 });

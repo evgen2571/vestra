@@ -207,6 +207,7 @@ macro_rules! shader_registration {
         label: $label:literal,
         sources: [$($source:literal),+ $(,)?],
     }),+ $(,)? } unsupported { $($unsupported:ident),* $(,)? }) => {
+        #[deny(unreachable_patterns)]
         pub(crate) const fn supports_kernel(kernel: EffectKernel) -> bool {
             match kernel {
                 $(EffectKernel::$kernel => $supported,)+
@@ -214,6 +215,7 @@ macro_rules! shader_registration {
             }
         }
 
+        #[deny(unreachable_patterns)]
         pub(super) const fn kernel_label(kernel: EffectKernel) -> &'static str {
             match kernel {
                 $(EffectKernel::$kernel => $label,)+
@@ -221,6 +223,7 @@ macro_rules! shader_registration {
             }
         }
 
+        #[deny(unreachable_patterns)]
         pub(super) const fn kernel_source(kernel: EffectKernel) -> &'static str {
             match kernel {
                 $(EffectKernel::$kernel => concat!($(include_str!($source)),+),)+

@@ -19,6 +19,7 @@ macro_rules! effect_kernels {
 
         /// The single renderer mapping from logical operations to backend kernels.
         #[must_use]
+        #[deny(unreachable_patterns)]
         pub const fn kernel_for_operation(operation: &EffectOperation) -> EffectKernel {
             match operation {
                 $($(EffectOperation::$operation { .. })|+ => EffectKernel::$kernel,)+

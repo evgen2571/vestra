@@ -99,26 +99,26 @@ macro_rules! visual_effect_catalog {
             }
             pub(crate) fn extra_dynamic_semantic(&self) -> bool {
                 match self {
-                    Self::$internal { .. } => colour_transform::extra_dynamic(self),
-                    $(Self::$kind { .. } => $module::extra_dynamic(self)),+
+                    Self::$internal { .. } => false,
+                    $(Self::$kind { .. } => crate::effects::hooks::semantic_policy!(Dynamic, [$($hook),*], $module, self)),+
                 }
             }
             pub(crate) fn extra_modifiers_semantic(&self) -> bool {
                 match self {
-                    Self::$internal { .. } => colour_transform::extra_modifiers(self),
-                    $(Self::$kind { .. } => $module::extra_modifiers(self)),+
+                    Self::$internal { .. } => false,
+                    $(Self::$kind { .. } => crate::effects::hooks::semantic_policy!(Modifiers, [$($hook),*], $module, self)),+
                 }
             }
             pub(crate) const fn pass_count_semantic(&self) -> usize {
                 match self {
-                    Self::$internal { .. } => colour_transform::pass_count(self),
-                    $(Self::$kind { .. } => $module::pass_count(self)),+
+                    Self::$internal { .. } => self.definition().estimated_pass_count,
+                    $(Self::$kind { .. } => crate::effects::hooks::semantic_policy!(PassCount, [$($hook),*], $module, self)),+
                 }
             }
             pub(crate) const fn extra_requirements_semantic(&self) -> bool {
                 match self {
-                    Self::$internal { .. } => colour_transform::extra_requirements(self),
-                    $(Self::$kind { .. } => $module::extra_requirements(self)),+
+                    Self::$internal { .. } => false,
+                    $(Self::$kind { .. } => crate::effects::hooks::semantic_policy!(Requirements, [$($hook),*], $module, self)),+
                 }
             }
         }

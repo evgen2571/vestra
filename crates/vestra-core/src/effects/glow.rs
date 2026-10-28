@@ -212,19 +212,3 @@ pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
                 || effect_amount_is_identity(intensity.base_value))
     }
 }
-
-pub(crate) fn extra_dynamic(_effect: &CompiledEffect) -> bool {
-    false
-}
-
-pub(crate) fn extra_modifiers(_effect: &CompiledEffect) -> bool {
-    false
-}
-
-pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
-    effect.definition().estimated_pass_count
-}
-
-pub(crate) const fn extra_requirements(_effect: &CompiledEffect) -> bool {
-    false
-}

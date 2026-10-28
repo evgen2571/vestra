@@ -129,22 +129,6 @@ pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
     amount.keyframes.is_empty() && amount.base_value == 1.0
 }
 
-pub(crate) fn extra_dynamic(_effect: &CompiledEffect) -> bool {
-    false
-}
-
-pub(crate) fn extra_modifiers(_effect: &CompiledEffect) -> bool {
-    false
-}
-
-pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
-    effect.definition().estimated_pass_count
-}
-
-pub(crate) const fn extra_requirements(_effect: &CompiledEffect) -> bool {
-    false
-}
-
 pub(crate) fn compose_colour(
     effect: &EvaluatedEffect,
     transform: crate::plan::ColourTransform,

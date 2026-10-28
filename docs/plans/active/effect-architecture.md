@@ -157,6 +157,38 @@ secondary/original surface liveness; typed Rust/WGSL ABI and upload identity.
   `just effect-check` combines generation, core/common/CPU tests and WGPU tests
   excluding adapter-dependent `gpu_` names. Strict adapter recipes remain separate.
 
+- Independent whole-branch review found no Critical/Important defect in existing
+  effects. Two extension pitfalls were reproduced and fixed: qualified/attributed
+  point and timing fields, and mandatory mechanical semantic defaults. The two
+  projection regression tests failed before the fix; deleting default functions
+  first produced 84 missing-function compiler errors. Optional declared
+  Dynamic/Modifiers/PassCount/Requirements overrides now derive defaults, removing
+  those 84 forwarding functions. Current core: 349 passed/one ignored plus the
+  integration test; Clippy with warnings denied and generation freshness (six
+  exporter/schema and 19 generator tests) pass. Arbitrary type aliases remain
+  outside the documented typed-field grammar.
+- Actual scratch A/B/C patches and tests are under ignored
+  `target/effect-extension-trials/`: FilmGrain 8 maintained/5 registration sites/
+  8 generated; SoftGlow 2/1/8; TransformDrift 2/1/8. Each adds two test-only files.
+  CPU/NVIDIA Vulkan parity and deterministic repeated frames pass; B reuses four
+  passes/three kernels; C has zero passes/kernels and preserves supported-source
+  restrictions. A's final complete generation recipe/native import gate is still
+  being completed after the final core revision; no temporary effect was shipped.
+- Validation checkpoint before the final review fixes: all 240 CPU/software/
+  hardware RGBA requests and 30 canonical projects matched baseline byte-for-byte;
+  full Python 1205 passed, wheel smoke and fresh source-distribution installation
+  and installed smoke passed. These will be refreshed against the final Rust
+  commit. Ordinary uv sync had reused the old native library: forced
+  `uv sync --locked --extra dev --reinstall-package vestra` is required and now
+  documented for Rust-only edits.
+- The initial broad workspace test was intentionally interrupted (exit 130)
+  after confirmed concurrent linker/Rust build memory pressure on the 15 GiB host.
+  Native release and stale source builds were stopped explicitly; subsequent
+  builds use CARGO_BUILD_JOBS=2. No interrupted check is counted as passed.
+- Paired/ABBA representative CPU timings drifted substantially within both
+  baseline and candidate. Initial apparent slowdowns did not repeat. Raw samples
+  are retained; make neither a performance-neutrality nor a speedup claim.
+
 ## Decisions and discoveries
 
 - 2026-10-28: Native cargo works for pure core/renderer crates. Use the pinned

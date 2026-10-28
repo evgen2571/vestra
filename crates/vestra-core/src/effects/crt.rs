@@ -330,15 +330,3 @@ pub(crate) fn extra_dynamic(effect: &CompiledEffect) -> bool {
             || rolling_strength.base_value > 0.0
     }
 }
-
-pub(crate) fn extra_modifiers(_effect: &CompiledEffect) -> bool {
-    false
-}
-
-pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
-    effect.definition().estimated_pass_count
-}
-
-pub(crate) const fn extra_requirements(_effect: &CompiledEffect) -> bool {
-    false
-}

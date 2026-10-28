@@ -18,6 +18,10 @@ pub(crate) enum EffectHook {
     Transform,
     Motion,
     Assets,
+    Dynamic,
+    Modifiers,
+    PassCount,
+    Requirements,
 }
 
 macro_rules! apply_transform {
@@ -59,4 +63,26 @@ macro_rules! compose_colour {
     };
 }
 
-pub(crate) use {apply_transform, compose_colour, resolve_motion, validate_assets};
+macro_rules! semantic_policy {
+    (Dynamic, [Dynamic $(, $rest:ident)*], $module:ident, $effect:ident) => {
+        $module::extra_dynamic($effect)
+    };
+    (Modifiers, [Modifiers $(, $rest:ident)*], $module:ident, $effect:ident) => {
+        $module::extra_modifiers($effect)
+    };
+    (PassCount, [PassCount $(, $rest:ident)*], $module:ident, $effect:ident) => {
+        $module::pass_count($effect)
+    };
+    (Requirements, [Requirements $(, $rest:ident)*], $module:ident, $effect:ident) => {
+        $module::extra_requirements($effect)
+    };
+    ($policy:ident, [$head:ident $(, $rest:ident)*], $module:ident, $effect:ident) => {
+        $crate::effects::hooks::semantic_policy!($policy, [$($rest),*], $module, $effect)
+    };
+    (PassCount, [], $module:ident, $effect:ident) => { $effect.definition().estimated_pass_count };
+    ($policy:ident, [], $module:ident, $effect:ident) => { false };
+}
+
+pub(crate) use {
+    apply_transform, compose_colour, resolve_motion, semantic_policy, validate_assets,
+};

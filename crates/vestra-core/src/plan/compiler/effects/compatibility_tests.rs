@@ -14,7 +14,7 @@ fn fingerprint(value: impl std::fmt::Debug) -> String {
 }
 
 #[test]
-fn every_catalog_property_is_compiled_visited_and_validated() {
+fn catalog_scalar_plain_visitors_and_negative_track_times_are_consistent() {
     use crate::effect_definition::{EffectParameterKind, tests::descriptor_specimen};
 
     let fixture: Value = serde_json::from_str(include_str!(
@@ -23,6 +23,31 @@ fn every_catalog_property_is_compiled_visited_and_validated() {
     .unwrap();
     for descriptor in crate::effect_definition::visual_effect_descriptors() {
         let specimen = descriptor_specimen(descriptor);
+        if descriptor
+            .parameters
+            .iter()
+            .any(|p| p.kind == EffectParameterKind::ActiveInterval)
+        {
+            let mut timed = specimen.clone();
+            timed["start"] = json!(0.5);
+            timed["duration"] = json!(1.5);
+            let mut effect: crate::project::Effect = serde_json::from_value(timed).unwrap();
+            assert_eq!(
+                effect.timing(),
+                crate::project::ActiveInterval {
+                    start: 0.5,
+                    duration: Some(1.5)
+                }
+            );
+            effect.remap_semantic(2.0);
+            assert_eq!(
+                effect.timing(),
+                crate::project::ActiveInterval {
+                    start: 1.0,
+                    duration: Some(3.0)
+                }
+            );
+        }
         let effect: crate::project::Effect = serde_json::from_value(specimen.clone()).unwrap();
         let compiled = compile(&effect, "test", &mut ScalarSignalInterner::default()).unwrap();
         assert_eq!(compiled.kind(), effect.kind(), "{}", descriptor.id);
@@ -70,13 +95,20 @@ fn every_catalog_property_is_compiled_visited_and_validated() {
         for parameter in descriptor.parameters.iter().filter(|parameter| {
             matches!(
                 parameter.kind,
-                EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack
+                EffectParameterKind::ScalarProperty
+                    | EffectParameterKind::PlainTrack
+                    | EffectParameterKind::PointProperty
             )
         }) {
             let mut invalid = specimen.clone();
-            invalid[parameter.name]["keyframes"] = json!([
-                {"time": -1.0, "value": invalid[parameter.name]["base_value"], "interpolation": "linear"}
-            ]);
+            let base = if parameter.kind == EffectParameterKind::PointProperty {
+                invalid[parameter.name].clone()
+            } else {
+                invalid[parameter.name]["base_value"].clone()
+            };
+            invalid[parameter.name] = json!({"base_value": base, "keyframes": [
+                {"time": -1.0, "value": base, "interpolation": "linear"}
+            ]});
             let mut project = fixture["project"].clone();
             project["visual"]["clips"][0]["effects"] = json!([invalid]);
             let project: crate::project::Project = serde_json::from_value(project).unwrap();

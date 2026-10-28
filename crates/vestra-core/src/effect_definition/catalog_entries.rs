@@ -18,7 +18,7 @@ visual_effect_catalog! {
     };
     Ascii => {
         module: ascii,
-        hooks: [Assets],
+        hooks: [Assets, Dynamic],
         definition: {
             id: "ascii",
             class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 2,
@@ -361,7 +361,7 @@ visual_effect_catalog! {
     },
     Crt => {
         module: crt,
-        hooks: [],
+        hooks: [Dynamic],
         definition: {
             id: "crt", class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1, temporal: FromProperties, retains_original: false,  parameters: [
                 EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtAmount),
@@ -560,7 +560,7 @@ visual_effect_catalog! {
     },
     PaletteMap => {
         module: palette_map,
-        hooks: [],
+        hooks: [Dynamic, PassCount, Requirements],
         definition: {
             id: "palette_map",
             class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 6,
@@ -745,7 +745,7 @@ visual_effect_catalog! {
     },
     OrderedDither => {
         module: ordered_dither,
-        hooks: [],
+        hooks: [Dynamic, PassCount, Requirements],
         definition: {
             id: "ordered_dither",
             class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 6,
@@ -1139,7 +1139,7 @@ visual_effect_catalog! {
     },
     MotionTile => {
         module: motion_tile,
-        hooks: [],
+        hooks: [Dynamic, Modifiers],
         definition: {
             id: "motion_tile",
             class: Transform, scope: ClipOnly, stage: PreTransform, passes: 0,
@@ -1313,7 +1313,7 @@ visual_effect_catalog! {
     },
     RadialBlur => {
         module: radial_blur,
-        hooks: [],
+        hooks: [Dynamic, Modifiers],
         definition: {
             id: "radial_blur",
             class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,

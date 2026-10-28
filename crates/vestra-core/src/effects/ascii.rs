@@ -281,18 +281,6 @@ pub(crate) fn extra_dynamic(effect: &CompiledEffect) -> bool {
     period.is_some()
 }
 
-pub(crate) fn extra_modifiers(_effect: &CompiledEffect) -> bool {
-    false
-}
-
-pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
-    effect.definition().estimated_pass_count
-}
-
-pub(crate) const fn extra_requirements(_effect: &CompiledEffect) -> bool {
-    false
-}
-
 pub(crate) fn validate_assets(
     effect: &Effect,
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,

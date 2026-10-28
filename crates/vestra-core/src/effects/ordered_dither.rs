@@ -395,10 +395,6 @@ pub(crate) fn extra_dynamic(effect: &CompiledEffect) -> bool {
     period.is_some()
 }
 
-pub(crate) fn extra_modifiers(_effect: &CompiledEffect) -> bool {
-    false
-}
-
 pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
     let CompiledEffect::OrderedDither {
         input_exposure,

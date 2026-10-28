@@ -185,11 +185,3 @@ pub(crate) fn extra_modifiers(effect: &CompiledEffect) -> bool {
     };
     point_property_has_modifiers(tile_center)
 }
-
-pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
-    effect.definition().estimated_pass_count
-}
-
-pub(crate) const fn extra_requirements(_effect: &CompiledEffect) -> bool {
-    false
-}

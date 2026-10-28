@@ -480,23 +480,30 @@ mod adapter_tests {
             eprintln!("WGPU_RUNTIME_SKIPPED reason=no-compatible-adapter callback=readback");
             return None;
         };
-        let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
-                .expect("adapter was found but device request failed");
         let info = adapter.get_info();
+        let metadata = crate::AdapterMetadata {
+            adapter_name: info.name,
+            device_type: format!("{:?}", info.device_type).to_lowercase(),
+            graphics_backend: format!("{:?}", info.backend).to_lowercase(),
+            driver_name: info.driver,
+            driver_info: info.driver_info,
+            vendor_id: info.vendor,
+            device_id: info.device,
+        };
+        let class = metadata.performance_class();
         if std::env::var_os("VESTRA_REQUIRE_HARDWARE_WGPU").is_some() {
             assert!(
-                matches!(
-                    info.device_type,
-                    wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu
-                ),
-                "hardware callback verification requires a proven hardware adapter: {info:?}"
+                class.is_proven_hardware(),
+                "hardware callback verification requires a proven hardware adapter: {metadata:?}"
             );
         }
         eprintln!(
-            "WGPU_RUNTIME_EXECUTED adapter={:?} backend={:?} device_type={:?} callback=readback",
-            info.name, info.backend, info.device_type
+            "WGPU_RUNTIME_EXECUTED callback=readback adapter={metadata:?} classification={}",
+            class.as_str()
         );
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .expect("adapter was found but device request failed");
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback callback test"),
             size: 256,

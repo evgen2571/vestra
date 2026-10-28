@@ -18,13 +18,13 @@ use crate::{
 mod assets;
 mod audio;
 mod clips;
-mod dependency;
-mod effects;
+pub(crate) mod dependency;
+pub(crate) mod effects;
 mod flashes;
 mod limits;
 mod mattes;
 mod metrics;
-mod optimization;
+pub(crate) mod optimization;
 mod output;
 use super::particles;
 mod presets;

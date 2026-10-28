@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(test)]
+#[cfg(all(test, feature = "adapter-tests"))]
 use image::RgbaImage;
 use vestra_core::plan::{EvaluatedFrame, EvaluatedSource, RenderPlan};
 
@@ -991,7 +991,7 @@ impl RenderBackend for WgpuBackend {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "adapter-tests"))]
 impl WgpuBackend {
     pub(crate) fn render_frame(
         &mut self,

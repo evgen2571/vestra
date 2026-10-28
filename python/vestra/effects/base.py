@@ -7,7 +7,22 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Iterable, Mapping, Self, TypeVar, cast
 
-from ..authoring.effects import ActiveInterval, ZoomBlurDirection, PaletteMode, PaletteInputFilter, PaletteInterpolation, DitherMatrix, HalftoneMode, PixelSortDirection, PixelSortOrder, AsciiMode, AsciiColorMode, AsciiGlyphStyle, _palette, _palette_stops
+# BEGIN GENERATED EFFECT IMPORTS
+from ..authoring.effects import (
+    AsciiColorMode,
+    AsciiGlyphStyle,
+    AsciiMode,
+    DitherMatrix,
+    HalftoneMode,
+    PaletteInputFilter,
+    PaletteInterpolation,
+    PaletteMode,
+    PixelSortDirection,
+    PixelSortOrder,
+    ZoomBlurDirection,
+)
+# END GENERATED EFFECT IMPORTS
+from ..authoring.effects import ActiveInterval, _palette, _palette_stops
 from ..authoring.effects import available_effects as _native_effects
 from ..authoring.effects import effect_definition
 from ..authoring.values import Color, Point, color_to_canonical
@@ -18,6 +33,25 @@ from ..properties import (
     ScalarProperty,
 )
 
+
+# BEGIN GENERATED EFFECT ENUM TYPES
+_ENUM_TYPES: Mapping[tuple[str, str], type[Enum]] = MappingProxyType({
+    ('ascii', 'glyph_style'): AsciiGlyphStyle,
+    ('ascii', 'mode'): AsciiMode,
+    ('ascii', 'color_mode'): AsciiColorMode,
+    ('halftone', 'mode'): HalftoneMode,
+    ('pixel_sort', 'direction'): PixelSortDirection,
+    ('pixel_sort', 'order'): PixelSortOrder,
+    ('palette_map', 'interpolation'): PaletteInterpolation,
+    ('palette_map', 'mode'): PaletteMode,
+    ('palette_map', 'input_filter'): PaletteInputFilter,
+    ('ordered_dither', 'interpolation'): PaletteInterpolation,
+    ('ordered_dither', 'mode'): PaletteMode,
+    ('ordered_dither', 'input_filter'): PaletteInputFilter,
+    ('ordered_dither', 'matrix'): DitherMatrix,
+    ('zoom_blur', 'direction'): ZoomBlurDirection,
+})
+# END GENERATED EFFECT ENUM TYPES
 
 def _freeze(value: object) -> object:
     if isinstance(value, dict):
@@ -219,7 +253,7 @@ class Effect:
             self._values[name] = _validate_number(parameter, value)
             return
         if kind in {"point2d", "point_property"}:
-            if name in {"tile_center", "center"}:
+            if kind == "point_property":
                 target = self._properties[name]
                 if isinstance(value, PointProperty):
                     value._copy_to(target)
@@ -237,7 +271,7 @@ class Effect:
             self._values[name] = _enum(
                 value,
                 name,
-                PaletteInputFilter if name == "input_filter" else PaletteInterpolation if name == "interpolation" else AsciiGlyphStyle if name == "glyph_style" else AsciiColorMode if name == "color_mode" else AsciiMode if self.effect_type == "ascii" and name == "mode" else HalftoneMode if self.effect_type == "halftone" and name == "mode" else PixelSortOrder if self.effect_type == "pixel_sort" and name == "order" else PixelSortDirection if self.effect_type == "pixel_sort" and name == "direction" else PaletteMode if name == "mode" else DitherMatrix if name == "matrix" else ZoomBlurDirection,
+                _ENUM_TYPES[(self.effect_type, name)],
                 tuple(cast(tuple[object, ...], parameter["enum_values"])),
             )
             return
@@ -280,10 +314,7 @@ class Effect:
             kind = parameter["kind"]
             if kind in {"scalar_property", "plain_track"}:
                 staged_properties[name] = _property(parameter, values[name])
-            elif kind in {"point2d", "point_property"} and name in {
-                "tile_center",
-                "center",
-            }:
+            elif kind == "point_property":
                 staged_properties[name] = BindablePointProperty(_point(values[name], name))
             else:
                 # Use a temporary descriptor state for the shared validators.

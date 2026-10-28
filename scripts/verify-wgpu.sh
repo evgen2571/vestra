@@ -96,7 +96,7 @@ run_targeted_wgpu_tests() (
   if [[ "$selected_backend" == "gl" ]]; then
     test_arguments+=(--test-threads=1)
   fi
-  cargo test -p vestra-render-wgpu --lib gpu_ -- "${test_arguments[@]}"
+  cargo test -p vestra-render-wgpu --lib --features adapter-tests -- "${test_arguments[@]}"
   cargo test -p vestra-render --tests --all-features gpu_ -- "${test_arguments[@]}"
 )
 

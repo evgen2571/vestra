@@ -29,7 +29,8 @@ private child modules organize their implementations.
 | Authored particle and spectrum sources | `project/model/particles.rs`, `project/model/spectrum2d.rs` |
 | Ordered semantic validation | `validation.rs`, `validation/visual.rs`, `validation/effects.rs` |
 | Visual source, transform and mask/matte rules | `validation/visual/` |
-| Effect attachment, parameter and property rules | `validation/effects/` |
+| Effect attachment and shared property rules | `validation/effects/` |
+| Authoritative effect representations/associations and local semantics | `effect_definition/catalog_entries.rs`, `effects/<effect>.rs` |
 | Compilation coordination and source/resource tables | `plan/compiler/mod.rs`, `plan/compiler/assets.rs` |
 | Matte identities and temporal dependencies | `plan/compiler/mattes.rs` |
 | Compiled plan/layers and compiled effects | `plan/model/mod.rs`, `plan/model/effects.rs` |

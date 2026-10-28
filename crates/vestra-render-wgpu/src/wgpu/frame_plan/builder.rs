@@ -3,7 +3,7 @@
 use super::{EffectScope, GpuFramePlan, GpuOperation, TextureSlot, alternate_canvas_for_bindings};
 use crate::wgpu::topology::PlanTopology;
 use std::collections::BTreeSet;
-#[cfg(test)]
+#[cfg(all(test, feature = "adapter-tests"))]
 use vestra_core::plan::RenderPlan;
 use vestra_core::plan::{EvaluatedFrame, EvaluatedSource};
 
@@ -107,7 +107,7 @@ impl GpuFramePlan {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "adapter-tests"))]
     pub(in crate::wgpu) fn required_group_depth(plan: &RenderPlan) -> usize {
         PlanTopology::from_plan(plan).required_group_depth()
     }

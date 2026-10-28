@@ -27,7 +27,7 @@ pub(crate) fn compile_property(
     })
 }
 
-pub(super) fn compile_modifiers(
+pub(crate) fn compile_modifiers(
     modifiers: &[project::ScalarModifier],
     interner: &mut ScalarSignalInterner,
 ) -> Result<Vec<CompiledScalarModifier>, Diagnostic> {

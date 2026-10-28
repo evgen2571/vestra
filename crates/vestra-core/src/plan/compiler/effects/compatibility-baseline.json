@@ -1,0 +1,554 @@
+{
+  "ascii/animated": {
+    "classification": "754ffdc700bc3920",
+    "compiled": "bb1768ce9672e8c4",
+    "frames": [
+      "39bd5049d719591b",
+      "d27152f484ab0ede",
+      "96388346365d6265"
+    ],
+    "properties": "5c28194a28383450",
+    "serde": "b0e58fd43e4cc583",
+    "topology": "1fd9db1713b7a98c"
+  },
+  "ascii/static": {
+    "classification": "da8dc88e020ec697",
+    "compiled": "f23d332a923948df",
+    "frames": [
+      "39bd5049d719591b",
+      "39bd5049d719591b",
+      "39bd5049d719591b"
+    ],
+    "properties": "e61e536e165b6f6f",
+    "serde": "b6bc4e1a6cb74170",
+    "topology": "1fd9db1713b7a98c"
+  },
+  "bloom/animated": {
+    "classification": "dc366399d6c18817",
+    "compiled": "36a03038ede6dd04",
+    "frames": [
+      "e21e995a03c2f625",
+      "749b332dcadd0087",
+      "c2d21404f8db6ef6"
+    ],
+    "properties": "871ee9b51fc69baa",
+    "serde": "c2506d6354d24450",
+    "topology": "99f9b19069b27d19"
+  },
+  "bloom/static": {
+    "classification": "7237a442ec1db702",
+    "compiled": "4239c4773276ccaf",
+    "frames": [
+      "e21e995a03c2f625",
+      "e21e995a03c2f625",
+      "e21e995a03c2f625"
+    ],
+    "properties": "2626b8fc50066ae5",
+    "serde": "fa5f1aa943896f9d",
+    "topology": "99f9b19069b27d19"
+  },
+  "brightness/animated": {
+    "classification": "e8550505205156fc",
+    "compiled": "66af18db5dd19f75",
+    "frames": [
+      "3a25373f13975288",
+      "21e9e47b1d31e511",
+      "427de245d8478baf"
+    ],
+    "properties": "f8a157655590a0bb",
+    "serde": "99095dc2fed14b17",
+    "topology": "286d6e279c6d0a92"
+  },
+  "brightness/static": {
+    "classification": "98a28ef6803c4bd3",
+    "compiled": "ad28797c2858cb8e",
+    "frames": [
+      "3a25373f13975288",
+      "3a25373f13975288",
+      "3a25373f13975288"
+    ],
+    "properties": "4ac8984b0d0f7cb0",
+    "serde": "93c3719924209404",
+    "topology": "286d6e279c6d0a92"
+  },
+  "camera_shake/animated": {
+    "classification": "aaf1d8d0d576ea65",
+    "compiled": "cbb7014e6b3c4100",
+    "frames": [
+      "f067ce252a796ab3",
+      "cca56e263f0dae8b",
+      "73b5986f13823161"
+    ],
+    "properties": "53c6ba1dfc1497cc",
+    "serde": "9847dbdb307bf679",
+    "topology": "dee640273b27380f"
+  },
+  "camera_shake/static": {
+    "classification": "6d9c54f77347e6ad",
+    "compiled": "637ccd3ca510a326",
+    "frames": [
+      "f067ce252a796ab3",
+      "524c234042474820",
+      "b9d4dbbd32315d55"
+    ],
+    "properties": "88177be4292b3424",
+    "serde": "af9a682be1dc9691",
+    "topology": "dee640273b27380f"
+  },
+  "chromatic_aberration/animated": {
+    "classification": "fd7abb8af297ef70",
+    "compiled": "82728386d9de7319",
+    "frames": [
+      "f1511dbd72fa66d9",
+      "580a5eacf8bf0535",
+      "b2367ef95f141aa9"
+    ],
+    "properties": "9daab97233ddf5eb",
+    "serde": "8628df72aab30122",
+    "topology": "9f0600d7ec969c30"
+  },
+  "chromatic_aberration/static": {
+    "classification": "07193f4315614d79",
+    "compiled": "7b0e47067923e359",
+    "frames": [
+      "f1511dbd72fa66d9",
+      "f1511dbd72fa66d9",
+      "f1511dbd72fa66d9"
+    ],
+    "properties": "c17380d9bdcc8a6d",
+    "serde": "b95f1d1bc6fda734",
+    "topology": "9f0600d7ec969c30"
+  },
+  "color_adjust/animated": {
+    "classification": "0f532ea3952f31fc",
+    "compiled": "86cb69fca2c8b4cd",
+    "frames": [
+      "282d6a77ec664edd",
+      "24dab1e734370d15",
+      "20efc70baad80203"
+    ],
+    "properties": "bf2bbea7497d88df",
+    "serde": "d6db91f2d0db9443",
+    "topology": "ee7548c3b82769ff"
+  },
+  "color_adjust/static": {
+    "classification": "07193f4315614d79",
+    "compiled": "877f8bfa5d02db6e",
+    "frames": [
+      "282d6a77ec664edd",
+      "282d6a77ec664edd",
+      "282d6a77ec664edd"
+    ],
+    "properties": "a66404d255f490e8",
+    "serde": "8cf14e6db936d154",
+    "topology": "ee7548c3b82769ff"
+  },
+  "contrast/animated": {
+    "classification": "e8550505205156fc",
+    "compiled": "8de6c1acb7eedf5e",
+    "frames": [
+      "8fe8dbe4fbc085f8",
+      "8f7b101a55c13ce9",
+      "85516af839668ca2"
+    ],
+    "properties": "30dddbd976203180",
+    "serde": "484ea868a0a06118",
+    "topology": "286d6e279c6d0a92"
+  },
+  "contrast/static": {
+    "classification": "98a28ef6803c4bd3",
+    "compiled": "f3a5856b5ebf6855",
+    "frames": [
+      "8fe8dbe4fbc085f8",
+      "8fe8dbe4fbc085f8",
+      "8fe8dbe4fbc085f8"
+    ],
+    "properties": "f7978b29787f4adb",
+    "serde": "3554f11d95dc675f",
+    "topology": "286d6e279c6d0a92"
+  },
+  "crt/animated": {
+    "classification": "9afba26750f697b0",
+    "compiled": "b3c28723cc0a323a",
+    "frames": [
+      "70ac9024ff6ddbc7",
+      "e17cc7ea75a06e69",
+      "2c84594bed663ff9"
+    ],
+    "properties": "7a3f82829dce99dc",
+    "serde": "af009238c946709f",
+    "topology": "da57d504c7561670"
+  },
+  "crt/static": {
+    "classification": "25b9f04f07eb87b4",
+    "compiled": "c8df6ea9a5a6cfb7",
+    "frames": [
+      "70ac9024ff6ddbc7",
+      "70ac9024ff6ddbc7",
+      "70ac9024ff6ddbc7"
+    ],
+    "properties": "3a305fbca8e3745f",
+    "serde": "49ca30d2b1378c92",
+    "topology": "da57d504c7561670"
+  },
+  "directional_blur/animated": {
+    "classification": "fd7abb8af297ef70",
+    "compiled": "b37871276b8c43c7",
+    "frames": [
+      "4ccb52157af865ef",
+      "01bbc3eed857cded",
+      "ec2c33fd851c922d"
+    ],
+    "properties": "d6f0c409ce41501d",
+    "serde": "3a16a457285ab412",
+    "topology": "67411b8acb2fcd7e"
+  },
+  "directional_blur/static": {
+    "classification": "07193f4315614d79",
+    "compiled": "62a4c869da6af42b",
+    "frames": [
+      "4ccb52157af865ef",
+      "4ccb52157af865ef",
+      "4ccb52157af865ef"
+    ],
+    "properties": "d9a493e2da0a12eb",
+    "serde": "ce3d41335c07b412",
+    "topology": "67411b8acb2fcd7e"
+  },
+  "gaussian_blur/animated": {
+    "classification": "128484cb1847bdf5",
+    "compiled": "116e63572b752c84",
+    "frames": [
+      "a808af2d2b6ec3ae",
+      "7fa6337f36c964f1",
+      "7efbdbd7281c46a9"
+    ],
+    "properties": "0a94fd8d7c8dc16a",
+    "serde": "2c824e9d8edc3768",
+    "topology": "e2b84a8780dea1dd"
+  },
+  "gaussian_blur/static": {
+    "classification": "e456f70a6f83ec24",
+    "compiled": "1edea1dd411780ad",
+    "frames": [
+      "a808af2d2b6ec3ae",
+      "a808af2d2b6ec3ae",
+      "a808af2d2b6ec3ae"
+    ],
+    "properties": "a41074f7c4cc610b",
+    "serde": "4e7d0720816d1d9f",
+    "topology": "e2b84a8780dea1dd"
+  },
+  "glow/animated": {
+    "classification": "dc366399d6c18817",
+    "compiled": "9ffcbc3dd70ffca2",
+    "frames": [
+      "14e92422f8e36213",
+      "2c71116cc8cee872",
+      "9b2f92c565a03484"
+    ],
+    "properties": "7fc094afd1ab5ed0",
+    "serde": "2c308a2552eeab11",
+    "topology": "99f9b19069b27d19"
+  },
+  "glow/static": {
+    "classification": "7237a442ec1db702",
+    "compiled": "17d8376a7ffa3475",
+    "frames": [
+      "14e92422f8e36213",
+      "14e92422f8e36213",
+      "14e92422f8e36213"
+    ],
+    "properties": "d686225661238495",
+    "serde": "7e17dab4840ec892",
+    "topology": "99f9b19069b27d19"
+  },
+  "halftone/animated": {
+    "classification": "d27b6353a08df4ff",
+    "compiled": "226d0035011473da",
+    "frames": [
+      "8d4b8b72f6e90766",
+      "de9c824089739bed",
+      "a9e9b7c4d2723f71"
+    ],
+    "properties": "d6c7f1dcb339922d",
+    "serde": "a754c96605723dcd",
+    "topology": "c2fd74b1844a8cc1"
+  },
+  "halftone/static": {
+    "classification": "e456f70a6f83ec24",
+    "compiled": "7e354b60d3b135d2",
+    "frames": [
+      "8d4b8b72f6e90766",
+      "8d4b8b72f6e90766",
+      "8d4b8b72f6e90766"
+    ],
+    "properties": "ae2b489443ef8beb",
+    "serde": "00d2155e82ee20d1",
+    "topology": "c2fd74b1844a8cc1"
+  },
+  "motion_blur/animated": {
+    "classification": "4edd863482214c3e",
+    "compiled": "8e4f79e1d3f2622b",
+    "frames": [
+      "95e127330e2120aa",
+      "48695d70f6b488e3",
+      "4994ed5a0e598634"
+    ],
+    "properties": "c11f76a9f623ead4",
+    "serde": "83c12b6ac331438d",
+    "topology": "5780a2ac4a277ceb"
+  },
+  "motion_blur/static": {
+    "classification": "25b9f04f07eb87b4",
+    "compiled": "bf6878f3e2a2e916",
+    "frames": [
+      "95e127330e2120aa",
+      "95e127330e2120aa",
+      "95e127330e2120aa"
+    ],
+    "properties": "4ac5cd8e57e48149",
+    "serde": "aa51a2da4252b570",
+    "topology": "5780a2ac4a277ceb"
+  },
+  "motion_tile/animated": {
+    "classification": "00664729f7e2f9d9",
+    "compiled": "5fdc4818fafbbef1",
+    "frames": [
+      "ab553db0e7c42f79",
+      "f97924f701b28414",
+      "f9a50ad305c21c5e"
+    ],
+    "properties": "74e1de53a8221d60",
+    "serde": "7ed6e7f3cfe304d5",
+    "topology": "dee640273b27380f"
+  },
+  "motion_tile/static": {
+    "classification": "c66e248c3afeaa5e",
+    "compiled": "27dee1529cf64bfb",
+    "frames": [
+      "ab553db0e7c42f79",
+      "ab553db0e7c42f79",
+      "ab553db0e7c42f79"
+    ],
+    "properties": "70fd513a15b48aac",
+    "serde": "33d36969f0e00e9f",
+    "topology": "dee640273b27380f"
+  },
+  "ordered_dither/animated": {
+    "classification": "e5a5ab66227add52",
+    "compiled": "1518e0bc5a47427a",
+    "frames": [
+      "69a9c68995ab77d4",
+      "572afe2e301177fd",
+      "f13d705de0b48f9f"
+    ],
+    "properties": "a8403e996dc07b23",
+    "serde": "a21bb0450b08f325",
+    "topology": "e9158e179d174f0a"
+  },
+  "ordered_dither/static": {
+    "classification": "da8dc88e020ec697",
+    "compiled": "bbc0c6ee821216f9",
+    "frames": [
+      "69a9c68995ab77d4",
+      "69a9c68995ab77d4",
+      "69a9c68995ab77d4"
+    ],
+    "properties": "e57c7cfcc8955d96",
+    "serde": "b0ee05c03b9f3484",
+    "topology": "38e0839cfe1ea5c1"
+  },
+  "palette_map/animated": {
+    "classification": "bd17873a585dd584",
+    "compiled": "0d5f834368aae670",
+    "frames": [
+      "c8e1dddbe0041cc1",
+      "ace2d1f086d71077",
+      "a5e52966780fb6d3"
+    ],
+    "properties": "618a52b7625450ca",
+    "serde": "3c038ba5531ab727",
+    "topology": "3bf61c7593848c96"
+  },
+  "palette_map/static": {
+    "classification": "da8dc88e020ec697",
+    "compiled": "595d10de8c9c18b2",
+    "frames": [
+      "c8e1dddbe0041cc1",
+      "c8e1dddbe0041cc1",
+      "c8e1dddbe0041cc1"
+    ],
+    "properties": "7750b91545312686",
+    "serde": "f289d1cf34f88fb5",
+    "topology": "414055312a65ac3f"
+  },
+  "pixel_sort/animated": {
+    "classification": "4edd863482214c3e",
+    "compiled": "173ecb9c78818032",
+    "frames": [
+      "cade5e1532bf8962",
+      "2bc6f0d1fa1b8f8d",
+      "a4fcdd55f1d34751"
+    ],
+    "properties": "27f271fb64dd3345",
+    "serde": "36d64229cb5acf76",
+    "topology": "6e7e5cacc8e9ba3d"
+  },
+  "pixel_sort/static": {
+    "classification": "07193f4315614d79",
+    "compiled": "870067b1de511d7b",
+    "frames": [
+      "cade5e1532bf8962",
+      "cade5e1532bf8962",
+      "cade5e1532bf8962"
+    ],
+    "properties": "8c96a02e60e6cc86",
+    "serde": "264af883cd7c6a15",
+    "topology": "6e7e5cacc8e9ba3d"
+  },
+  "radial_blur/animated": {
+    "classification": "4283b69cfb8e1442",
+    "compiled": "8d1111359e6cea1a",
+    "frames": [
+      "e8272dc925b63488",
+      "559363376f875052",
+      "bc5f215cbfb0a254"
+    ],
+    "properties": "c10c635088cd4e1c",
+    "serde": "2d0336aff6543da7",
+    "topology": "42828e8ef283e50d"
+  },
+  "radial_blur/static": {
+    "classification": "07193f4315614d79",
+    "compiled": "d44cb42cbd8252eb",
+    "frames": [
+      "e8272dc925b63488",
+      "e8272dc925b63488",
+      "e8272dc925b63488"
+    ],
+    "properties": "3ee8e2901b5daac1",
+    "serde": "a6a4a4c5504b2cea",
+    "topology": "42828e8ef283e50d"
+  },
+  "saturation/animated": {
+    "classification": "e8550505205156fc",
+    "compiled": "9ee00a6f0eead564",
+    "frames": [
+      "6d85379841a0797f",
+      "1e4f6f2361de0a4d",
+      "8d742cfaf72d2c81"
+    ],
+    "properties": "8e862c2a9346850e",
+    "serde": "cd0ad9c60c091ff2",
+    "topology": "286d6e279c6d0a92"
+  },
+  "saturation/static": {
+    "classification": "98a28ef6803c4bd3",
+    "compiled": "4c5eb834a14b944b",
+    "frames": [
+      "6d85379841a0797f",
+      "6d85379841a0797f",
+      "6d85379841a0797f"
+    ],
+    "properties": "33da289e39ced179",
+    "serde": "9e024c87e1449a11",
+    "topology": "286d6e279c6d0a92"
+  },
+  "sharpen/animated": {
+    "classification": "4a4a9af2e1ef53fa",
+    "compiled": "4af04db6b824148f",
+    "frames": [
+      "cafd57c63f36808f",
+      "0284db94593df243",
+      "dd4cba248e6089a5"
+    ],
+    "properties": "be4edf3d8a5f17cc",
+    "serde": "ae0d5836c169992f",
+    "topology": "9a198f2216fb5a74"
+  },
+  "sharpen/static": {
+    "classification": "8be8ce604db8421f",
+    "compiled": "9c343cb977cd6c3f",
+    "frames": [
+      "cafd57c63f36808f",
+      "cafd57c63f36808f",
+      "cafd57c63f36808f"
+    ],
+    "properties": "3e23fc2cab5b9ed0",
+    "serde": "901687f112263d41",
+    "topology": "9a198f2216fb5a74"
+  },
+  "tint/animated": {
+    "classification": "e8550505205156fc",
+    "compiled": "1bf6da3709e9e89b",
+    "frames": [
+      "bba3173cafb533ec",
+      "18f74528c87d178a",
+      "c12f8bea6f188bb9"
+    ],
+    "properties": "9f9014e81ac4615f",
+    "serde": "3d0b41d8e0b87ee1",
+    "topology": "286d6e279c6d0a92"
+  },
+  "tint/static": {
+    "classification": "98a28ef6803c4bd3",
+    "compiled": "51247e7c70eaa0d8",
+    "frames": [
+      "bba3173cafb533ec",
+      "bba3173cafb533ec",
+      "bba3173cafb533ec"
+    ],
+    "properties": "30e9b0581bc298fc",
+    "serde": "020d31b2c4abb852",
+    "topology": "286d6e279c6d0a92"
+  },
+  "vignette/animated": {
+    "classification": "4edd863482214c3e",
+    "compiled": "86f44962d4d9d288",
+    "frames": [
+      "b045a221bedae07a",
+      "abf98a5e386a33b5",
+      "578f459a71d02357"
+    ],
+    "properties": "e5e397ce1b25bed6",
+    "serde": "a68a0dbbb62ca254",
+    "topology": "86dc909049357579"
+  },
+  "vignette/static": {
+    "classification": "07193f4315614d79",
+    "compiled": "527815b2dd3a2159",
+    "frames": [
+      "b045a221bedae07a",
+      "b045a221bedae07a",
+      "b045a221bedae07a"
+    ],
+    "properties": "d10498481c8c3c1d",
+    "serde": "2b434f8783bef57f",
+    "topology": "86dc909049357579"
+  },
+  "zoom_blur/animated": {
+    "classification": "4283b69cfb8e1442",
+    "compiled": "f3fa39174266446a",
+    "frames": [
+      "77e13d4697310a6e",
+      "210dc09857686c11",
+      "f02680d0e78bc885"
+    ],
+    "properties": "92e21d0d770889fe",
+    "serde": "a52c79581506e77d",
+    "topology": "4f3ae977f6e6a9f6"
+  },
+  "zoom_blur/static": {
+    "classification": "07193f4315614d79",
+    "compiled": "4b8e60eb67f67371",
+    "frames": [
+      "77e13d4697310a6e",
+      "77e13d4697310a6e",
+      "77e13d4697310a6e"
+    ],
+    "properties": "f11e9adada01f327",
+    "serde": "2573c84370389056",
+    "topology": "4f3ae977f6e6a9f6"
+  }
+}

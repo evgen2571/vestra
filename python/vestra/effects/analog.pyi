@@ -5,11 +5,11 @@ from __future__ import annotations
 
 from typing import cast as cast
 
-from ..authoring.effects import HalftoneMode as HalftoneMode, PixelSortDirection as PixelSortDirection, PixelSortOrder as PixelSortOrder
+from ..properties import BindableScalarProperty as BindableScalarProperty, ScalarProperty as ScalarProperty
 
 from ..authoring.values import Color as Color
 
-from ..properties import BindableScalarProperty as BindableScalarProperty, ScalarProperty as ScalarProperty
+from ..authoring.effects import HalftoneMode as HalftoneMode, PixelSortDirection as PixelSortDirection, PixelSortOrder as PixelSortOrder
 
 from .base import Effect as Effect
 

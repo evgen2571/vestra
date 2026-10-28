@@ -6,6 +6,11 @@ description = "Internal WGPU frame rendering for vestra"
 license = "MIT"
 publish = false
 
+[features]
+default = ["adapter-tests"]
+# Controls adapter-dependent unit tests only; renderer availability is unchanged.
+adapter-tests = []
+
 [dependencies]
 vestra-core = { path = "../vestra-core" }
 vestra-render-common = { path = "../vestra-render-common" }

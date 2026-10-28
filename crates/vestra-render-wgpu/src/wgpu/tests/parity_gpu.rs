@@ -1,7 +1,8 @@
 //! WGPU-private planning and execution assertions split from cross-backend parity.
+#[cfg(feature = "adapter-tests")]
+use super::gpu::wgpu_backend_or_skip;
 use super::{
     frame_plan::GpuFramePlan,
-    gpu::wgpu_backend_or_skip,
     parameters::{FrameParameterArena, LayerParameters},
     requirements::GpuRequirements,
 };
@@ -10,12 +11,12 @@ use crate::{
     test_support::{ValidationOptions, load_and_validate},
 };
 use bytemuck::Zeroable;
+#[cfg(feature = "adapter-tests")]
 use image::RgbaImage;
 use serde_json::{Value, json};
 use vestra_core::plan::{
-    ColourTransform, CompileOptions, CompiledEffect, CompiledScalarProperty, CompiledVisualSource,
-    EvaluatedEffect, EvaluatedFrame, RenderPlan, ScheduledItem, TimedEffect, compile,
-    effect_pass_plan,
+    ColourTransform, CompileOptions, CompiledEffect, CompiledScalarProperty, EvaluatedEffect,
+    EvaluatedFrame, RenderPlan, ScheduledItem, TimedEffect, compile, effect_pass_plan,
 };
 #[path = "../../../../../tests/render_effect_cases.rs"]
 mod effect_cases;
@@ -293,8 +294,10 @@ fn gpu_particle_system_inside_group_targets_group_canvas() {
     assert_particle_group_plan_targets_group_canvas(&project);
 }
 
+#[cfg(feature = "adapter-tests")]
 #[test]
 fn gpu_multilayer_frame_preserves_execution_metrics() {
+    use vestra_core::plan::CompiledVisualSource;
     let validated = load_and_validate(
         std::path::Path::new("examples/projects/animation-effects.json"),
         &ValidationOptions {

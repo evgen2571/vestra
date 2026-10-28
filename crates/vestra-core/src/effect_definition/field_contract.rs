@@ -5,6 +5,8 @@ pub(crate) enum FieldKind {
     Scalar,
     PlainTrack,
     Other,
+    Timing,
+    Point,
 }
 
 pub(crate) trait CatalogField {
@@ -29,10 +31,10 @@ pub(crate) const fn association_matches(
         index += 1;
     }
     count
-        == if matches!(kind, FieldKind::Other) {
-            0
-        } else {
+        == if matches!(kind, FieldKind::Scalar | FieldKind::PlainTrack) {
             1
+        } else {
+            0
         }
 }
 
@@ -51,7 +53,11 @@ const fn same_name(left: &[u8], right: &[u8]) -> bool {
 }
 
 macro_rules! check_fields {
-    ($kind:ident, { $($(#[$attribute:meta])* $name:ident: $ty:ty,)* },
+    ($kind:ident, $fields:tt, [$($scalar:ident),*], [$($track:ident),*]) => {
+        $crate::effect_definition::field_contract::check_fields!(@associations $kind, $fields, [$($scalar),*], [$($track),*]);
+        $crate::effect_definition::field_contract::check_fields!(@projections $kind; $fields);
+    };
+    (@associations $kind:ident, { $($(#[$attribute:meta])* $name:ident: $ty:ty,)* },
      [$($scalar:ident),*], [$($track:ident),*]) => {
         const _: () = {
             use $crate::effect_definition::field_contract::{CatalogField, FieldKind, association_matches};
@@ -61,10 +67,31 @@ macro_rules! check_fields {
             ];
             $(assert!(association_matches(stringify!($name), <$ty as CatalogField>::KIND, associations),
                 concat!(stringify!($kind), ".", stringify!($name), ": incomplete or duplicate scalar/plain-track association"));)*
-            let expected = 0 $(+ (!matches!(<$ty as CatalogField>::KIND, FieldKind::Other)) as usize)*;
+            let expected = 0 $(+ (matches!(<$ty as CatalogField>::KIND, FieldKind::Scalar | FieldKind::PlainTrack)) as usize)*;
             assert!(associations.len() == expected, concat!(stringify!($kind), ": association names a nonexistent field"));
         };
     };
+    (@projections $kind:ident; { $(#[$attribute:meta])* $name:ident: ActiveInterval, $($rest:tt)* }) => {
+        $crate::effect_definition::field_contract::check_fields!(@projections $kind; { $($rest)* });
+    };
+    (@projections $kind:ident; { $(#[$attribute:meta])* $name:ident: crate::project::ActiveInterval, $($rest:tt)* }) => {
+        $crate::effect_definition::field_contract::check_fields!(@projections $kind; { $($rest)* });
+    };
+    (@projections $kind:ident; { $(#[$attribute:meta])* $name:ident: CompiledPointProperty, $($rest:tt)* }) => {
+        $crate::effect_definition::field_contract::check_fields!(@projections $kind; { $($rest)* });
+    };
+    (@projections $kind:ident; { $(#[$attribute:meta])* $name:ident: crate::plan::CompiledPointProperty, $($rest:tt)* }) => {
+        $crate::effect_definition::field_contract::check_fields!(@projections $kind; { $($rest)* });
+    };
+    (@projections $kind:ident; { $(#[$attribute:meta])* $name:ident: $ty:ty, $($rest:tt)* }) => {
+        const _: () = {
+            use $crate::effect_definition::field_contract::{CatalogField, FieldKind};
+            assert!(!matches!(<$ty as CatalogField>::KIND, FieldKind::Timing | FieldKind::Point),
+                concat!(stringify!($kind), ".", stringify!($name), ": use canonical point/timing type paths"));
+        };
+        $crate::effect_definition::field_contract::check_fields!(@projections $kind; { $($rest)* });
+    };
+    (@projections $kind:ident; {}) => {};
 }
 
 pub(crate) use check_fields;
@@ -94,6 +121,14 @@ mod tests {
             impl CatalogField for Scalar {{ const KIND: FieldKind = FieldKind::Scalar; }}
             impl CatalogField for Track {{ const KIND: FieldKind = FieldKind::PlainTrack; }}
             impl CatalogField for PointTrack {{ const KIND: FieldKind = FieldKind::Other; }}
+            struct ActiveInterval;
+            impl CatalogField for ActiveInterval {{ const KIND: FieldKind = FieldKind::Timing; }}
+            struct CompiledPointProperty;
+            impl CatalogField for CompiledPointProperty {{ const KIND: FieldKind = FieldKind::Point; }}
+            type PointAlias = CompiledPointProperty;
+            type TimingAlias = ActiveInterval;
+            mod project {{ pub(crate) use crate::ActiveInterval; }}
+            mod plan {{ pub(crate) use crate::CompiledPointProperty; }}
             type ScalarAlias = Scalar;
             check_fields!(Fixture, {{ {fields} }}, [{scalars}], [{tracks}]);
         "#,
@@ -171,5 +206,30 @@ mod tests {
         let output = compile("unknown: u32,", "", "");
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("u32: CatalogField"));
+    }
+
+    #[test]
+    fn specialized_aliases_cannot_silently_skip_token_based_projections() {
+        for fields in ["timing: crate::TimingAlias,", "center: PointAlias,"] {
+            let output = compile(fields, "", "");
+            assert!(
+                !output.status.success(),
+                "specialized alias silently compiled: {fields}"
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stderr)
+                    .contains("use canonical point/timing type paths")
+            );
+        }
+        let output = compile(
+            "#[serde(flatten)] timing: crate::project::ActiveInterval, center: crate::plan::CompiledPointProperty,",
+            "",
+            "",
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

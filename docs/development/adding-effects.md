@@ -72,7 +72,7 @@ For a plain numeric track, declare `softness: Track<f64>` in both authored and
 compiled fields, then add an entry under `tracks`, for example:
 
 ```rust
-softness => VignetteSoftness = 2: {
+softness => VignetteSoftness = 0: {
     Range {
         min: Some(0.0), max: Some(2.0),
         min_exclusive: true, max_exclusive: false,
@@ -108,7 +108,9 @@ fields marked `#[preserve_authored_track]` retain their historical transition an
 normalization behavior; do not copy that marker to a new effect by default.
 For typed point/timing projections, use `CompiledPointProperty`/`ActiveInterval`
 or their canonical `crate::plan::`/`crate::project::` paths, with field attributes
-as needed. Point/timing aliases remain outside these specialized projections.
+as needed. Aliases and other paths to these specialized point/timing types fail
+compilation with `use canonical point/timing type paths`, so they cannot silently
+bypass normalization or timing/remapping.
 
 ## Implement semantic decisions
 

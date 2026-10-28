@@ -478,3 +478,17 @@ without changing enum shapes, semantics, targets or renderer algorithms.
 ### Evidence and handoff
 
 Pending final checks; old results above are historical baseline evidence only.
+
+Final hardening checkpoint: c5b1acf isolates adapter tests; 6509f64 adds
+compile-time field association checks. Real-catalog temporary mutations rejected
+unassociated scalar/plain fields, nonexistent/wrong-kind fields, duplicate target
+names/discriminants, unknown types and invalid traversal markers. Removing a
+palette preservation marker fails the frozen traversal baseline; originals were
+restored. Four compiler-fixture tests plus explicit preserved-track test added.
+No-adapter effect-check passed with unsupported dx12 on Linux, invalid Vulkan
+ICDs and no display (139 WGPU tests). Independent review found specialized aliases
+could bypass token-based projections and callbacks used a narrower hardware
+classification than the established common policy; both are being corrected.
+Specialized alias regression observed failing before fix, then passed with
+canonical point/timing path enforcement. Full validation first attempt stopped
+at Clippy on the constant adapter guard, fixed in 4fe344c; rerun remains required.

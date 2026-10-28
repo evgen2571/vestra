@@ -34,15 +34,18 @@ fn instance_slot(backends: wgpu::Backends) -> InstanceSlot {
     }
 }
 
+#[cfg(test)]
+fn require_adapter_tests() {
+    #[cfg(not(feature = "adapter-tests"))]
+    panic!("adapter initialization requires the adapter-tests feature");
+}
+
 /// Keep WGPU root instances process-owned: WSL Mesa/D3D12 GL can crash during
 /// EGL instance destruction after tests. Renderer resources, devices, queues,
 /// and decoder sessions still have ordinary deterministic ownership.
 pub(super) fn instance_for_backends(backends: wgpu::Backends) -> &'static wgpu::Instance {
     #[cfg(test)]
-    assert!(
-        cfg!(feature = "adapter-tests"),
-        "adapter initialization requires the adapter-tests feature"
-    );
+    require_adapter_tests();
     let descriptor = || wgpu::InstanceDescriptor {
         backends,
         ..wgpu::InstanceDescriptor::default()

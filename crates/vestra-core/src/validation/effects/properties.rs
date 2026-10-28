@@ -3,7 +3,7 @@
 use crate::validation::{self as validation, positive, tracks, unit};
 use crate::{Category, Diagnostic, project::parse_colour};
 
-pub(super) fn plain_track(
+pub(crate) fn plain_track(
     track: &crate::project::Track<f64>,
     active_duration: f64,
     path: &str,
@@ -22,7 +22,7 @@ pub(super) fn plain_track(
     );
 }
 
-pub(super) fn invalid_effect(
+pub(crate) fn invalid_effect(
     errors: &mut Vec<Diagnostic>,
     code: &'static str,
     message: &'static str,
@@ -37,7 +37,7 @@ pub(super) fn invalid_effect(
     errors.push(Diagnostic::error(code, Category::Semantic, message, path));
 }
 
-pub(super) fn point_property(
+pub(crate) fn point_property(
     property: &crate::project::PointProperty,
     duration: f64,
     path: &str,
@@ -72,7 +72,7 @@ pub(super) fn point_property(
     }
 }
 
-pub(in crate::validation) fn validate_colour_points(
+pub(crate) fn validate_colour_points(
     black_point: &crate::project::Track<f64>,
     white_point: &crate::project::Track<f64>,
     path: &str,
@@ -103,7 +103,7 @@ pub(in crate::validation) fn validate_colour_points(
     }
 }
 
-pub(super) fn validate_channel_levels(levels: u16, path: &str, errors: &mut Vec<Diagnostic>) {
+pub(crate) fn validate_channel_levels(levels: u16, path: &str, errors: &mut Vec<Diagnostic>) {
     if !(2..=256).contains(&levels) {
         invalid_effect(
             errors,
@@ -115,7 +115,7 @@ pub(super) fn validate_channel_levels(levels: u16, path: &str, errors: &mut Vec<
     }
 }
 
-pub(super) fn validate_palette_stops(
+pub(crate) fn validate_palette_stops(
     stops: Option<&[f64]>,
     count: usize,
     mode: crate::project::PaletteMode,
@@ -139,7 +139,7 @@ pub(super) fn validate_palette_stops(
     }
 }
 
-pub(super) fn validate_palette(
+pub(crate) fn validate_palette(
     palette: &[String],
     period: Option<f64>,
     path: &str,

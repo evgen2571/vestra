@@ -6,6 +6,7 @@ cd "$repo_root"
 
 echo "Checking Rust formatting, build, lints, tests, and schema freshness"
 cargo fmt --all -- --check
+rustfmt --edition 2024 --check crates/vestra-core/src/effects/*.rs
 uv run --no-project python scripts/generate-effects.py --check
 cargo test --locked --quiet -p vestra-core --example effect_metadata
 uv run --no-project python -m unittest discover -s tests -p test_effect_generation.py

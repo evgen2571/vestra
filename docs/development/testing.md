@@ -11,7 +11,7 @@ just python-sync
 just check
 ```
 
-`just check` delegates to `scripts/check.sh`. It runs `cargo fmt --all -- --check`, effect-generation freshness and generator tests, workspace `cargo check` and Clippy with all features, workspace Rust tests, `uv run python crates/vestra-cli/tests/schema_validation.py`, and a generated-schema comparison against `schemas/project.schema.json`. The shared `scripts/test-rust.sh` runner serializes Rust tests when `VESTRA_WGPU_BACKEND=gl` or WSL's default adapter path needs one EGL context.
+`just check` delegates to `scripts/check.sh`. It runs `cargo fmt --all -- --check`, explicit rustfmt checks for included effect semantic sources, effect-generation freshness and generator tests, workspace `cargo check` and Clippy with all features, workspace Rust tests, `uv run python crates/vestra-cli/tests/schema_validation.py`, and a generated-schema comparison against `schemas/project.schema.json`. The shared `scripts/test-rust.sh` runner serializes Rust tests when `VESTRA_WGPU_BACKEND=gl` or WSL's default adapter path needs one EGL context.
 
 | Command | Purpose |
 | --- | --- |
@@ -21,6 +21,7 @@ just check
 | `just python-test` | Sync/build the native package, run pytest, and compileall |
 | `just schema-check` | Validate schema inputs and check generated-schema freshness |
 | `just gen-effects` / `just gen-effects-check` | Regenerate effect artifacts, or check freshness without writing |
+| `just effect-check` | Generation, core/common/CPU tests and adapter-independent WGPU library tests |
 | `just wheel-smoke` | Build/install a wheel and verify its installed rendering contract |
 | `just examples` | Validate canonical examples |
 | `just docs-check` | Check relative file targets in public Markdown |
@@ -37,6 +38,14 @@ Full-resolution rendering remains an explicit maintainer workflow. See the [exam
 the category map and media-dependent example.
 
 For a fast edit loop, use `cargo test -p CRATE TEST_FILTER`, `cargo test -p vestra-cli --test cli_validation`, or `just python-test python-tests/TEST.py`. `just test` forwards Cargo/test arguments, such as `just test TEST_FILTER -- --nocapture`. Native Python work uses `just python-sync`, then `just python-test`; the test recipe syncs dependencies itself, imports the extension, and runs compileall after pytest. Build the extension/package through the repository's documented Nix/uv workflow, not a separate hand-maintained environment.
+
+After Rust-only changes, explicitly rebuild the editable native package before
+Python tests: ordinary uv synchronization can reuse a cached extension.
+
+```bash
+uv sync --locked --extra dev --reinstall-package vestra
+just python-test
+```
 
 Check renderer packages and facade feature selections independently:
 
@@ -84,6 +93,35 @@ preserves the Ascii schema/parser mismatch. See the
 [fixture instructions](../../python-tests/fixtures/effects/README.md) to repeat
 the same comparisons against the exact baseline revision. Do not refresh the
 expected values from generated output to make a regression pass.
+
+Effect declarations and static semantic forwarding are described in
+[adding effects](adding-effects.md). Whole-catalog property tests compare typed
+visitors and compiled constraints with descriptors, exercise negative keyframe
+validation for scalar/plain/point tracks, and check declared active intervals.
+Frozen specimens additionally
+pin old serde/compile/evaluate/topology and transition/normalization behavior.
+Renderer tests pin old kernel order/private bits, shader labels/composed bytes
+and packed-value specimens. Registry-driven WGPU tests validate all registered
+records against WGSL, including named offsets, scalar types and typed uploads.
+These structural/specimen tests complement actual CPU/software/hardware frame
+tests; they do not establish exhaustive numerical correctness or hardware parity.
+
+`just effect-check` runs the WGPU library with `--no-default-features`. The
+crate's default `adapter-tests` feature includes tests that initialize a graphics
+instance, request a device, submit commands or read back pixels. Disabling it
+keeps registration, shader parsing/composition, parameter ABI/packing, resource
+calculations and pure planning tests, including tests with `gpu_` in their names.
+The test-only instance factory rejects initialization in this mode, so an
+accidental adapter request fails before graphics discovery. No Vulkan, EGL,
+software ICD or working adapter is required for the focused command.
+
+`just wgpu-software` and `just wgpu-hardware` explicitly enable `adapter-tests`
+and run the entire private WGPU library suite under strict adapter requirements,
+including readback callback validation and instance/queue lifetime tests.
+The facade's strict rendering/parity tests remain included. Ordinary
+`cargo test -p vestra-render-wgpu` retains adapter tests through default features;
+hardware validation still requires a proven hardware adapter. See
+[GPU validation](gpu-validation.md) for selecting and verifying the actual device.
 
 Benchmark tooling has focused tests independent of the Python extension:
 

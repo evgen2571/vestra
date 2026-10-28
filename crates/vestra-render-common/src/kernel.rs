@@ -1,79 +1,66 @@
 use vestra_core::plan::{EffectOperation, RenderPlan, compiled_effect_pass_plan};
 
-/// Renderer-owned implementation families for logical effect operations.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum EffectKernel {
-    AsciiAnalyze,
-    AsciiResolve,
-    HalftoneAnalyze,
-    Halftone,
-    PixelSort,
-    Crt,
-    PaletteInputAnalyze,
-    PaletteMap,
-    OrderedDither,
-    ColourTransform,
-    GaussianBlur,
-    HighlightExtract,
-    Composite,
-    DirectionalBlur,
-    ZoomBlur,
-    ChromaticAberration,
-    Vignette,
-    ColorAdjust,
-    MotionBlur,
-}
-
-/// The single renderer mapping from logical operations to backend kernels.
-#[must_use]
-pub const fn kernel_for_operation(operation: &EffectOperation) -> EffectKernel {
-    match operation {
-        EffectOperation::AsciiAnalyze { .. } => EffectKernel::AsciiAnalyze,
-        EffectOperation::AsciiResolve { .. } => EffectKernel::AsciiResolve,
-        EffectOperation::HalftoneAnalyze { .. } => EffectKernel::HalftoneAnalyze,
-        EffectOperation::Halftone { .. } => EffectKernel::Halftone,
-        EffectOperation::PixelSort { .. } => EffectKernel::PixelSort,
-        EffectOperation::Crt { .. } => EffectKernel::Crt,
-        EffectOperation::PaletteInputAnalyze { .. } => EffectKernel::PaletteInputAnalyze,
-        EffectOperation::PaletteMap { .. } => EffectKernel::PaletteMap,
-        EffectOperation::OrderedDither { .. } => EffectKernel::OrderedDither,
-        EffectOperation::ApplyColourTransform { .. } => EffectKernel::ColourTransform,
-        EffectOperation::GaussianHorizontal { .. } | EffectOperation::GaussianVertical { .. } => {
-            EffectKernel::GaussianBlur
+// Inventory order and private bit assignments are independent contracts.
+macro_rules! effect_kernels {
+    ($($kernel:ident = $bit:literal => [$($operation:ident),+]),+ $(,)?) => {
+        /// Renderer-owned implementation families for logical effect operations.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        pub enum EffectKernel {
+            $($kernel,)+
         }
-        EffectOperation::HighlightExtract { .. } => EffectKernel::HighlightExtract,
-        EffectOperation::Composite { .. } => EffectKernel::Composite,
-        EffectOperation::DirectionalBlur { .. } => EffectKernel::DirectionalBlur,
-        EffectOperation::ZoomBlur { .. } => EffectKernel::ZoomBlur,
-        EffectOperation::ChromaticAberration { .. } => EffectKernel::ChromaticAberration,
-        EffectOperation::Vignette { .. } => EffectKernel::Vignette,
-        EffectOperation::ColorAdjust { .. } => EffectKernel::ColorAdjust,
-        EffectOperation::MotionBlur { .. } => EffectKernel::MotionBlur,
-    }
+
+        impl EffectKernel {
+            pub const ALL: [Self; [$(stringify!($kernel)),+].len()] = [$(Self::$kernel,)+];
+
+            const fn index(self) -> u32 {
+                match self { $(Self::$kernel => $bit,)+ }
+            }
+        }
+
+        /// The single renderer mapping from logical operations to backend kernels.
+        #[must_use]
+        #[deny(unreachable_patterns)]
+        pub const fn kernel_for_operation(operation: &EffectOperation) -> EffectKernel {
+            match operation {
+                $($(EffectOperation::$operation { .. })|+ => EffectKernel::$kernel,)+
+            }
+        }
+
+        const _: () = {
+            let bits: &[u32] = &[$($bit,)+];
+            let mut used = 0_u64;
+            let mut index = 0;
+            while index < bits.len() {
+                assert!(bits[index] < u64::BITS, "effect kernel bit exceeds the kernel set");
+                let bit = 1_u64 << bits[index];
+                assert!(used & bit == 0, "effect kernel bits must be unique");
+                used |= bit;
+                index += 1;
+            }
+        };
+    };
 }
 
-impl EffectKernel {
-    pub const ALL: [Self; 19] = [
-        Self::AsciiAnalyze,
-        Self::AsciiResolve,
-        Self::HalftoneAnalyze,
-        Self::Halftone,
-        Self::PixelSort,
-        Self::Crt,
-        Self::PaletteInputAnalyze,
-        Self::PaletteMap,
-        Self::OrderedDither,
-        Self::ColourTransform,
-        Self::GaussianBlur,
-        Self::HighlightExtract,
-        Self::Composite,
-        Self::DirectionalBlur,
-        Self::ZoomBlur,
-        Self::ChromaticAberration,
-        Self::Vignette,
-        Self::ColorAdjust,
-        Self::MotionBlur,
-    ];
+effect_kernels! {
+    AsciiAnalyze = 15 => [AsciiAnalyze],
+    AsciiResolve = 16 => [AsciiResolve],
+    HalftoneAnalyze = 12 => [HalftoneAnalyze],
+    Halftone = 13 => [Halftone],
+    PixelSort = 14 => [PixelSort],
+    Crt = 17 => [Crt],
+    PaletteInputAnalyze = 18 => [PaletteInputAnalyze],
+    PaletteMap = 10 => [PaletteMap],
+    OrderedDither = 11 => [OrderedDither],
+    ColourTransform = 0 => [ApplyColourTransform],
+    GaussianBlur = 1 => [GaussianHorizontal, GaussianVertical],
+    HighlightExtract = 2 => [HighlightExtract],
+    Composite = 3 => [Composite],
+    DirectionalBlur = 4 => [DirectionalBlur],
+    ZoomBlur = 5 => [ZoomBlur],
+    ChromaticAberration = 6 => [ChromaticAberration],
+    Vignette = 7 => [Vignette],
+    ColorAdjust = 8 => [ColorAdjust],
+    MotionBlur = 9 => [MotionBlur],
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -97,32 +84,6 @@ impl EffectKernelSet {
     }
 }
 
-impl EffectKernel {
-    const fn index(self) -> u32 {
-        match self {
-            Self::AsciiAnalyze => 15,
-            Self::AsciiResolve => 16,
-            Self::HalftoneAnalyze => 12,
-            Self::Halftone => 13,
-            Self::PixelSort => 14,
-            Self::Crt => 17,
-            Self::PaletteInputAnalyze => 18,
-            Self::PaletteMap => 10,
-            Self::OrderedDither => 11,
-            Self::ColourTransform => 0,
-            Self::GaussianBlur => 1,
-            Self::HighlightExtract => 2,
-            Self::Composite => 3,
-            Self::DirectionalBlur => 4,
-            Self::ZoomBlur => 5,
-            Self::ChromaticAberration => 6,
-            Self::Vignette => 7,
-            Self::ColorAdjust => 8,
-            Self::MotionBlur => 9,
-        }
-    }
-}
-
 pub fn required_effect_kernels(plan: &RenderPlan) -> EffectKernelSet {
     let mut required = EffectKernelSet::new();
     for effect in plan
@@ -142,6 +103,39 @@ pub fn required_effect_kernels(plan: &RenderPlan) -> EffectKernelSet {
 mod tests {
     use super::*;
     use vestra_core::plan::{CompositeMode, EffectOperation};
+
+    #[test]
+    fn kernel_inventory_preserves_order_and_private_bit_assignments() {
+        let expected = [
+            (EffectKernel::AsciiAnalyze, 15),
+            (EffectKernel::AsciiResolve, 16),
+            (EffectKernel::HalftoneAnalyze, 12),
+            (EffectKernel::Halftone, 13),
+            (EffectKernel::PixelSort, 14),
+            (EffectKernel::Crt, 17),
+            (EffectKernel::PaletteInputAnalyze, 18),
+            (EffectKernel::PaletteMap, 10),
+            (EffectKernel::OrderedDither, 11),
+            (EffectKernel::ColourTransform, 0),
+            (EffectKernel::GaussianBlur, 1),
+            (EffectKernel::HighlightExtract, 2),
+            (EffectKernel::Composite, 3),
+            (EffectKernel::DirectionalBlur, 4),
+            (EffectKernel::ZoomBlur, 5),
+            (EffectKernel::ChromaticAberration, 6),
+            (EffectKernel::Vignette, 7),
+            (EffectKernel::ColorAdjust, 8),
+            (EffectKernel::MotionBlur, 9),
+        ];
+        assert_eq!(EffectKernel::ALL, expected.map(|(kernel, _)| kernel));
+        let mut set = EffectKernelSet::default();
+        for (kernel, bit) in expected {
+            assert_eq!(kernel.index(), bit);
+            set.insert(kernel);
+        }
+        assert_eq!(set.0.count_ones(), EffectKernel::ALL.len() as u32);
+        assert_eq!(set.iter().collect::<Vec<_>>(), EffectKernel::ALL);
+    }
 
     #[test]
     fn gaussian_directions_share_a_kernel() {
@@ -172,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn every_executable_operation_has_one_kernel_mapping() {
+    fn representative_executable_operations_have_kernel_mappings() {
         let operations = [
             EffectOperation::ApplyColourTransform {
                 transform: Default::default(),

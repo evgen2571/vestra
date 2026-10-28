@@ -4,6 +4,9 @@ use serde::Serialize;
 
 mod catalog;
 mod descriptors;
+pub(crate) mod field_contract;
+pub(crate) mod field_macros;
+mod field_types;
 mod properties;
 
 pub(crate) use catalog::VisualEffectKind;
@@ -11,10 +14,10 @@ pub use catalog::visual_effect_descriptors;
 pub use descriptors::{
     EffectParameterDefault, EffectParameterDescriptor, EffectParameterKind, VisualEffectDescriptor,
 };
+pub(crate) use properties::ScalarAuthoredValidation;
 pub use properties::{
     MIN_POSITIVE_PROPERTY_VALUE, PlainTrackTarget, ScalarPropertyConstraint, ScalarPropertyTarget,
 };
-pub(crate) use properties::{ScalarAuthoredValidation, ScalarPropertyDefinition};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -58,4 +61,4 @@ pub(crate) struct EffectDefinition {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

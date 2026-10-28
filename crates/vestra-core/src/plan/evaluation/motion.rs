@@ -2,7 +2,7 @@
 
 use crate::plan::CompiledLayer;
 
-pub(super) fn sample_bounds(layer: &CompiledLayer, relative: u128) -> (u128, u128) {
+pub(crate) fn sample_bounds(layer: &CompiledLayer, relative: u128) -> (u128, u128) {
     crate::motion_bounds::sample_bounds(
         layer.duration_nanos,
         layer

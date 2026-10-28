@@ -38,7 +38,7 @@ owns specs and dependencies; implementation plans track work on a selected issue
 ## Extension guides
 
 - [Add a source](extending/source.md)
-- [Add an effect](extending/effect.md)
+- [Add an effect](adding-effects.md)
 - [Add a transition](extending/transition.md)
 - [Add a backend](extending/backend.md)
 

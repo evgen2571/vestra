@@ -1,12 +1,14 @@
 """Area-filtered cinematic ASCII and antialiased geometric pseudo-ASCII."""
 from __future__ import annotations
+# BEGIN GENERATED EFFECT IMPORTS
+from typing import cast
 from collections.abc import Sequence
 from os import PathLike
-from typing import cast
-from ..authoring.effects import AsciiColorMode, AsciiGlyphStyle, AsciiMode
-from ..authoring.values import Color
 from ..properties import BindableScalarProperty, ScalarProperty
+from ..authoring.values import Color
+from ..authoring.effects import AsciiColorMode, AsciiGlyphStyle, AsciiMode
 from .base import Effect
+# END GENERATED EFFECT IMPORTS
 
 CHARACTER_SETS = {
     "standard": " .:-=+*#%@",

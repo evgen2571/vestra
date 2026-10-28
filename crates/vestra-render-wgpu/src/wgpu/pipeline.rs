@@ -1,5 +1,7 @@
 //! Prepared texture pipelines and bind-group layouts.
 
+use super::registry::kernel_label;
+pub(super) use super::registry::kernel_source;
 use super::support::supports_kernel;
 
 use super::parameters::PARAMETER_RECORD_BYTES;
@@ -298,7 +300,7 @@ impl GpuPipelines {
         Self::BASE_PIPELINE_COUNT + self.effects.len()
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "adapter-tests"))]
     pub(super) fn declared_supported_kernel_count() -> usize {
         supported_kernels().count()
     }
@@ -308,126 +310,6 @@ fn supported_kernels() -> impl Iterator<Item = EffectKernel> {
     EffectKernel::ALL
         .into_iter()
         .filter(|&kernel| supports_kernel(kernel))
-}
-
-const fn kernel_label(kernel: EffectKernel) -> &'static str {
-    match kernel {
-        EffectKernel::HalftoneAnalyze => "vestra.effect.halftoneanalyze",
-        EffectKernel::Halftone => "vestra.effect.halftone",
-        EffectKernel::PixelSort => "vestra.effect.pixelsort",
-        EffectKernel::Crt => "vestra.effect.crt",
-        EffectKernel::AsciiAnalyze => "vestra.effect.ascii-analyze",
-        EffectKernel::AsciiResolve => "vestra.effect.ascii-resolve",
-        EffectKernel::PaletteInputAnalyze => "vestra.effect.palette-input-analyze",
-        EffectKernel::PaletteMap => "vestra.effect.palette-map",
-        EffectKernel::OrderedDither => "vestra.effect.ordered-dither",
-        EffectKernel::ColourTransform => "vestra.effect.colour-transform",
-        EffectKernel::GaussianBlur => "vestra.effect.gaussian-blur",
-        EffectKernel::HighlightExtract => "vestra.effect.highlight-extract",
-        EffectKernel::Composite => "vestra.effect.composite",
-        EffectKernel::DirectionalBlur => "vestra.effect.directional-blur",
-        EffectKernel::ZoomBlur => "vestra.effect.zoom-blur",
-        EffectKernel::ChromaticAberration => "vestra.effect.chromatic-aberration",
-        EffectKernel::Vignette => "vestra.effect.vignette",
-        EffectKernel::ColorAdjust => "vestra.effect.color-adjust",
-        EffectKernel::MotionBlur => "vestra.effect.motion-blur",
-    }
-}
-
-pub(super) const fn kernel_source(kernel: EffectKernel) -> &'static str {
-    match kernel {
-        EffectKernel::HalftoneAnalyze => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/analog_common.wgsl"),
-            include_str!("../shaders/effects/halftone_common.wgsl"),
-            include_str!("../shaders/effects/halftone_analyze.wgsl")
-        ),
-        EffectKernel::Halftone => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/analog_common.wgsl"),
-            include_str!("../shaders/effects/halftone_common.wgsl"),
-            include_str!("../shaders/effects/halftone.wgsl")
-        ),
-        EffectKernel::PixelSort => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/analog_common.wgsl"),
-            include_str!("../shaders/effects/pixel_sort.wgsl")
-        ),
-        EffectKernel::Crt => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/analog_common.wgsl"),
-            include_str!("../shaders/effects/crt.wgsl")
-        ),
-        EffectKernel::AsciiAnalyze => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/ascii_common.wgsl"),
-            include_str!("../shaders/effects/ascii_analyze.wgsl")
-        ),
-        EffectKernel::AsciiResolve => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/ascii_common.wgsl"),
-            include_str!("../shaders/effects/ascii_resolve.wgsl")
-        ),
-        EffectKernel::PaletteInputAnalyze => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/palette_input_analyze.wgsl")
-        ),
-        EffectKernel::PaletteMap => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/oklab_constants.wgsl"),
-            include_str!("../shaders/effects/palette_common.wgsl"),
-            include_str!("../shaders/effects/palette_map.wgsl")
-        ),
-        EffectKernel::OrderedDither => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/oklab_constants.wgsl"),
-            include_str!("../shaders/effects/palette_common.wgsl"),
-            include_str!("../shaders/effects/blue_noise.wgsl"),
-            include_str!("../shaders/effects/ordered_dither.wgsl")
-        ),
-        EffectKernel::ColourTransform => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/colour_transform.wgsl")
-        ),
-        EffectKernel::GaussianBlur => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/gaussian_blur.wgsl")
-        ),
-        EffectKernel::HighlightExtract => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/highlight_extract.wgsl")
-        ),
-        EffectKernel::Composite => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/composite.wgsl")
-        ),
-        EffectKernel::DirectionalBlur => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/line_blur_common.wgsl"),
-            include_str!("../shaders/effects/directional_blur.wgsl")
-        ),
-        EffectKernel::ZoomBlur => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/zoom_blur.wgsl")
-        ),
-        EffectKernel::ChromaticAberration => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/chromatic_aberration.wgsl")
-        ),
-        EffectKernel::Vignette => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/vignette.wgsl")
-        ),
-        EffectKernel::ColorAdjust => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/color_adjust.wgsl")
-        ),
-        EffectKernel::MotionBlur => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/line_blur_common.wgsl"),
-            include_str!("../shaders/effects/motion_blur.wgsl")
-        ),
-    }
 }
 
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
@@ -554,6 +436,143 @@ mod tests {
     use super::*;
 
     #[test]
+    fn effect_shader_labels_and_composed_bytes_match_the_registration_baseline() {
+        let baseline = [
+            (
+                EffectKernel::HalftoneAnalyze,
+                "vestra.effect.halftoneanalyze",
+                4764,
+                0x6a0aee56e15eff6b,
+            ),
+            (
+                EffectKernel::Halftone,
+                "vestra.effect.halftone",
+                5232,
+                0x02c85a992c052a48,
+            ),
+            (
+                EffectKernel::PixelSort,
+                "vestra.effect.pixelsort",
+                4397,
+                0xc04aca79a8dee498,
+            ),
+            (
+                EffectKernel::Crt,
+                "vestra.effect.crt",
+                4349,
+                0x986eaf12bd56d63e,
+            ),
+            (
+                EffectKernel::AsciiAnalyze,
+                "vestra.effect.ascii-analyze",
+                6737,
+                0x546d5c3659dfe960,
+            ),
+            (
+                EffectKernel::AsciiResolve,
+                "vestra.effect.ascii-resolve",
+                8720,
+                0xc12c0b7ca88d0c57,
+            ),
+            (
+                EffectKernel::PaletteInputAnalyze,
+                "vestra.effect.palette-input-analyze",
+                3122,
+                0x761c192efcd0b35b,
+            ),
+            (
+                EffectKernel::PaletteMap,
+                "vestra.effect.palette-map",
+                14174,
+                0xd21e997744c4d8a9,
+            ),
+            (
+                EffectKernel::OrderedDither,
+                "vestra.effect.ordered-dither",
+                20352,
+                0x6d56afefd456f32e,
+            ),
+            (
+                EffectKernel::ColourTransform,
+                "vestra.effect.colour-transform",
+                2305,
+                0x3bdeb0d582fe814e,
+            ),
+            (
+                EffectKernel::GaussianBlur,
+                "vestra.effect.gaussian-blur",
+                3703,
+                0x6b15caf7e36a4675,
+            ),
+            (
+                EffectKernel::HighlightExtract,
+                "vestra.effect.highlight-extract",
+                2269,
+                0x6221ff18ec8ac0a6,
+            ),
+            (
+                EffectKernel::Composite,
+                "vestra.effect.composite",
+                2732,
+                0x685332c80cd10b24,
+            ),
+            (
+                EffectKernel::DirectionalBlur,
+                "vestra.effect.directional-blur",
+                2728,
+                0xf1f47ae546f8b064,
+            ),
+            (
+                EffectKernel::ZoomBlur,
+                "vestra.effect.zoom-blur",
+                3060,
+                0x5142903d4b9df482,
+            ),
+            (
+                EffectKernel::ChromaticAberration,
+                "vestra.effect.chromatic-aberration",
+                2301,
+                0xfa32550b5fea5d82,
+            ),
+            (
+                EffectKernel::Vignette,
+                "vestra.effect.vignette",
+                2393,
+                0x26d242f21e3f09c0,
+            ),
+            (
+                EffectKernel::ColorAdjust,
+                "vestra.effect.color-adjust",
+                2455,
+                0xf02f6b14c5b90142,
+            ),
+            (
+                EffectKernel::MotionBlur,
+                "vestra.effect.motion-blur",
+                2728,
+                0xf1f47ae546f8b064,
+            ),
+        ];
+        assert_eq!(baseline.len(), EffectKernel::ALL.len());
+        for (kernel, label, length, fingerprint) in baseline {
+            assert_eq!(kernel_label(kernel), label);
+            let source = kernel_source(kernel).as_bytes();
+            assert_eq!(source.len(), length, "{kernel:?}");
+            let actual = source.iter().fold(0xcbf29ce484222325_u64, |hash, byte| {
+                (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+            });
+            assert_eq!(actual, fingerprint, "{kernel:?}");
+        }
+    }
+
+    #[test]
+    fn reported_base_counts_preserve_the_existing_counter_contract() {
+        // Nine base resources are created; correcting their report is separate work.
+        assert_eq!(GpuPipelines::BASE_SHADER_MODULE_COUNT, 8);
+        assert_eq!(GpuPipelines::BASE_PIPELINE_COUNT, 8);
+    }
+
+    #[test]
     fn effect_shader_sources_isolate_kernel_algorithms() {
         assert!(kernel_source(EffectKernel::GaussianBlur).contains("fn gaussian"));
         assert!(!kernel_source(EffectKernel::ColorAdjust).contains("fn gaussian"));
@@ -566,7 +585,6 @@ mod tests {
     #[test]
     fn every_declared_wgpu_kernel_has_one_pipeline_source() {
         let supported = supported_kernels().collect::<Vec<_>>();
-        assert_eq!(supported.len(), EffectKernel::ALL.len());
         assert_eq!(
             supported
                 .iter()

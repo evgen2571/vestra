@@ -3,7 +3,6 @@
 use bytemuck::Pod;
 
 use super::PARAMETER_RECORD_BYTES;
-use super::effects::EffectKernelParameters;
 
 /// Every dynamic uniform record reserves the largest parameter layout.  The
 /// bytes written into an effect record are still the size of its typed layout.
@@ -100,33 +99,6 @@ fn parameter_overflow(message: &str) -> crate::Diagnostic {
 pub(in crate::wgpu) fn dynamic_uniform_offset(offset: u64) -> Result<u32, crate::Diagnostic> {
     u32::try_from(offset)
         .map_err(|_| parameter_overflow("dynamic uniform offset exceeds WGPU's u32 range"))
-}
-
-pub(in crate::wgpu) fn push_effect_parameters(
-    arena: &mut FrameParameterArena,
-    parameters: EffectKernelParameters,
-) -> Result<u32, crate::Diagnostic> {
-    match parameters {
-        EffectKernelParameters::AsciiAnalyze(value)
-        | EffectKernelParameters::AsciiResolve(value) => arena.push(&value),
-        EffectKernelParameters::HalftoneAnalyze(value) => arena.push(&value),
-        EffectKernelParameters::Halftone(value) => arena.push(&value),
-        EffectKernelParameters::PixelSort(value) => arena.push(&value),
-        EffectKernelParameters::Crt(value) => arena.push(&value),
-        EffectKernelParameters::PaletteInputAnalyze(value) => arena.push(&value),
-        EffectKernelParameters::PaletteMap(value)
-        | EffectKernelParameters::OrderedDither(value) => arena.push(&value),
-        EffectKernelParameters::ColourTransform(value) => arena.push(&value),
-        EffectKernelParameters::GaussianBlur(value) => arena.push(&value),
-        EffectKernelParameters::HighlightExtract(value) => arena.push(&value),
-        EffectKernelParameters::Composite(value) => arena.push(&value),
-        EffectKernelParameters::DirectionalBlur(value) => arena.push(&value),
-        EffectKernelParameters::ZoomBlur(value) => arena.push(&value),
-        EffectKernelParameters::ChromaticAberration(value) => arena.push(&value),
-        EffectKernelParameters::Vignette(value) => arena.push(&value),
-        EffectKernelParameters::ColorAdjust(value) => arena.push(&value),
-        EffectKernelParameters::MotionBlur(value) => arena.push(&value),
-    }
 }
 
 #[cfg(test)]

@@ -19,8 +19,11 @@ stay in the CPU implementation. CPU/WGPU comparison tests live in facade
 integration modules and require both features; WGPU planning, packing and
 resource-limit tests live in the WGPU package and run independently of CPU.
 
-CPU capability validation belongs to `cpu/support.rs`; it currently accepts all
-declared effect kernels. Common supplies only kernel identifiers, operation
+CPU capability validation belongs to `cpu/support.rs`. Its deliberate kernel
+decisions derive from `cpu_effect_kernels!` in `cpu/effects.rs`, beside typed
+operation dispatch. Every current kernel is implemented; a new common kernel
+requires a registered or explicitly unsupported CPU row. Algorithms and surface
+execution stay explicit. Common supplies only kernel identifiers, operation
 mapping and required-kernel collection. The facade calls CPU/WGPU validation
 before selecting or falling back to an implementation.
 

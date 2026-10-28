@@ -13,7 +13,7 @@ mod wgpu;
 pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};
 
 mod render {
-    #[cfg(test)]
+    #[cfg(all(test, feature = "adapter-tests"))]
     pub(crate) use crate::WgpuBackend;
     pub(crate) use vestra_render_common::{
         AdapterMetadata, ByteLruCache, CompletedFrame, DecodedAssets, PollMode, RenderBackend,
@@ -46,6 +46,7 @@ pub fn validate_plan(plan: &vestra_core::plan::RenderPlan) -> Result<(), Diagnos
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-use vestra_render_common::{
-    AdapterPerformanceClass, DecodedAssets, PollMode, VideoDecoderFactory, VideoFrame,
-};
+use vestra_render_common::{AdapterPerformanceClass, DecodedAssets, PollMode};
+
+#[cfg(all(test, feature = "adapter-tests"))]
+use vestra_render_common::{VideoDecoderFactory, VideoFrame};

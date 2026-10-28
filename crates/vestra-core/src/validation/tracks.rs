@@ -70,7 +70,7 @@ pub(super) fn validate_track<T>(
     }
 }
 
-pub(super) fn validate_scalar_property(
+pub(crate) fn validate_scalar_property(
     property: &crate::project::ScalarProperty,
     duration: f64,
     path: &str,

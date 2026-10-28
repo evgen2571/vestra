@@ -9,12 +9,39 @@ use crate::{
 };
 
 macro_rules! effect_parameters {
-    ($name:ident { $($field:ident : $ty:ty),+ $(,)? }) => {
+    ($name:ident { $($field:ident : $ty:ty $(=> ($shader_field:ident, $component:literal))?),+ $(,)? }) => {
         #[repr(C, align(16))]
         #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
         pub(in crate::wgpu) struct $name {
             $(pub(in crate::wgpu) $field: $ty,)+
         }
+
+        const _: () = {
+            assert!(std::mem::align_of::<$name>() == 16);
+            assert!(std::mem::size_of::<$name>() % 16 == 0);
+            assert!(std::mem::size_of::<$name>() <= super::PARAMETER_RECORD_BYTES as usize);
+        };
+
+        #[cfg(test)]
+        impl $name {
+            fn field_offsets() -> &'static [(&'static str, usize, usize)] {
+                &[$(effect_parameters!(@field $name, $field $(=> ($shader_field, $component))?),)+]
+            }
+
+            fn scalar_layout() -> Vec<(usize, naga::ScalarKind)> {
+                let mut fields = Vec::new();
+                $(registration_tests::rust_scalar_layout::<$ty>(
+                    std::mem::offset_of!($name, $field), &mut fields,
+                );)+
+                fields
+            }
+        }
+    };
+    (@field $record:ident, $field:ident) => {
+        (stringify!($field), std::mem::offset_of!($record, $field), 0)
+    };
+    (@field $record:ident, $field:ident => ($shader_field:ident, $component:literal)) => {
+        (stringify!($shader_field), std::mem::offset_of!($record, $field), $component)
     };
 }
 
@@ -124,8 +151,8 @@ effect_parameters!(ZoomBlurParameters {
     _padding: [u32; 2],
     radius: f32,
     samples: u32,
-    anchor_x: f32,
-    anchor_y: f32,
+    anchor_x: f32 => (anchor, 0),
+    anchor_y: f32 => (anchor, 4),
     direction: u32,
     _padding1: [u32; 3]
 });
@@ -160,54 +187,44 @@ effect_parameters!(ColorAdjustParameters {
     white_point: f32
 });
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::wgpu) enum EffectKernelParameters {
-    AsciiAnalyze(AsciiParameters),
-    AsciiResolve(AsciiParameters),
-    HalftoneAnalyze(AnalogParameters),
-    Halftone(AnalogParameters),
-    PixelSort(AnalogParameters),
-    Crt(AnalogParameters),
-    PaletteInputAnalyze(InputAnalysisParameters),
-    PaletteMap(PaletteParameters),
-    OrderedDither(PaletteParameters),
-    ColourTransform(ColourTransformParameters),
-    GaussianBlur(GaussianBlurParameters),
-    HighlightExtract(HighlightExtractParameters),
-    Composite(CompositeParameters),
-    DirectionalBlur(LineBlurParameters),
-    ZoomBlur(ZoomBlurParameters),
-    ChromaticAberration(ChromaticAberrationParameters),
-    Vignette(VignetteParameters),
-    ColorAdjust(ColorAdjustParameters),
-    MotionBlur(LineBlurParameters),
+macro_rules! parameter_registration {
+    (registered { $($kernel:ident {
+        supported: $supported:literal,
+        parameters: $parameters:ident,
+        label: $label:literal,
+        sources: [$($source:literal),+ $(,)?],
+    }),+ $(,)? } unsupported { $($unsupported:ident),* $(,)? }) => {
+        #[derive(Clone, Copy, Debug, PartialEq)]
+        pub(in crate::wgpu) enum EffectKernelParameters {
+            $($kernel($parameters),)+
+        }
+
+        impl EffectKernelParameters {
+            pub(in crate::wgpu) const fn kernel(self) -> EffectKernel {
+                match self { $(Self::$kernel(_) => EffectKernel::$kernel,)+ }
+            }
+        }
+
+        pub(in crate::wgpu) fn push_effect_parameters(
+            arena: &mut super::arena::FrameParameterArena,
+            parameters: EffectKernelParameters,
+        ) -> Result<u32, crate::Diagnostic> {
+            match parameters {
+                $(EffectKernelParameters::$kernel(value) => arena.push(&value),)+
+            }
+        }
+
+        pub(in crate::wgpu) const MAX_EFFECT_PARAMETER_BYTES: usize = {
+            let mut largest = 0;
+            $(if std::mem::size_of::<$parameters>() > largest {
+                largest = std::mem::size_of::<$parameters>();
+            })+
+            largest
+        };
+    };
 }
 
-impl EffectKernelParameters {
-    pub(in crate::wgpu) const fn kernel(self) -> EffectKernel {
-        match self {
-            Self::AsciiAnalyze(_) => EffectKernel::AsciiAnalyze,
-            Self::AsciiResolve(_) => EffectKernel::AsciiResolve,
-            Self::HalftoneAnalyze(_) => EffectKernel::HalftoneAnalyze,
-            Self::Halftone(_) => EffectKernel::Halftone,
-            Self::PixelSort(_) => EffectKernel::PixelSort,
-            Self::Crt(_) => EffectKernel::Crt,
-            Self::PaletteInputAnalyze(_) => EffectKernel::PaletteInputAnalyze,
-            Self::PaletteMap(_) => EffectKernel::PaletteMap,
-            Self::OrderedDither(_) => EffectKernel::OrderedDither,
-            Self::ColourTransform(_) => EffectKernel::ColourTransform,
-            Self::GaussianBlur(_) => EffectKernel::GaussianBlur,
-            Self::HighlightExtract(_) => EffectKernel::HighlightExtract,
-            Self::Composite(_) => EffectKernel::Composite,
-            Self::DirectionalBlur(_) => EffectKernel::DirectionalBlur,
-            Self::ZoomBlur(_) => EffectKernel::ZoomBlur,
-            Self::ChromaticAberration(_) => EffectKernel::ChromaticAberration,
-            Self::Vignette(_) => EffectKernel::Vignette,
-            Self::ColorAdjust(_) => EffectKernel::ColorAdjust,
-            Self::MotionBlur(_) => EffectKernel::MotionBlur,
-        }
-    }
-}
+crate::wgpu::registry::effect_kernels!(parameter_registration);
 
 pub(in crate::wgpu) fn effect_parameters(
     width: u32,
@@ -763,6 +780,82 @@ mod effect_parameter_layout_tests {
     use std::mem::{align_of, offset_of, size_of};
 
     #[test]
+    fn effect_record_sizes_match_the_existing_abi() {
+        let baseline = [
+            (
+                size_of::<AnalogParameters>(),
+                96,
+                align_of::<AnalogParameters>(),
+            ),
+            (
+                size_of::<AsciiParameters>(),
+                128,
+                align_of::<AsciiParameters>(),
+            ),
+            (
+                size_of::<PaletteParameters>(),
+                256,
+                align_of::<PaletteParameters>(),
+            ),
+            (
+                size_of::<InputAnalysisParameters>(),
+                16,
+                align_of::<InputAnalysisParameters>(),
+            ),
+            (
+                size_of::<ColourTransformParameters>(),
+                80,
+                align_of::<ColourTransformParameters>(),
+            ),
+            (
+                size_of::<GaussianBlurParameters>(),
+                176,
+                align_of::<GaussianBlurParameters>(),
+            ),
+            (
+                size_of::<HighlightExtractParameters>(),
+                48,
+                align_of::<HighlightExtractParameters>(),
+            ),
+            (
+                size_of::<CompositeParameters>(),
+                32,
+                align_of::<CompositeParameters>(),
+            ),
+            (
+                size_of::<LineBlurParameters>(),
+                32,
+                align_of::<LineBlurParameters>(),
+            ),
+            (
+                size_of::<ZoomBlurParameters>(),
+                48,
+                align_of::<ZoomBlurParameters>(),
+            ),
+            (
+                size_of::<ChromaticAberrationParameters>(),
+                32,
+                align_of::<ChromaticAberrationParameters>(),
+            ),
+            (
+                size_of::<VignetteParameters>(),
+                48,
+                align_of::<VignetteParameters>(),
+            ),
+            (
+                size_of::<ColorAdjustParameters>(),
+                32,
+                align_of::<ColorAdjustParameters>(),
+            ),
+        ];
+        assert_eq!(baseline.len(), 13);
+        for (actual, expected, alignment) in baseline {
+            assert_eq!(actual, expected);
+            assert_eq!(alignment, 16);
+        }
+    }
+
+    #[test]
     fn ascii_record_matches_shared_wgsl_layout() {
         assert_eq!(offset_of!(AsciiParameters, glyph_count), 16);
         assert_eq!(offset_of!(AsciiParameters, foreground), 32);
@@ -820,38 +913,12 @@ mod effect_parameter_layout_tests {
     }
 
     #[test]
-    fn every_effect_parameter_fits_the_uniform_record() {
+    fn gaussian_record_matches_the_existing_wgsl_layout() {
         assert_eq!(offset_of!(GaussianBlurParameters, weights), 32);
         assert_eq!(size_of::<GaussianBlurParameters>(), 176);
-        let sizes = [
-            size_of::<PaletteParameters>(),
-            size_of::<ColourTransformParameters>(),
-            size_of::<GaussianBlurParameters>(),
-            size_of::<HighlightExtractParameters>(),
-            size_of::<CompositeParameters>(),
-            size_of::<LineBlurParameters>(),
-            size_of::<ZoomBlurParameters>(),
-            size_of::<ChromaticAberrationParameters>(),
-            size_of::<VignetteParameters>(),
-            size_of::<ColorAdjustParameters>(),
-        ];
-        let alignments = [
-            align_of::<PaletteParameters>(),
-            align_of::<ColourTransformParameters>(),
-            align_of::<GaussianBlurParameters>(),
-            align_of::<HighlightExtractParameters>(),
-            align_of::<CompositeParameters>(),
-            align_of::<LineBlurParameters>(),
-            align_of::<ZoomBlurParameters>(),
-            align_of::<ChromaticAberrationParameters>(),
-            align_of::<VignetteParameters>(),
-            align_of::<ColorAdjustParameters>(),
-        ];
-        assert!(alignments.into_iter().all(|alignment| alignment == 16));
-        assert!(
-            sizes
-                .into_iter()
-                .all(|size| { size <= PARAMETER_RECORD_BYTES as usize && size % 16 == 0 })
-        );
     }
 }
+
+#[cfg(test)]
+#[path = "effect_registration_tests.rs"]
+mod registration_tests;

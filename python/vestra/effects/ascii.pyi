@@ -3,17 +3,17 @@
 
 from __future__ import annotations
 
+from typing import cast as cast
+
 from collections.abc import Sequence as Sequence
 
 from os import PathLike as PathLike
 
-from typing import cast as cast
-
-from ..authoring.effects import AsciiColorMode as AsciiColorMode, AsciiGlyphStyle as AsciiGlyphStyle, AsciiMode as AsciiMode
+from ..properties import BindableScalarProperty as BindableScalarProperty, ScalarProperty as ScalarProperty
 
 from ..authoring.values import Color as Color
 
-from ..properties import BindableScalarProperty as BindableScalarProperty, ScalarProperty as ScalarProperty
+from ..authoring.effects import AsciiColorMode as AsciiColorMode, AsciiGlyphStyle as AsciiGlyphStyle, AsciiMode as AsciiMode
 
 from .base import Effect as Effect
 

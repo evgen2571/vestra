@@ -1,9 +1,4 @@
-//! Glow semantics; registration is derived from its authoritative declaration.
-
-#![allow(
-    clippy::result_large_err,
-    reason = "preserve machine-readable effect diagnostics"
-)]
+// Glow semantics; registration is derived from its authoritative declaration.
 
 use crate::Category;
 use crate::Diagnostic;
@@ -20,11 +15,8 @@ use crate::plan::EvaluatedEffect;
 use crate::plan::EvaluationContext;
 use crate::plan::EvaluationError;
 use crate::plan::ScalarSignalInterner;
-use crate::plan::compiler::optimization::normalize_track;
-use crate::plan::compiler::transitions::map_project_track;
 use crate::plan::effect_passes::evaluated::highlight_bloom_pass_plan;
 use crate::project::Effect;
-use crate::project::ScalarProperty;
 use crate::project::parse_colour;
 use crate::validation::effects::properties::invalid_effect;
 use crate::validation::tracks;
@@ -42,7 +34,7 @@ pub(crate) fn compile(
         ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     macro_rules! scalar {
         ($property:expr, $target:expr) => {
@@ -82,7 +74,7 @@ pub(crate) fn evaluate(
         colour,
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     Ok(EvaluatedEffect::Glow {
         threshold: threshold.evaluate(authored_time, project_time, context)?,
@@ -108,7 +100,7 @@ pub(crate) fn validate(
         ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     let track = |track: &crate::project::ScalarProperty,
                  field,
@@ -152,7 +144,7 @@ pub(crate) fn validate(
 
 pub(crate) fn compiled_passes(effect: &CompiledEffect) -> EffectPassPlan {
     let CompiledEffect::Glow { .. } = effect else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     EffectPassPlan::new(&[
         EffectPass::new(
@@ -191,7 +183,7 @@ pub(crate) fn evaluated_passes(effect: &EvaluatedEffect) -> EffectPassPlan {
         colour,
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     highlight_bloom_pass_plan(*threshold, *radius, *intensity, *colour)
 }
@@ -201,22 +193,9 @@ pub(crate) fn evaluated_identity(effect: &EvaluatedEffect) -> bool {
         radius, intensity, ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     gaussian_radius_is_identity(*radius) || effect_amount_is_identity(*intensity)
-}
-
-pub(crate) fn normalize(effect: &mut CompiledEffect) -> usize {
-    let CompiledEffect::Glow {
-        threshold,
-        radius,
-        intensity,
-        ..
-    } = effect
-    else {
-        unreachable!("effect dispatch matches its declaration")
-    };
-    normalize_track(threshold) + normalize_track(radius) + normalize_track(intensity)
 }
 
 pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
@@ -224,7 +203,7 @@ pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
         radius, intensity, ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     {
         radius.keyframes.is_empty()
@@ -234,20 +213,18 @@ pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
     }
 }
 
-pub(crate) fn remap(effect: &mut Effect, duration: f64) {
-    let Effect::Glow {
-        threshold,
-        radius,
-        intensity,
-        ..
-    } = effect
-    else {
-        unreachable!("effect dispatch matches its declaration")
-    };
-    let scalar = |property: &mut ScalarProperty| map_project_track(&mut property.track, duration);
-    {
-        scalar(threshold);
-        scalar(radius);
-        scalar(intensity);
-    }
+pub(crate) fn extra_dynamic(_effect: &CompiledEffect) -> bool {
+    false
+}
+
+pub(crate) fn extra_modifiers(_effect: &CompiledEffect) -> bool {
+    false
+}
+
+pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
+    effect.definition().estimated_pass_count
+}
+
+pub(crate) const fn extra_requirements(_effect: &CompiledEffect) -> bool {
+    false
 }

@@ -12,11 +12,13 @@ check:
 # Format Rust and the maintained Python format surface.
 fmt:
     cargo fmt --all
+    rustfmt --edition 2024 crates/vestra-core/src/effects/*.rs
     uvx --from 'ruff>=0.12,<0.13' ruff format python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
 
 # Check formatting without changing files.
 fmt-check:
     cargo fmt --all -- --check
+    rustfmt --edition 2024 --check crates/vestra-core/src/effects/*.rs
     uvx --from 'ruff>=0.12,<0.13' ruff format --check python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
 
 # Run the inexpensive CI style checks.
@@ -67,6 +69,12 @@ gen-effects-check:
     uv run --no-project python scripts/generate-effects.py --check
     cargo test --locked --quiet -p vestra-core --example effect_metadata
     uv run --no-project python -m unittest discover -s tests -p test_effect_generation.py
+
+# Check effect declarations, registration, CPU pixels and adapter-independent WGPU contracts.
+effect-check: gen-effects-check
+    rustfmt --edition 2024 --check crates/vestra-core/src/effects/*.rs
+    cargo test --locked -p vestra-core -p vestra-render-common -p vestra-render-cpu
+    cargo test --locked -p vestra-render-wgpu --lib -- --skip gpu_
 
 # Check local public documentation links.
 docs-check:

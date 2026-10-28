@@ -1,9 +1,4 @@
-//! Vignette semantics; registration is derived from its authoritative declaration.
-
-#![allow(
-    clippy::result_large_err,
-    reason = "preserve machine-readable effect diagnostics"
-)]
+// Vignette semantics; registration is derived from its authoritative declaration.
 
 use crate::Category;
 use crate::Diagnostic;
@@ -18,10 +13,7 @@ use crate::plan::EvaluatedEffect;
 use crate::plan::EvaluationContext;
 use crate::plan::EvaluationError;
 use crate::plan::ScalarSignalInterner;
-use crate::plan::compiler::optimization::normalize_track;
-use crate::plan::compiler::transitions::map_project_track;
 use crate::project::Effect;
-use crate::project::ScalarProperty;
 use crate::project::parse_colour;
 use crate::validation::effects::properties::invalid_effect;
 use crate::validation::effects::properties::plain_track;
@@ -40,7 +32,7 @@ pub(crate) fn compile(
         ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     macro_rules! scalar {
         ($property:expr, $target:expr) => {
@@ -80,7 +72,7 @@ pub(crate) fn evaluate(
         colour,
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     Ok(EvaluatedEffect::Vignette {
         amount: amount.evaluate(authored_time, project_time, context)?,
@@ -106,7 +98,7 @@ pub(crate) fn validate(
         ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     let track = |track: &crate::project::ScalarProperty,
                  field,
@@ -157,7 +149,7 @@ pub(crate) fn validate(
 
 pub(crate) fn compiled_passes(effect: &CompiledEffect) -> EffectPassPlan {
     let CompiledEffect::Vignette { .. } = effect else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     let current = EffectResource::Current;
     EffectPassPlan::new(&[EffectPass::new(
@@ -180,7 +172,7 @@ pub(crate) fn evaluated_passes(effect: &EvaluatedEffect) -> EffectPassPlan {
         colour,
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     let current = EffectResource::Current;
     EffectPassPlan::new(&[EffectPass::new(
@@ -197,46 +189,30 @@ pub(crate) fn evaluated_passes(effect: &EvaluatedEffect) -> EffectPassPlan {
 
 pub(crate) fn evaluated_identity(effect: &EvaluatedEffect) -> bool {
     let EvaluatedEffect::Vignette { amount, .. } = effect else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     effect_amount_is_identity(*amount)
 }
 
-pub(crate) fn normalize(effect: &mut CompiledEffect) -> usize {
-    let CompiledEffect::Vignette {
-        amount,
-        radius,
-        softness,
-        ..
-    } = effect
-    else {
-        unreachable!("effect dispatch matches its declaration")
-    };
-    normalize_track(amount) + normalize_track(radius) + normalize_track(softness)
-}
-
 pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
     let CompiledEffect::Vignette { amount, .. } = effect else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     amount.keyframes.is_empty() && effect_amount_is_identity(amount.base_value)
 }
 
-pub(crate) fn remap(effect: &mut Effect, duration: f64) {
-    let Effect::Vignette {
-        amount,
-        radius,
-        softness,
-        ..
-    } = effect
-    else {
-        unreachable!("effect dispatch matches its declaration")
-    };
-    let scalar = |property: &mut ScalarProperty| map_project_track(&mut property.track, duration);
-    let track = |value: &mut crate::project::Track<f64>| map_project_track(value, duration);
-    {
-        scalar(amount);
-        scalar(radius);
-        track(softness);
-    }
+pub(crate) fn extra_dynamic(_effect: &CompiledEffect) -> bool {
+    false
+}
+
+pub(crate) fn extra_modifiers(_effect: &CompiledEffect) -> bool {
+    false
+}
+
+pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
+    effect.definition().estimated_pass_count
+}
+
+pub(crate) const fn extra_requirements(_effect: &CompiledEffect) -> bool {
+    false
 }

@@ -5,7 +5,7 @@ use crate::plan::ColourTransform;
 use super::EvaluatedEffect;
 
 impl ColourTransform {
-    fn then(mut self, matrix: [[f64; 3]; 3], offset: [f64; 3]) -> Self {
+    pub(crate) fn then(mut self, matrix: [[f64; 3]; 3], offset: [f64; 3]) -> Self {
         let previous_matrix = self.matrix;
         let previous_offset = self.offset;
         self.matrix = multiply(matrix, previous_matrix);
@@ -17,41 +17,8 @@ impl ColourTransform {
     pub fn from_effects(effects: impl IntoIterator<Item = EvaluatedEffect>) -> Self {
         effects
             .into_iter()
-            .fold(Self::default(), |transform, effect| match effect {
-                EvaluatedEffect::ColourTransform { transform } => transform,
-                EvaluatedEffect::Brightness { amount } => transform.then(
-                    [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-                    [amount * 255.0; 3],
-                ),
-                EvaluatedEffect::Contrast { amount } => transform.then(
-                    [[amount, 0.0, 0.0], [0.0, amount, 0.0], [0.0, 0.0, amount]],
-                    [128.0 * (1.0 - amount); 3],
-                ),
-                EvaluatedEffect::Saturation { amount } => {
-                    let luma = [0.2126, 0.7152, 0.0722];
-                    let matrix = std::array::from_fn(|row| {
-                        std::array::from_fn(|column| {
-                            luma[column] * (1.0 - amount) + if row == column { amount } else { 0.0 }
-                        })
-                    });
-                    transform.then(matrix, [0.0; 3])
-                }
-                EvaluatedEffect::Tint { colour, amount } => {
-                    let amount = amount.clamp(0.0, 1.0);
-                    transform.then(
-                        [
-                            [1.0 - amount, 0.0, 0.0],
-                            [0.0, 1.0 - amount, 0.0],
-                            [0.0, 0.0, 1.0 - amount],
-                        ],
-                        [
-                            f64::from(colour[0]) * amount,
-                            f64::from(colour[1]) * amount,
-                            f64::from(colour[2]) * amount,
-                        ],
-                    )
-                }
-                _ => transform,
+            .fold(Self::default(), |transform, effect| {
+                effect.compose_colour_semantic(transform)
             })
     }
 }

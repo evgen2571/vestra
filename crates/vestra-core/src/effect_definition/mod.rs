@@ -4,6 +4,7 @@ use serde::Serialize;
 
 mod catalog;
 mod descriptors;
+pub(crate) mod field_macros;
 mod properties;
 
 pub(crate) use catalog::VisualEffectKind;
@@ -58,4 +59,4 @@ pub(crate) struct EffectDefinition {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

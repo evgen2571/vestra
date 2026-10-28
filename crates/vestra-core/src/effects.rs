@@ -1,5 +1,10 @@
 //! Backend-neutral effect normalization shared by all render backends.
 
+#![allow(
+    clippy::result_large_err,
+    reason = "preserve machine-readable effect diagnostics"
+)]
+
 /// The canonical Gaussian radius used for kernel selection and logical pass
 /// planning. Gaussian kernels are quantized to quarter-pixel increments.
 #[must_use]
@@ -40,6 +45,6 @@ mod tests {
     }
 }
 
-pub(crate) mod camera_shake;
-pub(crate) mod glow;
-pub(crate) mod vignette;
+include!("effects/dispatch.rs");
+
+pub(crate) mod hooks;

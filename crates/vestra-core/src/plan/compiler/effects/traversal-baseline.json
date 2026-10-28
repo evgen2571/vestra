@@ -1,0 +1,186 @@
+{
+  "ascii/animated": {
+    "normalized": "b552dc08d1fca34f",
+    "remapped": "42e5ad73dae43390"
+  },
+  "ascii/static": {
+    "normalized": "f2dd82e54e929616",
+    "remapped": "b6bc4e1a6cb74170"
+  },
+  "bloom/animated": {
+    "normalized": "b133fe53915fe13b",
+    "remapped": "78612a4058276df9"
+  },
+  "bloom/static": {
+    "normalized": "94f3595eae162376",
+    "remapped": "fa5f1aa943896f9d"
+  },
+  "brightness/animated": {
+    "normalized": "ef887911934be41a",
+    "remapped": "392443370f5a9f14"
+  },
+  "brightness/static": {
+    "normalized": "827ee37931293385",
+    "remapped": "93c3719924209404"
+  },
+  "camera_shake/animated": {
+    "normalized": "5e20bb852bf3ce2f",
+    "remapped": "a9e50bfa22823959"
+  },
+  "camera_shake/static": {
+    "normalized": "b3b2b305e9ac52fb",
+    "remapped": "af9a682be1dc9691"
+  },
+  "chromatic_aberration/animated": {
+    "normalized": "1b41c32a2303ef0a",
+    "remapped": "b13ae077bb4449f0"
+  },
+  "chromatic_aberration/static": {
+    "normalized": "cfda53fafceacd7c",
+    "remapped": "b95f1d1bc6fda734"
+  },
+  "color_adjust/animated": {
+    "normalized": "77b3d0212ce15f0a",
+    "remapped": "c5d5da8fc53f68e3"
+  },
+  "color_adjust/static": {
+    "normalized": "b5b25b33e959f681",
+    "remapped": "8cf14e6db936d154"
+  },
+  "contrast/animated": {
+    "normalized": "c284baa9f2f95479",
+    "remapped": "0603ae91f590fbaf"
+  },
+  "contrast/static": {
+    "normalized": "21585a2779ef0656",
+    "remapped": "3554f11d95dc675f"
+  },
+  "crt/animated": {
+    "normalized": "b051fdf19db2e499",
+    "remapped": "37e3a881df2c7036"
+  },
+  "crt/static": {
+    "normalized": "f2932857881c82fe",
+    "remapped": "49ca30d2b1378c92"
+  },
+  "directional_blur/animated": {
+    "normalized": "10cac5ea3cb953cc",
+    "remapped": "e6f1185134af1c76"
+  },
+  "directional_blur/static": {
+    "normalized": "9dc8e64a40cac1c2",
+    "remapped": "ce3d41335c07b412"
+  },
+  "gaussian_blur/animated": {
+    "normalized": "c4291add76f5cd3b",
+    "remapped": "73059d7f22fa1b3b"
+  },
+  "gaussian_blur/static": {
+    "normalized": "3b50787ff9491b74",
+    "remapped": "4e7d0720816d1d9f"
+  },
+  "glow/animated": {
+    "normalized": "8a3a638e60a3e99d",
+    "remapped": "55e3abef7c6e9252"
+  },
+  "glow/static": {
+    "normalized": "cc65a6c5d14d38c8",
+    "remapped": "7e17dab4840ec892"
+  },
+  "halftone/animated": {
+    "normalized": "33b534b6c981c911",
+    "remapped": "a3a46816f2fd1691"
+  },
+  "halftone/static": {
+    "normalized": "3bd111bf06d1738f",
+    "remapped": "00d2155e82ee20d1"
+  },
+  "motion_blur/animated": {
+    "normalized": "c271b65547928afc",
+    "remapped": "3b120bd2bc464358"
+  },
+  "motion_blur/static": {
+    "normalized": "958f07cabb1367c7",
+    "remapped": "aa51a2da4252b570"
+  },
+  "motion_tile/animated": {
+    "normalized": "8d12ceba355521be",
+    "remapped": "be9a9daad22e1b7f"
+  },
+  "motion_tile/static": {
+    "normalized": "3bf29da3b1d5b156",
+    "remapped": "33d36969f0e00e9f"
+  },
+  "ordered_dither/animated": {
+    "normalized": "bcdcb708df960a3d",
+    "remapped": "4c5e1d77e59bc944"
+  },
+  "ordered_dither/static": {
+    "normalized": "8fb53cb6bb43299c",
+    "remapped": "b0ee05c03b9f3484"
+  },
+  "palette_map/animated": {
+    "normalized": "06a3bca4b1102ad7",
+    "remapped": "49acd8e8cf39fbc9"
+  },
+  "palette_map/static": {
+    "normalized": "8fd1399fd7cecad3",
+    "remapped": "f289d1cf34f88fb5"
+  },
+  "pixel_sort/animated": {
+    "normalized": "bfac64bcdef33389",
+    "remapped": "8f01057632c46c0d"
+  },
+  "pixel_sort/static": {
+    "normalized": "e07c94423597ffaa",
+    "remapped": "264af883cd7c6a15"
+  },
+  "radial_blur/animated": {
+    "normalized": "f779f67a3c40f499",
+    "remapped": "b4a452aa83f2d36e"
+  },
+  "radial_blur/static": {
+    "normalized": "52add41e98632622",
+    "remapped": "a6a4a4c5504b2cea"
+  },
+  "saturation/animated": {
+    "normalized": "617c6d68d628f103",
+    "remapped": "65fdf6e245664681"
+  },
+  "saturation/static": {
+    "normalized": "bf23f11ee2b0dab8",
+    "remapped": "9e024c87e1449a11"
+  },
+  "sharpen/animated": {
+    "normalized": "1ad4b44f8ee15f1c",
+    "remapped": "31d060767e4a93f9"
+  },
+  "sharpen/static": {
+    "normalized": "1059e11ff84c64e2",
+    "remapped": "901687f112263d41"
+  },
+  "tint/animated": {
+    "normalized": "e5d3c8d299397990",
+    "remapped": "ea336c329c248d4e"
+  },
+  "tint/static": {
+    "normalized": "725678e2c0869565",
+    "remapped": "020d31b2c4abb852"
+  },
+  "vignette/animated": {
+    "normalized": "4e1ffb2148a90223",
+    "remapped": "05c95e12b32d54cb"
+  },
+  "vignette/static": {
+    "normalized": "9f5bf9d851e4c0d8",
+    "remapped": "2b434f8783bef57f"
+  },
+  "zoom_blur/animated": {
+    "normalized": "c73de4f6e64280a9",
+    "remapped": "d69df852d341cf02"
+  },
+  "zoom_blur/static": {
+    "normalized": "c2ae15d0747beb10",
+    "remapped": "2573c84370389056"
+  }
+}

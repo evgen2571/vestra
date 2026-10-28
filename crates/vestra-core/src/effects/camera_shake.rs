@@ -1,9 +1,4 @@
-//! CameraShake semantics; registration is derived from its authoritative declaration.
-
-#![allow(
-    clippy::result_large_err,
-    reason = "preserve machine-readable effect diagnostics"
-)]
+// CameraShake semantics; registration is derived from its authoritative declaration.
 
 use crate::Diagnostic;
 use crate::effect_definition::ScalarPropertyTarget;
@@ -13,10 +8,7 @@ use crate::plan::EvaluatedEffect;
 use crate::plan::EvaluationContext;
 use crate::plan::EvaluationError;
 use crate::plan::ScalarSignalInterner;
-use crate::plan::compiler::optimization::normalize_track;
-use crate::plan::compiler::transitions::map_project_track;
 use crate::project::Effect;
-use crate::project::ScalarProperty;
 use crate::validation::effects::properties::invalid_effect;
 use crate::validation::nonnegative;
 use crate::validation::positive;
@@ -38,7 +30,7 @@ pub(crate) fn compile(
         ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     macro_rules! scalar {
         ($property:expr, $target:expr) => {
@@ -83,7 +75,7 @@ pub(crate) fn evaluate(
         decay,
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     Ok(EvaluatedEffect::CameraShake {
         local_time: authored_time,
@@ -117,7 +109,7 @@ pub(crate) fn validate(
         ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     let track = |track: &crate::project::ScalarProperty,
                  field,
@@ -172,42 +164,23 @@ pub(crate) fn validate(
 
 pub(crate) fn compiled_passes(effect: &CompiledEffect) -> EffectPassPlan {
     let CompiledEffect::CameraShake { .. } = effect else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     EffectPassPlan::new(&[])
 }
 
 pub(crate) fn evaluated_passes(effect: &EvaluatedEffect) -> EffectPassPlan {
     let EvaluatedEffect::CameraShake { .. } = effect else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     EffectPassPlan::new(&[])
 }
 
 pub(crate) fn evaluated_identity(effect: &EvaluatedEffect) -> bool {
     let EvaluatedEffect::CameraShake { .. } = effect else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     true
-}
-
-pub(crate) fn normalize(effect: &mut CompiledEffect) -> usize {
-    let CompiledEffect::CameraShake {
-        position_amount,
-        rotation_degrees,
-        scale_amount,
-        frequency,
-        ..
-    } = effect
-    else {
-        unreachable!("effect dispatch matches its declaration")
-    };
-    {
-        normalize_track(position_amount)
-            + normalize_track(rotation_degrees)
-            + normalize_track(scale_amount)
-            + normalize_track(frequency)
-    }
 }
 
 pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
@@ -218,7 +191,7 @@ pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
         ..
     } = effect
     else {
-        unreachable!("effect dispatch matches its declaration")
+        panic!("effect dispatch matches its declaration")
     };
     {
         position_amount.keyframes.is_empty()
@@ -230,25 +203,47 @@ pub(crate) fn static_identity(effect: &CompiledEffect) -> bool {
     }
 }
 
-pub(crate) fn remap(effect: &mut Effect, duration: f64) {
-    let Effect::CameraShake {
-        timing,
+pub(crate) fn extra_dynamic(_effect: &CompiledEffect) -> bool {
+    false
+}
+
+pub(crate) fn extra_modifiers(_effect: &CompiledEffect) -> bool {
+    false
+}
+
+pub(crate) const fn pass_count(effect: &CompiledEffect) -> usize {
+    effect.definition().estimated_pass_count
+}
+
+pub(crate) const fn extra_requirements(_effect: &CompiledEffect) -> bool {
+    false
+}
+
+pub(crate) fn apply_transform(
+    effect: &EvaluatedEffect,
+    transform: &mut crate::animation::Transform2D,
+) {
+    if let EvaluatedEffect::CameraShake {
+        local_time,
         position_amount,
-        rotation_degrees,
+        rotation_radians,
         scale_amount,
         frequency,
-        ..
+        seed,
+        attack,
+        decay,
     } = effect
-    else {
-        unreachable!("effect dispatch matches its declaration")
-    };
-    let scalar = |property: &mut ScalarProperty| map_project_track(&mut property.track, duration);
     {
-        timing.start *= duration;
-        timing.duration = timing.duration.map(|value| value * duration);
-        scalar(position_amount);
-        scalar(rotation_degrees);
-        scalar(scale_amount);
-        scalar(frequency);
+        crate::camera_shake::apply(
+            transform,
+            *local_time,
+            *position_amount,
+            *rotation_radians,
+            *scale_amount,
+            *frequency,
+            *seed,
+            *attack,
+            *decay,
+        );
     }
 }

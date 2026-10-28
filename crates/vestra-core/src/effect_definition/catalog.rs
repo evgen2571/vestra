@@ -27,11 +27,12 @@ macro_rules! visual_effect_catalog {
         evaluated: $internal_evaluated:tt
     }; $( $kind:ident => {
         module: $module:ident,
+    hooks: [$($hook:ident),* $(,)?],
         definition: $definition:tt,
         authored: $authored:tt,
         compiled: $compiled:tt,
         evaluated: $evaluated:tt,
-        scalars: [$($field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
+        scalars: [$($(#[$traversal:ident])? $field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
         tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
     }),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]

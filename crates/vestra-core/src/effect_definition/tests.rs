@@ -87,55 +87,9 @@ fn authored_descriptors_have_unique_ids_and_parameter_names() {
 fn descriptor_ids_and_parameters_are_accepted_by_canonical_visual_serde() {
     let mut serialized_ids = Vec::new();
     for descriptor in super::visual_effect_descriptors() {
-        let mut value = serde_json::Map::from_iter([
-            ("id".to_owned(), serde_json::json!("test")),
-            ("type".to_owned(), serde_json::json!(descriptor.id)),
-        ]);
-        for parameter in descriptor.parameters {
-            let number = match parameter.name {
-                "black_point" => 0.25,
-                "white_point" => 0.75,
-                _ if parameter.minimum_exclusive => parameter.minimum.unwrap_or(0.0) + 0.5,
-                _ => parameter.minimum.unwrap_or(0.5),
-            };
-            let parameter_value = match parameter.kind {
-                EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack => {
-                    serde_json::json!({"base_value": number})
-                }
-                EffectParameterKind::String => {
-                    serde_json::json!(if parameter.name == "edge_characters" {
-                        "-|/\\"
-                    } else {
-                        " .:-=+*#%@"
-                    })
-                }
-                EffectParameterKind::Font => serde_json::json!("font"),
-                EffectParameterKind::Colour => serde_json::json!("#ffffff"),
-                EffectParameterKind::PaletteStops => serde_json::json!([0.0, 1.0]),
-                EffectParameterKind::Palette => serde_json::json!(["#000000", "#ffffff"]),
-                EffectParameterKind::Period => serde_json::json!(number),
-                EffectParameterKind::Integer => {
-                    serde_json::json!(parameter.integer_minimum.unwrap_or(2))
-                }
-                EffectParameterKind::Number => serde_json::json!(number),
-                EffectParameterKind::Point2d | EffectParameterKind::PointProperty => {
-                    serde_json::json!({"x": 0.5, "y": 0.5})
-                }
-                EffectParameterKind::Boolean => serde_json::json!(true),
-                EffectParameterKind::Enum => {
-                    serde_json::json!(parameter.default.unwrap_or(
-                        super::EffectParameterDefault::String(parameter.enum_values[0])
-                    ))
-                }
-                EffectParameterKind::ActiveInterval => {
-                    value.insert("start".to_owned(), serde_json::json!(0.0));
-                    continue;
-                }
-            };
-            value.insert(parameter.name.to_owned(), parameter_value);
-        }
+        let value = descriptor_specimen(descriptor);
         let effect: crate::project::Effect =
-            serde_json::from_value(serde_json::Value::Object(value)).unwrap_or_else(|error| {
+            serde_json::from_value(value).unwrap_or_else(|error| {
                 panic!(
                     "{} descriptor is not serde-compatible: {error}",
                     descriptor.id
@@ -210,4 +164,56 @@ fn canonical_catalog_excludes_only_the_internal_colour_transform_kind() {
             .collect::<Vec<_>>(),
         vec![VisualEffectKind::ColourTransform]
     );
+}
+
+/// Representative inputs for every current descriptor, including future catalog entries.
+pub(crate) fn descriptor_specimen(descriptor: super::VisualEffectDescriptor) -> serde_json::Value {
+    let mut value = serde_json::Map::from_iter([
+        ("id".to_owned(), serde_json::json!("test")),
+        ("type".to_owned(), serde_json::json!(descriptor.id)),
+    ]);
+    for parameter in descriptor.parameters {
+        let number = match parameter.name {
+            "black_point" => 0.25,
+            "white_point" => 0.75,
+            _ if parameter.minimum_exclusive => parameter.minimum.unwrap_or(0.0) + 0.5,
+            _ => parameter.minimum.unwrap_or(0.5),
+        };
+        let parameter_value = match parameter.kind {
+            EffectParameterKind::ScalarProperty | EffectParameterKind::PlainTrack => {
+                serde_json::json!({"base_value": number})
+            }
+            EffectParameterKind::String => {
+                serde_json::json!(if parameter.name == "edge_characters" {
+                    "-|/\\"
+                } else {
+                    " .:-=+*#%@"
+                })
+            }
+            EffectParameterKind::Font => serde_json::json!("font"),
+            EffectParameterKind::Colour => serde_json::json!("#ffffff"),
+            EffectParameterKind::PaletteStops => serde_json::json!([0.0, 1.0]),
+            EffectParameterKind::Palette => serde_json::json!(["#000000", "#ffffff"]),
+            EffectParameterKind::Period => serde_json::json!(number),
+            EffectParameterKind::Integer => {
+                serde_json::json!(parameter.integer_minimum.unwrap_or(2))
+            }
+            EffectParameterKind::Number => serde_json::json!(number),
+            EffectParameterKind::Point2d | EffectParameterKind::PointProperty => {
+                serde_json::json!({"x": 0.5, "y": 0.5})
+            }
+            EffectParameterKind::Boolean => serde_json::json!(true),
+            EffectParameterKind::Enum => {
+                serde_json::json!(parameter.default.unwrap_or(
+                    super::EffectParameterDefault::String(parameter.enum_values[0])
+                ))
+            }
+            EffectParameterKind::ActiveInterval => {
+                value.insert("start".to_owned(), serde_json::json!(0.0));
+                continue;
+            }
+        };
+        value.insert(parameter.name.to_owned(), parameter_value);
+    }
+    serde_json::Value::Object(value)
 }

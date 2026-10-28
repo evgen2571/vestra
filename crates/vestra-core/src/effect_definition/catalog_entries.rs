@@ -16,6 +16,7 @@ visual_effect_catalog! {
     };
     Ascii => {
         module: ascii,
+        hooks: [Assets],
         definition: {
             id: "ascii",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 2,
@@ -146,6 +147,7 @@ visual_effect_catalog! {
     },
     Halftone => {
         module: halftone,
+        hooks: [],
         definition: {
             id: "halftone", class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 2, temporal: FromProperties, retains_original: true,  parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::HalftoneCellSize), EffectParameterDescriptor::scalar(ScalarPropertyTarget::HalftoneAngleDegrees), EffectParameterDescriptor::scalar(ScalarPropertyTarget::HalftoneSoftness), EffectParameterDescriptor::scalar(ScalarPropertyTarget::HalftoneAmount), EffectParameterDescriptor::optional_enum_default("mode", &["luminance", "source", "rgb"], "luminance"), EffectParameterDescriptor::simple("foreground", EffectParameterKind::Colour), EffectParameterDescriptor::simple("background", EffectParameterKind::Colour), EffectParameterDescriptor::simple("invert", EffectParameterKind::Boolean)]
         },
@@ -230,6 +232,7 @@ visual_effect_catalog! {
     },
     PixelSort => {
         module: pixel_sort,
+        hooks: [],
         definition: {
             id: "pixel_sort", class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1, temporal: FromProperties, retains_original: false,  parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::PixelSortLowerThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PixelSortUpperThreshold), EffectParameterDescriptor::scalar(ScalarPropertyTarget::PixelSortAmount), EffectParameterDescriptor::optional_enum_default("direction", &["horizontal", "vertical"], "horizontal"), EffectParameterDescriptor::optional_enum_default("order", &["ascending", "descending"], "ascending"), EffectParameterDescriptor::integer("segment_length", 2, 256)]
         },
@@ -300,6 +303,7 @@ visual_effect_catalog! {
     },
     Crt => {
         module: crt,
+        hooks: [],
         definition: {
             id: "crt", class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1, temporal: FromProperties, retains_original: false,  parameters: [EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtAmount), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtCurvature), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtScanlineStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtScanlineSpacing), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtMaskStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtGrain), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtJitter), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtFlicker), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtRollingStrength), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtRollingWidth), EffectParameterDescriptor::scalar(ScalarPropertyTarget::CrtPhase), EffectParameterDescriptor::integer("mask_spacing", 1, 6), EffectParameterDescriptor::period(), EffectParameterDescriptor::integer("seed", 0, 18446744073709551615)]
         },
@@ -484,6 +488,7 @@ visual_effect_catalog! {
     },
     PaletteMap => {
         module: palette_map,
+        hooks: [],
         definition: {
             id: "palette_map",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 6,
@@ -550,26 +555,31 @@ visual_effect_catalog! {
                     levels: u16,
         },
         scalars: [
+            #[preserve_authored_track]
             input_exposure => PaletteMapInputExposure = 25: {
                 {
                                 Self::ColorAdjustExposure.definition()
                             }
             },
+            #[preserve_authored_track]
             input_gamma => PaletteMapInputGamma = 26: {
                 {
                                 Self::ColorAdjustGamma.definition()
                             }
             },
+            #[preserve_authored_track]
             input_detail => PaletteMapInputDetail = 27: {
                 {
                                 Self::SharpenAmount.definition()
                             }
             },
+            #[preserve_authored_track]
             input_detail_radius => PaletteMapInputDetailRadius = 28: {
                 {
                                 Self::SharpenRadius.definition()
                             }
             },
+            #[preserve_authored_track]
             input_scale => PaletteMapInputScale = 29: {
                 {
                                 ScalarPropertyDefinition {
@@ -609,6 +619,7 @@ visual_effect_catalog! {
     },
     OrderedDither => {
         module: ordered_dither,
+        hooks: [],
         definition: {
             id: "ordered_dither",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 6,
@@ -689,26 +700,31 @@ visual_effect_catalog! {
                     seed: u32,
         },
         scalars: [
+            #[preserve_authored_track]
             input_exposure => OrderedDitherInputExposure = 30: {
                 {
                                 Self::ColorAdjustExposure.definition()
                             }
             },
+            #[preserve_authored_track]
             input_gamma => OrderedDitherInputGamma = 31: {
                 {
                                 Self::ColorAdjustGamma.definition()
                             }
             },
+            #[preserve_authored_track]
             input_detail => OrderedDitherInputDetail = 32: {
                 {
                                 Self::SharpenAmount.definition()
                             }
             },
+            #[preserve_authored_track]
             input_detail_radius => OrderedDitherInputDetailRadius = 33: {
                 {
                                 Self::SharpenRadius.definition()
                             }
             },
+            #[preserve_authored_track]
             input_scale => OrderedDitherInputScale = 34: {
                 {
                                 ScalarPropertyDefinition {
@@ -759,6 +775,7 @@ visual_effect_catalog! {
     },
     Brightness => {
         module: brightness,
+        hooks: [],
         definition: {
             id: "brightness",
                     class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -788,6 +805,7 @@ visual_effect_catalog! {
     },
     Contrast => {
         module: contrast,
+        hooks: [],
         definition: {
             id: "contrast",
                     class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -817,6 +835,7 @@ visual_effect_catalog! {
     },
     Saturation => {
         module: saturation,
+        hooks: [],
         definition: {
             id: "saturation",
                     class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -846,6 +865,7 @@ visual_effect_catalog! {
     },
     Tint => {
         module: tint,
+        hooks: [],
         definition: {
             id: "tint",
                     class: BasicColour, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -883,6 +903,7 @@ visual_effect_catalog! {
     },
     GaussianBlur => {
         module: gaussian_blur,
+        hooks: [],
         definition: {
             id: "gaussian_blur",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 2,
@@ -920,6 +941,7 @@ visual_effect_catalog! {
     },
     MotionTile => {
         module: motion_tile,
+        hooks: [],
         definition: {
             id: "motion_tile",
                     class: Transform, scope: ClipOnly, stage: PreTransform, passes: 0,
@@ -984,6 +1006,7 @@ visual_effect_catalog! {
     },
     DirectionalBlur => {
         module: directional_blur,
+        hooks: [],
         definition: {
             id: "directional_blur",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -1030,6 +1053,7 @@ visual_effect_catalog! {
     },
     ZoomBlur => {
         module: zoom_blur,
+        hooks: [],
         definition: {
             id: "zoom_blur",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -1077,6 +1101,7 @@ visual_effect_catalog! {
     },
     RadialBlur => {
         module: radial_blur,
+        hooks: [],
         definition: {
             id: "radial_blur",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -1117,6 +1142,7 @@ visual_effect_catalog! {
     },
     Glow => {
         module: glow,
+        hooks: [],
         definition: {
             id: "glow",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 4,
@@ -1187,6 +1213,7 @@ visual_effect_catalog! {
     },
     Bloom => {
         module: bloom,
+        hooks: [],
         definition: {
             id: "bloom",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 4,
@@ -1246,6 +1273,7 @@ visual_effect_catalog! {
     },
     ChromaticAberration => {
         module: chromatic_aberration,
+        hooks: [],
         definition: {
             id: "chromatic_aberration",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -1292,6 +1320,7 @@ visual_effect_catalog! {
     },
     Vignette => {
         module: vignette,
+        hooks: [],
         definition: {
             id: "vignette",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -1354,6 +1383,7 @@ visual_effect_catalog! {
     },
     Sharpen => {
         module: sharpen,
+        hooks: [],
         definition: {
             id: "sharpen",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 3,
@@ -1407,6 +1437,7 @@ visual_effect_catalog! {
     },
     ColorAdjust => {
         module: color_adjust,
+        hooks: [],
         definition: {
             id: "color_adjust",
                     class: Advanced, scope: ClipAndGlobal, stage: PostTransform, passes: 1,
@@ -1483,6 +1514,7 @@ visual_effect_catalog! {
     },
     CameraShake => {
         module: camera_shake,
+        hooks: [Transform],
         definition: {
             id: "camera_shake",
                     class: Transform, scope: ClipOnly, stage: PostTransform, passes: 0,
@@ -1573,6 +1605,7 @@ visual_effect_catalog! {
     },
     MotionBlur => {
         module: motion_blur,
+        hooks: [Motion],
         definition: {
             id: "motion_blur",
                     class: Advanced, scope: ClipOnly, stage: PostTransform, passes: 1,

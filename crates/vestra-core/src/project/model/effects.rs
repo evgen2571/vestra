@@ -41,17 +41,23 @@ macro_rules! visual_effect_catalog {
         evaluated: $internal_evaluated:tt
     }; $( $kind:ident => {
         module: $module:ident,
+    hooks: [$($hook:ident),* $(,)?],
         definition: $definition:tt,
         authored: $authored:tt,
         compiled: $compiled:tt,
         evaluated: $evaluated:tt,
-        scalars: [$($field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
+        scalars: [$($(#[$traversal:ident])? $field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
         tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
     }),+ $(,)?) => {
         authored_effect! { $($kind $authored),+ }
         impl Effect {
             #[must_use]
             pub fn id(&self) -> &str { match self { $(Self::$kind { id, .. } => id),+ } }
+            #[must_use]
+            pub fn timing(&self) -> ActiveInterval {
+                use crate::effect_definition::field_macros::effect_timing;
+                match self { $(Self::$kind { .. } => effect_timing!(self, $kind; $authored)),+ }
+            }
             #[cfg(test)]
             pub(crate) fn for_each_scalar_property(
                 &self, mut visitor: impl FnMut(crate::effect_definition::ScalarPropertyTarget, &ScalarProperty)
@@ -70,14 +76,6 @@ impl Effect {
     #[must_use]
     pub(crate) const fn definition(&self) -> crate::effect_definition::EffectDefinition {
         self.kind().definition()
-    }
-
-    #[must_use]
-    pub fn timing(&self) -> ActiveInterval {
-        match self {
-            Self::CameraShake { timing, .. } => *timing,
-            _ => ActiveInterval::default(),
-        }
     }
 }
 

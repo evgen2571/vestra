@@ -12,18 +12,7 @@ pub(in crate::validation) fn validate_assets(
     path: &str,
     errors: &mut Vec<Diagnostic>,
 ) {
-    if let crate::project::Effect::Ascii {
-        font: Some(font), ..
-    } = effect
-        && assets.get(font) != Some(&crate::project::AssetType::Font)
-    {
-        errors.push(Diagnostic::error(
-            "VESTRA-ASCII-FONT",
-            Category::Semantic,
-            format!("ASCII font '{font}' must refer to a Font asset"),
-            format!("{path}/font"),
-        ));
-    }
+    effect.validate_assets_semantic(assets, path, errors);
 }
 
 pub(in crate::validation) fn validate_global(

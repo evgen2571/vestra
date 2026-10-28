@@ -11,8 +11,8 @@ use crate::{
 
 mod colour;
 pub(crate) mod effects;
-mod motion;
-mod transform;
+pub(crate) mod motion;
+pub(crate) mod transform;
 
 pub use effects::EvaluatedEffect;
 /// Workspace-internal raw effect evaluation used by renderer conformance tests.
@@ -383,85 +383,20 @@ fn evaluate_layers(
             })
             .collect::<Result<Vec<_>, EvaluationError>>()?;
         for effect in &mut effects {
-            if let EvaluatedEffect::MotionBlur {
-                radius,
-                angle_degrees,
-                intensity,
-                shutter_angle,
-                max_radius,
-                ..
-            } = effect
-            {
-                let frame_duration =
-                    (1_000_000_000_u128 * u128::from(frame_rate.1)) / u128::from(frame_rate.0);
-                let exposure = (frame_duration as f64 * (*shutter_angle / 360.0)).round() as u128;
-                let half_window = exposure / 2;
-                let (lower, upper) = motion::sample_bounds(layer, relative);
-                let before = relative.saturating_sub(half_window).max(lower);
-                let after = relative.saturating_add(half_window).min(upper);
-                let mut ignored_tracks = 0;
-                let before_project_time = if root_composition {
-                    layer.start_nanos.saturating_add(before)
-                } else {
-                    sample_root_time(root_project_time, relative, before)
-                };
-                let after_project_time = if root_composition {
-                    layer.start_nanos.saturating_add(after)
-                } else {
-                    sample_root_time(root_project_time, relative, after)
-                };
-                let start = transform::evaluate(
-                    layer,
-                    before,
-                    before_project_time,
-                    context,
-                    &mut ignored_tracks,
-                )?
-                .position;
-                let end = transform::evaluate(
-                    layer,
-                    after,
-                    after_project_time,
-                    context,
-                    &mut ignored_tracks,
-                )?
-                .position;
-                let dx = (end.x - start.x) * f64::from(width);
-                let dy = (end.y - start.y) * f64::from(height);
-                let displacement = (dx * dx + dy * dy).sqrt();
-                if displacement <= 0.000_1 || exposure == 0 {
-                    *radius = 0.0;
-                } else {
-                    *angle_degrees = dy.atan2(dx).to_degrees();
-                    *radius = (displacement * *intensity).clamp(0.0, *max_radius);
-                }
-            }
+            effect.resolve_motion_semantic(&crate::effects::hooks::MotionContext {
+                layer,
+                relative,
+                root_project_time,
+                frame_rate,
+                width,
+                height,
+                root_composition,
+                context,
+            })?;
         }
         if source.supports_direct_transform() {
             for effect in &effects {
-                if let EvaluatedEffect::CameraShake {
-                    local_time,
-                    position_amount,
-                    rotation_radians,
-                    scale_amount,
-                    frequency,
-                    seed,
-                    attack,
-                    decay,
-                } = effect
-                {
-                    crate::camera_shake::apply(
-                        &mut transform,
-                        *local_time,
-                        *position_amount,
-                        *rotation_radians,
-                        *scale_amount,
-                        *frequency,
-                        *seed,
-                        *attack,
-                        *decay,
-                    );
-                }
+                effect.apply_transform_semantic(&mut transform);
             }
         }
         layers.push(EvaluatedLayer {
@@ -596,7 +531,7 @@ fn evaluate_source(
     })
 }
 
-fn sample_root_time(
+pub(crate) fn sample_root_time(
     current_root_time: u128,
     current_local_time: u128,
     sample_local_time: u128,

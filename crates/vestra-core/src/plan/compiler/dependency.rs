@@ -90,31 +90,7 @@ pub(super) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
     effect.for_each_plain_track(|_, track| {
         dynamic |= !static_track(track);
     });
-    dynamic |= match effect {
-        CompiledEffect::Ascii { period, .. }
-        | CompiledEffect::PaletteMap { period, .. }
-        | CompiledEffect::OrderedDither { period, .. } => period.is_some(),
-        CompiledEffect::Crt {
-            period,
-            grain,
-            jitter,
-            flicker,
-            rolling_strength,
-            ..
-        } => {
-            period.is_some()
-                || grain.base_value > 0.0
-                || jitter.base_value > 0.0
-                || flicker.base_value > 0.0
-                || rolling_strength.base_value > 0.0
-        }
-        CompiledEffect::MotionTile { tile_center, .. }
-        | CompiledEffect::RadialBlur {
-            center: tile_center,
-            ..
-        } => !static_point_property(tile_center),
-        _ => false,
-    };
+    dynamic |= effect.extra_dynamic_semantic();
     dynamic |= matches!(
         effect.definition().temporal_policy,
         crate::effect_definition::EffectTemporalPolicy::AlwaysDynamic
@@ -129,14 +105,7 @@ pub(super) fn effect_dependency(effect: &CompiledEffect) -> TemporalDependency {
 fn effect_has_modifiers(effect: &CompiledEffect) -> bool {
     let mut has_modifiers = false;
     effect.for_each_scalar_property(|_, property| has_modifiers |= property.has_modifiers());
-    has_modifiers |= match effect {
-        CompiledEffect::MotionTile { tile_center, .. }
-        | CompiledEffect::RadialBlur {
-            center: tile_center,
-            ..
-        } => point_property_has_modifiers(tile_center),
-        _ => false,
-    };
+    has_modifiers |= effect.extra_modifiers_semantic();
     has_modifiers
 }
 

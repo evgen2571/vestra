@@ -8,7 +8,7 @@ use crate::{
     },
 };
 
-pub(super) fn evaluate(
+pub(crate) fn evaluate(
     layer: &CompiledLayer,
     authored_time: u128,
     project_time: u128,

@@ -69,17 +69,17 @@ changes, new public effects or unrelated statistics corrections.
 
 ## Milestones
 
-- [ ] 0. Freeze compatibility evidence before migration: core API/serde,
+- [x] 0. Freeze compatibility evidence before migration: core API/serde,
   compile/evaluate/pass/dependency behavior; renderer order/bits/shader bytes,
   ABI/upload fingerprints; existing Python frozen fixtures. Capture baseline
   rendering and comparable performance before production changes.
-- [ ] 1. Implement Vignette, Glow and Camera Shake pilots, verify them, then
+- [x] 1. Implement Vignette, Glow and Camera Shake pilots, verify them, then
   migrate all core effects and remove old mechanical integration. Check all
   property descriptors against visitors and semantic paths.
 - [x] 2. Consolidate common kernels and deliberate CPU/WGPU capabilities.
 - [x] 3. Consolidate WGPU shaders/parameters/uploads and automatic ABI checks.
 - [x] 4. Consolidate CPU registration without execution lifecycle changes.
-- [ ] 5. Complete Python generation and exhaustive/structural checks; preserve
+- [x] 5. Complete Python generation and exhaustive/structural checks; preserve
   existing `gen-effects` commands and frozen compatibility fixtures.
 - [ ] 6. Exercise temporary ordinary FilmGrain-style addition through every
   layer, remove it, and record actual file/site/generated-file counts. Exercise
@@ -136,6 +136,26 @@ secondary/original surface liveness; typed Rust/WGSL ABI and upload identity.
   `VESTRA_WGPU_FORCE_FALLBACK` and set
   `VK_ICD_FILENAMES=/run/opengl-driver/share/vulkan/icd.d/nvidia_icd.json`.
   Software shell uses llvmpipe/Mesa 26.1.5; never mix its timings with hardware.
+
+- Full core migration now derives all three enums, identity/class/stage and
+  scalar/plain-track associations from one declaration. Original type paths,
+  serde attributes and public property discriminants remain unchanged.
+- All effect semantics are local modules. Generic normalization/transition
+  traversal preserves the ten existing palette input exclusions using
+  `#[preserve_authored_track]`. Original-revision scratch captures confirm all
+  46 remapping/normalization specimens; the probe was restored afterwards.
+- Optional Assets/Transform/Motion hooks remove centralized ASCII asset and
+  Camera Shake/Motion Blur evaluator matches. Basic-colour composition dispatch
+  derives from the existing class, with matrix algorithms in effect modules.
+- New whole-catalog property test checks actual compilation constraints, typed
+  visitors and negative keyframe validation for every scalar/plain track.
+  Current core result: 347 unit tests passed/one ignored, one integration passed.
+- Python generation commit `5da2d7f`: 23 generated outputs (previously 19),
+  ordinary new scalar effects need no Python override; all 332 frozen contract
+  cases pass. Stable integrated Python/native packaging checks remain pending.
+- Included semantic sources receive explicit rustfmt checks in fmt/check recipes;
+  `just effect-check` combines generation, core/common/CPU tests and WGPU tests
+  excluding adapter-dependent `gpu_` names. Strict adapter recipes remain separate.
 
 ## Decisions and discoveries
 

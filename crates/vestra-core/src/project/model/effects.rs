@@ -28,10 +28,10 @@ pub enum PixelSortOrder {
 }
 
 macro_rules! authored_effect {
-    ($($kind:ident $fields:tt),+) => {
+    ($($kind:ident [$id:literal] $fields:tt),+) => {
         #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
         #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-        pub enum Effect { $($kind $fields),+ }
+        pub enum Effect { $(#[serde(rename = $id)] $kind $fields),+ }
     };
 }
 macro_rules! visual_effect_catalog {
@@ -42,14 +42,14 @@ macro_rules! visual_effect_catalog {
     }; $( $kind:ident => {
         module: $module:ident,
     hooks: [$($hook:ident),* $(,)?],
-        definition: $definition:tt,
+        definition: { id: $id:literal, $($definition:tt)* },
         authored: $authored:tt,
         compiled: $compiled:tt,
         evaluated: $evaluated:tt,
         scalars: [$($(#[$traversal:ident])? $field:ident => $target:ident = $index:literal: $constraint:tt),* $(,)?],
         tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
     }),+ $(,)?) => {
-        authored_effect! { $($kind $authored),+ }
+        authored_effect! { $($kind [$id] $authored),+ }
         impl Effect {
             #[must_use]
             pub fn id(&self) -> &str { match self { $(Self::$kind { id, .. } => id),+ } }

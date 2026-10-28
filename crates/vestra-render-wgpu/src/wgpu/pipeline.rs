@@ -1,5 +1,7 @@
 //! Prepared texture pipelines and bind-group layouts.
 
+use super::registry::kernel_label;
+pub(super) use super::registry::kernel_source;
 use super::support::supports_kernel;
 
 use super::parameters::PARAMETER_RECORD_BYTES;
@@ -310,126 +312,6 @@ fn supported_kernels() -> impl Iterator<Item = EffectKernel> {
         .filter(|&kernel| supports_kernel(kernel))
 }
 
-const fn kernel_label(kernel: EffectKernel) -> &'static str {
-    match kernel {
-        EffectKernel::HalftoneAnalyze => "vestra.effect.halftoneanalyze",
-        EffectKernel::Halftone => "vestra.effect.halftone",
-        EffectKernel::PixelSort => "vestra.effect.pixelsort",
-        EffectKernel::Crt => "vestra.effect.crt",
-        EffectKernel::AsciiAnalyze => "vestra.effect.ascii-analyze",
-        EffectKernel::AsciiResolve => "vestra.effect.ascii-resolve",
-        EffectKernel::PaletteInputAnalyze => "vestra.effect.palette-input-analyze",
-        EffectKernel::PaletteMap => "vestra.effect.palette-map",
-        EffectKernel::OrderedDither => "vestra.effect.ordered-dither",
-        EffectKernel::ColourTransform => "vestra.effect.colour-transform",
-        EffectKernel::GaussianBlur => "vestra.effect.gaussian-blur",
-        EffectKernel::HighlightExtract => "vestra.effect.highlight-extract",
-        EffectKernel::Composite => "vestra.effect.composite",
-        EffectKernel::DirectionalBlur => "vestra.effect.directional-blur",
-        EffectKernel::ZoomBlur => "vestra.effect.zoom-blur",
-        EffectKernel::ChromaticAberration => "vestra.effect.chromatic-aberration",
-        EffectKernel::Vignette => "vestra.effect.vignette",
-        EffectKernel::ColorAdjust => "vestra.effect.color-adjust",
-        EffectKernel::MotionBlur => "vestra.effect.motion-blur",
-    }
-}
-
-pub(super) const fn kernel_source(kernel: EffectKernel) -> &'static str {
-    match kernel {
-        EffectKernel::HalftoneAnalyze => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/analog_common.wgsl"),
-            include_str!("../shaders/effects/halftone_common.wgsl"),
-            include_str!("../shaders/effects/halftone_analyze.wgsl")
-        ),
-        EffectKernel::Halftone => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/analog_common.wgsl"),
-            include_str!("../shaders/effects/halftone_common.wgsl"),
-            include_str!("../shaders/effects/halftone.wgsl")
-        ),
-        EffectKernel::PixelSort => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/analog_common.wgsl"),
-            include_str!("../shaders/effects/pixel_sort.wgsl")
-        ),
-        EffectKernel::Crt => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/analog_common.wgsl"),
-            include_str!("../shaders/effects/crt.wgsl")
-        ),
-        EffectKernel::AsciiAnalyze => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/ascii_common.wgsl"),
-            include_str!("../shaders/effects/ascii_analyze.wgsl")
-        ),
-        EffectKernel::AsciiResolve => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/ascii_common.wgsl"),
-            include_str!("../shaders/effects/ascii_resolve.wgsl")
-        ),
-        EffectKernel::PaletteInputAnalyze => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/palette_input_analyze.wgsl")
-        ),
-        EffectKernel::PaletteMap => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/oklab_constants.wgsl"),
-            include_str!("../shaders/effects/palette_common.wgsl"),
-            include_str!("../shaders/effects/palette_map.wgsl")
-        ),
-        EffectKernel::OrderedDither => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/oklab_constants.wgsl"),
-            include_str!("../shaders/effects/palette_common.wgsl"),
-            include_str!("../shaders/effects/blue_noise.wgsl"),
-            include_str!("../shaders/effects/ordered_dither.wgsl")
-        ),
-        EffectKernel::ColourTransform => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/colour_transform.wgsl")
-        ),
-        EffectKernel::GaussianBlur => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/gaussian_blur.wgsl")
-        ),
-        EffectKernel::HighlightExtract => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/highlight_extract.wgsl")
-        ),
-        EffectKernel::Composite => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/composite.wgsl")
-        ),
-        EffectKernel::DirectionalBlur => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/line_blur_common.wgsl"),
-            include_str!("../shaders/effects/directional_blur.wgsl")
-        ),
-        EffectKernel::ZoomBlur => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/zoom_blur.wgsl")
-        ),
-        EffectKernel::ChromaticAberration => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/chromatic_aberration.wgsl")
-        ),
-        EffectKernel::Vignette => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/vignette.wgsl")
-        ),
-        EffectKernel::ColorAdjust => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/color_adjust.wgsl")
-        ),
-        EffectKernel::MotionBlur => concat!(
-            include_str!("../shaders/effects/common.wgsl"),
-            include_str!("../shaders/effects/line_blur_common.wgsl"),
-            include_str!("../shaders/effects/motion_blur.wgsl")
-        ),
-    }
-}
-
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
@@ -703,7 +585,6 @@ mod tests {
     #[test]
     fn every_declared_wgpu_kernel_has_one_pipeline_source() {
         let supported = supported_kernels().collect::<Vec<_>>();
-        assert_eq!(supported.len(), EffectKernel::ALL.len());
         assert_eq!(
             supported
                 .iter()

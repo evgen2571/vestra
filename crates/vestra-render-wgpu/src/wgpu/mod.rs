@@ -18,6 +18,7 @@ mod pipeline;
 mod polling;
 mod readback;
 mod readback_state;
+mod registry;
 mod requirements;
 mod resources;
 mod runtime_error;

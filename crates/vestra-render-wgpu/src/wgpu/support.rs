@@ -65,9 +65,7 @@ fn validate_blend_mode(mode: BlendMode) -> Result<(), Diagnostic> {
     }
 }
 
-pub(crate) const fn supports_kernel(_kernel: EffectKernel) -> bool {
-    true
-}
+pub(crate) use super::registry::supports_kernel;
 
 #[cfg(test)]
 mod tests {

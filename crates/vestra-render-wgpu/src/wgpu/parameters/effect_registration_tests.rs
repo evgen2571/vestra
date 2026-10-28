@@ -213,3 +213,167 @@ fn operation_specimens_preserve_packed_records_and_kernel_identity() {
     }
     assert_eq!(kernels.len(), EffectKernel::ALL.len());
 }
+
+pub(super) trait UniformScalarLayout {
+    fn append(base: usize, fields: &mut Vec<(usize, naga::ScalarKind)>);
+}
+
+impl UniformScalarLayout for u32 {
+    fn append(base: usize, fields: &mut Vec<(usize, naga::ScalarKind)>) {
+        fields.push((base, naga::ScalarKind::Uint));
+    }
+}
+
+impl UniformScalarLayout for f32 {
+    fn append(base: usize, fields: &mut Vec<(usize, naga::ScalarKind)>) {
+        fields.push((base, naga::ScalarKind::Float));
+    }
+}
+
+impl<T: UniformScalarLayout, const N: usize> UniformScalarLayout for [T; N] {
+    fn append(base: usize, fields: &mut Vec<(usize, naga::ScalarKind)>) {
+        for index in 0..N {
+            T::append(base + index * std::mem::size_of::<T>(), fields);
+        }
+    }
+}
+
+pub(super) fn rust_scalar_layout<T: UniformScalarLayout>(
+    base: usize,
+    fields: &mut Vec<(usize, naga::ScalarKind)>,
+) {
+    T::append(base, fields);
+}
+
+fn wgsl_scalar_layout(
+    module: &naga::Module,
+    ty: naga::Handle<naga::Type>,
+    base: usize,
+    fields: &mut Vec<(usize, naga::ScalarKind)>,
+) {
+    match &module.types[ty].inner {
+        naga::TypeInner::Scalar(scalar) => {
+            assert_eq!(scalar.width, 4);
+            fields.push((base, scalar.kind));
+        }
+        naga::TypeInner::Vector { size, scalar } => {
+            assert_eq!(scalar.width, 4);
+            for index in 0..*size as usize {
+                fields.push((base + index * 4, scalar.kind));
+            }
+        }
+        naga::TypeInner::Array {
+            base: element,
+            size: naga::ArraySize::Constant(count),
+            stride,
+        } => {
+            for index in 0..count.get() as usize {
+                wgsl_scalar_layout(module, *element, base + index * *stride as usize, fields);
+            }
+        }
+        naga::TypeInner::Struct { members, .. } => {
+            for member in members {
+                wgsl_scalar_layout(module, member.ty, base + member.offset as usize, fields);
+            }
+        }
+        other => panic!("unsupported uniform layout {other:?}"),
+    }
+}
+
+fn assert_shader_abi(
+    kernel: EffectKernel,
+    size: usize,
+    rust_layout: Vec<(usize, naga::ScalarKind)>,
+) {
+    let module = naga::front::wgsl::parse_str(crate::wgpu::registry::kernel_source(kernel))
+        .expect("registered shader parses");
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .expect("registered shader validates");
+    let parameters = module
+        .global_variables
+        .iter()
+        .find_map(|(_, variable)| (variable.name.as_deref() == Some("params")).then_some(variable))
+        .expect("registered effect has a uniform parameter record");
+    assert_eq!(parameters.space, naga::AddressSpace::Uniform);
+    assert_eq!(
+        parameters.binding,
+        Some(naga::ResourceBinding {
+            group: 0,
+            binding: 3
+        })
+    );
+    let naga::TypeInner::Struct { span, .. } = &module.types[parameters.ty].inner else {
+        panic!("{kernel:?} parameters must be a struct");
+    };
+    assert_eq!(size, *span as usize, "{kernel:?} record size");
+    let mut shader_layout = Vec::new();
+    wgsl_scalar_layout(&module, parameters.ty, 0, &mut shader_layout);
+    assert_eq!(
+        rust_layout, shader_layout,
+        "{kernel:?} scalar types and byte offsets"
+    );
+}
+
+macro_rules! registered_parameter_tests {
+    (registered { $($kernel:ident {
+        supported: $supported:literal,
+        parameters: $parameters:ident,
+        label: $label:literal,
+        sources: [$($source:literal),+ $(,)?],
+    }),+ $(,)? } unsupported { $($unsupported:ident),* $(,)? }) => {
+        #[test]
+        fn every_registered_record_matches_its_shader_abi_and_typed_upload() {
+            use bytemuck::Zeroable;
+            let mut covered = std::collections::HashSet::new();
+            $(
+                let kernel = EffectKernel::$kernel;
+                assert!(covered.insert(kernel), "duplicate WGPU registration");
+                assert_eq!(std::mem::align_of::<$parameters>(), 16);
+                assert_shader_abi(
+                    kernel,
+                    std::mem::size_of::<$parameters>(),
+                    $parameters::scalar_layout(),
+                );
+                let parameters = EffectKernelParameters::$kernel($parameters::zeroed());
+                assert_eq!(parameters.kernel(), kernel);
+                let mut arena = FrameParameterArena::new(256, super::super::PARAMETER_RECORD_BYTES);
+                assert_eq!(push_effect_parameters(&mut arena, parameters).unwrap(), 0);
+                assert!(arena.bytes().iter().all(|byte| *byte == 0));
+            )+
+            $(assert!(covered.insert(EffectKernel::$unsupported));
+            assert!(!crate::wgpu::registry::supports_kernel(EffectKernel::$unsupported));)*
+            assert_eq!(covered.len(), EffectKernel::ALL.len());
+            assert!(EffectKernel::ALL.into_iter().all(|kernel| covered.contains(&kernel)));
+        }
+    };
+}
+
+crate::wgpu::registry::effect_kernels!(registered_parameter_tests);
+
+#[test]
+#[should_panic(expected = "scalar types and byte offsets")]
+fn shader_abi_check_rejects_a_same_size_record_with_the_wrong_scalar_kind() {
+    let mut layout = VignetteParameters::scalar_layout();
+    layout[0].1 = naga::ScalarKind::Float;
+    assert_shader_abi(
+        EffectKernel::Vignette,
+        std::mem::size_of::<VignetteParameters>(),
+        layout,
+    );
+}
+
+#[test]
+#[should_panic(expected = "scalar types and byte offsets")]
+fn shader_abi_check_rejects_a_record_with_the_wrong_member_offset() {
+    let mut layout = VignetteParameters::scalar_layout();
+    layout[3].0 += 4;
+    assert_shader_abi(
+        EffectKernel::Vignette,
+        std::mem::size_of::<VignetteParameters>(),
+        layout,
+    );
+}

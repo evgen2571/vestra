@@ -505,3 +505,6 @@ pub(super) fn compile_timed(
 
 #[cfg(test)]
 mod stylization_tests;
+
+#[cfg(test)]
+mod compatibility_tests;

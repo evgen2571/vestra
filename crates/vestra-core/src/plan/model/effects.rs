@@ -56,6 +56,8 @@ macro_rules! visual_effect_catalog {
         tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
     }),+ $(,)?) => {
         compiled_effect! { $internal $internal_compiled; $($kind $compiled),+ }
+        crate::effect_definition::field_contract::check_fields!($internal, $internal_compiled, [], []);
+        $(crate::effect_definition::field_contract::check_fields!($kind, $compiled, [$($field),*], [$($track),*]);)+
         impl CompiledEffect {
             pub(crate) const fn kind(&self) -> crate::effect_definition::VisualEffectKind {
                 match self {

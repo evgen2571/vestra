@@ -1,6 +1,6 @@
 # Effect architecture implementation plan
 
-Status: completed
+Status: in progress — final hardening and integration
 Branch / baseline: `refactor/effect-architecture` / `8fb4847f6d2b85d5a09d09179b638a39652dff78`
 
 ## Objective
@@ -435,3 +435,46 @@ GPUs/APIs, and the 30 existing ignored manual suites are unverified.
 Keep this completed acceptance record for the local feature branch. Lasting
 architecture and contributor instructions are in the permanent guides; remove
 the completed plan before a future authorized merge, following `PLANS.md`.
+
+
+## Final hardening and integration (2026-10-28)
+
+User scope: harden existing Phase 4 at `5433589`, preserve compatibility,
+validate final changes and merge/push to `develop` without a PR. This supersedes
+the earlier implementation-only authorization. Fetched remote: develop remains
+`8fb4847`; main must remain untouched. Preserve untracked `vestra.zip` and the
+existing scratch worktree. CodeGraph still exits 139; direct source inspection
+is the navigation fallback.
+
+### Remaining milestones
+
+- [ ] Compile-time authored/compiled field classification and complete, unique
+  scalar/plain associations; readable negative compilation fixtures, including
+  unknown types, qualified types, serde attributes and palette exceptions.
+- [ ] Adapter-independent effect-check boundary; strict suites retain device,
+  pipeline, submission/readback and rendering assertions (adapter worker owns
+  WGPU test gates, recipes/scripts and testing guide).
+- [ ] Final Rust, explicit Python native rebuild/API/schema, package wheel/sdist,
+  feature isolation, CPU/software/hardware rendering validation.
+- [ ] Controlled baseline/candidate performance samples (read-only performance
+  worker); independent final correctness review and fix confirmed findings.
+- [ ] Update extension guide; transfer enduring knowledge, remove this completed
+  plan per PLANS.md; commit, reconcile remote develop, merge and confirm push.
+
+### Investigation
+
+Authored/compiled/evaluated enums and target identities are generated. Existing
+patterns and typed visitors reject nonexistent/wrong-kind associations, while
+Rust enum definitions reject duplicate names/discriminants (including reserved
+RotationDegrees=72). A declared scalar/plain field omitted from associations can
+compile because visitors use `..`. Existing whole-catalog tests validate declared
+associations/descriptors but do not enumerate all typed fields independently.
+Palette input preserve_authored_track markers intentionally skip normalization
+and transition remapping while remaining in dependency/property visitors.
+Point/timing fields use separate projections; custom temporal/resource hooks
+remain explicit. Hardening will add checks within the existing macro grammar,
+without changing enum shapes, semantics, targets or renderer algorithms.
+
+### Evidence and handoff
+
+Pending final checks; old results above are historical baseline evidence only.

@@ -64,9 +64,39 @@ amount => VignetteAmount = 59: {
 }
 ```
 
-Its descriptor uses `EffectParameterDescriptor::scalar(ScalarPropertyTarget::VignetteAmount)`.
-Plain tracks use the corresponding `PlainTrackTarget` association. Share a
-constraint definition when properties deliberately follow the same rule.
+Declare `amount: ScalarProperty` in `authored`,
+`amount: CompiledScalarProperty` in `compiled`, and its evaluated value in
+`evaluated`. Its descriptor uses
+`EffectParameterDescriptor::scalar(ScalarPropertyTarget::VignetteAmount)`.
+For a plain numeric track, declare `softness: Track<f64>` in both authored and
+compiled fields, then add an entry under `tracks`, for example:
+
+```rust
+softness => VignetteSoftness = 2: {
+    Range {
+        min: Some(0.0), max: Some(2.0),
+        min_exclusive: true, max_exclusive: false,
+    }
+}
+```
+
+Use `EffectParameterDescriptor::plain_track(PlainTrackTarget::VignetteSoftness)`
+for its descriptor. Share a constraint definition when properties deliberately
+follow the same rule.
+
+Every authored and compiled field is checked at compile time against the
+association lists. A scalar or numeric track must appear exactly once, with
+the correct kind. Missing or repeated associations report the effect and field
+name; nonexistent fields, wrong types, duplicate targets and discriminants also
+fail compilation. These checks run during ordinary builds, without a generator.
+The lists derive visitors, target metadata and ordinary normalization/remapping;
+descriptor completeness and semantic compatibility are additionally tested.
+
+[field_types.rs](../../crates/vestra-core/src/effect_definition/field_types.rs)
+explicitly classifies supported Rust types. Qualified scalar/track paths and
+aliases resolve to the same classification. New types require a deliberate
+classification there; there is no blanket rule treating every `Track<T>` as a
+numeric track. Point properties and timing retain their separate projections.
 
 Existing target discriminants preserve observable Rust enum casts. Allocate an
 unused value across the **whole** generated enum: `RotationDegrees = 72` is a
@@ -78,7 +108,7 @@ fields marked `#[preserve_authored_track]` retain their historical transition an
 normalization behavior; do not copy that marker to a new effect by default.
 For typed point/timing projections, use `CompiledPointProperty`/`ActiveInterval`
 or their canonical `crate::plan::`/`crate::project::` paths, with field attributes
-as needed. Arbitrary type aliases are outside this declaration grammar.
+as needed. Point/timing aliases remain outside these specialized projections.
 
 ## Implement semantic decisions
 
@@ -222,10 +252,14 @@ just docs-check
 just check
 ```
 
-`effect-check` runs generation, core/common/CPU tests and WGPU library tests
-excluding `gpu_` integration-test names, and checks included semantic-source
-formatting. Two readback callback tests still request a device when an adapter
-is available; use the pinned development environment for a usable adapter. Use `just fmt` to format. After Rust-only edits, the explicit
+`effect-check` runs generation, core/common/CPU tests and adapter-independent
+WGPU library tests, including shader/ABI/packing/registration contracts. It
+disables the WGPU crate's default `adapter-tests` feature; no graphics adapter,
+Vulkan ICD or EGL environment is required. A test-only guard rejects accidental
+graphics initialization in this suite. Device, submission, readback and rendering
+tests remain enabled by default and are explicitly included in the strict
+software/hardware commands below. Included semantic-source formatting is also
+checked. Use `just fmt` to format. After Rust-only edits, the explicit
 reinstall above ensures Python loads a newly built extension; ordinary uv
 synchronization can reuse its cached native build. Run adapter checks separately:
 

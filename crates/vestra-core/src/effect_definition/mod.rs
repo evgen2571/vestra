@@ -4,7 +4,9 @@ use serde::Serialize;
 
 mod catalog;
 mod descriptors;
+pub(crate) mod field_contract;
 pub(crate) mod field_macros;
+mod field_types;
 mod properties;
 
 pub(crate) use catalog::VisualEffectKind;

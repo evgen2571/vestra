@@ -77,6 +77,16 @@ mod tests {
     };
 
     #[test]
+    fn explicit_preserved_tracks_skip_only_authored_track_traversal() {
+        let field = Track::new(1.0);
+        let mut visits = 0;
+        visit_track!([preserve_authored_track], field, visits += 1);
+        assert_eq!(visits, 0);
+        visit_track!([], field, visits += 1);
+        assert_eq!(visits, 1);
+    }
+
+    #[test]
     fn qualified_timing_fields_keep_their_interval_and_remapping() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),

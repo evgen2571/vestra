@@ -50,6 +50,7 @@ macro_rules! visual_effect_catalog {
         tracks: [$($track:ident => $plain_target:ident = $plain_index:literal: $validation:tt),* $(,)?]
     }),+ $(,)?) => {
         authored_effect! { $($kind [$id] $authored),+ }
+        $(crate::effect_definition::field_contract::check_fields!($kind, $authored, [$($field),*], [$($track),*]);)+
         impl Effect {
             #[must_use]
             pub fn id(&self) -> &str { match self { $(Self::$kind { id, .. } => id),+ } }

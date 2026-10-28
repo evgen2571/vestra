@@ -29,6 +29,7 @@ The internal frame path has these owners, all inside
 | `frame_plan/effects.rs` | Core effect-pass expansion, logical-resource liveness and physical texture-slot binding |
 | `frame_plan/validation.rs` | Texture initialization and logical values, aliasing, operation sequencing and diagnostics |
 | `parameters/` | Typed WGSL-compatible records, packing and the aligned uniform arena; `parameters/frame.rs` encodes records in operation order and prepares particle ranges/uploads |
+| `registry.rs` | One kernel/support/record/label/ordered-shader declaration, projected into shaders, parameter variants, identity, upload and ABI-test coverage |
 | `bind_groups.rs` | Prepared bind-group creation, reuse and lookup, plus binding construction for cached layer textures |
 | `executor.rs` | Parameter upload, command encoding, pipeline dispatch, texture copies and submission metrics |
 
@@ -49,8 +50,21 @@ encoding. Keeping that timing preserves the existing allocation and metric
 scopes. Topology, requirements, pipelines, texture pools and readback retain
 their separate resource responsibilities.
 
-Shader labels and WGSL source mappings are WGPU-owned free functions in
-`pipeline.rs`; kernel identifiers and operation requirements stay backend-neutral.
+Shader labels and ordered static WGSL fragments derive from `registry.rs`;
+`pipeline.rs` prepares supported kernels in common inventory order. Unsupported
+kernels need an explicit backend decision. Registered code, backend support,
+device capabilities and prepared-resource requirements remain separate facts.
+The `effect_parameters!` record macro and registry-driven tests check every
+registered record's size/alignment, named field offsets and scalar types against
+validated WGSL, plus typed upload. Numerical packing and algorithms still need
+their own specimens and rendered-pixel tests. The runtime kernel-mismatch guard
+remains in parameter/frame planning.
+
+The current pipeline/shader counter omits one of nine base entries: with 19
+effect kernels it reports 27 for 28 actual creations. Interpret that metric with
+this limitation; registration order and pipeline reuse do not depend on it.
+
+Kernel identifiers and operation requirements stay backend-neutral.
 Shared shape rasterization prepares immutable pixels consumed by both backends.
 WGPU resource tests run with the WGPU feature alone. Tests comparing CPU and
 WGPU output additionally require CPU.

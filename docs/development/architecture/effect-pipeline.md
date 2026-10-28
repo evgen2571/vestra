@@ -1,7 +1,7 @@
 # Effect pipeline and renderer resource constraints
 
 This is the architecture reference for visual effects, including advanced
-multi-pass shaders. Use [Add an effect](../extending/effect.md) as the
+multi-pass shaders. Use [Add an effect](../adding-effects.md) as the
 implementation checklist, and verify precise behavior against current source.
 
 ## Ownership and data flow
@@ -17,17 +17,18 @@ Python / Rust / canonical JSON authoring
 
 | Responsibility | Implementation |
 | --- | --- |
-| Authoritative effect catalog, scope, stage and temporal policy | `crates/vestra-core/src/effect_definition/catalog.rs` and `mod.rs` |
-| Property targets and constraints | `crates/vestra-core/src/effect_definition/properties.rs` |
+| Authoritative fields, catalog policy, property associations and constraints | `crates/vestra-core/src/effect_definition/catalog_entries.rs` |
+| Catalog and property projections | `crates/vestra-core/src/effect_definition/{catalog,properties,field_macros}.rs` |
 | Serializable descriptors and parameter builders | `crates/vestra-core/src/effect_definition/descriptors.rs` |
 | Canonical effects | `crates/vestra-core/src/project/model/effects.rs` |
 | Attachment and parameter validation | `crates/vestra-core/src/validation/effects/` |
 | Compiled effects and property visitation | `crates/vestra-core/src/plan/model/effects.rs` |
-| Compile/evaluate | `crates/vestra-core/src/plan/compiler/effects.rs`, `plan/evaluation/effects.rs` |
+| Effect-local validation, compile/evaluate, identity, dependency and pass decisions | `crates/vestra-core/src/effects/<effect>.rs` |
+| Static forwarding and optional asset/motion/transform hooks | `crates/vestra-core/src/effects/{dispatch,hooks}.rs` |
 | Logical operations and resource relationships | `crates/vestra-core/src/plan/effect_passes/mod.rs` |
-| Conservative compiled topology and evaluated pass construction | `crates/vestra-core/src/plan/effect_passes/compiled.rs`, `evaluated.rs` |
+| Public pass-planning facade and shared topology helpers | `crates/vestra-core/src/plan/effect_passes/{compiled,evaluated}.rs` |
 | Shared kernel identifiers, operation mapping and required-kernel collection | `crates/vestra-render-common/src/kernel.rs` |
-| Backend capability policy | `crates/vestra-render-cpu/src/cpu/support.rs`, `crates/vestra-render-wgpu/src/wgpu/support.rs` |
+| Backend registration and deliberate kernel support | CPU `cpu/effects.rs`; WGPU `wgpu/registry.rs` |
 | CPU | `crates/vestra-render-cpu/src/cpu/effects.rs` and surface pools |
 | WGPU | `crates/vestra-render-wgpu/src/wgpu/frame_plan/effects.rs`, `parameters/effects.rs`, `pipeline.rs`, `bind_groups.rs`, `executor.rs` |
 | Shader source | `crates/vestra-render-wgpu/src/shaders/effects/` and kernel registration |
@@ -37,10 +38,24 @@ Python / Rust / canonical JSON authoring
 
 Core owns authored/evaluated semantics; backends must not reinterpret defaults.
 The `effect_definition` and `plan` facades preserve existing Rust paths. Keep
-catalog entries authoritative: descriptors derive scalar bounds from property
-targets, and validation and compilation consume those same definitions. The
-compile/evaluate dispatches remain exhaustive matches over authored/compiled
-effects; their private test modules live in adjacent directories.
+catalog entries authoritative: enum variants, wire names, kind/class/stage,
+property identities/constraints and visitors derive from the declaration.
+Semantic functions remain explicit in each effect's module; static exhaustive
+forwarding requires their integration at compile time. Shared compiler,
+evaluation and validation helpers retain their subsystem ownership.
+
+Generic transition remapping and constant-track normalization traverse declared
+scalar/plain-track fields. Ten palette input fields retain their existing
+`preserve_authored_track` exception. Typed point normalization and authored
+active intervals also derive from field declarations. These traversal choices
+are distinct from frame-time identity and resource decisions.
+
+Common owns one kernel/order/private-bit/operation declaration. CPU binds
+support to typed dispatch; WGPU binds support, record type, label and ordered
+source fragments. Backend policy does not replace device-limit or resource
+validation. WGPU record fields/packing, image algorithms and resource lifetimes
+remain explicit backend work. Neither metadata nor runtime registration moves
+into a renderer dependency of core or media.
 
 Prepared image/shape/text pixels, glyph atlases and shared geometry belong to
 common. Backends borrow these resources without duplicating buffers. Gaussian

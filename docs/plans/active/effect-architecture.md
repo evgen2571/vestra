@@ -1,6 +1,6 @@
 # Effect architecture implementation plan
 
-Status: in progress
+Status: completed
 Branch / baseline: `refactor/effect-architecture` / `8fb4847f6d2b85d5a09d09179b638a39652dff78`
 
 ## Objective
@@ -81,10 +81,10 @@ changes, new public effects or unrelated statistics corrections.
 - [x] 4. Consolidate CPU registration without execution lifecycle changes.
 - [x] 5. Complete Python generation and exhaustive/structural checks; preserve
   existing `gen-effects` commands and frozen compatibility fixtures.
-- [ ] 6. Exercise temporary ordinary FilmGrain-style addition through every
+- [x] 6. Exercise temporary ordinary FilmGrain-style addition through every
   layer, remove it, and record actual file/site/generated-file counts. Exercise
   composite and transform cases with no artificial kernel registrations.
-- [ ] 7. Publish practical `docs/development/adding-effects.md`, update existing
+- [x] 7. Publish practical `docs/development/adding-effects.md`, update existing
   architecture/testing links and execute final validation. Commit all changes
   on the requested branch, with no push, merge or PR.
 
@@ -106,88 +106,143 @@ secondary/original surface liveness; typed Rust/WGSL ABI and upload identity.
 
 ## Progress and verification
 
-- Baseline `cargo test -p vestra-core`: 344 unit tests passed, one ignored;
-  one integration test passed; zero doctests.
-- Renderer baseline measurements and characterization tests are being captured
-  in the worker worktree before its registration changes.
-- Python worker is running the frozen pre-generation compatibility tests before
-  expanding generation; frozen fixtures will not be refreshed.
-- Hardware, pixels, packaging, performance and integrated validation pending.
-- Core representations now expand from `catalog_entries.rs`; enums remain in
-  their original defining modules and public property enum discriminants are
-  pinned explicitly. All 345 unit tests, the integration test, six exporter
-  tests, frozen specimen hashes and warnings-denied core Clippy passed.
-- Vignette/Glow/Camera Shake semantic pilots pass core tests and all 175 CPU
-  tests. Full migration follows after this independently verified pilot.
-- Renderer commits integrated through `c8ab41d`. Worker validation: common
-  64 passed/3 ignored, CPU 175 passed/6 ignored, WGPU 150 passed/4 ignored;
-  all three crates Clippy all-targets with warnings denied and formatting pass.
-  Strict WGPU used actual GTX 1650 SUPER / Vulkan / NVIDIA 595.71.05.
-  Mutation probes reject duplicate kernel bits, missing CPU/WGPU rows and
-  swapped same-type uniform fields. These are structural/compile checks,
-  separate from representative packed-value and rendered-pixel checks.
-- Before-render artifacts secured under ignored
-  `target/effect-architecture-baseline/`: exact baseline Python/native package,
-  80 frame requests across ten scenes on each CPU/software/hardware backend,
-  repeated/backward-request assertions, raw RGBA/PNG/hashes and timing samples.
-  Use `before-fit` and `before-hardware-fit`; initial natural-size captures
-  were superseded because Vignette did not visibly affect that small source.
-- Hardware setup: in `nix develop .#wgpu-software`, unset
-  `VESTRA_WGPU_FORCE_FALLBACK` and set
-  `VK_ICD_FILENAMES=/run/opengl-driver/share/vulkan/icd.d/nvidia_icd.json`.
-  Software shell uses llvmpipe/Mesa 26.1.5; never mix its timings with hardware.
+Implementation is committed through `cfe04bc97554d069118cc69b8a082c909304bdcb`.
+The final documentation and acceptance results are committed with this plan.
 
-- Full core migration now derives all three enums, identity/class/stage and
-  scalar/plain-track associations from one declaration. Original type paths,
-  serde attributes and public property discriminants remain unchanged.
-- All effect semantics are local modules. Generic normalization/transition
-  traversal preserves the ten existing palette input exclusions using
-  `#[preserve_authored_track]`. Original-revision scratch captures confirm all
-  46 remapping/normalization specimens; the probe was restored afterwards.
-- Optional Assets/Transform/Motion hooks remove centralized ASCII asset and
-  Camera Shake/Motion Blur evaluator matches. Basic-colour composition dispatch
-  derives from the existing class, with matrix algorithms in effect modules.
-- New whole-catalog property test checks actual compilation constraints, typed
-  visitors and negative keyframe validation for every scalar/plain track.
-  Current core result: 347 unit tests passed/one ignored, one integration passed.
-- Python generation commit `5da2d7f`: 23 generated outputs (previously 19),
-  ordinary new scalar effects need no Python override; all 332 frozen contract
-  cases pass. Stable integrated Python/native packaging checks remain pending.
-- Included semantic sources receive explicit rustfmt checks in fmt/check recipes;
-  `just effect-check` combines generation, core/common/CPU tests and WGPU tests
-  excluding adapter-dependent `gpu_` names. Strict adapter recipes remain separate.
+### Architecture and compatibility evidence
 
-- Independent whole-branch review found no Critical/Important defect in existing
-  effects. Two extension pitfalls were reproduced and fixed: qualified/attributed
-  point and timing fields, and mandatory mechanical semantic defaults. The two
-  projection regression tests failed before the fix; deleting default functions
-  first produced 84 missing-function compiler errors. Optional declared
-  Dynamic/Modifiers/PassCount/Requirements overrides now derive defaults, removing
-  those 84 forwarding functions. Current core: 349 passed/one ignored plus the
-  integration test; Clippy with warnings denied and generation freshness (six
-  exporter/schema and 19 generator tests) pass. Arbitrary type aliases remain
-  outside the documented typed-field grammar.
-- Actual scratch A/B/C patches and tests are under ignored
-  `target/effect-extension-trials/`: FilmGrain 8 maintained/5 registration sites/
-  8 generated; SoftGlow 2/1/8; TransformDrift 2/1/8. Each adds two test-only files.
-  CPU/NVIDIA Vulkan parity and deterministic repeated frames pass; B reuses four
-  passes/three kernels; C has zero passes/kernels and preserves supported-source
-  restrictions. A's final complete generation recipe/native import gate is still
-  being completed after the final core revision; no temporary effect was shipped.
-- Validation checkpoint before the final review fixes: all 240 CPU/software/
-  hardware RGBA requests and 30 canonical projects matched baseline byte-for-byte;
-  full Python 1205 passed, wheel smoke and fresh source-distribution installation
-  and installed smoke passed. These will be refreshed against the final Rust
-  commit. Ordinary uv sync had reused the old native library: forced
-  `uv sync --locked --extra dev --reinstall-package vestra` is required and now
-  documented for Rust-only edits.
-- The initial broad workspace test was intentionally interrupted (exit 130)
-  after confirmed concurrent linker/Rust build memory pressure on the 15 GiB host.
-  Native release and stale source builds were stopped explicitly; subsequent
-  builds use CARGO_BUILD_JOBS=2. No interrupted check is counted as passed.
-- Paired/ABBA representative CPU timings drifted substantially within both
-  baseline and candidate. Initial apparent slowdowns did not repeat. Raw samples
-  are retained; make neither a performance-neutrality nor a speedup claim.
+- Core pilots (Vignette, Glow, Camera Shake) passed before full migration.
+  All three representations now derive from the catalog in their original
+  defining modules. All effect semantics are local; old central semantic
+  matches and manual property/identity/classification inventories are removed.
+- Optional Assets/Transform/Motion hooks replace the old special evaluator
+  cases. Basic-colour composition derives from the existing class. Default
+  semantic policies derive directly; 84 constant/catalog forwarding functions
+  were removed. Declared override hooks still require implementations.
+- Frozen original-revision specimens cover all 23 existing effects, both static
+  and animated, with serde, compile/evaluate, identity, dependencies, properties
+  and topology. Separate 46-specimen normalization/remapping capture preserves
+  the ten historical palette input exclusions. Neither fixture was regenerated
+  from the replacement architecture.
+- Renderer specimens pin common kernel order/private bits, exact shader labels
+  and composed bytes, and representative packed records. Registry-driven ABI
+  checks cover all 13 record layouts automatically, including previously omitted
+  Analog/Ascii/InputAnalysis. Named offsets, scalar kinds, layout and typed
+  upload are structural checks, not proofs of every packed numerical value.
+- Actual mutation probes reject duplicate kernel bits, missing CPU/WGPU rows,
+  duplicate scalar discriminants, missing transform functions and wrong uniform
+  scalar kinds/offsets. Two qualified/attributed-field regressions were observed
+  failing before the final fix and passing afterwards. Arbitrary type aliases
+  remain outside the documented typed-field grammar.
+- Final independent source review found no confirmed important production bug.
+  It identified missing scratch conformance specimens; those were added and
+  all three full trial recipes now pass.
+
+### Final native and rendering checks
+
+The final Rust source revision `cfe04bc` was force-rebuilt with
+`uv sync --locked --extra dev --reinstall-package vestra`. Loaded native SHA256:
+`adc5ea784da3602de3798cc29fb5167819d2548cf874953732b7271e5ec216ef`.
+Ordinary uv synchronization had reused an old extension; explicit reinstall is
+now documented for Rust-only changes.
+
+| Check against final Rust source | Observed result |
+| --- | --- |
+| CPU original/candidate frame requests | 80/80 byte-identical |
+| llvmpipe Vulkan original/candidate frame requests | 80/80 byte-identical |
+| NVIDIA Vulkan original/candidate frame requests | 80/80 byte-identical |
+| Canonical project values | 30/30 identical |
+| Full Python suite, native import, compileall | 1,205 passed; import/compileall passed |
+| Fresh wheel build/install and installed audio/glyph smoke | Passed |
+| Source archive/current included source comparison | 454 files identical, including 26 semantic modules |
+| Fresh sdist installation outside checkout with isolated Cargo target | Passed; installed audio/glyph smoke passed |
+| Rust/Python formatting and maintained Python lint | Passed |
+| Documentation links | 339 checked, zero missing |
+
+Rendered scenes include source, Vignette, Glow, Gaussian, palette/dither, ASCII,
+Camera Shake, Sharpen and chains, including repeated/backward frame requests.
+The final contact sheet was inspected. Exact requests, canonical values, RGBA,
+PNGs, native hashes and command logs remain under
+`target/effect-architecture-baseline/`; final-native summary is
+`cfe04bc-native-status.json`, pixels are `cfe04bc-comparison.json`.
+Packaging evidence is under `target/effect-architecture-packaging/cfe04bc/`.
+
+The uncached sdist build-requirement download stalled while PyPI was unreachable;
+that attempt was terminated and recorded. The successful retry used cached
+build requirements with `uv --offline`, the same current archive, a fresh venv,
+an external working directory and an isolated Cargo target. Current engine
+source was compiled; a previous installed package was not reused.
+
+### Rust, adapters and isolation
+
+Final production checks passed in `nix develop .#wgpu-software` with
+`CARGO_BUILD_JOBS=2`:
+
+| Command | Observed result |
+| --- | --- |
+| `just check` | Passed: formatting, all-features workspace check, all-targets warnings-denied Clippy, 1,157 workspace Rust tests, doctest targets, six exporter/schema tests, 19 generator tests, schema and docs freshness |
+| `cargo build --locked --workspace --all-features` | Passed |
+| `cargo build --locked --workspace --all-features --examples` | Passed |
+| `just effect-check` | Passed, including 122 focused WGPU library tests |
+| `just wgpu-software` | Passed on llvmpipe Vulkan, including workspace and strict adapter-dependent tests |
+| `just wgpu-hardware` | Passed on GTX 1650 SUPER Vulkan, including workspace, strict renderer tests and the CLI encoded-frame regression |
+
+Thirty existing ignored Rust tests remain unexecuted: manual benchmarks,
+concurrent lifecycle stress, exhaustive RGB packing and explicit 1080p/4K
+correctness/resource suites. No tests were newly ignored and no assertions were
+weakened. Other operating systems, graphics APIs and GPU vendors remain
+unverified. All three feature-isolated facade tests passed in separate fresh
+Cargo target directories: backend-free four tests, CPU-only four tests, WGPU-only two tests.
+Compiler artifact inventories contain 139, 140 and 177 targets respectively.
+CPU-only has its CPU implementation and no WGPU/Naga artifact; WGPU-only has
+its WGPU implementation and no CPU artifact; backend-free has neither. Presence
+as well as exclusion was asserted. Commands use `cargo test --locked -p
+vestra-render --no-default-features`, adding `--features cpu` or `wgpu` and
+`--message-format=json-render-diagnostics`. Isolated debug symbols are disabled;
+assertions remain enabled. Exact commands, environments, exit codes, compiler
+JSON and artifact inventories are under
+`target/effect-architecture-validation/`; `final-rust-results.json` records all
+13 final command stages, including four timing runs, with exit code zero.
+
+Dependency graph checks pass for CPU-only, WGPU-only, backend-free, media and
+core selections. CPU selects no WGPU/Naga package; WGPU selects no CPU
+implementation; core/media select no renderer. Logs and assertions are under
+`target/effect-architecture-validation/`. Isolated compiler artifacts are
+collected in addition to these graphs.
+
+Actual hardware is NVIDIA GeForce GTX 1650 SUPER, discrete GPU, Vulkan,
+NVIDIA driver 595.71.05. Software is llvmpipe, Mesa 26.1.5 / LLVM 21.1.8.
+The default pinned software shell discovers llvmpipe; hardware runs must unset
+`VESTRA_WGPU_FORCE_FALLBACK` and use
+`VK_ICD_FILENAMES=/run/opengl-driver/share/vulkan/icd.d/nvidia_icd.json`.
+Desktop GL 3.3 was unusable and is not a substitute for Vulkan validation.
+Toolchain: Rust/Cargo 1.95.0, FFmpeg 8.1.2, Python 3.13.14, Linux/Nix.
+
+### Performance and resource limits
+
+After all compilation finished, final-source ABBA timings used the frozen
+original native library and the rebuilt `cfe04bc` library, CPU 640x360, 24 warmup
+frames, seven samples of eight frame requests. Order was original A3, candidate
+B3, candidate B4, original A4; native hashes are recorded in every JSON file.
+
+| Workload | Original A3 / A4 medians, ms/frame | Final B3 / B4 medians, ms/frame |
+| --- | ---: | ---: |
+| vignette | 30.20, 27.68 | 25.14, 35.58 |
+| glow | 37.98, 38.68 | 39.11, 47.92 |
+| gaussian_blur | 33.54, 37.98 | 34.28, 42.43 |
+| chain | 53.42, 48.55 | 51.07, 54.91 |
+
+Run-to-run variation remains substantial, including within the same candidate.
+Earlier paired/ABBA samples also drifted and initial apparent slowdowns did not
+repeat. The measurements do not justify a performance-neutrality or speedup
+claim; they cannot exclude a material regression. Raw distributions and earlier
+CPU/NVIDIA timings remain under `target/effect-architecture-baseline/`.
+
+The refactor preserves explicit algorithm/packing/resource work and static
+forwarding. The existing pipeline-statistics discrepancy remains characterized:
+28 actual pipeline creations versus 27 reported. This unrelated counter bug was
+not silently corrected. Structural tests and pixel specimens supplement actual
+resource/fallback tests; none establish every numerical combination or device.
 
 ## Decisions and discoveries
 
@@ -196,9 +251,187 @@ secondary/original surface liveness; typed Rust/WGSL ABI and upload identity.
 - 2026-10-28: Existing transition/normalization visitors intentionally need exact
   characterization: palette input fields are absent from some legacy visitors.
   Do not change those semantics during mechanical generation.
+- 2026-10-28: Resumed final acceptance at `cfe04bc`. No old validation jobs
+  remained. Serialize native, scratch-trial and workspace builds with two Cargo
+  jobs; read-only review and documentation may proceed concurrently.
+- Final dependency graphs pass for CPU-only, WGPU-only, backend-free, media and
+  core selections. CPU selects no WGPU/Naga package; WGPU selects no CPU
+  implementation; core/media select no renderer. Logs are under
+  `target/effect-architecture-validation/dependencies-*.txt`. Final isolated compiler artifacts
+  additionally prove these backend exclusions.
+- Documentation link check: 339 local links in 95 Markdown files, zero missing.
+
+## Workflow measurements
+
+The actual temporary implementations and their complete patches/path inventories
+are retained in `target/effect-extension-trials/`. They are not shipped effects.
+"Maintained files" excludes generated files, tests and documentation. A manual
+registration site is an inventory, association, visitor or import/export list;
+algorithm bodies, validation, packing and semantic topology are implementation,
+not additional registration sites. Fields within one declaration count once.
+
+| Actual post-refactor trial | Maintained files | Registration sites | Generated files changed | Test-only files |
+| --- | ---: | ---: | ---: | ---: |
+| FilmGrain: new CPU and WGSL algorithm, amount and seed | 8 | 5 | 8 | 5 |
+| SoftGlow: composition using existing kernels | 2 | 1 | 8 | 4 |
+| TransformDrift: local-time transform hook | 2 | 1 | 8 | 4 |
+
+FilmGrain's eight maintained files are the catalog, local semantic module,
+logical-operation enum, common kernel declaration, CPU algorithm/dispatch,
+WGPU registry, WGPU record/packing, and WGSL source. Its five registration sites
+are the catalog row, logical-operation variant, common kernel row, CPU row and
+WGPU row. A separately organized CPU module adds its ordinary module declaration;
+the trial keeps its small algorithm in the existing CPU effects file.
+
+SoftGlow and TransformDrift edit only the catalog and their local module.
+SoftGlow emits four passes using three existing kernels and retains the original.
+TransformDrift applies its own transform with zero kernels/passes and no central
+evaluator edit. It preserves the existing Image/Shape/Text/Group source policy.
+
+Each trial changes eight generated files out of 23 managed artifacts: high-level
+class/stub, advanced handles, three export files, schema and parameter reference.
+The earlier generator manages 19 files. Neither count means all generated files
+change for every effect. The ordinary trial has five test-only paths; composite/transform each have
+four. These include the new rendering test, exporter/catalog-count expectations,
+whole-catalog conformance cases and, for a new kernel, shader/packed-record
+fixtures. Common kernel.rs also has ordinary-trial test edits but is already
+counted as maintained. Existing frozen rows are retained. Distinct changed paths
+are 21 ordinary and 14 composite/transform; the measured implementation footprint
+excludes these necessary test edits explicitly.
+
+The historical audit's approximately 27-file estimate is not a recovered
+measurement: `REPORT(6).md` was unavailable. The following before counts come
+from independently counting source integration points at `8fb4847`; they are
+hypothetical additions, not executed old-architecture implementations. After
+counts are actual patches and commands. The matched ordinary route uses scalar
+amount plus integer seed and an inline CPU algorithm, like the FilmGrain trial.
+
+| Scenario | Before maintained files / sites | After maintained files / sites | Generated files changed before / after |
+| --- | ---: | ---: | ---: |
+| Ordinary, scalar-only, new CPU/WGSL kernel | 26 / 33 | 8 / 5 | 5 / 8 |
+| Composite, reusing existing operations | 18 / 20 | 2 / 1 | 5 / 8 |
+| Transform, scalar-only, own algorithm module | 21 / 22 | 2 / 1 | 5 / 8 |
+
+A Vignette-shaped effect also has plain-track fields: its inline-CPU before
+route is 26 files / 36 sites. A dedicated CPU module adds two files / one site
+to either ordinary before route (28 / 34 scalar-only; 28 / 37 Vignette-shaped).
+These differences explain the audit's approximate file estimate without
+presenting unlike scenarios as exact equivalents.
+
+Before ordinary maintained files: 13 core files, common kernel file, CPU effects
+file, five WGPU files, and six Python/metadata files. Scalar-only core has 13
+registration sites (catalog, authored kind, property enum/name, authored enum/id,
+compiled enum/kind/scalar visitor, evaluated enum, normalization/remapping,
+logical operation). Common has four, CPU one, WGPU seven, Python eight.
+Plain-track enum/name/visitor add three sites for the Vignette-shaped route.
+Constraint implementation bodies and typed Python class implementation are
+semantic work, consistently excluded from registration-site counts.
+
+Before generated changes are high-level module/stub, advanced collection
+helpers, schema and parameter reference. The Python module and advanced file
+also contain handwritten edits in that architecture, so maintained/generated
+path sets overlap; do not sum them as distinct files. After these mechanical
+sections and exports are generated. Optional Python ergonomics remain explicit.
+
+Before command routes are inferred from the existing recipes, not measured by
+running a new baseline effect: `just gen-effects`, `just gen-effects-check`,
+focused crate tests, native rebuild/Python tests and strict adapters. After
+trials actually run `just gen-effects`, full `just effect-check` (including
+`gen-effects-check`), strict hardware facade rendering and focused Clippy;
+A additionally rebuilds/imports the native package and checks generated exports,
+signatures, helpers, canonical lowering, validation, CPU pixels and alpha. Each
+full trial recipe reports six exporter/schema tests, 19 generator tests, core
+349 plus one integration, common 64, CPU 175 and focused WGPU 122 passing. All
+three final patches/measurements are based on `cfe04bc` and retain the original
+`de5f036` trial artifacts separately. Scratch is restored clean at `cfe04bc`,
+including removal of temporary native libraries from its Python source tree.
+`just effect-check` now combines generation and core/common/CPU/focused
+WGPU tests; it does not replace native or strict adapter verification.
+
+Before exhaustive operation matches caught omitted operation cases, but common
+inventory/bit lists, unconditional backend support, shader/parameter/upload
+lists and Python exports were independent. After missing catalog modules or
+required semantic functions fail compilation; operation/kernel/backend matches
+are exhaustive, duplicate bits fail constant assertions, registered uniforms
+receive structural ABI/upload checks, and generation freshness covers exports.
+Actual mutations rejected duplicate scalar target 72, missing WGPU registration
+and a missing transform hook. Property validation and numerical correctness still
+need tests; the macros cannot prove an algorithm correct.
+
+### Trial environment corrections
+
+The first ordinary full recipe hit EGL BadAccess/device loss in two existing
+readback callback tests under the host's default GLES path. The full pinned
+Vulkan software recipe passed with those tests enabled. Consequently the guide
+calls this a focused WGPU recipe, not an adapter-independent guarantee.
+
+The worker's native environment mixed a CPython 3.12 venv with Nix's 3.13
+sysconfig overrides. The build succeeded but import failed; selecting the
+interpreter and clearing inherited Python sysconfig overrides produced the
+correct 3.12 extension, and native smoke then passed. The smoke expectation
+was also corrected to retain the existing normalized `keyframes: []` snapshot
+shape. Original failure/retry logs are retained. Root's full package checks used
+matching Python 3.13 and were unaffected. No production workaround was added.
+
+## Compatibility audit
+
+| Contract | Result and evidence |
+| --- | --- |
+| Rust public types/paths/enum construction and pattern shapes | Retained in original defining modules; workspace build/tests and frozen compiled/evaluated specimens pass |
+| Canonical JSON | Frozen original serde/project values match; defaults, unknown fields, nulls and timing remain covered by existing suites |
+| Python authoring API | Frozen imports, signatures, inheritance, slots, exports, lowering and validation timing pass within the 1,205-test native suite |
+| Canonical schema | Byte-unchanged from baseline; generation and schema-validation/freshness checks pass |
+| CPU/WGPU frames | All 240 original/final requests match their corresponding backend baseline byte-for-byte; actual reference/contact frames inspected |
+| Shader labels/order/composed bytes | Frozen tests pass; WGSL source directory itself is byte-unchanged from baseline |
+| GPU records and upload | Existing layouts/packed specimens preserved; all registered layouts receive named-offset/scalar-kind/WGSL/typed-upload checks |
+| Backend selection/fallback/diagnostics | Existing facade and diagnostic suites pass; facade selection source is unchanged |
+| Resource lifetime and pipeline behavior | Existing planning, submission/readback/cache/resource tests pass; executor, frame-plan and readback source unchanged; 28-created/27-reported counter discrepancy preserved |
+| Ownership/dependencies | No new Cargo dependency or manifest changes; core/media graphs contain no renderer; feature-isolated compilation checked separately |
+
+These are source, structural and specimen guarantees with actual rendered
+coverage, not proofs of every parameter combination, resolution or adapter.
+There is no intended compatibility exception or shipped new public effect.
+
+## Local Git sequence
+
+All work stays on `refactor/effect-architecture`, based on fetched `8fb4847`.
+The implementation commits are:
+
+```text
+cebde57 docs: record effect architecture execution plan
+f3e213a test(effects): freeze core compatibility specimens
+39c7b5b refactor(core): derive effect models and property associations
+8f167f0 test(effects): capture renderer registration compatibility
+d583713 refactor(render): declare kernel inventory and operation mappings once
+b780eeb refactor(wgpu): unify shader parameter and upload registration
+62b77b7 refactor(cpu): bind capability decisions to typed effect dispatch
+c8ab41d test(effects): enforce named uniform and exhaustive registry checks
+01fd919 refactor(core): pilot effect-local semantic implementations
+5da2d7f refactor(python): derive effect handles and exports
+de5f036 refactor(core): derive traversal and dispatch to effect-local semantics
+720f9eb refactor(core): derive canonical effect tags from catalog ids
+cfe04bc refactor(core): derive semantic defaults and harden field traversal
+```
+
+The final guide/acceptance-record commit follows this sequence on the same
+branch; its exact SHA is reported in the final handoff. No push, pull request,
+merge or protected-branch modification was performed. There are two worktrees;
+the scratch worktree is restored clean at `cfe04bc`.
 
 ## Completion / handoff
 
-Not complete. All milestone checkboxes require evidence, not implementation intent.
-Retain this active plan during local branch work; transfer lasting knowledge to
-permanent docs and remove the completed plan before a future authorized merge.
+All eight milestones are complete. Implementation, extension exercises,
+compatibility checks, documentation and local commits are finished; no temporary
+effect ships. Final branch/HEAD and clean working-tree status are reported in
+the handoff. No push, PR or merge is authorized or performed.
+
+Remaining limits: typed point/interval field traversal recognizes the documented
+bare/canonical paths, not arbitrary aliases; special algorithms, point temporal
+policies, resource preparation and GPU packing remain explicit semantic work;
+the bounded pass IR is unchanged and kernel bits remain limited to 64. The old
+pipeline counter discrepancy remains. Performance neutrality, other platforms/
+GPUs/APIs, and the 30 existing ignored manual suites are unverified.
+
+Keep this completed acceptance record for the local feature branch. Lasting
+architecture and contributor instructions are in the permanent guides; remove
+the completed plan before a future authorized merge, following `PLANS.md`.

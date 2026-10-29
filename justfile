@@ -132,6 +132,12 @@ showcase-style:
 comparison-style:
     uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
     uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py
+
+# Collector contracts without building the project/native Python extension.
+collector-test:
+    uv run --no-project --python 3.13 --with pytest --with psutil==7.2.2 --with Pillow==11.3.0 python -m pytest tests/test_benchmark_collector.py tests/test_benchmark_compare.py tests/test_moviepy_comparison.py
 
 # Script regression tests; Pillow is isolated from Vestra's runtime dependencies.
 comparison-test:

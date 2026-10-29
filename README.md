@@ -74,6 +74,8 @@ See the contributing guide above and [testing](https://github.com/evgen2571/vest
 for setup and verification details. Coding agents can start with
 [AGENTS.md](AGENTS.md); complex implementation work follows [PLANS.md](PLANS.md).
 
+To contribute performance results, follow the [portable benchmark collection guide](benchmarks/COLLECTING.md).
+
 ## License
 
 [MIT](https://github.com/evgen2571/vestra/blob/main/LICENSE).

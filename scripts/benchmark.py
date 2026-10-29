@@ -7,8 +7,6 @@ import math
 import os
 import subprocess
 import sys
-import time
-import signal
 from datetime import datetime
 from pathlib import Path
 from statistics import median
@@ -37,6 +35,7 @@ def source_identity() -> str:
                     "examples/effects/",
                     "python/",
                     "benchmarks/comparisons/",
+                    "benchmarks/collector/",
                 )
             )
             or name
@@ -49,6 +48,8 @@ def source_identity() -> str:
                 "uv.lock",
                 "rust-toolchain.toml",
                 "scripts/benchmark.py",
+                "scripts/benchmark_process.py",
+                "scripts/collect-benchmarks.py",
                 "benchmarks/suites.json",
             }
         ):
@@ -162,85 +163,12 @@ def measure_process(
     env: dict | None = None,
     interval: float = 0.02,
 ) -> dict:
-    """Time a worker and sample simultaneous process-tree RSS, including FFmpeg.
+    """Use the portable process-tree sampler shared with collection."""
+    from scripts.benchmark_process import measure_process as portable_measure
 
-    RSS is a sampled lower bound, not a sum of independent process high-water
-    marks. On Unix, waited child CPU time includes reaped descendants.
-    """
-    try:
-        import psutil
-    except ImportError:
-        psutil = None
-    try:
-        import resource
-
-        before = resource.getrusage(resource.RUSAGE_CHILDREN)
-    except ImportError:
-        resource = None
-        before = None
-    peak = None
-    memory_complete = psutil is not None
-    timed_out = False
-    started = time.perf_counter()
-    with log_path.open("w") as log:
-        process = subprocess.Popen(
-            command,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            env=env,
-            start_new_session=os.name == "posix",
-        )
-        while process.poll() is None:
-            if psutil is not None:
-                try:
-                    parent = psutil.Process(process.pid)
-                    rss = 0
-                    for member in [parent, *parent.children(recursive=True)]:
-                        try:
-                            rss += member.memory_info().rss
-                        except psutil.NoSuchProcess:
-                            pass
-                    peak = max(peak or 0, rss)
-                except psutil.NoSuchProcess:
-                    pass
-                except psutil.Error:
-                    memory_complete = False
-            if time.perf_counter() - started >= timeout:
-                timed_out = True
-                if os.name == "posix":
-                    try:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass  # The worker finished between polling and timeout.
-                else:
-                    process.kill()
-                break
-            time.sleep(interval)
-        process.wait()
-    wall_ms = (time.perf_counter() - started) * 1000
-    cpu_seconds = None
-    if resource is not None:
-        after = resource.getrusage(resource.RUSAGE_CHILDREN)
-        cpu_seconds = (
-            after.ru_utime + after.ru_stime - before.ru_utime - before.ru_stime
-        )
-    return {
-        "returncode": process.returncode,
-        "timed_out": timed_out,
-        "wall_ms": wall_ms,
-        "peak_tree_rss_bytes": peak if memory_complete else None,
-        "cpu_seconds": cpu_seconds,
-        "cpu_percent": cpu_seconds / (wall_ms / 1000) * 100
-        if cpu_seconds is not None
-        else None,
-        "rss_sampling_interval_ms": interval * 1000,
-        "memory_method": "psutil simultaneous process-tree RSS"
-        if memory_complete
-        else None,
-        "cpu_method": "RUSAGE_CHILDREN delta (one core = 100%)"
-        if resource is not None
-        else None,
-    }
+    return portable_measure(
+        command, log_path, timeout=timeout, env=env, interval=interval
+    )
 
 
 def main() -> None:
@@ -405,7 +333,7 @@ def run_suite(args: argparse.Namespace) -> None:
         environment = {
             key: value
             for key, value in os.environ.items()
-            if not key.startswith("VESTRA_BENCH_")
+            if not key.startswith("VESTRA_BENCH_") or key == "VESTRA_BENCH_VALIDATE"
         }
         environment.update(
             {

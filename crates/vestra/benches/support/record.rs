@@ -61,6 +61,7 @@ pub(super) fn write(
     warmups: usize,
     project: &Value,
     samples: &[Sample],
+    validation: Option<Value>,
 ) {
     // Content identities survive temporary directories and detect edited assets.
     let mut workload = project.clone();
@@ -95,7 +96,11 @@ pub(super) fn write(
             "dirty": !command("git", &["status", "--porcelain"]).is_empty(),
             "cpu": super::cpu_model(),
             "logical_threads": std::thread::available_parallelism().map(std::num::NonZeroUsize::get).unwrap_or(1),
-            "os": command("uname", &["-srm"]),
+            "os": if cfg!(windows) {
+                format!("{} {}", command("cmd", &["/c", "ver"]), std::env::consts::ARCH)
+            } else {
+                command("uname", &["-srm"])
+            },
             "rustc": command("rustc", &["-Vv"]),
             "ffmpeg": command("ffmpeg", &["-version"]),
             "features": {"cpu": cfg!(feature = "cpu"), "wgpu": cfg!(feature = "wgpu")},
@@ -103,10 +108,106 @@ pub(super) fn write(
             "variables": environment_variables,
         },
         "samples": samples,
+        "validation": validation,
     });
     fs::write(
         path,
         serde_json::to_vec_pretty(&record).expect("serialize benchmark record"),
     )
     .expect("write benchmark record");
+}
+
+/// Collector opt-in correctness work, always after measured renders and before
+/// the temporary output directory is dropped. Legacy timings are unaffected.
+pub(super) fn validate_media(
+    directory: &Path,
+    expected: &vestra::RenderResult,
+    count: usize,
+) -> Value {
+    let mut evidence = Vec::new();
+    for entry in fs::read_dir(directory).expect("benchmark output directory") {
+        let path = entry.expect("output entry").path();
+        if path.extension().is_none_or(|extension| extension != "mp4") {
+            continue;
+        }
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-count_frames",
+                "-show_streams",
+                "-of",
+                "json",
+            ])
+            .arg(&path)
+            .output()
+            .expect("probe published benchmark output");
+        assert!(probe.status.success(), "output probe failed");
+        let data: Value = serde_json::from_slice(&probe.stdout).expect("probe JSON");
+        let videos: Vec<_> = data["streams"]
+            .as_array()
+            .expect("streams")
+            .iter()
+            .filter(|stream| stream["codec_type"] == "video")
+            .collect();
+        assert_eq!(videos.len(), 1, "one published video stream");
+        let video = videos[0];
+        assert_eq!(video["codec_name"], "h264");
+        assert_eq!(video["pix_fmt"], "yuv420p");
+        assert_eq!(video["width"], expected.width);
+        assert_eq!(video["height"], expected.height);
+        assert_eq!(
+            video["nb_read_frames"]
+                .as_str()
+                .expect("frame count")
+                .parse::<u64>()
+                .expect("integer frame count"),
+            expected.total_frames
+        );
+        let rate = |text: &str| {
+            let (numerator, denominator) = text.split_once('/').unwrap_or((text, "1"));
+            numerator.parse::<f64>().expect("numeric FPS numerator")
+                / denominator.parse::<f64>().expect("numeric FPS denominator")
+        };
+        assert!(
+            (rate(video["avg_frame_rate"].as_str().expect("FPS")) - rate(&expected.frame_rate))
+                .abs()
+                < 1e-9,
+            "published frame rate"
+        );
+        let duration = video["duration"]
+            .as_str()
+            .expect("duration")
+            .parse::<f64>()
+            .expect("numeric duration");
+        assert!(
+            (duration - expected.duration).abs() < 0.002,
+            "published duration"
+        );
+        assert_eq!(
+            data["streams"]
+                .as_array()
+                .expect("streams")
+                .iter()
+                .any(|stream| stream["codec_type"] == "audio"),
+            expected.audio_present
+        );
+        let decode = Command::new("ffmpeg")
+            .args(["-v", "error", "-xerror", "-nostdin", "-i"])
+            .arg(&path)
+            .args(["-map", "0:v:0", "-f", "null", "-"])
+            .output()
+            .expect("decode published benchmark output");
+        assert!(decode.status.success(), "published output decode failed");
+        evidence.push(
+            json!({"filename": path.file_name().expect("filename").to_string_lossy(),
+            "video": video, "full_decode": true}),
+        );
+    }
+    assert_eq!(
+        evidence.len(),
+        count,
+        "validate every measured and warmup output"
+    );
+    json!({"status": "passed", "outputs": evidence})
 }

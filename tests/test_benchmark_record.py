@@ -34,11 +34,13 @@ def test_smoke_suite_records_every_workload(
             str(output),
         ],
         check=True,
+        env={**os.environ, "VESTRA_BENCH_VALIDATE": "1"},
     )
     suite = json.loads((output / "suite.json").read_text())
     assert len(suite["provenance"]["executable_sha256"]) == 64
     assert len(suite["provenance"]["source_sha256"]) == 64
     assert len(suite["records"]) == expected_count
+    assert all(record["validation"]["status"] == "passed" for record in suite["records"])
     expected = (
         {"masks", "mattes", "particles", "nested_groups"}
         if suite_name == "smoke"
@@ -127,9 +129,14 @@ def test_modern_workloads_render(tmp_path: Path, scenario: str, frames: int) -> 
             "VESTRA_BENCH_WARMUPS": "0",
             "VESTRA_BENCH_SAMPLES": "1",
             "VESTRA_BENCH_REPORT": str(report),
+            "VESTRA_BENCH_VALIDATE": "1",
         },
     )
-    result = json.loads(report.read_text())["samples"][0]["result"]
+    record = json.loads(report.read_text())
+    assert record["validation"]["status"] == "passed"
+    assert len(record["validation"]["outputs"]) == 1
+    assert record["validation"]["outputs"][0]["full_decode"] is True
+    result = record["samples"][0]["result"]
     assert result["total_frames"] == frames
     assert result["render_backend"] == "cpu"
     if scenario in {"production_edit", "video_heavy"}:

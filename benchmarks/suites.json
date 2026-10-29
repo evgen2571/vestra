@@ -222,6 +222,20 @@
         "palette_video",
         "oklab_palette_video"
       ]
+    },
+    "community-v1": {
+      "width": 640,
+      "height": 360,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "single_video",
+        "mixed_dynamic",
+        "video_heavy",
+        "masks",
+        "mattes",
+        "production_edit"
+      ]
     }
   }
 }

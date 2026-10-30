@@ -102,6 +102,14 @@ impl CpuBackend {
         let (completion_tx, completions) = mpsc::sync_channel(worker_count);
         let mut workers = Vec::with_capacity(worker_count);
         for (worker_id, &worker_cache_budget) in worker_cache_budgets.iter().enumerate() {
+            tracing::debug!(
+                target: "vestra.render.cpu",
+                worker_id,
+                crop_cache_budget_bytes = worker_cache_budget.crop_cache_budget_bytes,
+                static_cache_budget_bytes = worker_cache_budget.static_cache_budget_bytes,
+                video_cache_budget_bytes = worker_cache_budget.video_cache_budget_bytes,
+                "CPU worker cache configured"
+            );
             let (command_tx, command_rx) = mpsc::sync_channel(1);
             let worker_plan = plan.clone();
             let worker_decoded = Arc::clone(&decoded);

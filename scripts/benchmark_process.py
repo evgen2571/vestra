@@ -72,7 +72,23 @@ def measure_process(
     except ImportError:
         psutil = None
     peak = None
-    complete = psutil is not None
+    complete = dict.fromkeys(("memory", "cpu", "descriptors"), psutil is not None)
+    errors = {}
+    peak_handles = None
+
+    def failed(metric, pid, error):
+        complete[metric] = False
+        key = (metric, pid, type(error).__name__, str(error))
+        if key not in errors:
+            errors[key] = dict(
+                metric=metric,
+                pid=pid,
+                error=type(error).__name__,
+                message=str(error),
+                count=0,
+            )
+        errors[key]["count"] += 1
+
     cpu_totals = {}
     timed_out = False
     disk_exhausted = False
@@ -101,13 +117,25 @@ def measure_process(
                         parent = psutil.Process(process.pid)
                         members = [parent, *parent.children(recursive=True)]
                         rss, processes, handles = 0, len(members), 0
+                        memory_ok = descriptors_ok = True
                         for member in members:
                             try:
                                 rss += member.memory_info().rss
+                            except psutil.NoSuchProcess:
+                                pass
+                            except psutil.Error as error:
+                                failed("memory", member.pid, error)
+                                memory_ok = False
+                            try:
                                 cpu = member.cpu_times()
                                 cpu_totals[(member.pid, member.create_time())] = (
                                     cpu.user + cpu.system
                                 )
+                            except psutil.NoSuchProcess:
+                                pass
+                            except psutil.Error as error:
+                                failed("cpu", member.pid, error)
+                            try:
                                 handles += (
                                     member.num_handles()
                                     if os.name == "nt"
@@ -115,11 +143,22 @@ def measure_process(
                                 )
                             except psutil.NoSuchProcess:
                                 pass
-                        peak = max(peak or 0, rss)
+                            except psutil.Error as error:
+                                failed("descriptors", member.pid, error)
+                                descriptors_ok = False
+                        if memory_ok:
+                            peak = max(peak or 0, rss)
+                        else:
+                            rss = None
+                        if descriptors_ok:
+                            peak_handles = max(peak_handles or 0, handles)
+                        else:
+                            handles = None
                     except psutil.NoSuchProcess:
                         pass
-                    except psutil.Error:
-                        complete = False
+                    except psutil.Error as error:
+                        for metric in complete:
+                            failed(metric, process.pid, error)
                         rss = handles = None
                 progress = None
                 if progress_path:
@@ -145,7 +184,7 @@ def measure_process(
                             shutil.disk_usage(media_directory).free < minimum_free_bytes
                         )
                 if series:
-                    cpu_seconds = sum(cpu_totals.values()) if complete else None
+                    cpu_seconds = sum(cpu_totals.values()) if complete["cpu"] else None
                     sample_seconds = elapsed - previous_elapsed
                     frame = (progress or {}).get("frame")
                     series.write(
@@ -188,21 +227,26 @@ def measure_process(
         if series:
             series.close()
     wall_ms = (time.perf_counter() - started) * 1000
-    cpu_seconds = sum(cpu_totals.values()) if complete and cpu_totals else None
+    cpu_seconds = sum(cpu_totals.values()) if complete["cpu"] and cpu_totals else None
     return dict(
         command=[str(c) for c in command],
         returncode=process.returncode,
         timed_out=timed_out,
         disk_exhausted=disk_exhausted,
         wall_ms=wall_ms,
-        peak_tree_rss_bytes=peak if complete else None,
+        peak_tree_rss_bytes=peak if complete["memory"] else None,
+        peak_handles_or_fds=peak_handles if complete["descriptors"] else None,
+        measurement_complete=complete,
+        measurement_errors=list(errors.values()),
         cpu_seconds=cpu_seconds,
         cpu_percent=cpu_seconds / (wall_ms / 1000) * 100
         if cpu_seconds is not None
         else None,
         rss_sampling_interval_ms=interval * 1000,
-        memory_method="psutil simultaneous process-tree RSS" if complete else None,
+        memory_method="psutil simultaneous process-tree RSS"
+        if complete["memory"]
+        else None,
         cpu_method="psutil observed process-tree CPU estimate; one core = 100%"
-        if complete
+        if complete["cpu"]
         else None,
     )

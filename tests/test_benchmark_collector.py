@@ -657,3 +657,72 @@ def test_real_collector_end_to_end(tmp_path):
                 )
             )
             assert progress["frame"] == progress["total_frames"] == 90
+
+
+@pytest.mark.parametrize("failed_metric", ["descriptors", "memory", "cpu"])
+def test_resource_query_failures_are_independent(monkeypatch, tmp_path, failed_metric):
+    psutil = pytest.importorskip("psutil")
+    from types import SimpleNamespace
+
+    class Member:
+        pid = 12345
+
+        def children(self, recursive):
+            return []
+
+        def query(self, metric, value):
+            if metric == failed_metric:
+                raise psutil.AccessDenied(self.pid, msg=f"{metric} denied")
+            return value
+
+        def memory_info(self):
+            return self.query("memory", SimpleNamespace(rss=4096))
+
+        def cpu_times(self):
+            return self.query("cpu", SimpleNamespace(user=0.02, system=0.01))
+
+        def create_time(self):
+            return 1.0
+
+        def num_fds(self):
+            return self.query("descriptors", 7)
+
+        num_handles = num_fds
+
+    monkeypatch.setattr(psutil, "Process", lambda pid: Member())
+    sample = measure_process(
+        [sys.executable, "-c", "import time; time.sleep(.08)"],
+        tmp_path / "worker.log",
+        timeout=5,
+        series_path=tmp_path / "resources.jsonl",
+    )
+    assert sample["returncode"] == 0
+    assert sample["peak_tree_rss_bytes"] == (
+        None if failed_metric == "memory" else 4096
+    )
+    assert sample["cpu_seconds"] == (None if failed_metric == "cpu" else 0.03)
+    assert sample["measurement_complete"] == {
+        metric: metric != failed_metric for metric in ("memory", "cpu", "descriptors")
+    }
+    assert sample["peak_handles_or_fds"] == (
+        None if failed_metric == "descriptors" else 7
+    )
+    (error,) = sample["measurement_errors"]
+    assert error["metric"] == failed_metric and error["pid"] == 12345
+    assert error["error"] == "AccessDenied" and "denied" in error["message"]
+    assert error["count"] > 0
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "resources.jsonl").read_text().splitlines()
+    ]
+    assert all(
+        row["tree_rss_bytes"] == (None if failed_metric == "memory" else 4096)
+        for row in rows
+    )
+    assert all(
+        row["cpu_seconds"] == (None if failed_metric == "cpu" else 0.03) for row in rows
+    )
+    assert all(
+        row["handles_or_fds"] == (None if failed_metric == "descriptors" else 7)
+        for row in rows
+    )

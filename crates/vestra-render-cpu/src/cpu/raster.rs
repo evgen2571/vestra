@@ -350,6 +350,26 @@ pub(crate) fn draw_image(
     draw_resolved_raster(canvas, source, &resolved, opacity, colour_transform);
 }
 
+fn exact_pixel_centers(source: &RgbaImage, geometry: &geometry::ResolvedRasterGeometry) -> bool {
+    let inverse = geometry.inverse;
+    let crop = geometry.source.normalized_crop;
+    geometry.motion_tile.is_none()
+        && crop.x == 0.0
+        && crop.y == 0.0
+        && crop.width == 1.0
+        && crop.height == 1.0
+        && geometry.logical_origin_x == 0.0
+        && geometry.logical_origin_y == 0.0
+        && geometry.raster_effective_width == f64::from(source.width())
+        && geometry.raster_effective_height == f64::from(source.height())
+        && inverse.m00 == 1.0
+        && inverse.m01 == 0.0
+        && inverse.m10 == 0.0
+        && inverse.m11 == 1.0
+        && inverse.m02.fract() == 0.0
+        && inverse.m12.fract() == 0.0
+}
+
 fn draw_resolved_raster(
     canvas: &mut RgbaImage,
     source: &RgbaImage,
@@ -359,6 +379,7 @@ fn draw_resolved_raster(
 ) {
     let (min_x, max_x, min_y, max_y) = geometry.visible_bounds(canvas.width(), canvas.height());
     let inverse = geometry.inverse;
+    let exact_centers = exact_pixel_centers(source, geometry);
     for y in min_y..max_y {
         let mut mapped = inverse.map(f64::from(min_x) + 0.5, f64::from(y) + 0.5);
         for x in min_x..max_x {
@@ -367,17 +388,23 @@ fn draw_resolved_raster(
                 && mapped.x < geometry.logical_origin_x + geometry.raster_effective_width
                 && mapped.y < geometry.logical_origin_y + geometry.raster_effective_height
             {
-                let (source_x, source_y) = source_position(geometry, mapped, source);
                 let sampled = apply_colour_transform(
-                    match geometry.motion_tile {
-                        Some(tile) => sample_motion_tile_bilinear(
-                            source,
-                            source_x,
-                            source_y,
-                            geometry.source.normalized_crop,
-                            tile.mirror_edges,
-                        ),
-                        None => sample_bilinear(source, source_x, source_y),
+                    if exact_centers {
+                        let pixel = *source.get_pixel(mapped.x as u32, mapped.y as u32);
+                        // Bilinear sampling normalizes hidden RGB at zero alpha.
+                        if pixel[3] == 0 { Rgba([0; 4]) } else { pixel }
+                    } else {
+                        let (source_x, source_y) = source_position(geometry, mapped, source);
+                        match geometry.motion_tile {
+                            Some(tile) => sample_motion_tile_bilinear(
+                                source,
+                                source_x,
+                                source_y,
+                                geometry.source.normalized_crop,
+                                tile.mirror_edges,
+                            ),
+                            None => sample_bilinear(source, source_x, source_y),
+                        }
                     },
                     colour_transform,
                 );
@@ -873,4 +900,285 @@ mod tests {
             Rgba([255, 0, 0, 255])
         );
     }
+
+    #[allow(clippy::too_many_arguments)]
+    fn resolved_for_test(
+        width: u32,
+        height: u32,
+        canvas_width: u32,
+        canvas_height: u32,
+        dx: f64,
+        scale: f64,
+        rotation: f64,
+        crop: Crop,
+        tile: Option<geometry::MotionTileParameters>,
+    ) -> geometry::ResolvedRasterGeometry {
+        geometry::resolve_raster_geometry_with_motion_tile(
+            geometry::IntrinsicSize::new(width, height),
+            crop,
+            false,
+            &vestra_core::plan::CompiledSizing::Original,
+            Transform2D {
+                position: crate::domain::Point {
+                    x: dx / f64::from(canvas_width),
+                    y: -dx / f64::from(canvas_height),
+                },
+                anchor: crate::domain::Point { x: 0.0, y: 0.0 },
+                scale: crate::domain::Point { x: scale, y: scale },
+                rotation_radians: rotation,
+            },
+            canvas_width,
+            canvas_height,
+            tile,
+        )
+    }
+
+    // Retain the pre-bypass loop as an exact RGBA reference, including row stepping.
+    fn filtered_reference(
+        canvas: &mut RgbaImage,
+        source: &RgbaImage,
+        geometry: &geometry::ResolvedRasterGeometry,
+        opacity: f64,
+        colour: ColourTransform,
+    ) {
+        let (min_x, max_x, min_y, max_y) = geometry.visible_bounds(canvas.width(), canvas.height());
+        for y in min_y..max_y {
+            let mut mapped = geometry
+                .inverse
+                .map(f64::from(min_x) + 0.5, f64::from(y) + 0.5);
+            for x in min_x..max_x {
+                if mapped.x >= geometry.logical_origin_x
+                    && mapped.y >= geometry.logical_origin_y
+                    && mapped.x < geometry.logical_origin_x + geometry.raster_effective_width
+                    && mapped.y < geometry.logical_origin_y + geometry.raster_effective_height
+                {
+                    let (sx, sy) = source_position(geometry, mapped, source);
+                    let sample = match geometry.motion_tile {
+                        Some(tile) => sample_motion_tile_bilinear(
+                            source,
+                            sx,
+                            sy,
+                            geometry.source.normalized_crop,
+                            tile.mirror_edges,
+                        ),
+                        None => sample_bilinear(source, sx, sy),
+                    };
+                    let pixel = canvas.get_pixel_mut(x, y);
+                    *pixel =
+                        composite_sample(*pixel, apply_colour_transform(sample, colour), opacity);
+                }
+                mapped.x += geometry.inverse.m00;
+                mapped.y += geometry.inverse.m10;
+            }
+        }
+    }
+
+    #[test]
+    fn exact_center_eligibility_excludes_filtering_and_crop_boundaries() {
+        let crop = Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        };
+        let source = RgbaImage::new(37, 29);
+        for dx in [-2.0, 0.0, 1.0] {
+            let g = resolved_for_test(37, 29, 37, 29, dx, 1.0, 0.0, crop, None);
+            assert!(exact_pixel_centers(&source, &g), "integer {dx}");
+        }
+        for (dx, scale, rotation, crop, tile) in [
+            (0.25, 1.0, 0.0, crop, None),
+            (1e-9, 1.0, 0.0, crop, None),
+            (0.0, 1.0 + 1e-12, 0.0, crop, None),
+            (0.0, 0.5, 0.0, crop, None),
+            (0.0, 1.0, 1e-12, crop, None),
+            (
+                0.0,
+                1.0,
+                0.0,
+                Crop {
+                    x: 0.1,
+                    width: 0.8,
+                    ..crop
+                },
+                None,
+            ),
+            (
+                0.0,
+                1.0,
+                0.0,
+                crop,
+                Some(geometry::MotionTileParameters {
+                    width_factor: 1.0,
+                    height_factor: 1.0,
+                    center_x: 0.5,
+                    center_y: 0.5,
+                    mirror_edges: true,
+                }),
+            ),
+        ] {
+            let g = resolved_for_test(37, 29, 37, 29, dx, scale, rotation, crop, tile);
+            assert!(
+                !exact_pixel_centers(&source, &g),
+                "dx={dx} scale={scale} rotation={rotation} crop={crop:?} tile={tile:?}"
+            );
+        }
+        let g = geometry::resolve_raster_geometry_with_motion_tile(
+            geometry::IntrinsicSize::new(37, 29),
+            crop,
+            false,
+            &vestra_core::plan::CompiledSizing::Stretch {
+                width: 74,
+                height: 58,
+            },
+            Transform2D::identity(
+                crate::domain::Point { x: 0.0, y: 0.0 },
+                crate::domain::Point { x: 0.0, y: 0.0 },
+            ),
+            74,
+            58,
+            None,
+        );
+        assert!(!exact_pixel_centers(&source, &g));
+    }
+
+    #[test]
+    fn materialized_crop_keeps_its_resolved_buffer_bounds() {
+        let source =
+            RgbaImage::from_fn(4, 3, |x, y| Rgba([(x * 37) as u8, (y * 61) as u8, 91, 127]));
+        let geometry = geometry::resolve_raster_geometry_with_motion_tile(
+            geometry::IntrinsicSize::new(8, 6),
+            Crop {
+                x: 0.25,
+                y: 0.0,
+                width: 0.5,
+                height: 0.5,
+            },
+            true,
+            &vestra_core::plan::CompiledSizing::Original,
+            Transform2D::identity(
+                crate::domain::Point { x: 0.0, y: 0.0 },
+                crate::domain::Point { x: 0.0, y: 0.0 },
+            ),
+            8,
+            6,
+            None,
+        );
+        assert!(exact_pixel_centers(&source, &geometry));
+        let mut expected = RgbaImage::new(8, 6);
+        let mut actual = expected.clone();
+        filtered_reference(
+            &mut expected,
+            &source,
+            &geometry,
+            0.5,
+            ColourTransform::default(),
+        );
+        draw_resolved_raster(
+            &mut actual,
+            &source,
+            &geometry,
+            0.5,
+            ColourTransform::default(),
+        );
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn raster_matches_filtered_reference_exactly_including_alpha_and_colour() {
+        let crop = Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        };
+        for (width, height) in [
+            (1, 1),
+            (7, 5),
+            (37, 29),
+            (1280, 720),
+            (1920, 1080),
+            (3840, 2160),
+        ] {
+            let source = RgbaImage::from_fn(width, height, |x, y| {
+                Rgba([
+                    (x * 37 + y * 17) as u8,
+                    (y * 61 + x * 13) as u8,
+                    (x * 83 + y * 29) as u8,
+                    [0, 1, 127, 254, 255][((x + y) % 5) as usize],
+                ])
+            });
+            let cases = if width > 37 {
+                vec![(0.0, 1.0, 0.0, crop, None)]
+            } else {
+                vec![
+                    (-2.0, 1.0, 0.0, crop, None),
+                    (0.0, 1.0, 0.0, crop, None),
+                    (1.0, 1.0, 0.0, crop, None),
+                    (0.25, 1.0, 0.0, crop, None),
+                    (0.0, 1.0 + 1e-12, 0.0, crop, None),
+                    (0.0, 0.9, 0.0, crop, None),
+                    (0.0, 1.0, 1e-9, crop, None),
+                    (
+                        0.0,
+                        1.0,
+                        0.0,
+                        Crop {
+                            x: 0.1,
+                            width: 0.8,
+                            ..crop
+                        },
+                        None,
+                    ),
+                    (
+                        0.0,
+                        1.0,
+                        0.0,
+                        crop,
+                        Some(geometry::MotionTileParameters {
+                            width_factor: 2.0,
+                            height_factor: 2.0,
+                            center_x: 0.5,
+                            center_y: 0.5,
+                            mirror_edges: false,
+                        }),
+                    ),
+                ]
+            };
+            for (dx, scale, rotation, crop, tile) in cases {
+                let g = resolved_for_test(
+                    width,
+                    height,
+                    width + 2,
+                    height + 2,
+                    dx,
+                    scale,
+                    rotation,
+                    crop,
+                    tile,
+                );
+                for opacity in [0.0, 0.5, 1.0] {
+                    for colour in [
+                        ColourTransform::default(),
+                        ColourTransform::from_effects([
+                            EvaluatedEffect::Brightness { amount: 0.2 },
+                            EvaluatedEffect::Saturation { amount: 0.7 },
+                        ]),
+                    ] {
+                        let mut expected = RgbaImage::from_fn(width + 2, height + 2, |x, y| {
+                            Rgba([91, 37, 123, (x * 13 + y * 53) as u8])
+                        });
+                        let mut actual = expected.clone();
+                        filtered_reference(&mut expected, &source, &g, opacity, colour);
+                        draw_resolved_raster(&mut actual, &source, &g, opacity, colour);
+                        assert!(
+                            actual.as_raw() == expected.as_raw(),
+                            "{width}x{height} dx={dx} scale={scale} rotation={rotation} opacity={opacity}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
 }

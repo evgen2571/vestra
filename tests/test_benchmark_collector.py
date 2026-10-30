@@ -71,8 +71,8 @@ def test_uv_locked_environment_isolation():
     assert "--no-editable" in command and "--no-cache" in command
     assert command[command.index("--no-build-isolation-package") + 1] == "vestra"
     assert "build-args=--profile release --locked" in command
-    assert host.managed_environment()["UV_PROJECT_ENVIRONMENT"].endswith(
-        "target/benchmark-env"
+    assert Path(host.managed_environment()["UV_PROJECT_ENVIRONMENT"]) == (
+        ROOT / "target" / "benchmark-env"
     )
     import tomllib
 

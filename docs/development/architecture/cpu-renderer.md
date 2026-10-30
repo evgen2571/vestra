@@ -4,6 +4,15 @@ The CPU backend in `vestra-render-cpu` implements the common `RenderBackend` con
 
 Common preparation creates immutable image/shape/text pixels and glyph atlases shared by `Arc`. The CPU backend prepares worker-local raster views, video decoder sessions and source-specific resources before the hot loop. A frame then dispatches evaluated sources, including images, video frames, shapes, text, Spectrum2D, particles and recursively evaluated groups. Shared geometry and crop adaptation feed CPU sampling/compositing work; tiny-skia shape rasterization belongs to common preparation. Ordered layers and effect passes are composited into the output surface; nested compositions render their child-local work before their parent presentation is applied.
 
+Source rasters skip bilinear interpolation when resolved geometry has a full
+normalized source buffer, zero logical origin, source-sized raster extents,
+unit inverse axes and exact integer translation. Clipping, colour transforms,
+opacity and source-over composition still apply; zero-alpha source RGB is
+normalized as in the filtered sampler. Fractional/near-identity transforms,
+resizing, unresolved crop boundaries and Motion Tile retain filtering.
+Materialized crop buffers can qualify when their resolved bounds satisfy the
+same proof. This path allocates no additional storage.
+
 The implementation keeps reusable surfaces, decoded data, worker-local state, bitmap/static-layer caches and source resources around the prepared render. Video decode remains a media-facing session but its pixels are consumed through prepared renderer resources. Reuse is important because a frame path that repeatedly allocates a canvas, opens a file, reparses a font, or rebuilds an effect state will distort both performance and renderer parity.
 
 Under `crates/vestra-render-cpu/src/`, `cpu/compositor.rs` keeps recursive composition, masks/mattes and cache

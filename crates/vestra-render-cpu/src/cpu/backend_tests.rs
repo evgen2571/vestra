@@ -2367,3 +2367,6 @@ fn cancellation_does_not_block_on_cpu_completion() {
     backend.abort();
     assert!(backend.verify_idle().is_err());
 }
+
+#[path = "native_worker_benchmarks.rs"]
+mod native_worker_benchmarks;

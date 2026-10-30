@@ -354,7 +354,21 @@ fn main() {
         summary.adapter,
     );
     if let Some(path) = std::env::var_os("VESTRA_BENCH_REPORT") {
-        record::write(Path::new(&path), &scenario, warmup_runs, &project, &samples);
+        let validation = std::env::var_os("VESTRA_BENCH_VALIDATE").map(|_| {
+            record::validate_media(
+                output.path(),
+                &samples[0].result,
+                warmup_runs + measured_runs,
+            )
+        });
+        record::write(
+            Path::new(&path),
+            &scenario,
+            warmup_runs,
+            &project,
+            &samples,
+            validation,
+        );
     }
 }
 
@@ -658,6 +672,28 @@ fn cpu_model() -> String {
                 let (key, value) = line.split_once(':')?;
                 (key.trim() == "model name").then(|| value.trim().to_owned())
             })
+        })
+        .or_else(|| {
+            let (program, args): (&str, &[&str]) = if cfg!(target_os = "macos") {
+                ("sysctl", &["-n", "machdep.cpu.brand_string"])
+            } else if cfg!(windows) {
+                (
+                    "powershell",
+                    &[
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        "(Get-CimInstance Win32_Processor).Name",
+                    ],
+                )
+            } else {
+                return None;
+            };
+            let output = Command::new(program).args(args).output().ok()?;
+            output
+                .status
+                .success()
+                .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
         })
         .unwrap_or_else(|| "unknown".to_owned())
 }

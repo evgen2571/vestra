@@ -74,6 +74,7 @@ def vestra_project(definition, inputs):
             Video(str(inputs / f"{c['asset']}.mp4"), sizing="cover"),
             start=c["start"],
             duration=c["duration"],
+            source_start=c.get("source_start", 0),
             z=z,
         )
         layer.transform.scale = c["scale"]
@@ -133,7 +134,7 @@ def adapter_class(adapter):
     }.get(adapter.get("device_type", "").lower(), "unknown")
 
 
-def render_vestra(definition, inputs, output, backend):
+def render_vestra(definition, inputs, output, backend, *, progress=None):
     started = time.perf_counter()
     project = vestra_project(definition, inputs)
     built = time.perf_counter()
@@ -142,6 +143,7 @@ def render_vestra(definition, inputs, output, backend):
         output,
         backend="wgpu" if backend == "hardware-wgpu" else "cpu",
         show_progress=False,
+        on_progress=progress,
     )
     adapter = None
     if result.adapter:
@@ -166,6 +168,8 @@ def render_vestra(definition, inputs, output, backend):
         if name.endswith("_ms")
     }
     return dict(
+        requested_render_backend="wgpu" if backend == "hardware-wgpu" else "cpu",
+        requested_graphics_api=os.environ.get("VESTRA_WGPU_BACKEND"),
         render_backend=result.selected_backend,
         adapter=adapter,
         encoder_backend=result.encoder_backend,
@@ -185,7 +189,7 @@ def render_vestra(definition, inputs, output, backend):
     )
 
 
-def render_moviepy(definition, inputs, output):
+def render_moviepy(definition, inputs, output, *, progress=None):
     # Use the same system FFmpeg executable as Vestra, not imageio's bundled one.
     import shutil
 
@@ -201,7 +205,8 @@ def render_moviepy(definition, inputs, output):
             source = VideoFileClip(str(inputs / f"{c['asset']}.mp4"), audio=False)
             sources.append(source)
             cw, ch = int(w * c["scale"]), int(h * c["scale"])
-            clip = source.subclipped(0, c["duration"]).resized((cw, ch))
+            offset = c.get("source_start", 0)
+            clip = source.subclipped(offset, offset + c["duration"]).resized((cw, ch))
             if c["brightness"]:
                 clip = clip.with_effects([vfx.LumContrast(lum=c["brightness"] * 255)])
             if c["ellipse"]:
@@ -236,7 +241,7 @@ def render_moviepy(definition, inputs, output):
             audio=False,
             preset="veryfast",
             ffmpeg_params=["-crf", "23", "-pix_fmt", "yuv420p"],
-            logger=None,
+            logger=progress,
         )
         ended = time.perf_counter()
         final.close()

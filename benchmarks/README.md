@@ -1,5 +1,9 @@
 # Benchmarks
 
+For one-command CPU, hardware WGPU and MoviePy collection with a shareable ZIP,
+see [Collect benchmark results](COLLECTING.md). Cache and sustained profiles are
+explicitly opt-in; the established local baseline workflow below is unchanged.
+
 The suite definition is in `suites.json`; representative projects are in
 `projects/`. The runner, Rust benchmark and comparison tests are maintained
 with the engine. Generated results belong under the ignored

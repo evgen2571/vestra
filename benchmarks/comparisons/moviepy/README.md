@@ -17,30 +17,29 @@ On other systems use the equivalent native environment with FFmpeg/FFprobe.
 
 ```bash
 nix develop .#comparison
-just python-sync
-uv pip install --python .venv/bin/python -r benchmarks/comparisons/moviepy/requirements.txt
+uv sync --locked --extra benchmark --extra dev
 
 # Fresh directory; defaults to ~/drive/Assets. No downloads or replacements.
-.venv/bin/python scripts/benchmark.py moviepy prepare
+uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy prepare
 # Optional: --assets /path/to/Assets --inputs target/my-moviepy-inputs
 
 # Viability only; these timings are not performance evidence.
-.venv/bin/python scripts/benchmark.py moviepy run --width 320 --height 180 \
+uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run --width 320 --height 180 \
   --warmups 0 --samples 1 --output target/moviepy-smoke
 
 # All three CPU workloads, one warmup + five measured samples per engine.
-VESTRA_WGPU_BACKEND=vulkan .venv/bin/python scripts/benchmark.py moviepy run \
+VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run \
   --output target/moviepy-cpu
 
 # Separate strict hardware run; select the API found by adapter discovery.
 just wgpu-list
-VESTRA_WGPU_BACKEND=vulkan .venv/bin/python scripts/benchmark.py moviepy run \
+VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run \
   --engines hardware-wgpu --output target/moviepy-hardware
 
 # Decode representative boundary/source frames, compare and create local sheets.
-.venv/bin/python scripts/benchmark.py moviepy verify \
+uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy verify \
   target/moviepy-cpu target/moviepy-hardware --output target/moviepy-visuals
-.venv/bin/python scripts/benchmark.py moviepy report \
+uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy report \
   target/moviepy-cpu target/moviepy-hardware \
   --verification target/moviepy-visuals/metrics.json > target/moviepy-report.md
 ```
@@ -56,11 +55,11 @@ environment for CPU and hardware captures that will be verified together.
 The shell exposes loaders, not device permissions/drivers; unavailable hardware
 or a software/unknown adapter is a failed hardware run, never a CPU replacement.
 
-Do not run `uv sync` between installing the comparison dependencies and rendering:
-it removes these optional tools. The explicit `.venv/bin/python` commands retain
-the installed development package. Package versions and the native extension
-hash are recorded; MoviePy's distribution is 2.2.1 even though its internal
-`__version__` string says 2.1.2.
+Keep `--extra benchmark` on sync/run commands so MoviePy remains installed.
+The locked benchmark extra replaces manual requirements installation. Package
+versions and the native extension hash are recorded; MoviePy's distribution is
+2.2.1 even though its internal version string says 2.1.2. For automatic portable
+footage and a shareable ZIP, use [the collector](../../COLLECTING.md).
 
 ## Inputs and equivalent operations
 
@@ -109,10 +108,11 @@ The report labels these scopes; use internal Vestra benchmarks for stage isolati
 
 RSS is a 20 ms sample of the simultaneous renderer-plus-descendant process tree,
 including FFmpeg; it is a lower bound and double-counts shared pages. It is not
-a sum of independent process peaks or GPU VRAM. CPU utilization uses Unix waited
-child CPU time including reaped descendants, with one core = 100%; it may exceed
-100%. Unsupported/missing metrics remain JSON null. Psutil is optional to the
-shared runner but installed by this comparison's requirements for RSS evidence.
+a sum of independent process peaks or GPU VRAM. CPU utilization uses sampled
+observed-tree CPU time on each platform, with one core = 100%; short-lived
+unobserved descendants can be missed and utilization may exceed 100%.
+Unsupported/missing metrics remain JSON null. Psutil is optional to the shared
+runner but installed by the locked benchmark extra for RSS evidence.
 
 Every output is probed for resolution, rational FPS, duration, decoded frame
 count, silent H.264/yuv420p and is fully decoded with FFmpeg's error gate. Warmups

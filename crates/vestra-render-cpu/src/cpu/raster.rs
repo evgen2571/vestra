@@ -1181,4 +1181,63 @@ mod tests {
         }
     }
 
+    #[test]
+    #[ignore = "serial raster timing; opt in with an output path"]
+    fn exact_center_sampling_benchmark() {
+        let output = std::env::var("VESTRA_RASTER_BENCH_OUTPUT").expect("benchmark output path");
+        let mut rows = Vec::new();
+        let crop = Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        };
+        for (width, height) in [(1280, 720), (1920, 1080)] {
+            let source = RgbaImage::from_fn(width, height, |x, y| {
+                Rgba([(x * 37) as u8, (y * 61) as u8, (x * 83 + y * 29) as u8, 255])
+            });
+            for (case, dx, scale) in [
+                ("identity", 0.0, 1.0),
+                ("integer", 1.0, 1.0),
+                ("fractional", 0.25, 1.0),
+                ("resize", 0.0, 0.9),
+            ] {
+                let geometry =
+                    resolved_for_test(width, height, width, height, dx, scale, 0.0, crop, None);
+                let mut canvas = RgbaImage::new(width, height);
+                for (block, candidate) in [false, true, false, true].into_iter().enumerate() {
+                    for sample in 0..6 {
+                        let started = std::time::Instant::now();
+                        for _ in 0..8 {
+                            canvas.fill(0);
+                            if candidate {
+                                draw_resolved_raster(
+                                    &mut canvas,
+                                    &source,
+                                    &geometry,
+                                    1.0,
+                                    ColourTransform::default(),
+                                );
+                            } else {
+                                filtered_reference(
+                                    &mut canvas,
+                                    &source,
+                                    &geometry,
+                                    1.0,
+                                    ColourTransform::default(),
+                                );
+                            }
+                            std::hint::black_box(&canvas);
+                        }
+                        rows.push(serde_json::json!({"width":width,"height":height,"case":case,"block":block,"candidate":candidate,"warmup":sample==0,"sample":sample,"frames":8,"wall_ms":started.elapsed().as_secs_f64()*1000.0,"eligible":exact_pixel_centers(&source,&geometry)}));
+                    }
+                }
+            }
+        }
+        std::fs::write(
+            output,
+            serde_json::to_vec_pretty(&rows).expect("serialize raster timing"),
+        )
+        .expect("write raster timing");
+    }
 }

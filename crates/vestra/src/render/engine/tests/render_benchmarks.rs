@@ -40,6 +40,9 @@ struct Measurement {
     static_cache_misses: u64,
     static_cache_bypasses: u64,
     static_layer_renders: u64,
+    static_cache_population_renders: u64,
+    static_cache_entries: usize,
+    static_cached_bytes: u64,
     cpu_scratch_allocations: u64,
     cpu_scratch_reuses: u64,
     cpu_copy_bytes: u64,
@@ -968,6 +971,9 @@ fn measurement(
         static_cache_misses: metrics.static_cache_misses,
         static_cache_bypasses: metrics.static_cache_budget_bypasses,
         static_layer_renders: metrics.static_layers_rendered,
+        static_cache_population_renders: metrics.static_cache_population_renders,
+        static_cache_entries: metrics.static_cache_entries,
+        static_cached_bytes: metrics.static_cached_bytes,
         cpu_scratch_allocations: metrics.cpu_scratch_allocations,
         cpu_scratch_reuses: metrics.cpu_scratch_reuses,
         cpu_copy_bytes: metrics.cpu_full_frame_copy_bytes,
@@ -981,3 +987,6 @@ fn measurement(
         readback_repack_bytes: metrics.readback_repack_bytes,
     }
 }
+
+#[path = "cache_threshold_benchmarks.rs"]
+mod cache_threshold;

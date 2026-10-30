@@ -2792,6 +2792,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "vestra-core",
+ "vestra-media",
  "vestra-render-common",
 ]
 

@@ -19,8 +19,8 @@ Use equivalent installed native environment; copy Phase 0 build artifacts into n
 
 ## Milestones
 - [x] Sampler repair: failing regression, independent metrics/error context, focused collector tests.
-- [ ] Baseline/control preparation: source, native/tool/input hashes, smoke and fresh baseline.
-- [ ] A: eligibility proof, exact pixel/reference tests, source-sized/translation/negative/4K controls, canonical repeated timings, encoded correctness/resource checks; assess before B.
+- [x] Baseline/control preparation: source, native/tool/input hashes, smoke and fresh baseline.
+- [x] A: eligibility proof, exact pixel/reference tests, source-sized/translation/negative/4K controls, canonical repeated timings, encoded correctness/resource checks; assess before B.
 - [ ] B: SDK mixed10 cold/warm/warm-2 with 256/320 MiB, mixed25/50/fitting/static controls, exact full-frame checks and partitions/counters/memory/wall; assess before C.
 - [ ] C: real native 1/2/4/8 workers, request/PTS/counter reconciliation and independent oracle, separate tracing/oracle and null/encoded performance/resource controls.
 - [ ] Final checks/review/report and local handoff.
@@ -36,3 +36,7 @@ No semantic/API/default changes outside scope. Accept A only with exact correctn
 
 ## Completion / handoff
 Pending. Multi-hour output stability and publication beyond 4 GiB remain unverified.
+
+2026-10-30 A progress: candidate eligibility regression failed first, then CPU suite passed 178/7 ignored, including exact RGBA filtered-reference comparisons at 720p/1080p/4K, partial/zero alpha, colour/opacity, crop, Motion Tile fallback, near identity and translations in both axes. Candidate commits 00b17e3 (candidate+correctness tests) and 02c9fb7 (test-only raster benchmark+plan). First canonical A/B pair completed; first-pair video medians fell approximately 39–48%, still provisional. All eleven first-pair CLI controls have byte-identical full decoded framemd5 sequences. Second A/B pair is running serially with original filtered loop restored for A2 (test-only eligibility helper retained under cfg(test)), then exact candidate source restored for B2. Each build/patch/binary/native identity is retained. Do not modify raster.rs while run-ab2.sh is running (session 80582); it owns temporary source restoration. Source-sized controls: 720/1080 identity, +1/-2 integer offsets; fractional, resize, opacity negatives; 4K correctness/resource only. Commands/drivers and complete resources JSONL live in evidence. No B or C implementation started.
+
+2026-10-30 A decision: ADOPT narrow exact-center bypass, pending final contributor gates. Two full A/B pairs, two additional combined/nested pairs and raster-only A/B/A/B completed. Combined apparent +2.8/+7.6% regression did not repeat in focused pairs (+0.07/-9.09%); nested -0.89/-8.93%. All 33 control sequence comparisons, four composition sequences, 16 exact PNG checks and visual contact sheet passed. Six flat perf profiles succeeded, separately from timing. RSS/CPU valid and allocation/retained capacities match. See a-decision.json/a-analysis.md. Start B now; no production cache default change.

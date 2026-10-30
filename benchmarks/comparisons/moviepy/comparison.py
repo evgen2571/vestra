@@ -36,7 +36,11 @@ def digest(path):
 
 
 def write_json(path, value):
-    path.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(
+        json.dumps(value, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+    )
+    temporary.replace(path)
 
 
 def probe(path):
@@ -253,6 +257,21 @@ def environment():
         except importlib.metadata.PackageNotFoundError:
             packages[name] = None
     cpu = platform.processor()
+    if platform.system() == "Darwin":
+        cpu = version(["sysctl", "-n", "machdep.cpu.brand_string"]) or cpu
+    elif platform.system() == "Windows":
+        cpu = (
+            version(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "(Get-CimInstance Win32_Processor).Name",
+                ]
+            )
+            or cpu
+        )
     if Path("/proc/cpuinfo").is_file():
         cpu = next(
             (

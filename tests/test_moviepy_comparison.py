@@ -190,11 +190,28 @@ def test_report_rejects_failed_run(tmp_path):
 
 def test_missing_cpu_metric_is_null(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "resource", None)
+    monkeypatch.setitem(sys.modules, "psutil", None)
     measured = benchmark.measure_process(
         [sys.executable, "-c", "pass"], tmp_path / "ok.log", timeout=3
     )
     assert measured["cpu_seconds"] is None
     assert measured["cpu_percent"] is None
+
+
+def test_portable_cpu_sampling_does_not_require_unix_resource(tmp_path, monkeypatch):
+    pytest.importorskip("psutil")
+    monkeypatch.setitem(sys.modules, "resource", None)
+    measured = benchmark.measure_process(
+        [
+            sys.executable,
+            "-c",
+            "import time; sum(i*i for i in range(200000)); time.sleep(.1)",
+        ],
+        tmp_path / "portable-cpu.log",
+        timeout=3,
+    )
+    assert measured["cpu_seconds"] is not None
+    assert "psutil" in measured["cpu_method"]
 
 
 @pytest.mark.skipif(

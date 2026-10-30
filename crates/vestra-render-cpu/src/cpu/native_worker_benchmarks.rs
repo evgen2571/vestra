@@ -216,6 +216,10 @@ fn oracle_frame(
     expected
 }
 
+#[expect(
+    clippy::assertions_on_constants,
+    reason = "ignored timing diagnostics deliberately reject unoptimized builds"
+)]
 fn native_workers(workers: usize) {
     assert!(!cfg!(debug_assertions), "release-only diagnostic");
     let inputs =

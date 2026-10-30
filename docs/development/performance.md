@@ -169,3 +169,49 @@ a leak. Respect current timeline/resource limits when choosing workloads.
 Report actual duration/frame count and output bytes: short smoke runs prove
 execution, not multi-hour stability or large-file behavior. Changes involving
 encoded output also need [media verification](media-pipeline.md#verify-encoded-output).
+
+## Cache working-set and native worker diagnostics
+
+The ignored SDK `static_cache_threshold_benchmark` reuses the existing mixed-layer
+fixtures and null-sink runner. Run it in release mode with a fresh output path:
+
+```bash
+mkdir -p target/benchmark-results/cache-diagnostic
+VESTRA_CACHE_BENCH_OUTPUT=target/benchmark-results/cache-diagnostic/result.json \
+VESTRA_CACHE_BENCH_WORKLOAD=mixed-layers-10 VESTRA_CACHE_BENCH_MIB=256 \
+VESTRA_CACHE_BENCH_MODE=timing cargo test --release --locked -p vestra \
+  --no-default-features --features cpu static_cache_threshold_benchmark \
+  -- --ignored --nocapture --test-threads=1
+```
+
+Compare 256 and 320 MiB in repeated blocks. Timing mode emits one warmup and
+five independently prepared sequences, each with cold/warm/warm-2 operations.
+The operations within one sequence reuse prepared state. `partitions` mode
+separately captures actual per-worker budgets; `pixels` compares every RGBA byte
+through the SDK frame loop with a cache-disabled reference. Keep both diagnostic
+modes outside performance/resource controls. Supported controls are mixed8,
+mixed10, mixed25, mixed50 (`mixed-layers-N`) and `static-image`, all at 720p/30
+frames. Dynamic controls require the same eight automatic workers; the static
+control uses one. The configured cache default and replacement policy are unchanged.
+
+The CPU crate also has ignored `native_workers_1`, `native_workers_2`,
+`native_workers_4` and `native_workers_8` tests. These use a test-only native
+FFmpeg owner-thread adapter and the existing private fixed-worker constructor.
+They add no production worker-count setting. Supply `VESTRA_NATIVE_BENCH_INPUTS`
+with five video-only, source-sized scene JSON files (`single-video`, `video-heavy`,
+`holds`, `trimmed`, `divergent-clocks`) and `manifest.json`. The manifest maps asset
+IDs to source paths, full external packed-RGBA reference files, integer PTS lists,
+time-base numerator/denominator and source origin. Generate references using full
+external FFmpeg decoding with bilinear conversion and passthrough frame timing;
+use ffprobe's actual presentation timestamps rather than nominal FPS.
+
+Select a fresh `VESTRA_NATIVE_BENCH_OUTPUT`, `VESTRA_NATIVE_BENCH_CASE`,
+`VESTRA_NATIVE_BENCH_SINK=null|encoded` and `VESTRA_NATIVE_BENCH_MODE=oracle|timing`,
+then run the chosen ignored test in release mode. These fixtures are 1280×720,
+30/1 and one second. Oracle mode checks pixels/PTS and captures per-session
+requests, receives, seeks, conversions and waits; timing mode disables those
+additional diagnostics and emits one warmup plus five fresh-backend samples.
+Run null controls before matched encoded controls, repeat the worker sweep, and
+record process resources separately. Worker count changes cursor count and
+per-worker cache partitions together. These internal controls do not measure
+public SDK end-to-end throughput or justify a new scheduling policy by themselves.

@@ -203,6 +203,11 @@ pub struct VideoDecoder {
     metrics: VideoDecoderMetrics,
 }
 
+const INITIAL_SEEK_TIME_THRESHOLD_SECONDS: f64 = 1.0;
+const INITIAL_SEEK_FRAME_THRESHOLD: f64 = 24.0;
+const FORWARD_SEEK_TIME_THRESHOLD_SECONDS: f64 = 4.0;
+const FORWARD_SEEK_FRAME_THRESHOLD: f64 = 120.0;
+
 impl VideoDecoder {
     pub fn open(path: &Path) -> Result<Self, MediaError> {
         Self::open_with_options(path, VideoDecoderOptions::default())
@@ -330,10 +335,7 @@ impl VideoDecoder {
             cache_hit = false,
             "video frame cache miss"
         );
-        if self
-            .current
-            .as_ref()
-            .is_some_and(|frame| target < frame.pts.0)
+        if self.should_seek(target)
             && let Err(error) = self.seek(target)
         {
             tracing::debug!(
@@ -365,6 +367,38 @@ impl VideoDecoder {
         self.current
             .clone()
             .ok_or(MediaError::VideoTimestampOutOfRange { seconds })
+    }
+
+    /// Reposition when continuing from the cursor would decode a substantial
+    /// range. This is only a cost heuristic; `FfmpegVideoCursor::frame_at`
+    /// still selects the exact latest presentation timestamp at or before the
+    /// request after FFmpeg lands on its preceding random-access point.
+    fn should_seek(&self, target: i64) -> bool {
+        let has_current = self.current.is_some();
+        let origin = self
+            .current
+            .as_ref()
+            .map_or(self.info.source_origin.0, |frame| frame.pts.0);
+        if target < origin {
+            return true;
+        }
+        let distance_seconds = self.info.time_base.ticks_to_seconds(target - origin);
+        let (time_threshold, frame_threshold) = if has_current {
+            (
+                FORWARD_SEEK_TIME_THRESHOLD_SECONDS,
+                FORWARD_SEEK_FRAME_THRESHOLD,
+            )
+        } else {
+            (
+                INITIAL_SEEK_TIME_THRESHOLD_SECONDS,
+                INITIAL_SEEK_FRAME_THRESHOLD,
+            )
+        };
+        distance_seconds > time_threshold
+            || self.info.nominal_frame_rate.is_some_and(|rate| {
+                distance_seconds * f64::from(rate.numerator) / f64::from(rate.denominator)
+                    > frame_threshold
+            })
     }
 
     fn final_timestamp(&self) -> Option<i64> {
@@ -731,12 +765,58 @@ mod tests {
         );
         assert_eq!(metrics.frame_requests, 6);
         assert!(metrics.actual_decodes > 0);
-        // Only requested presentation frames are converted and cached. Going
-        // back to the previously skipped early frame needs one seek; all three
-        // later repeats must still hit the cache.
-        assert_eq!(metrics.seeks, 1);
+        // The distant initial and backward requests reposition the cursor;
+        // repeated covered requests still hit the cache.
+        assert_eq!(metrics.seeks, 2);
         assert_eq!(metrics.cache_hits, 3);
         assert!(metrics.cache_misses > 0);
+    }
+
+    #[test]
+    fn distant_forward_request_repositions_without_changing_frame_selection() {
+        let directory = tempfile::tempdir().expect("directory");
+        let path = directory.path().join("long-forward.mkv");
+        let status = Command::new("ffmpeg")
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=red:s=16x16:r=2:d=2",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=green:s=16x16:r=2:d=2",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=blue:s=16x16:r=2:d=2",
+                "-filter_complex",
+                "[0:v][1:v][2:v]concat=n=3:v=1:a=0,format=yuv444p",
+                "-c:v",
+                "ffv1",
+            ])
+            .arg(&path)
+            .status()
+            .expect("fixture FFmpeg");
+        assert!(status.success());
+
+        let mut decoder = VideoDecoder::open_with_options(
+            &path,
+            VideoDecoderOptions {
+                cache_budget_bytes: 0,
+                ..VideoDecoderOptions::default()
+            },
+        )
+        .expect("decoder");
+        let _first = decoder.frame_at(0.1).expect("first frame");
+        let later = decoder.frame_at(5.1).expect("distant forward frame");
+        assert_eq!(later.pts, VideoTimestamp(5000));
+        assert_eq!(*later.pixels.get_pixel(8, 8), image::Rgba([0, 0, 255, 255]));
+        assert_eq!(decoder.metrics().seeks, 1);
     }
 
     #[test]
@@ -797,7 +877,7 @@ mod tests {
             assert_eq!(held.pts, VideoTimestamp(2500));
             assert_eq!(held.pixels, last.pixels);
             assert_eq!(decoder.metrics().actual_decodes, decodes);
-            assert_eq!(decoder.metrics().seeks, 0);
+            assert_eq!(decoder.metrics().seeks, 1);
             let first = decoder.frame_at(0.1).expect("backward from EOF");
             assert_eq!(first.pts, VideoTimestamp(0));
             assert_eq!(*first.pixels.get_pixel(8, 8), image::Rgba([254, 0, 0, 255]));
@@ -818,7 +898,7 @@ mod tests {
             *middle.pixels.get_pixel(8, 8),
             image::Rgba([1, 128, 1, 255])
         );
-        assert_eq!(decoder.metrics().seeks, 1);
+        assert_eq!(decoder.metrics().seeks, 2);
         assert_eq!(decoder.metrics().cache_hits, 1);
     }
 

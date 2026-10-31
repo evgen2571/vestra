@@ -357,6 +357,56 @@ fn example_plan() -> RenderPlan {
 }
 
 #[test]
+fn cpu_composition_counters_are_scoped_to_each_operation() {
+    let plan = example_plan();
+    let before = PreparationStats {
+        cpu_opaque_copy_fast_path_hits: 7,
+        cpu_opaque_copy_fast_path_bytes: 1024,
+        cpu_generic_blend_surface_calls: 3,
+        ..PreparationStats::default()
+    };
+    let after = PreparationStats {
+        cpu_opaque_copy_fast_path_hits: 12,
+        cpu_opaque_copy_fast_path_bytes: 3072,
+        cpu_generic_blend_surface_calls: 11,
+        ..PreparationStats::default()
+    };
+    let mut performance = PreparationStats::default();
+    super::metrics::operation_backend_metrics(&mut performance, &before, &after, &plan)
+        .expect("composition counter deltas");
+    assert_eq!(
+        (
+            performance.cpu_opaque_copy_fast_path_hits,
+            performance.cpu_opaque_copy_fast_path_bytes,
+            performance.cpu_generic_blend_surface_calls,
+        ),
+        (5, 2048, 8)
+    );
+    super::metrics::operation_backend_metrics(&mut performance, &after, &after, &plan)
+        .expect("idle operation has no composition work");
+    assert_eq!(
+        (
+            performance.cpu_opaque_copy_fast_path_hits,
+            performance.cpu_opaque_copy_fast_path_bytes,
+            performance.cpu_generic_blend_surface_calls,
+        ),
+        (0, 0, 0)
+    );
+    for (hits, bytes, calls) in [(6, 1024, 3), (7, 1023, 3), (7, 1024, 2)] {
+        let regressed = PreparationStats {
+            cpu_opaque_copy_fast_path_hits: hits,
+            cpu_opaque_copy_fast_path_bytes: bytes,
+            cpu_generic_blend_surface_calls: calls,
+            ..before.clone()
+        };
+        let error =
+            super::metrics::operation_backend_metrics(&mut performance, &before, &regressed, &plan)
+                .expect_err("decreasing composition counter is rejected");
+        assert_eq!(error.diagnostic.code, "VESTRA-BACKEND-METRICS");
+    }
+}
+
+#[test]
 fn timing_converts_after_submillisecond_samples_accumulate() {
     let accumulated = Duration::from_micros(800) * 100;
     assert_eq!(milliseconds(accumulated), 80);

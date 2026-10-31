@@ -1,5 +1,40 @@
 # Benchmarks
 
+The focused `row-copy-1080p` suite measures ten seconds of deterministic H.264
+with two source-sized video presentations per frame, including an integer-clipped
+overlay. `opaque_video` uses unit opacity; `ineligible_video` uses 0.9. Run with
+`python scripts/benchmark.py run --suite row-copy-1080p --backend cpu --output target/benchmark-results/row-copy`.
+It uses one warmup and three one-shot encoded renders per workload. In this
+video-only scene `cpu_opaque_copy_fast_path_hits` counts row copies (there are
+no static cached layers); expect 600 eligible hits and zero ineligible hits.
+Use the same benchmark harness on a Phase 1 checkout for incremental comparison.
+The corrected Phase 2 measurements and their limitations are recorded in
+[PR #90](https://github.com/evgen2571/vestra/pull/90); filtered-reference timings
+do not measure incremental improvement over Phase 1 production sampling.
+
+The ignored CPU `opaque_row_copy_benchmark` compares Phase 1 production sampling
+with row-copy/fallback at 720p, 1080p and 4K after exact pixel checks. Run in
+release mode with `VESTRA_RASTER_ROW_COPY_BENCH_OUTPUT` set to a JSON output path.
+`opacity_scan_benchmark` similarly measures alpha scans at 1080p/4K using
+`VESTRA_OPACITY_BENCH_OUTPUT`. These focused timings exclude decoding/encoding.
+
+The ignored media `video_access_benchmark_matrix` covers 30-second 1080p H.264
+(GOP 60), 60-second H.264 (GOP 300), and 30-second VFR H.264, all with B-frames.
+Set `VESTRA_VIDEO_ACCESS_BENCH_OUTPUT` to a fresh JSON path and run
+`cargo test --release -p vestra-media video_access_benchmark_matrix -- --ignored --nocapture --test-threads=1`.
+Baseline and candidate output files in the same directory reuse identical
+fixtures and external FFmpeg RGBA/ffprobe PTS references under `media/` (about
+9.1 GiB). One oracle/warmup pass precedes three timing passes at zero and 64 MiB
+cache budgets. Frame-request timings exclude open, teardown and oracle reads;
+open time and decoder/cache/memory counters are separate. Select one fixture
+with `VESTRA_VIDEO_ACCESS_BENCH_FIXTURE=typical-1080p|long-gop|vfr` if needed.
+After an oracle pass, `VESTRA_VIDEO_ACCESS_BENCH_MODE=timing` and
+`VESTRA_VIDEO_ACCESS_BENCH_PATTERN=sequential` isolate repeated sequential timing
+without rereading the full RGBA reference; discarded warmups are retained.
+Preserve executables from isolated builds: a shared Cargo target directory can
+reuse the other checkout's newer artifacts. Check revision and actual fast-path
+or seek behavior before accepting a comparison.
+
 For one-command CPU, hardware WGPU and MoviePy collection with a shareable ZIP,
 see [Collect benchmark results](COLLECTING.md). Cache and sustained profiles are
 explicitly opt-in; the established local baseline workflow below is unchanged.

@@ -25,6 +25,13 @@
       "warmups": 1,
       "samples": 5
     },
+    "row-copy-1080p": {
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": ["opaque_video", "ineligible_video"]
+    },
     "stylization-smoke": {
       "width": 128,
       "height": 72,

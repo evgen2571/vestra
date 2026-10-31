@@ -1736,14 +1736,12 @@ mod tests {
 
     #[test]
     #[ignore = "serial raster timing; opt in with an output path"]
-    fn opaque_row_copy_benchmark() {
+    fn opaque_row_copy_benchmark() -> Result<(), &'static str> {
+        if cfg!(debug_assertions) {
+            return Err("run this benchmark in release mode");
+        }
         let output =
             std::env::var("VESTRA_RASTER_ROW_COPY_BENCH_OUTPUT").expect("benchmark output path");
-        let width = 1280;
-        let height = 720;
-        let source = RgbaImage::from_fn(width, height, |x, y| {
-            Rgba([(x * 37) as u8, (y * 61) as u8, (x * 83 + y * 29) as u8, 255])
-        });
         let crop = Crop {
             x: 0.0,
             y: 0.0,
@@ -1751,63 +1749,121 @@ mod tests {
             height: 1.0,
         };
         let sizing = vestra_core::plan::CompiledSizing::Original;
-        let transform = Transform2D {
-            position: crate::domain::Point {
-                x: 1.0 / f64::from(width),
-                y: 0.0,
-            },
-            ..Transform2D::identity(
-                crate::domain::Point { x: 0.0, y: 0.0 },
-                crate::domain::Point { x: 0.0, y: 0.0 },
-            )
-        };
         let layer = copy_test_layer();
         let mut rows = Vec::new();
-        for (path, candidate) in [("filtered", false), ("row_copy", true)] {
-            for sample in 0..6 {
-                let mut canvas = RgbaImage::new(width, height);
-                let started = std::time::Instant::now();
-                for _ in 0..8 {
-                    canvas.fill(0);
-                    if candidate {
-                        assert!(
-                            copy_opaque_raster(
-                                &mut canvas,
-                                &source,
-                                geometry::IntrinsicSize::new(width, height),
-                                crop,
-                                false,
-                                &sizing,
-                                transform,
-                                1.0,
-                                ColourTransform::default(),
-                                None,
-                                true,
-                                &layer,
-                            )
-                            .is_some()
-                        );
-                    } else {
-                        let geometry = resolved_for_test(
-                            width, height, width, height, 1.0, 1.0, 0.0, crop, None,
-                        );
-                        filtered_reference(
-                            &mut canvas,
-                            &source,
-                            &geometry,
-                            1.0,
-                            ColourTransform::default(),
-                        );
-                    }
-                    std::hint::black_box(&canvas);
+        for (width, height) in [(1280, 720), (1920, 1080)] {
+            for (case, dx, dy, inset, alpha, eligible) in [
+                ("opaque_identity", 0.0, 0.0, 0, 255, true),
+                ("opaque_integer", 16.0, 8.0, 32, 255, true),
+                ("opaque_clipped", -97.0, 53.0, 0, 255, true),
+                ("transparent_fallback", 0.0, 0.0, 0, 127, false),
+                ("fractional_fallback", 0.25, 0.5, 0, 255, false),
+            ] {
+                let source = RgbaImage::from_fn(width - inset, height - inset, |x, y| {
+                    Rgba([
+                        (x * 37) as u8,
+                        (y * 61) as u8,
+                        (x * 83 + y * 29) as u8,
+                        alpha,
+                    ])
+                });
+                let intrinsic = geometry::IntrinsicSize::new(source.width(), source.height());
+                let transform = Transform2D {
+                    position: crate::domain::Point {
+                        x: dx / f64::from(width),
+                        y: dy / f64::from(height),
+                    },
+                    ..layer.transform
+                };
+                let resolved = geometry::resolve_raster_geometry_with_motion_tile(
+                    intrinsic, crop, false, &sizing, transform, width, height, None,
+                );
+                let mut expected = RgbaImage::from_pixel(width, height, Rgba([91, 37, 123, 211]));
+                let mut actual = expected.clone();
+                draw_resolved_raster(
+                    &mut expected,
+                    &source,
+                    &resolved,
+                    1.0,
+                    ColourTransform::default(),
+                );
+                let copied = copy_opaque_raster(
+                    &mut actual,
+                    &source,
+                    intrinsic,
+                    crop,
+                    false,
+                    &sizing,
+                    transform,
+                    1.0,
+                    ColourTransform::default(),
+                    None,
+                    alpha == 255,
+                    &layer,
+                );
+                assert_eq!(copied.is_some(), eligible, "{case} {width}x{height}");
+                if copied.is_none() {
+                    draw_resolved_raster(
+                        &mut actual,
+                        &source,
+                        &resolved,
+                        1.0,
+                        ColourTransform::default(),
+                    );
                 }
-                rows.push(serde_json::json!({
-                    "path": path,
-                    "warmup": sample == 0,
-                    "sample": sample,
-                    "frames": 8,
-                    "wall_ms": started.elapsed().as_secs_f64() * 1000.0,
-                }));
+                assert_eq!(actual, expected, "{case} {width}x{height}");
+                for sample in 0..6 {
+                    let paths = if sample % 2 == 0 {
+                        [false, true]
+                    } else {
+                        [true, false]
+                    };
+                    for candidate in paths {
+                        let mut canvas = RgbaImage::new(width, height);
+                        let started = std::time::Instant::now();
+                        for _ in 0..8 {
+                            canvas.fill(91);
+                            let copied = candidate
+                                && copy_opaque_raster(
+                                    &mut canvas,
+                                    &source,
+                                    intrinsic,
+                                    crop,
+                                    false,
+                                    &sizing,
+                                    transform,
+                                    1.0,
+                                    ColourTransform::default(),
+                                    None,
+                                    alpha == 255,
+                                    &layer,
+                                )
+                                .is_some();
+                            if !copied {
+                                draw_resolved_raster(
+                                    &mut canvas,
+                                    &source,
+                                    &resolved,
+                                    1.0,
+                                    ColourTransform::default(),
+                                );
+                            }
+                            std::hint::black_box(&canvas);
+                        }
+                        rows.push(serde_json::json!({
+                            "width": width,
+                            "height": height,
+                            "case": case,
+                            "path": if candidate { "phase2_row_copy_or_fallback" } else { "phase1_production" },
+                            "warmup": sample == 0,
+                            "sample": sample,
+                            "frames": 8,
+                            "wall_ms": started.elapsed().as_secs_f64() * 1000.0,
+                            "row_copy_eligible": eligible,
+                            "pixel_equality": true,
+                        }));
+                    }
+                }
             }
         }
         std::fs::write(
@@ -1815,5 +1871,6 @@ mod tests {
             serde_json::to_vec_pretty(&rows).expect("serialize row-copy timing"),
         )
         .expect("write row-copy timing");
+        Ok(())
     }
 }

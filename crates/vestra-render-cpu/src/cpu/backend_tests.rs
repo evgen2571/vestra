@@ -622,6 +622,44 @@ fn cpu_same_video_asset_can_render_two_source_times_in_one_frame() {
 }
 
 #[test]
+fn repeated_video_assets_use_bounded_temporal_batches() {
+    let plan = same_video_asset_plan();
+    let decoded = DecodedAssets::build_with_video_factory(
+        &plan,
+        Some(Arc::new(TimelineVideoFactory {
+            requested_times: Arc::new(Mutex::new(Vec::new())),
+        })),
+    )
+    .expect("video fixture decodes");
+    let frame = evaluate(&plan, &[ScheduledItem(0), ScheduledItem(1)], 500_000_000)
+        .expect("video fixture evaluates");
+    let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 2);
+    for frame_number in 0..backend.capacity() as u64 {
+        backend
+            .submit_frame(frame_number, &frame)
+            .expect("bounded batch submission");
+    }
+    assert_eq!(backend.in_flight(), backend.capacity());
+    let mut completed = Vec::new();
+    while backend.in_flight() > 0 {
+        completed.push(
+            backend
+                .poll_completed(PollMode::WaitForOne)
+                .expect("batch poll")
+                .expect("batch completion"),
+        );
+    }
+    completed.sort_by_key(|frame| frame.frame_number);
+    assert_eq!(
+        completed
+            .iter()
+            .map(|frame| frame.frame_number)
+            .collect::<Vec<_>>(),
+        (0..backend.capacity() as u64).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn cpu_video_reopen_failure_fails_the_frame() {
     #[derive(Default)]
     struct Factory {
@@ -1180,12 +1218,16 @@ fn cpu_video_worker_count_benchmark() {
                 "quality": "preview", "audio": false, "duration_mode": "automatic"
             },
             "assets": [{"id": "video", "type": "video", "source": "fixture.mp4"}],
-            "visual": {"clips": [{
-                "id": "video-layer", "source": {"type": "video", "asset": "video"},
-                "start": 0, "duration": 4, "layer": 0,
-                "source_start": 0, "playback_rate": 1,
-                "opacity": {"base_value": 1}
-            }]}
+            "visual": {"clips": [
+                {"id": "video-layer", "source": {"type": "video", "asset": "video"},
+                 "start": 0, "duration": 4, "layer": 0,
+                 "source_start": 0, "playback_rate": 1,
+                 "opacity": {"base_value": 1}},
+                {"id": "video-overlay", "source": {"type": "video", "asset": "video"},
+                 "start": 0, "duration": 4, "layer": 1,
+                 "source_start": 0, "playback_rate": 1,
+                 "opacity": {"base_value": 0.5}}
+            ]}
         }"##,
     )
     .expect("benchmark project parses");

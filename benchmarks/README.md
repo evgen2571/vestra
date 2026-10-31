@@ -70,6 +70,17 @@ local comparisons meaningful. Inspect and sanitize them before sharing, and
 avoid committing home paths, environment dumps or workstation descriptions.
 See [performance methodology](../docs/development/performance.md).
 
+The ignored CPU `cpu_video_worker_count_benchmark` uses two presentations of
+one source. It compares the ordinary one-worker cursor path with bounded
+four-frame temporal batches for multi-worker renders, and prints wall time,
+decoder sessions, requests, native decodes, cache hits/misses and decode time.
+Run it in release mode with:
+
+```bash
+cargo test --release -p vestra-render-cpu cpu_video_worker_count_benchmark \
+  -- --ignored --nocapture --test-threads=1
+```
+
 The focused color/dither suite measures a single full-frame moving FFV1 video
 at 1920×1080, 30 fps and 90 frames. It records three separate workloads:
 `stylization_baseline` (no effects), `palette_video` (smooth palette mapping),

@@ -36,6 +36,14 @@ execution stay explicit. Common supplies only kernel identifiers, operation
 mapping and required-kernel collection. The facade calls CPU/WGPU validation
 before selecting or falling back to an implementation.
 
+Opaque raster presentation has a small row-copy fast path. It is eligible only
+for normal source-over at unit opacity with the full source crop, original
+sizing, unit scale, zero rotation, integer translation, default colour
+transform, no effects, masks or mattes, and every source pixel at alpha 255.
+The clipped source and destination rows are copied directly; transparent,
+filtered, scaled, transformed or otherwise uncertain layers use the existing
+sampler and blend path. Layer opacity alone never proves source opacity.
+
 Preserve these boundaries when changing CPU code:
 
 - Source and effect dispatch must consume evaluated values and respect plan ordering.

@@ -24,6 +24,7 @@ pub struct PreparedAssets {
     decoded: Arc<DecodedAssets>,
     shapes: Vec<PreparedRasterSource>,
     texts: Vec<PreparedRasterSource>,
+    image_opaque: Vec<bool>,
     // One cached primary cursor per asset, plus uncached cursors for sources
     // that need that asset at different times within the same output frame.
     video_decoders: BTreeMap<usize, Vec<CpuVideoSession>>,
@@ -45,12 +46,17 @@ struct CpuVideoSession {
 pub(crate) struct PreparedRasterSource {
     pixels: Arc<RgbaImage>,
     intrinsic_size: IntrinsicSize,
+    fully_opaque: bool,
 }
 
 impl PreparedRasterSource {
     #[must_use]
     pub(crate) fn from_pixels(pixels: Arc<RgbaImage>, intrinsic_size: IntrinsicSize) -> Self {
         Self {
+            fully_opaque: pixels
+                .as_raw()
+                .chunks_exact(4)
+                .all(|pixel| pixel[3] == u8::MAX),
             pixels,
             intrinsic_size,
         }
@@ -64,6 +70,11 @@ impl PreparedRasterSource {
     #[must_use]
     pub(crate) const fn intrinsic_size(&self) -> IntrinsicSize {
         self.intrinsic_size
+    }
+
+    #[must_use]
+    pub(crate) const fn fully_opaque(&self) -> bool {
+        self.fully_opaque
     }
 }
 
@@ -124,10 +135,20 @@ impl PreparedAssets {
         let video_cache_budget_bytes = video_cache_budget_bytes
             .checked_div(decoded.videos_len().max(1) as u64)
             .unwrap_or(0);
+        let image_opaque = (0..decoded.image_count())
+            .map(|index| {
+                decoded
+                    .image(index)
+                    .as_raw()
+                    .chunks_exact(4)
+                    .all(|pixel| pixel[3] == u8::MAX)
+            })
+            .collect();
         Self {
             decoded,
             shapes: prepared_shapes,
             texts,
+            image_opaque,
             video_decoders: BTreeMap::new(),
             retired_video_metrics: VideoDecoderMetrics::default(),
             video_cache_budget_bytes,
@@ -172,7 +193,12 @@ impl PreparedAssets {
     pub(crate) fn raster_source(&self, asset: usize) -> PreparedRasterSource {
         let pixels = self.decoded.image_resource(asset);
         let intrinsic_size = IntrinsicSize::new(pixels.width(), pixels.height());
-        PreparedRasterSource::from_pixels(pixels, intrinsic_size)
+        let fully_opaque = self.image_opaque.get(asset).copied().unwrap_or(false);
+        PreparedRasterSource {
+            pixels,
+            intrinsic_size,
+            fully_opaque,
+        }
     }
 
     #[must_use]

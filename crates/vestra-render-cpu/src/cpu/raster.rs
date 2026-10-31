@@ -24,7 +24,7 @@ pub(crate) fn draw_layer(
     colour_transform: ColourTransform,
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
-) {
+) -> Option<u64> {
     let motion_tile = layer.effects.iter().find_map(motion_tile_parameters);
     let motion_tile_started = profiling_enabled
         .then(std::time::Instant::now)
@@ -51,6 +51,21 @@ pub(crate) fn draw_layer(
                 (prepared.pixels(), false)
             };
             if layer.transform.is_valid() {
+                if let Some(bytes) = copy_opaque_raster(
+                    canvas,
+                    source,
+                    intrinsic,
+                    *crop,
+                    resolved_cacheable_crop,
+                    sizing,
+                    layer.transform,
+                    opacity,
+                    colour_transform,
+                    motion_tile,
+                    layer,
+                ) {
+                    return Some(bytes);
+                }
                 let started = profiling_enabled.then(std::time::Instant::now);
                 draw_raster_with_motion_tile(
                     canvas,
@@ -76,23 +91,60 @@ pub(crate) fn draw_layer(
             sizing,
             ..
         } => match assets.video_source(*asset_index, *source_time) {
-            Ok(prepared) if layer.transform.is_valid() => draw_raster_with_motion_tile(
-                canvas,
-                prepared.pixels(),
-                prepared.intrinsic_size(),
-                *crop,
-                false,
-                sizing,
-                layer.transform,
-                opacity,
-                colour_transform,
-                motion_tile,
-            ),
+            Ok(prepared) if layer.transform.is_valid() => {
+                if let Some(bytes) = copy_opaque_raster(
+                    canvas,
+                    prepared.pixels(),
+                    prepared.intrinsic_size(),
+                    *crop,
+                    false,
+                    sizing,
+                    layer.transform,
+                    opacity,
+                    colour_transform,
+                    motion_tile,
+                    layer,
+                ) {
+                    return Some(bytes);
+                }
+                draw_raster_with_motion_tile(
+                    canvas,
+                    prepared.pixels(),
+                    prepared.intrinsic_size(),
+                    *crop,
+                    false,
+                    sizing,
+                    layer.transform,
+                    opacity,
+                    colour_transform,
+                    motion_tile,
+                )
+            }
             Ok(_) | Err(_) => {}
         },
         EvaluatedSource::Shape { shape_index, .. } => {
             let prepared = assets.shape_source(*shape_index);
             if layer.transform.is_valid() {
+                if let Some(bytes) = copy_opaque_raster(
+                    canvas,
+                    prepared.pixels(),
+                    prepared.intrinsic_size(),
+                    Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                    false,
+                    &vestra_core::plan::CompiledSizing::Original,
+                    layer.transform,
+                    opacity,
+                    colour_transform,
+                    motion_tile,
+                    layer,
+                ) {
+                    return Some(bytes);
+                }
                 draw_raster_with_motion_tile(
                     canvas,
                     prepared.pixels(),
@@ -115,6 +167,26 @@ pub(crate) fn draw_layer(
         EvaluatedSource::Text { text_index } => {
             let prepared = assets.text_source(*text_index);
             if layer.transform.is_valid() {
+                if let Some(bytes) = copy_opaque_raster(
+                    canvas,
+                    prepared.pixels(),
+                    prepared.intrinsic_size(),
+                    Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                    false,
+                    &vestra_core::plan::CompiledSizing::Original,
+                    layer.transform,
+                    opacity,
+                    colour_transform,
+                    motion_tile,
+                    layer,
+                ) {
+                    return Some(bytes);
+                }
                 draw_raster_with_motion_tile(
                     canvas,
                     prepared.pixels(),
@@ -178,6 +250,106 @@ pub(crate) fn draw_layer(
     if let Some(started) = motion_tile_started {
         timings.motion_tile += started.elapsed();
     }
+    None
+}
+
+/// Copy a source row-for-row when the evaluated layer is exactly an opaque,
+/// unfiltered integer translation. All other geometry and alpha cases retain
+/// the general sampler so the fast path cannot change visible semantics.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "copy eligibility mirrors raster inputs"
+)]
+fn copy_opaque_raster(
+    canvas: &mut RgbaImage,
+    source: &RgbaImage,
+    intrinsic: geometry::IntrinsicSize,
+    crop: Crop,
+    cacheable_crop: bool,
+    sizing: &vestra_core::plan::CompiledSizing,
+    transform: crate::animation::Transform2D,
+    opacity: f64,
+    colour_transform: ColourTransform,
+    motion_tile: Option<geometry::MotionTileParameters>,
+    layer: &EvaluatedLayer,
+) -> Option<u64> {
+    if opacity != 1.0
+        || colour_transform != ColourTransform::default()
+        || !matches!(layer.blend_mode, crate::project::BlendMode::Normal)
+        || !layer.masks.is_empty()
+        || layer.matte.is_some()
+        || !layer.effects.is_empty()
+        || motion_tile.is_some()
+        || crop
+            != (Crop {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            })
+        || !matches!(sizing, vestra_core::plan::CompiledSizing::Original)
+    {
+        return None;
+    }
+
+    let geometry = geometry::resolve_raster_geometry_with_motion_tile(
+        intrinsic,
+        crop,
+        cacheable_crop,
+        sizing,
+        transform,
+        canvas.width(),
+        canvas.height(),
+        None,
+    );
+    let inverse = geometry.inverse;
+    if inverse.m00 != 1.0
+        || inverse.m01 != 0.0
+        || inverse.m10 != 0.0
+        || inverse.m11 != 1.0
+        || geometry.logical_origin_x != 0.0
+        || geometry.logical_origin_y != 0.0
+        || geometry.raster_effective_width != f64::from(source.width())
+        || geometry.raster_effective_height != f64::from(source.height())
+        || inverse.m02.fract() != 0.0
+        || inverse.m12.fract() != 0.0
+        || !source
+            .as_raw()
+            .chunks_exact(4)
+            .all(|pixel| pixel[3] == u8::MAX)
+    {
+        return None;
+    }
+
+    let destination_x = (-inverse.m02).round() as i64;
+    let destination_y = (-inverse.m12).round() as i64;
+    let source_x = destination_x.saturating_neg().max(0) as u32;
+    let source_y = destination_y.saturating_neg().max(0) as u32;
+    let canvas_x = destination_x.max(0) as u32;
+    let canvas_y = destination_y.max(0) as u32;
+    let width = source
+        .width()
+        .saturating_sub(source_x)
+        .min(canvas.width().saturating_sub(canvas_x));
+    let height = source
+        .height()
+        .saturating_sub(source_y)
+        .min(canvas.height().saturating_sub(canvas_y));
+    if width == 0 || height == 0 {
+        return Some(0);
+    }
+    let source_stride = source.width() as usize * 4;
+    let canvas_stride = canvas.width() as usize * 4;
+    let row_bytes = width as usize * 4;
+    let source_bytes = source.as_raw();
+    let canvas_bytes = canvas.as_mut();
+    for row in 0..height as usize {
+        let source_start = (source_y as usize + row) * source_stride + source_x as usize * 4;
+        let canvas_start = (canvas_y as usize + row) * canvas_stride + canvas_x as usize * 4;
+        canvas_bytes[canvas_start..canvas_start + row_bytes]
+            .copy_from_slice(&source_bytes[source_start..source_start + row_bytes]);
+    }
+    Some(u64::from(width) * u64::from(height) * 4)
 }
 
 #[expect(
@@ -718,6 +890,131 @@ mod tests {
         );
     }
 
+    fn copy_test_layer() -> EvaluatedLayer {
+        EvaluatedLayer {
+            compiled_layer_index: 0,
+            visible: true,
+            content_dependency: vestra_core::plan::TemporalDependency::Dynamic,
+            source: EvaluatedSource::SolidColor {
+                colour: [0, 0, 0, 255],
+            },
+            transform: Transform2D::identity(
+                crate::domain::Point { x: 0.0, y: 0.0 },
+                crate::domain::Point { x: 0.0, y: 0.0 },
+            ),
+            opacity: 1.0,
+            effects: Vec::new(),
+            masks: Vec::new(),
+            matte: None,
+            colour_transform: ColourTransform::default(),
+            blend_mode: crate::project::BlendMode::Normal,
+        }
+    }
+
+    #[test]
+    fn opaque_integer_translation_copies_clipped_rows_exactly() {
+        let source = RgbaImage::from_fn(3, 2, |x, y| Rgba([x as u8 + 10, y as u8 + 20, 30, 255]));
+        let transform = Transform2D {
+            position: crate::domain::Point { x: -0.2, y: 0.25 },
+            ..Transform2D::identity(
+                crate::domain::Point { x: 0.0, y: 0.0 },
+                crate::domain::Point { x: 0.0, y: 0.0 },
+            )
+        };
+        let crop = Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        };
+        let sizing = vestra_core::plan::CompiledSizing::Original;
+        let mut actual = RgbaImage::from_pixel(5, 4, Rgba([1, 2, 3, 255]));
+        let mut expected = actual.clone();
+        let mut layer = copy_test_layer();
+        layer.transform = transform;
+        let copied = copy_opaque_raster(
+            &mut actual,
+            &source,
+            geometry::IntrinsicSize::new(3, 2),
+            crop,
+            false,
+            &sizing,
+            transform,
+            1.0,
+            ColourTransform::default(),
+            None,
+            &layer,
+        );
+        draw_raster(
+            &mut expected,
+            &source,
+            geometry::IntrinsicSize::new(3, 2),
+            crop,
+            false,
+            &sizing,
+            transform,
+            1.0,
+            ColourTransform::default(),
+        );
+        assert_eq!(copied, Some(2 * 2 * 4));
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn transparent_or_filtered_layers_fall_back_from_row_copy() {
+        let source = RgbaImage::from_pixel(2, 2, Rgba([10, 20, 30, 254]));
+        let crop = Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        };
+        let sizing = vestra_core::plan::CompiledSizing::Original;
+        let transform = Transform2D::identity(
+            crate::domain::Point { x: 0.0, y: 0.0 },
+            crate::domain::Point { x: 0.0, y: 0.0 },
+        );
+        let mut canvas = RgbaImage::new(2, 2);
+        let layer = copy_test_layer();
+        assert_eq!(
+            copy_opaque_raster(
+                &mut canvas,
+                &source,
+                geometry::IntrinsicSize::new(2, 2),
+                crop,
+                false,
+                &sizing,
+                transform,
+                1.0,
+                ColourTransform::default(),
+                None,
+                &layer,
+            ),
+            None
+        );
+        let mut filtered = copy_test_layer();
+        filtered
+            .effects
+            .push(EvaluatedEffect::GaussianBlur { radius: 1.0 });
+        let opaque = RgbaImage::from_pixel(2, 2, Rgba([10, 20, 30, 255]));
+        assert_eq!(
+            copy_opaque_raster(
+                &mut canvas,
+                &opaque,
+                geometry::IntrinsicSize::new(2, 2),
+                crop,
+                false,
+                &sizing,
+                transform,
+                1.0,
+                ColourTransform::default(),
+                None,
+                &filtered,
+            ),
+            None
+        );
+    }
+
     #[test]
     fn surface_composition_matches_resampling_at_identity_and_nearby_transforms() {
         for (width, height) in [(1, 1), (7, 5), (16, 16), (37, 29)] {
@@ -1239,5 +1536,87 @@ mod tests {
             serde_json::to_vec_pretty(&rows).expect("serialize raster timing"),
         )
         .expect("write raster timing");
+    }
+
+    #[test]
+    #[ignore = "serial raster timing; opt in with an output path"]
+    fn opaque_row_copy_benchmark() {
+        let output =
+            std::env::var("VESTRA_RASTER_ROW_COPY_BENCH_OUTPUT").expect("benchmark output path");
+        let width = 1280;
+        let height = 720;
+        let source = RgbaImage::from_fn(width, height, |x, y| {
+            Rgba([(x * 37) as u8, (y * 61) as u8, (x * 83 + y * 29) as u8, 255])
+        });
+        let crop = Crop {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        };
+        let sizing = vestra_core::plan::CompiledSizing::Original;
+        let transform = Transform2D {
+            position: crate::domain::Point {
+                x: 1.0 / f64::from(width),
+                y: 0.0,
+            },
+            ..Transform2D::identity(
+                crate::domain::Point { x: 0.0, y: 0.0 },
+                crate::domain::Point { x: 0.0, y: 0.0 },
+            )
+        };
+        let layer = copy_test_layer();
+        let mut rows = Vec::new();
+        for (path, candidate) in [("filtered", false), ("row_copy", true)] {
+            for sample in 0..6 {
+                let mut canvas = RgbaImage::new(width, height);
+                let started = std::time::Instant::now();
+                for _ in 0..8 {
+                    canvas.fill(0);
+                    if candidate {
+                        assert!(
+                            copy_opaque_raster(
+                                &mut canvas,
+                                &source,
+                                geometry::IntrinsicSize::new(width, height),
+                                crop,
+                                false,
+                                &sizing,
+                                transform,
+                                1.0,
+                                ColourTransform::default(),
+                                None,
+                                &layer,
+                            )
+                            .is_some()
+                        );
+                    } else {
+                        let geometry = resolved_for_test(
+                            width, height, width, height, 1.0, 1.0, 0.0, crop, None,
+                        );
+                        filtered_reference(
+                            &mut canvas,
+                            &source,
+                            &geometry,
+                            1.0,
+                            ColourTransform::default(),
+                        );
+                    }
+                    std::hint::black_box(&canvas);
+                }
+                rows.push(serde_json::json!({
+                    "path": path,
+                    "warmup": sample == 0,
+                    "sample": sample,
+                    "frames": 8,
+                    "wall_ms": started.elapsed().as_secs_f64() * 1000.0,
+                }));
+            }
+        }
+        std::fs::write(
+            output,
+            serde_json::to_vec_pretty(&rows).expect("serialize row-copy timing"),
+        )
+        .expect("write row-copy timing");
     }
 }

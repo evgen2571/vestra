@@ -3,7 +3,11 @@
 use crate::cpu::metrics::CpuHotPathTimings;
 use std::{
     panic::AssertUnwindSafe,
-    sync::{Arc, mpsc::SyncSender},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::SyncSender,
+    },
 };
 
 use image::RgbaImage;
@@ -70,6 +74,10 @@ pub(super) struct CpuWorkerCacheBudgets {
     pub(super) video_cache_budget_bytes: u64,
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "worker construction keeps the existing explicit ownership boundary"
+)]
 pub(super) fn run_worker(
     worker_id: usize,
     plan: RenderPlan,
@@ -78,9 +86,13 @@ pub(super) fn run_worker(
     completion_tx: SyncSender<WorkerCompletion>,
     cache_budgets: CpuWorkerCacheBudgets,
     profiling_enabled: bool,
+    stop: Arc<AtomicBool>,
 ) {
     let mut state = CpuWorkerState::new(&plan, decoded, cache_budgets, profiling_enabled);
     while let Ok(command) = command_rx.recv() {
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
         match command {
             WorkerCommand::Render(job) => {
                 let frame_number = job.frame_number;

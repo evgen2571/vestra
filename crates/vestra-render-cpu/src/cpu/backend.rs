@@ -28,6 +28,7 @@ use super::worker::{
 };
 
 pub(crate) const MAX_AUTO_CPU_WORKERS: usize = 8;
+const TEMPORAL_BATCH_SIZE: usize = 4;
 const LEGACY_RGBA_FRAMES_PER_WORKER: u64 = 6;
 pub(crate) const LEGACY_AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
@@ -39,8 +40,13 @@ struct WorkerHandle {
 /// CPU renderer state, fully prepared before backend selection returns it.
 pub struct CpuBackend {
     workers: Vec<WorkerHandle>,
+    stop: Arc<AtomicBool>,
     worker_busy: Vec<bool>,
+    worker_queued: Vec<usize>,
     next_worker: usize,
+    temporal_batching: bool,
+    batch_worker: usize,
+    batch_remaining: usize,
     completions: Receiver<WorkerCompletion>,
     metrics: StagedMetrics,
     worker_timings: PreparationTimings,
@@ -84,6 +90,12 @@ impl CpuBackend {
             "CPU renderer initialized"
         );
         let class_budgets = cache_class_budgets(plan);
+        let temporal_batching = worker_count > 1 && has_repeated_video_asset(plan);
+        let pipeline_capacity = worker_count.saturating_mul(if temporal_batching {
+            TEMPORAL_BATCH_SIZE
+        } else {
+            1
+        });
         let worker_cache_budgets = (0..worker_count)
             .map(|worker_id| CpuWorkerCacheBudgets {
                 crop_cache_budget_bytes: worker_budget(class_budgets.crop, worker_count, worker_id),
@@ -100,6 +112,7 @@ impl CpuBackend {
             })
             .collect::<Vec<_>>();
         let (completion_tx, completions) = mpsc::sync_channel(worker_count);
+        let stop = Arc::new(AtomicBool::new(false));
         let mut workers = Vec::with_capacity(worker_count);
         for (worker_id, &worker_cache_budget) in worker_cache_budgets.iter().enumerate() {
             tracing::debug!(
@@ -110,10 +123,15 @@ impl CpuBackend {
                 video_cache_budget_bytes = worker_cache_budget.video_cache_budget_bytes,
                 "CPU worker cache configured"
             );
-            let (command_tx, command_rx) = mpsc::sync_channel(1);
+            let (command_tx, command_rx) = mpsc::sync_channel(if temporal_batching {
+                TEMPORAL_BATCH_SIZE
+            } else {
+                1
+            });
             let worker_plan = plan.clone();
             let worker_decoded = Arc::clone(&decoded);
             let worker_completion_tx = completion_tx.clone();
+            let worker_stop = Arc::clone(&stop);
             let join = thread::Builder::new()
                 .name(format!("cpu-render-worker-{worker_id}"))
                 .spawn(move || {
@@ -125,6 +143,7 @@ impl CpuBackend {
                         worker_completion_tx,
                         worker_cache_budget,
                         profiling_enabled,
+                        worker_stop,
                     )
                 })
                 .expect("CPU worker thread must start");
@@ -135,12 +154,17 @@ impl CpuBackend {
         }
         Self {
             workers,
+            stop,
             worker_busy: vec![false; worker_count],
+            worker_queued: vec![0; worker_count],
             next_worker: 0,
+            temporal_batching,
+            batch_worker: 0,
+            batch_remaining: 0,
             completions,
             metrics: StagedMetrics {
-                configured_pipeline_depth: worker_count,
-                allocated_slot_count: worker_count,
+                configured_pipeline_depth: pipeline_capacity,
+                allocated_slot_count: pipeline_capacity,
                 ..StagedMetrics::default()
             },
             worker_timings: PreparationTimings::default(),
@@ -152,7 +176,7 @@ impl CpuBackend {
                 plan.canvas.height,
             )
             .saturating_mul(2)
-            .saturating_mul(worker_count as u64),
+            .saturating_mul(pipeline_capacity as u64),
             profiling_enabled,
             profile_reported: false,
             #[cfg(test)]
@@ -190,7 +214,11 @@ impl CpuBackend {
                 frame,
                 render_duration,
             } => {
-                self.worker_busy[worker_id] = false;
+                if self.worker_queued[worker_id] > 0 {
+                    self.worker_queued[worker_id] -= 1;
+                } else {
+                    self.worker_busy[worker_id] = false;
+                }
                 self.metrics.backend_completed_frames += 1;
                 self.metrics.frame_render_work_duration += render_duration;
                 Ok(frame)
@@ -201,7 +229,11 @@ impl CpuBackend {
                 message,
                 code,
             } => {
-                self.worker_busy[worker_id] = false;
+                if self.worker_queued[worker_id] > 0 {
+                    self.worker_queued[worker_id] -= 1;
+                } else {
+                    self.worker_busy[worker_id] = false;
+                }
                 self.failed_frame_number = Some(frame_number);
                 let error = Self::diagnostic(code, format!("{message} (frame {frame_number})"));
                 self.failed = Some(error.clone());
@@ -233,10 +265,16 @@ impl RenderBackend for CpuBackend {
 
     fn capacity(&self) -> usize {
         self.workers.len()
+            * if self.temporal_batching {
+                TEMPORAL_BATCH_SIZE
+            } else {
+                1
+            }
     }
 
     fn in_flight(&self) -> usize {
         self.worker_busy.iter().filter(|busy| **busy).count()
+            + self.worker_queued.iter().sum::<usize>()
     }
 
     fn failed_frame_number(&self) -> Option<u64> {
@@ -249,12 +287,47 @@ impl RenderBackend for CpuBackend {
         frame: &EvaluatedFrame,
     ) -> Result<(), Diagnostic> {
         self.check_healthy()?;
-        let worker_id = (0..self.workers.len())
-            .map(|offset| (self.next_worker + offset) % self.workers.len())
-            .find(|&id| !self.worker_busy[id])
-            .ok_or_else(|| {
-                Self::diagnostic("CPU-BACKEND-FULL", "CPU backend has no idle worker")
-            })?;
+        if self.in_flight() >= self.capacity() {
+            return Err(Self::diagnostic(
+                "CPU-BACKEND-FULL",
+                "CPU backend has no available frame slot",
+            ));
+        }
+        let worker_id = if self.temporal_batching {
+            if self.batch_remaining == 0 {
+                self.batch_worker = self.next_worker;
+                self.next_worker = (self.next_worker + 1) % self.workers.len();
+                self.batch_remaining = TEMPORAL_BATCH_SIZE;
+            }
+            let desired_worker = self.batch_worker;
+            let worker_id = if self.worker_busy[desired_worker]
+                && self.worker_queued[desired_worker] >= TEMPORAL_BATCH_SIZE.saturating_sub(1)
+            {
+                let worker_id = (0..self.workers.len())
+                    .filter(|&id| {
+                        !self.worker_busy[id]
+                            || self.worker_queued[id] < TEMPORAL_BATCH_SIZE.saturating_sub(1)
+                    })
+                    .min_by_key(|&id| usize::from(self.worker_busy[id]) + self.worker_queued[id])
+                    .ok_or_else(|| {
+                        Self::diagnostic("CPU-BACKEND-FULL", "CPU worker batch queues are full")
+                    })?;
+                self.batch_worker = worker_id;
+                self.batch_remaining = 1;
+                worker_id
+            } else {
+                desired_worker
+            };
+            self.batch_remaining -= 1;
+            worker_id
+        } else {
+            (0..self.workers.len())
+                .map(|offset| (self.next_worker + offset) % self.workers.len())
+                .find(|&id| !self.worker_busy[id])
+                .ok_or_else(|| {
+                    Self::diagnostic("CPU-BACKEND-FULL", "CPU backend has no idle worker")
+                })?
+        };
         self.workers[worker_id]
             .command_tx
             .send(WorkerCommand::Render(CpuFrameJob::new(
@@ -269,8 +342,14 @@ impl RenderBackend for CpuBackend {
                 self.failed = Some(error.clone());
                 error
             })?;
-        self.worker_busy[worker_id] = true;
-        self.next_worker = (worker_id + 1) % self.workers.len();
+        if self.worker_busy[worker_id] {
+            self.worker_queued[worker_id] += 1;
+        } else {
+            self.worker_busy[worker_id] = true;
+            if !self.temporal_batching {
+                self.next_worker = (worker_id + 1) % self.workers.len();
+            }
+        }
         self.metrics.submitted_frames += 1;
         self.metrics.peak_frames_in_flight =
             self.metrics.peak_frames_in_flight.max(self.in_flight());
@@ -351,6 +430,7 @@ impl RenderBackend for CpuBackend {
         }
         let started = Instant::now();
         self.aborted = true;
+        self.stop.store(true, Ordering::Relaxed);
         for worker in &self.workers {
             let _ = worker.command_tx.send(WorkerCommand::Shutdown);
         }
@@ -361,6 +441,7 @@ impl RenderBackend for CpuBackend {
         }
         while self.completions.try_recv().is_ok() {}
         self.worker_busy.fill(false);
+        self.worker_queued.fill(0);
         self.metrics.abort_drain_duration += started.elapsed();
     }
 
@@ -451,10 +532,20 @@ impl RenderBackend for CpuBackend {
     }
 }
 
+fn has_repeated_video_asset(plan: &RenderPlan) -> bool {
+    let slots = plan.video_slot_assets();
+    let unique = slots
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    unique.len() < slots.len()
+}
+
 impl Drop for CpuBackend {
     fn drop(&mut self) {
         if !self.aborted {
             self.aborted = true;
+            self.stop.store(true, Ordering::Relaxed);
             for worker in &self.workers {
                 let _ = worker.command_tx.send(WorkerCommand::Shutdown);
             }

@@ -85,6 +85,15 @@ throughput while increasing decoder contexts, repeated native decoding, scratch
 storage and retained memory. Measure those costs together; decoder throughput
 and end-to-end wall time are different quantities.
 
+When a compiled CPU plan presents one video asset in multiple slots, the backend
+uses bounded temporal affinity for multi-worker rendering. Four consecutive
+submitted frames are queued to the same worker when capacity permits, then the
+batch rotates. This keeps nearby source requests on the worker's existing cursor
+without sharing mutable FFmpeg state or serializing independent assets. The
+batch queue is capped at four jobs per worker; completion ordering and the
+staged coordinator's output reordering remain unchanged. Plans without repeated
+video assets keep the ordinary round-robin one-job-per-worker path.
+
 ## WGPU decode and prefetch
 
 WGPU gathers video reads from evaluated work, including dependencies needed by

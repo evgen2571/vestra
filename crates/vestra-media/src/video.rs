@@ -205,8 +205,9 @@ pub struct VideoDecoder {
 
 const INITIAL_SEEK_TIME_THRESHOLD_SECONDS: f64 = 1.0;
 const INITIAL_SEEK_FRAME_THRESHOLD: f64 = 24.0;
-const FORWARD_SEEK_TIME_THRESHOLD_SECONDS: f64 = 4.0;
-const FORWARD_SEEK_FRAME_THRESHOLD: f64 = 120.0;
+// Seeking inside a long GOP can repeat work already decoded for moderate jumps.
+const FORWARD_SEEK_TIME_THRESHOLD_SECONDS: f64 = 8.0;
+const FORWARD_SEEK_FRAME_THRESHOLD: f64 = 240.0;
 
 impl VideoDecoder {
     pub fn open(path: &Path) -> Result<Self, MediaError> {
@@ -435,7 +436,7 @@ impl VideoDecoder {
         tracing::debug!(
             target: "vestra.media.video",
             media_pts = target,
-            reason = "requested timestamp precedes decoded range",
+            reason = "repositioning video cursor for requested timestamp",
             "video seek started"
         );
         self.cursor.seek(target, self.info.time_base)?;
@@ -798,15 +799,15 @@ mod tests {
                 "-f",
                 "lavfi",
                 "-i",
-                "color=c=red:s=16x16:r=2:d=2",
+                "color=c=red:s=16x16:r=2:d=4",
                 "-f",
                 "lavfi",
                 "-i",
-                "color=c=green:s=16x16:r=2:d=2",
+                "color=c=green:s=16x16:r=2:d=4",
                 "-f",
                 "lavfi",
                 "-i",
-                "color=c=blue:s=16x16:r=2:d=2",
+                "color=c=blue:s=16x16:r=2:d=4",
                 "-filter_complex",
                 "[0:v][1:v][2:v]concat=n=3:v=1:a=0,format=yuv444p",
                 "-c:v",
@@ -826,10 +827,44 @@ mod tests {
         )
         .expect("decoder");
         let _first = decoder.frame_at(0.1).expect("first frame");
-        let later = decoder.frame_at(5.1).expect("distant forward frame");
-        assert_eq!(later.pts, VideoTimestamp(5000));
+        let later = decoder.frame_at(9.1).expect("distant forward frame");
+        assert_eq!(later.pts, VideoTimestamp(9000));
         assert_eq!(*later.pixels.get_pixel(8, 8), image::Rgba([0, 0, 255, 255]));
         assert_eq!(decoder.metrics().seeks, 1);
+    }
+
+    #[test]
+    fn seek_thresholds_use_both_time_and_nominal_frame_distance() {
+        let (_directory, path) = fixture();
+        let mut decoder = VideoDecoder::open(&path).expect("decoder");
+        decoder.info.nominal_frame_rate = None;
+        assert!(!decoder.should_seek(1000));
+        assert!(decoder.should_seek(1001));
+        decoder.info.nominal_frame_rate = Some(MediaRational {
+            numerator: 30,
+            denominator: 1,
+        });
+        assert!(!decoder.should_seek(800));
+        assert!(decoder.should_seek(801));
+        let _first = decoder
+            .frame_at(0.1)
+            .expect("establish presentation cursor");
+        assert!(!decoder.should_seek(4001));
+        assert!(!decoder.should_seek(8000));
+        assert!(decoder.should_seek(8001));
+        decoder.info.nominal_frame_rate = Some(MediaRational {
+            numerator: 60,
+            denominator: 1,
+        });
+        assert!(!decoder.should_seek(4000));
+        assert!(decoder.should_seek(4001));
+        decoder.info.nominal_frame_rate = None;
+        assert!(!decoder.should_seek(8000));
+        assert!(decoder.should_seek(8001));
+        let _later = decoder.frame_at(0.6).expect("advance presentation cursor");
+        assert!(!decoder.should_seek(8500));
+        assert!(decoder.should_seek(8501));
+        assert!(decoder.should_seek(499));
     }
 
     #[test]
@@ -955,11 +990,11 @@ mod tests {
                 "-f",
                 "lavfi",
                 "-i",
-                "testsrc2=s=64x48:r=12:d=3",
+                "testsrc2=s=64x48:r=12:d=30",
                 "-c:v",
                 "libx264",
                 "-g",
-                "24",
+                "120",
                 "-bf",
                 "3",
                 "-sc_threshold",
@@ -987,7 +1022,7 @@ mod tests {
             .expect("reference FFmpeg");
         assert!(reference.status.success());
         let frame_bytes = 64 * 48 * 4;
-        assert_eq!(reference.stdout.len(), 36 * frame_bytes);
+        assert_eq!(reference.stdout.len(), 360 * frame_bytes);
         for prefetch in [false, true] {
             for budget in [0, frame_bytes as u64, frame_bytes as u64 * 4] {
                 let mut decoder = VideoDecoder::open_with_options(
@@ -998,7 +1033,9 @@ mod tests {
                     },
                 )
                 .expect("decoder");
-                for index in [0, 18, 19, 35, 2, 23, 24, 25, 1, 35, 0] {
+                for index in [
+                    0, 18, 19, 359, 2, 119, 120, 121, 239, 240, 241, 60, 240, 120, 0,
+                ] {
                     let frame = decoder.frame_at(index as f64 / 12.0 + 0.01).expect("frame");
                     assert_eq!(
                         frame.pixels.as_raw(),

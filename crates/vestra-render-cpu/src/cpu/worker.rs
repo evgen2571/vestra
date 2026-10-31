@@ -206,8 +206,10 @@ impl CpuWorkerState {
             self.profiling_enabled,
         );
         self.static_layer_renders += compose.static_layer_renders;
-        self.opaque_copy_fast_path_hits += compose.opaque_copy_fast_path_hits;
-        self.opaque_copy_fast_path_bytes += compose.opaque_copy_fast_path_bytes;
+        self.opaque_copy_fast_path_hits +=
+            compose.opaque_copy_fast_path_hits + compose.opaque_row_copy_fast_path_hits;
+        self.opaque_copy_fast_path_bytes +=
+            compose.opaque_copy_fast_path_bytes + compose.opaque_row_copy_fast_path_bytes;
         self.generic_blend_surface_calls += compose.generic_blend_surface_calls;
         self.static_cache_population_renders +=
             self.static_layers.stats().insertions - insertions_before;

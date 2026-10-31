@@ -335,6 +335,10 @@ impl VideoDecoder {
             cache_hit = false,
             "video frame cache miss"
         );
+        let cursor_origin = self
+            .current
+            .as_ref()
+            .map_or(self.info.source_origin.0, |frame| frame.pts.0);
         if self.should_seek(target)
             && let Err(error) = self.seek(target)
         {
@@ -346,7 +350,16 @@ impl VideoDecoder {
                 reason = "decoder seek failed",
                 "video seek failed"
             );
-            return Err(error);
+            if target < cursor_origin {
+                return Err(error);
+            }
+            tracing::debug!(
+                target: "vestra.media.video",
+                asset_type = "video",
+                media_pts = target,
+                reason = "falling back to sequential decode",
+                "video seek fallback"
+            );
         }
         let started = Instant::now();
         let frame = self

@@ -46,6 +46,9 @@ available); shorter forward requests stay sequential to avoid seek overhead.
 This threshold only chooses where decoding starts. The existing PTS loop still
 selects the latest presentation timestamp at or before the request, so nominal
 frame rate never changes VFR or B-frame semantics.
+If FFmpeg rejects an initial or forward reposition, the cursor continues from
+its current point; a backward failure remains an error because the cursor
+cannot recover an earlier frame without repositioning.
 
 The cursor retains its selected image and native lookahead. Repeated requests
 within that image's presentation interval reuse it even when optional RGBA

@@ -20,7 +20,7 @@ Add a semantics-preserving CPU row-copy path for eligible opaque integer-transla
 ## Constraints and decisions
 - Row copy requires normal source-over, unit opacity, no effects/masks/mattes, default colour transform, full uncropped source, unit scale, zero rotation and an integer pixel translation. Source alpha must be proven fully opaque; all other cases use the existing sampler/compositor.
 - Seek policy uses timestamp distance and metadata-derived frame estimates only as a cost heuristic. FFmpeg still seeks to a preceding random-access point and the existing PTS selection loop remains authoritative.
-- A seek failure returns the existing media error rather than silently changing frame selection.
+- A backward seek failure returns the existing media error; failed initial/forward repositioning falls back to sequential decoding, preserving frame selection.
 
 ## Milestones
 - [x] Implement and test row-copy eligibility, clipping, offsets and fallback.

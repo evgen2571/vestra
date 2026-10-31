@@ -55,4 +55,4 @@ Pending implementation and validation.
 - Release native decoder matrix (1280x720 H.264, 180 frames, GOP 60, B-frames 3) compared baseline `8b9f737` and combined code. Sequential remained 180 decodes/0 seeks; scrub at zero cache improved from median 4,785,250 us / 2,436 decodes / 19 seeks to 4,195,170 us / 2,084 decodes / 23 seeks. Sparse-forward requests in that six-second fixture stayed below the four-second threshold and were unchanged. Pixel oracles passed in both runs.
 
 ## Completion / handoff
-Implementation and focused validation are complete. Full workspace checks, Python/API checks, WGPU software/hardware checks, and cross-platform runs remain unverified in this environment. The feature branch is intentionally unpushed and no merge was performed.
+Implementation and focused validation are complete. Final branch commit before this handoff is `f2cba1e`; the branch is pushed to `origin/perf/cpu-compositing-seeking` and draft PR [#90](https://github.com/evgen2571/vestra/pull/90) targets `develop`. Full workspace Python/API tests, WGPU software/hardware checks, and cross-platform runs remain unverified in this environment. No merge was performed.

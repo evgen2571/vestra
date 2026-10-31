@@ -62,6 +62,7 @@ pub(crate) fn draw_layer(
                     opacity,
                     colour_transform,
                     motion_tile,
+                    prepared.fully_opaque(),
                     layer,
                 ) {
                     return Some(bytes);
@@ -103,6 +104,7 @@ pub(crate) fn draw_layer(
                     opacity,
                     colour_transform,
                     motion_tile,
+                    prepared.fully_opaque(),
                     layer,
                 ) {
                     return Some(bytes);
@@ -141,6 +143,7 @@ pub(crate) fn draw_layer(
                     opacity,
                     colour_transform,
                     motion_tile,
+                    prepared.fully_opaque(),
                     layer,
                 ) {
                     return Some(bytes);
@@ -183,6 +186,7 @@ pub(crate) fn draw_layer(
                     opacity,
                     colour_transform,
                     motion_tile,
+                    prepared.fully_opaque(),
                     layer,
                 ) {
                     return Some(bytes);
@@ -271,6 +275,7 @@ fn copy_opaque_raster(
     opacity: f64,
     colour_transform: ColourTransform,
     motion_tile: Option<geometry::MotionTileParameters>,
+    source_fully_opaque: bool,
     layer: &EvaluatedLayer,
 ) -> Option<u64> {
     if opacity != 1.0
@@ -313,10 +318,7 @@ fn copy_opaque_raster(
         || geometry.raster_effective_height != f64::from(source.height())
         || inverse.m02.fract() != 0.0
         || inverse.m12.fract() != 0.0
-        || !source
-            .as_raw()
-            .chunks_exact(4)
-            .all(|pixel| pixel[3] == u8::MAX)
+        || !source_fully_opaque
     {
         return None;
     }
@@ -943,6 +945,7 @@ mod tests {
             1.0,
             ColourTransform::default(),
             None,
+            true,
             &layer,
         );
         draw_raster(
@@ -988,6 +991,7 @@ mod tests {
                 1.0,
                 ColourTransform::default(),
                 None,
+                false,
                 &layer,
             ),
             None
@@ -1009,6 +1013,7 @@ mod tests {
                 1.0,
                 ColourTransform::default(),
                 None,
+                true,
                 &filtered,
             ),
             None
@@ -1586,6 +1591,7 @@ mod tests {
                                 1.0,
                                 ColourTransform::default(),
                                 None,
+                                true,
                                 &layer,
                             )
                             .is_some()

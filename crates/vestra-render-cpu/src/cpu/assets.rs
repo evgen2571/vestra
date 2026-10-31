@@ -387,6 +387,42 @@ mod tests {
     use crate::test_support::{ValidationOptions, load_and_validate};
 
     #[test]
+    #[ignore = "manual release opacity scan benchmark"]
+    fn opacity_scan_benchmark() -> Result<(), &'static str> {
+        if cfg!(debug_assertions) {
+            return Err("run in release mode");
+        }
+        let output = std::env::var("VESTRA_OPACITY_BENCH_OUTPUT").expect("output path");
+        let mut rows = Vec::new();
+        for (width, height) in [(1920, 1080), (3840, 2160)] {
+            let pixels = Arc::new(RgbaImage::from_pixel(
+                width,
+                height,
+                image::Rgba([30, 60, 90, 255]),
+            ));
+            let intrinsic = IntrinsicSize::new(width, height);
+            for sample in 0..6 {
+                let started = std::time::Instant::now();
+                for _ in 0..64 {
+                    let source = PreparedRasterSource::from_pixels(
+                        Arc::clone(std::hint::black_box(&pixels)),
+                        intrinsic,
+                    );
+                    assert!(std::hint::black_box(source.fully_opaque()));
+                }
+                rows.push(serde_json::json!({
+                    "width": width, "height": height, "sample": sample,
+                    "warmup": sample == 0, "scans": 64,
+                    "wall_ms": started.elapsed().as_secs_f64() * 1000.0,
+                }));
+            }
+        }
+        std::fs::write(output, serde_json::to_vec_pretty(&rows).expect("JSON"))
+            .expect("write opacity timings");
+        Ok(())
+    }
+
+    #[test]
     fn caches_static_source_crops_with_byte_metrics() {
         let validated = load_and_validate(
             std::path::Path::new("examples/projects/animation-effects.json"),

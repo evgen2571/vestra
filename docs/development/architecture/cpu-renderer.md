@@ -43,6 +43,14 @@ transform, no effects, masks or mattes, and every source pixel at alpha 255.
 The clipped source and destination rows are copied directly; transparent,
 filtered, scaled, transformed or otherwise uncertain layers use the existing
 sampler and blend path. Layer opacity alone never proves source opacity.
+Clipping rejects off-screen translations before integer narrowing, and byte
+spans are checked before copying. Static source opacity is prepared once per worker;
+video opacity currently scans the returned RGBA on each presentation, including
+repeated frames and ineligible layers. Decoder providers do not supply a reusable
+opacity proof. The focused [row-copy benchmarks](../../../benchmarks/README.md)
+separate that scan cost from compositing and one-shot encoded rendering.
+SDK copy-hit/byte and generic-blend counters describe the current operation;
+reusing a prepared project does not include work from previous operations.
 
 Preserve these boundaries when changing CPU code:
 

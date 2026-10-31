@@ -40,12 +40,15 @@ playback rate. The native decoder selects the latest presentation timestamp at
 or before the request, respecting the stream time base and source origin.
 Advancing requests decode intervening native frames but convert only the
 selected frame to RGBA. Backward requests seek to a keyframe and flush decoder
-state. The cursor also repositions for a distant initial request or a forward
-jump longer than four seconds (or 120 nominal frames when that metadata is
-available); shorter forward requests stay sequential to avoid seek overhead.
+state. The cursor also repositions for an initial request more than one second
+or 24 nominal frames from the origin, or a forward jump longer than eight seconds
+or 240 nominal frames. Frame estimates apply only when nominal rate metadata is
+available; shorter forward requests stay sequential to avoid seek overhead.
 This threshold only chooses where decoding starts. The existing PTS loop still
 selects the latest presentation timestamp at or before the request, so nominal
 frame rate never changes VFR or B-frame semantics.
+These are cost heuristics: a preceding keyframe can lie behind the current
+cursor, so some jumps still decode extra frames and incur seek overhead.
 If FFmpeg rejects an initial or forward reposition, the cursor continues from
 its current point; a backward failure remains an error because the cursor
 cannot recover an earlier frame without repositioning.

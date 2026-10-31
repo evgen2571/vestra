@@ -39,6 +39,8 @@ pub(crate) struct ComposeStats {
     pub static_layer_renders: u64,
     pub opaque_copy_fast_path_hits: u64,
     pub opaque_copy_fast_path_bytes: u64,
+    pub opaque_row_copy_fast_path_hits: u64,
+    pub opaque_row_copy_fast_path_bytes: u64,
     pub generic_blend_surface_calls: u64,
 }
 
@@ -216,7 +218,7 @@ impl ComposeContext<'_> {
             }
             if uses_direct_colour_path(layer) {
                 let started = self.profiling_enabled.then(Instant::now);
-                draw_layer(
+                let copied_bytes = draw_layer(
                     canvas,
                     self.assets,
                     layer,
@@ -225,6 +227,10 @@ impl ComposeContext<'_> {
                     self.timings,
                     self.profiling_enabled,
                 );
+                if let Some(bytes) = copied_bytes {
+                    self.stats.opaque_row_copy_fast_path_hits += 1;
+                    self.stats.opaque_row_copy_fast_path_bytes += bytes;
+                }
                 if let Some(started) = started {
                     self.timings.source_rasterization += started.elapsed();
                 }

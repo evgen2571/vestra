@@ -4,6 +4,10 @@ These seven repository-local skills supplement [AGENTS.md](../../AGENTS.md),
 [PLANS.md](../../PLANS.md) and the [development docs](../../docs/development/README.md).
 They do not override the repository's existing architectural contracts.
 
+Claude Code discovers the same skill directories through `.claude/skills/`.
+Keep `.agents/skills/` canonical and edit the target files, not the symlinked
+Claude entries.
+
 | Skill | Activate when |
 | --- | --- |
 | [effect-development](effect-development/SKILL.md) | Implementing or changing effects and shader pipelines |

@@ -70,6 +70,8 @@ fn main() {
             | "crt_video"
     ) {
         create_stylization_benchmark_project(&scenario, output.path(), width, height)
+    } else if matches!(scenario.as_str(), "opaque_video" | "ineligible_video") {
+        production::row_copy_project(&scenario, output.path(), width, height)
     } else if matches!(scenario.as_str(), "production_edit" | "video_heavy") {
         production::project(&scenario, output.path(), width, height)
     } else if matches!(
@@ -108,6 +110,8 @@ fn main() {
     if !matches!(
         scenario.as_str(),
         "single_video"
+            | "opaque_video"
+            | "ineligible_video"
             | "mixed_dynamic"
             | "dedup_video"
             | "production_edit"

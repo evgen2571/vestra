@@ -98,6 +98,21 @@ pub(super) fn operation_backend_metrics(
             after.cpu_full_frame_copy_bytes,
         ),
         (
+            "CPU opaque copy hit",
+            before.cpu_opaque_copy_fast_path_hits,
+            after.cpu_opaque_copy_fast_path_hits,
+        ),
+        (
+            "CPU opaque copy bytes",
+            before.cpu_opaque_copy_fast_path_bytes,
+            after.cpu_opaque_copy_fast_path_bytes,
+        ),
+        (
+            "CPU generic blend surface call",
+            before.cpu_generic_blend_surface_calls,
+            after.cpu_generic_blend_surface_calls,
+        ),
+        (
             "WGPU temporary texture allocation",
             before.wgpu_temporary_texture_allocations,
             after.wgpu_temporary_texture_allocations,
@@ -178,6 +193,18 @@ pub(super) fn operation_backend_metrics(
     performance.cpu_full_frame_copy_bytes = delta(
         before.cpu_full_frame_copy_bytes,
         after.cpu_full_frame_copy_bytes,
+    );
+    performance.cpu_opaque_copy_fast_path_hits = delta(
+        before.cpu_opaque_copy_fast_path_hits,
+        after.cpu_opaque_copy_fast_path_hits,
+    );
+    performance.cpu_opaque_copy_fast_path_bytes = delta(
+        before.cpu_opaque_copy_fast_path_bytes,
+        after.cpu_opaque_copy_fast_path_bytes,
+    );
+    performance.cpu_generic_blend_surface_calls = delta(
+        before.cpu_generic_blend_surface_calls,
+        after.cpu_generic_blend_surface_calls,
     );
     performance.wgpu_temporary_texture_allocations = delta(
         before.wgpu_temporary_texture_allocations,

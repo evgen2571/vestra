@@ -14,8 +14,7 @@ owns specs and dependencies; implementation plans track work on a selected issue
 
 - [Testing](testing.md)
 - [GPU validation](gpu-validation.md)
-- [Performance](performance.md)
-- [CPU rendering and work reuse](cpu-efficiency.md)
+- [Performance and benchmarking](performance.md)
 - [Media pipeline and concurrency](media-pipeline.md)
 - [Timeline domains and validation](architecture/project-to-plan.md#time-domains-and-frame-boundaries)
 
@@ -38,11 +37,11 @@ owns specs and dependencies; implementation plans track work on a selected issue
 ## Extension guides
 
 - [Add a source](extending/source.md)
-- [Add an effect](adding-effects.md)
+- [Add an effect](extending/effect.md)
 - [Add a transition](extending/transition.md)
 - [Add a backend](extending/backend.md)
 
 ## Release procedures
 
 - [Releasing the Python package](releasing.md)
-- [v0.1.0 historical release summary](release-notes.md)
+- [Changelog](../../CHANGELOG.md)

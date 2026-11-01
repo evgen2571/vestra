@@ -1,11 +1,24 @@
+import os
+
 import pytest
 
+import vestra
 from vestra import Crossfade, Image, Rectangle, Text
 from vestra.effects import GaussianBlur
 from vestra.lowering import source_capabilities
 
 
 FONT = "tests/assets/VestraTest-Regular.ttf"
+
+
+def _render_frame(project: vestra.Project, seconds: float, backend: str) -> vestra.Frame:
+    """Render a frame, skipping WGPU cases when this host has no usable adapter."""
+    try:
+        return project.render_frame(seconds, backend=backend)
+    except vestra.PreparationError:
+        if backend != "wgpu" or os.environ.get("VESTRA_REQUIRE_WGPU") == "1":
+            raise
+        pytest.skip("no compatible WGPU adapter")
 
 
 def _ink_bounds(pixels: bytes, width: int, height: int) -> tuple[int, int, int, int] | None:
@@ -110,8 +123,7 @@ def test_text_uses_generic_wgpu_raster_presentation() -> None:
     layer.transform.rotation = 0.1
     layer.opacity = 0.8
     cpu = project.render_frame(0, backend="cpu").to_bytes()
-    frame = project.render_frame(0, backend="wgpu")
-    gpu = frame.to_bytes()
+    gpu = _render_frame(project, 0, "wgpu").to_bytes()
     assert any(alpha for alpha in gpu[3::4])
     assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 2
 
@@ -248,7 +260,7 @@ def test_later_shapes_do_not_change_text_pixels(placement: str, backend: str) ->
             )
         return result
 
-    reference = project(False).render_frame(0.25, backend=backend).to_bytes()
-    actual = project(True).render_frame(0.25, backend=backend).to_bytes()
+    reference = _render_frame(project(False), 0.25, backend).to_bytes()
+    actual = _render_frame(project(True), 0.25, backend).to_bytes()
     assert _ink_bounds(reference, 160, 120), "reference must contain rendered text"
     assert actual == reference

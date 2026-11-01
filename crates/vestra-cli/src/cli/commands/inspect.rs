@@ -13,7 +13,8 @@ pub(super) fn run(project: PathBuf, preview: bool, format: ResultFormat) -> Exit
     };
     match outcome {
         Ok(inspection) => {
-            print_success("inspect", format, inspection, "project inspection complete")
+            let summary = crate::output::human::inspect(&inspection);
+            print_success("inspect", format, inspection, &summary)
         }
         Err(error) => print_failure(
             "inspect",

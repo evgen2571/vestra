@@ -22,15 +22,12 @@ pub(super) fn run(project: PathBuf, format: ResultFormat) -> ExitCode {
     // also reports whether that valid project can actually use its assets.
     let report = editor.preflight(&loaded, vestra::PreflightOptions::for_validation());
     if report.is_valid() {
-        print_success(
-            "validate",
-            format,
-            ValidateResult {
-                project,
-                warnings: report.warnings().cloned().collect(),
-            },
-            "project is valid",
-        )
+        let result = ValidateResult {
+            project,
+            warnings: report.warnings().cloned().collect(),
+        };
+        let summary = crate::output::human::validate(&result);
+        print_success("validate", format, result, &summary)
     } else {
         print_failure(
             "validate",

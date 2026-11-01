@@ -36,7 +36,6 @@ with the [user guides](../index.md#learn-vestra).
 - [Audio and signals](../concepts/audio-and-signals.md)
 - [The authoring model](../concepts/authoring-model.md)
 - [Effects, transitions, animation, flashes, and presets](../concepts/effects-transitions-and-animation.md)
-- [Rendering backends](../concepts/rendering-backends.md)
 - [The rendering lifecycle](../concepts/rendering-lifecycle.md)
 - [Timeline and time](../concepts/timeline-and-time.md)
 

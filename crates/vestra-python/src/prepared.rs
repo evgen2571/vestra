@@ -234,6 +234,15 @@ pub(crate) struct PyBackendFallback {
     #[pyo3(get)]
     message: String,
 }
+#[pymethods]
+impl PyBackendFallback {
+    fn __repr__(&self) -> String {
+        format!(
+            "BackendFallback(code={:?}, stage={:?}, message={:?})",
+            self.code, self.stage, self.message
+        )
+    }
+}
 impl From<&NativeBackendFallback> for PyBackendFallback {
     fn from(value: &NativeBackendFallback) -> Self {
         Self {

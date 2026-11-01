@@ -14,8 +14,12 @@ verbosity flags provide the CLI's default filter when it is unset.
 | `generate-schema` | `--output PATH`, default `schemas/project.schema.json`. |
 | `version` | Prints the Vestra version. |
 
-`PROJECT` is a path. Human results are printed as readable output. JSON results
-are machine-readable envelopes. Failures use a nonzero exit code and expose
+`PROJECT` is a path. Human results are short summaries: `validate` names the
+valid project, `inspect` lists the resolved output, duration and contents, and
+`render` reports the output path, size, frame count, renderer and elapsed time.
+Diagnostics are printed as `error[CODE]: message` or `warning[CODE]: message`,
+followed by the JSON location and hint when available. JSON results are
+machine-readable envelopes; their fields are stable, the human text is not. Failures use a nonzero exit code and expose
 diagnostics. Tracing is written to stderr. The default log policy is WARN;
 `-v`, `-vv`, and `-vvv` enable INFO, DEBUG, and TRACE respectively. `RUST_LOG`
 has precedence over those flags and supports target-specific filters such as

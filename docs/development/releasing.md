@@ -37,16 +37,18 @@ without publishing them.
 
 Before creating a tag or publishing a release:
 
-1. Run `just style check python-test examples showcase-smoke` and `just wheel-smoke`.
-2. Validate and visually inspect the public showcase outputs using the examples
+1. Move the `Unreleased` section in [CHANGELOG.md](../../CHANGELOG.md) into a
+   dated `version — date` section. The tag and GitHub release notes reuse it.
+2. Run `just style check python-test examples showcase-smoke` and `just wheel-smoke`.
+3. Validate and visually inspect the public showcase outputs using the examples
    instructions. Check documentation links with `just docs-check`.
-3. Push the reviewed release-preparation changes, then manually run
+4. Push the reviewed release-preparation changes, then manually run
    `.github/workflows/release.yml` on that exact revision. All 20 wheel jobs and
    the source-distribution job must pass at least once before release.
-4. Download and inspect the resulting wheel/sdist artifacts. The manual event
+5. Download and inspect the resulting wheel/sdist artifacts. The manual event
    cannot enter either the PyPI publish job or the GitHub attachment job.
-5. Configure PyPI Trusted Publishing and the protected `pypi` environment.
-6. Review the release notes and the history/privacy decision before making the
+6. Configure PyPI Trusted Publishing and the protected `pypi` environment.
+7. Review the release notes and the history/privacy decision before making the
    repository public. Creating the tag and publishing remain maintainer actions.
 
 Version/license inheritance and release-tag consistency are checked before

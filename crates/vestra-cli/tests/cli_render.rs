@@ -102,7 +102,7 @@ fn none_progress_does_not_suppress_debug_logs_or_the_command_result() {
         .output()
         .expect("render runs");
     assert!(result.status.success());
-    assert!(String::from_utf8_lossy(&result.stdout).contains("render completed"));
+    assert!(String::from_utf8_lossy(&result.stdout).contains("Rendered "));
     assert!(String::from_utf8_lossy(&result.stderr).contains(" DEBUG "));
     assert!(!String::from_utf8_lossy(&result.stderr).contains("Rendering"));
 }
@@ -185,7 +185,7 @@ fn json_progress_keeps_stdout_parseable_and_moves_result_to_stderr() {
     for line in progress.lines() {
         serde_json::from_str::<Value>(line).expect("progress line is JSON");
     }
-    assert!(String::from_utf8_lossy(&result.stderr).contains("render completed"));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("Rendered "));
 }
 
 #[test]
@@ -219,6 +219,6 @@ fn json_progress_and_json_results_share_a_jsonl_stdout_stream() {
         .collect();
     assert!(lines.iter().any(|line| line["type"] == "started"));
     assert!(lines.iter().any(|line| line["status"] == "success"));
-    assert!(!String::from_utf8_lossy(&result.stderr).contains("render completed"));
+    assert!(!String::from_utf8_lossy(&result.stderr).contains("Rendered "));
     assert!(!String::from_utf8_lossy(&result.stderr).contains("result_schema_version"));
 }

@@ -38,7 +38,8 @@ Presets are layer-owned reusable motion intent. They are currently intended
 for image layers and a layer can hold one at a time:
 
 ```python
-layer.presets.apply_slow_drift(start=0.5, duration=4, intensity=0.6)
+photo = project.root.add(Image("assets/photo.png"), duration=6)
+photo.presets.apply_slow_drift(start=0.5, duration=4, intensity=0.6)
 ```
 
 Nested compositions can be transition endpoints in their parent composition.

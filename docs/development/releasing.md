@@ -37,8 +37,8 @@ without publishing them.
 
 Before creating a tag or publishing a release:
 
-1. Move the `Unreleased` section in [CHANGELOG.md](../../CHANGELOG.md) into a
-   dated `version — date` section. The tag and GitHub release notes reuse it.
+1. Draft dated `version — date` release notes from the reviewed changes since
+   the previous tag. Publish them with the [GitHub release](https://github.com/evgen2571/vestra/releases).
 2. Run `just style check python-test examples showcase-smoke` and `just wheel-smoke`.
 3. Validate and visually inspect the public showcase outputs using the examples
    instructions. Check documentation links with `just docs-check`.

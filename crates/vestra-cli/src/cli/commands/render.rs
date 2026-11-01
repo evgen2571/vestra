@@ -88,7 +88,8 @@ pub(super) fn run(
                     warnings,
                 );
             }
-            print_success_for_progress(progress, "render", format, data, "render completed")
+            let summary = crate::output::human::render(&data);
+            print_success_for_progress(progress, "render", format, data, &summary)
         }
         Err(EditorError::Project {
             errors,

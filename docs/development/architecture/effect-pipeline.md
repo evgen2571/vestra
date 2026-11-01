@@ -1,7 +1,7 @@
 # Effect pipeline and renderer resource constraints
 
 This is the architecture reference for visual effects, including advanced
-multi-pass shaders. Use [Add an effect](../adding-effects.md) as the
+multi-pass shaders. Use [Add an effect](../extending/effect.md) as the
 implementation checklist, and verify precise behavior against current source.
 
 ## Ownership and data flow

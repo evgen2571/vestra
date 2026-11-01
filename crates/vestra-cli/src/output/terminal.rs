@@ -69,11 +69,8 @@ pub fn print_failure(
     let exit = exit_for_errors(&errors);
     match format {
         ResultFormat::Human => {
-            for warning in &warnings {
-                eprintln!("{}: {}", warning.code, warning.message);
-            }
-            for error in &errors {
-                eprintln!("{}: {}", error.code, error.message);
+            for diagnostic in warnings.iter().chain(&errors) {
+                eprintln!("{}", super::human::diagnostic(diagnostic));
             }
         }
         ResultFormat::Json => match serde_json::to_string(&ResultEnvelope {
@@ -101,11 +98,8 @@ pub(crate) fn print_failure_stderr(
     let exit = exit_for_errors(&errors);
     match format {
         ResultFormat::Human => {
-            for warning in &warnings {
-                eprintln!("{}: {}", warning.code, warning.message);
-            }
-            for error in &errors {
-                eprintln!("{}: {}", error.code, error.message);
+            for diagnostic in warnings.iter().chain(&errors) {
+                eprintln!("{}", super::human::diagnostic(diagnostic));
             }
         }
         ResultFormat::Json => match serde_json::to_string(&ResultEnvelope {

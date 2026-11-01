@@ -62,8 +62,15 @@ Run validation before rendering:
 cargo run -q -p vestra-cli -- validate solid.json
 ```
 
-The command should report `project is valid`. Validation checks the JSON shape,
-schema version, layer settings and the resources needed by the project.
+The command should print `solid.json is valid`. Validation checks the JSON
+shape, schema version, timing and layer settings, plus the media files, output
+path and renderer the project needs. Problems are reported with a code, the
+JSON location and, where available, a hint:
+
+```text
+error[VESTRA-KEYFRAME-TIME]: keyframe times must be finite, strictly increasing, and inside the clip
+  at /visual/clips/0/opacity/keyframes/0/time
+```
 
 ## Render it
 
@@ -77,8 +84,16 @@ cargo run -q -p vestra-cli -- render solid.json \
   --render-backend cpu
 ```
 
-The output is `quickstart.mp4` in the current directory. It is a 320×180,
-24 fps, one-second MP4 filled with `#2f6fed`. `--progress none` keeps this
+The command prints a summary such as:
+
+```text
+Rendered quickstart.mp4
+  320x180 at 24 fps, 1.00 s (24 frames)
+  cpu renderer, finished in 0.21 s
+```
+
+The output is `quickstart.mp4` in the current directory, a one-second MP4
+filled with `#2f6fed`. `--progress none` keeps this
 minimal command quiet. Progress defaults to Auto: it is shown on an interactive
 terminal and stays quiet when stderr is redirected, in CI, or under
 `TERM=dumb`. Use `--progress terminal` to force the terminal presentation.
@@ -95,10 +110,19 @@ check `ffmpeg -version` and `ffprobe -version`, then consult
 [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md) or
 [rendering troubleshooting](../troubleshooting/rendering.md).
 
-Use `inspect` to see the loaded project and its assets:
+Use `inspect` to see the resolved output settings, duration and contents:
 
 ```bash
 cargo run -q -p vestra-cli -- inspect solid.json
+```
+
+```text
+solid.json (Minimal solid project)
+  output   output.mp4
+           320x180 at 24 fps, 1.00 s (24 frames, explicit duration)
+  visual   1 clip, 0 transitions, 0 flashes
+  assets   0 images, 0 audio files
+  audio    none
 ```
 
 For scripts that need machine-readable diagnostics, add `--format json` to

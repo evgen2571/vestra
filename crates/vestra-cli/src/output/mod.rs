@@ -1,5 +1,6 @@
 //! Output paths, temporary files, and publication.
 
+pub(crate) mod human;
 pub(crate) mod progress;
 mod report;
 mod result;

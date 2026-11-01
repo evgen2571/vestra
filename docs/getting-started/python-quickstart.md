@@ -68,6 +68,7 @@ without rendering a video:
 ```python
 report = project.validate()
 print(f"Project settings valid: {report.is_valid}")
+print(report)  # diagnostics with JSON locations when invalid
 ```
 
 The report's `is_valid` property tells you whether these checks passed.

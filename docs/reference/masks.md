@@ -68,7 +68,7 @@ A Track Matte references existing timeline content; it does not own a new
 source. The two relationships are intentionally distinct:
 
 ```python
-layer.masks.add(vestra.Text("MASK", font="font.ttf"))  # owned source
+layer.masks.add(vestra.Text("MASK", font="font.ttf", font_size=48))  # owned source
 layer.set_matte(matte_layer, mode=vestra.MatteMode.ALPHA)  # layer reference
 ```
 

@@ -248,7 +248,7 @@ pub fn build_with_terminal_output(
     match config.format {
         LogFormat::Human => {
             let layer = tracing_subscriber::fmt::layer()
-                .pretty()
+                .compact()
                 .with_target(true)
                 .with_ansi(false)
                 .with_writer(writer);

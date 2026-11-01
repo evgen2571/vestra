@@ -191,7 +191,7 @@ fn render_progress_and_root_log_share_the_operation_id() {
         .as_u64()
         .expect("started event has an operation id");
     let stderr = String::from_utf8_lossy(&result.stderr);
-    assert!(stderr.contains(&format!("operation_id: {operation_id}")));
+    assert!(stderr.contains(&format!("operation_id={operation_id}")));
     assert_eq!(stderr.matches("render failed").count(), 1);
 }
 

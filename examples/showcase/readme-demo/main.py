@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from vestra import Interpolation, Project
+from vestra.authoring import Quality
 from vestra.effects import OrderedDither
 from vestra.sources import Circle, Color, Image, Rectangle, Text, Video
 
@@ -14,7 +15,13 @@ BACKGROUND, PAPER, MINT = "#101c24", "#f1efe5", "#b8e3bc"
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
     unit = size[0] / 1280
-    project = Project(size=size, fps=fps, duration=DURATION, base_directory=SHOWCASE)
+    project = Project(
+        size=size,
+        fps=fps,
+        duration=DURATION,
+        base_directory=SHOWCASE,
+        quality=Quality.HIGH,
+    )
     project.root.add(Color(BACKGROUND), z=-100)
 
     def label(parent, text, position, font_size, fill=PAPER, duration=DURATION):
@@ -30,10 +37,16 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
 
     label(project.root, "V E S T R A", (0.16, 0.105), 26, MINT)
     label(project.root, "PYTHON  →  VIDEO", (0.79, 0.105), 18)
-    label(project.root, "Make it", (0.245, 0.33), 100)
-    label(project.root, "move.", (0.245, 0.49), 112, MINT)
-    label(project.root, "Your ideas. Your timeline. Your code.", (0.252, 0.655), 21)
-    label(project.root, "Every frame rendered with Vestra", (0.5, 0.925), 17, MINT)
+    label(project.root, "Video", (0.245, 0.33), 92)
+    label(project.root, "composition", (0.245, 0.49), 59, MINT)
+    label(project.root, "Python · Rust · CPU / WGPU", (0.252, 0.655), 21)
+    label(
+        project.root,
+        "Layers, masks and effects · 720p / 30 fps",
+        (0.5, 0.925),
+        17,
+        MINT,
+    )
 
     rule = project.root.add(Rectangle(width=1120 * unit, height=unit, fill="#36504f"))
     rule.transform.position = (0.5, 0.835)
@@ -45,7 +58,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     progress.transform.scale.keyframe(0, (0.001, 1))
     progress.transform.scale.keyframe(DURATION, (1, 1))
 
-    # Overlapping opacity ramps keep the hero alive through every scene change.
+    # Fade adjacent groups over the persistent background.
     def scene(start, duration, caption):
         group = project.root.group(start=start, duration=duration)
         if start:
@@ -56,7 +69,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         label(group, caption, (0.745, 0.765), 19, MINT, duration)
         return group
 
-    motion = scene(0, 3.5, "01 / KEYFRAMES + LAYERS")
+    motion = scene(0, 3.5, "Layer animation")
     for index, colour in enumerate(("#527e79", MINT, PAPER)):
         card = motion.add(
             Rectangle(
@@ -86,7 +99,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         dot = motion.add(Circle(radius=10 * unit, fill=colour), z=5)
         dot.transform.position = (0.64 + index * 0.10, 0.17)
 
-    media = scene(3.2, 3.6, "02 / FOOTAGE + MASKS")
+    media = scene(3.2, 3.6, "Video and masks")
     clip = media.add(Video("assets/city-1.mp4", sizing="cover"))
     clip.masks.add(
         Rectangle(
@@ -101,7 +114,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     )
     label(media, "Location Kenya · CC BY 3.0", (0.74, 0.70), 15, PAPER, 3.6)
 
-    effects = scene(6.5, 3.5, "03 / PALETTES + DITHER")
+    effects = scene(6.5, 3.5, "Palette dithering")
     photo = effects.add(Image("assets/landscape.jpg", sizing="cover"))
     photo.masks.add(
         Rectangle(
@@ -115,13 +128,11 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
             (BACKGROUND, "#527e79", MINT, PAPER),
             matrix="bayer8",
             scale=max(1, round(3 * unit)),
-            input_gamma=1.25,
+            input_exposure=-0.3,
         )
     )
     dither.amount.keyframe(0, 0)
     dither.amount.keyframe(1.2, 1, interpolation=Interpolation.EASE_IN_OUT)
-    dither.phase.keyframe(1.2, 0)
-    dither.phase.keyframe(3.5, 0.45)
     return project
 
 

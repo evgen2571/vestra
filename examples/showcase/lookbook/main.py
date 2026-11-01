@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from vestra import Interpolation, Project
+from vestra.authoring import Quality
 from vestra.effects import Ascii, Halftone
 from vestra.sources import Color, Image, Rectangle, Text
 
@@ -13,7 +14,13 @@ DURATION = 6
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
     unit = size[0] / 1280
-    project = Project(size=size, fps=fps, duration=DURATION, base_directory=SHOWCASE)
+    project = Project(
+        size=size,
+        fps=fps,
+        duration=DURATION,
+        base_directory=SHOWCASE,
+        quality=Quality.HIGH,
+    )
     project.root.add(Color("#101c24"))
 
     def label(text, position, font_size, colour="#f1efe5"):
@@ -25,12 +32,12 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         )
         layer.transform.position = position
 
-    label("ONE SOURCE. THREE MOODS.", (0.5, 0.11), 36)
-    for index, name in enumerate(("01 / ORIGINAL", "02 / HALFTONE", "03 / ASCII")):
+    label("Photo, halftone and ASCII", (0.5, 0.11), 36)
+    for index, name in enumerate(("Original", "Halftone", "ASCII")):
         group = project.root.group(duration=DURATION)
         photo = group.add(Image("assets/landscape.jpg", sizing="cover"))
         photo.transform.scale.keyframe(0, 1)
-        photo.transform.scale.keyframe(3, 1.15, interpolation=Interpolation.EASE_IN_OUT)
+        photo.transform.scale.keyframe(3, 1.06, interpolation=Interpolation.EASE_IN_OUT)
         photo.transform.scale.keyframe(6, 1, interpolation=Interpolation.EASE_IN_OUT)
         if index == 1:
             photo.effects.add(

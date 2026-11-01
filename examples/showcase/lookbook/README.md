@@ -1,4 +1,4 @@
-# One source. Three moods.
+# Photo, halftone and ASCII
 
 [Watch the MP4](render.mp4) · [Python source](main.py)
 

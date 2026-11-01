@@ -20,5 +20,5 @@ The original synth bed is generated using Python's standard library; no download
 is required. [ASSETS](../ASSETS.md) records its CC0 dedication and the font license.
 
 The radial layout wraps 48 bands around a reactive halo, with a cyan-to-coral
-gradient across the bands. The centred SIGNAL title and purple particle field
+gradient across the bands. The centred spectrum label and purple particle field
 form a complete music-visualizer composition.

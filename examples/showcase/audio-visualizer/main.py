@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from vestra import Project
+from vestra.authoring import Quality
 from vestra.effects import Bloom
 from vestra.sources import (
     Circle,
@@ -23,7 +24,9 @@ SHOWCASE = Path(__file__).resolve().parents[1]
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
     width, _ = size
     unit = width / 1280
-    project = Project(size=size, fps=fps, duration=12, base_directory=SHOWCASE)
+    project = Project(
+        size=size, fps=fps, duration=12, base_directory=SHOWCASE, quality=Quality.HIGH
+    )
     project.root.add(Color("#141222"), duration=12)
     project.audio.track("synth").add(
         "assets/synth.wav", trim_end=12, gain=0.85, fade_in=0.4, fade_out=1
@@ -81,7 +84,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     spectrum.effects.add(Bloom(threshold=0.65, radius=4 * unit, intensity=0.25))
     heading = project.root.add(
         Text(
-            "S I G N A L",
+            "Spectrum",
             font="assets/Manrope.ttf",
             font_size=45 * unit,
             fill="#f1efe5",
@@ -92,7 +95,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     heading.transform.position = (0.5, 0.5)
     caption = project.root.add(
         Text(
-            "SOUND INTO SHAPE",
+            "Audio-reactive spectrum and particles",
             font="assets/Manrope.ttf",
             font_size=20 * unit,
             fill="#bba5eb",

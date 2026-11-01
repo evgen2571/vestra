@@ -1,8 +1,8 @@
 # Showcases
 
 Six complete CPU-rendered compositions, with their Python source, rendered MP4s,
-posters, silent animated previews and assets. Each project page displays its
-GIF directly on GitHub; the MP4 link opens the full video file for download.
+posters, silent animated previews and assets. Each project page displays a
+GIF preview directly on GitHub; the MP4 link opens the full video file for download.
 
 | Project | Render | Source / notes |
 | --- | --- | --- |
@@ -44,3 +44,11 @@ FFmpeg version even when the project and source inputs are unchanged.
 
 The README quickstart is also checked against the code in the tutorial, so the
 copy-paste example and its committed result share the same scene.
+
+Full showcase MP4s use 1280×720 / 30 fps and the high quality tier (libx264
+CRF 18 / medium); the small Python quickstart retains its 640×360 / 30 fps
+balanced output. GIFs use 20 fps, 128 colours and a 480 px width (800 px for the
+hero’s standalone project page). The media-edit GIF uses 400 px and 96 colours
+to keep the moving footage reasonably small. It shows seconds 3.5–7.5, with
+short fades at its ends; the linked MP4 is the complete
+fourteen-second edit. GIF previews intentionally omit audio.

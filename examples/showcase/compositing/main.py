@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from vestra import Interpolation, Project
+from vestra.authoring import Quality
 from vestra.effects import Saturation
 from vestra.sources import Circle, Color, Image, Rectangle, Text
 
@@ -13,7 +14,9 @@ SHOWCASE = Path(__file__).resolve().parents[1]
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
     width, _ = size
     unit = width / 1280
-    project = Project(size=size, fps=fps, duration=8, base_directory=SHOWCASE)
+    project = Project(
+        size=size, fps=fps, duration=8, base_directory=SHOWCASE, quality=Quality.HIGH
+    )
     project.root.add(Color("#ebe7df"), duration=8)
 
     def label(text, position, font_size, colour="#213c4b"):
@@ -59,6 +62,8 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         card.transform.scale.keyframe(1, 1, interpolation=Interpolation.EASE_OUT)
         card.opacity.keyframe(0, 0)
         card.opacity.keyframe(0.6, 1)
+        card.opacity.keyframe(7.4, 1)
+        card.opacity.keyframe(8, 0)
         label(("Circle", "Rounded rectangle", "Rectangle")[index], (x, 0.76), 24)
     return project
 

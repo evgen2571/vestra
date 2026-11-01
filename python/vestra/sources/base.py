@@ -126,6 +126,21 @@ class Source:
     def snapshot(self) -> "Source":
         return deepcopy(self)
 
+    def __repr__(self) -> str:
+        # Show the simple configured values; nested properties stay summarized.
+        fields = []
+        for cls in reversed(type(self).__mro__):
+            for slot in cls.__dict__.get("__slots__", ()):
+                value = getattr(self, slot, None)
+                if isinstance(value, (bool, int, float, str)) or (
+                    isinstance(value, tuple)
+                    and all(isinstance(item, (int, float)) for item in value)
+                ):
+                    fields.append(f"{slot.lstrip('_')}={value!r}")
+                elif hasattr(value, "value") and isinstance(value.value, str):
+                    fields.append(f"{slot.lstrip('_')}={value.value!r}")
+        return f"{type(self).__name__}({', '.join(fields)})"
+
 
 SizingValue: TypeAlias = Sizing | Literal["original", "fit", "cover"]
 

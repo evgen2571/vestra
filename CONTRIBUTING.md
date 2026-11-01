@@ -42,7 +42,7 @@ just python-sync
 Run `just` to list available commands. Coding agents should read
 [AGENTS.md](AGENTS.md); substantial changes use the [plan convention](PLANS.md). If you do not use Nix, follow the native
 setup instructions in [installation](docs/getting-started/installation.md#build-from-source--development)
-and [testing](docs/development/testing.md). Rendering requires `ffmpeg` and
+and [testing](docs/development/testing.md) and [changelog](CHANGELOG.md). Rendering requires `ffmpeg` and
 `ffprobe` on `PATH`.
 
 ## 3. Make and test your change
@@ -72,7 +72,7 @@ just python-test
 
 Vestra's public Rust/Python APIs, project schema, CLI and diagnostics are shared
 contracts. Changes to these may also need updated type stubs, schema checks or
-reference documentation. See [testing](docs/development/testing.md) for the
+reference documentation. See [testing](docs/development/testing.md) and [changelog](CHANGELOG.md) for the
 checks relevant to your change, and the [architecture overview](docs/development/architecture/overview.md)
 for an introduction to the codebase.
 

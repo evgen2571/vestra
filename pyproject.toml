@@ -10,8 +10,13 @@ readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = "MIT"
 license-files = ["LICENSE", "licenses/*.txt"]
-keywords = ["video editing", "video rendering", "ffmpeg"]
+keywords = ["video editing", "video rendering", "video compositing", "motion graphics", "ffmpeg", "wgpu"]
 classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Topic :: Multimedia :: Video",
+  "Topic :: Multimedia :: Video :: Conversion",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
@@ -30,7 +35,7 @@ Issues = "https://github.com/evgen2571/vestra/issues"
 test = ["jsonschema==4.26.0", "mypy>=1.13", "pytest>=8"]
 dev = ["jsonschema==4.26.0", "maturin>=1.14,<2", "mypy>=1.13", "pytest>=8", "ruff>=0.12,<0.13"]
 
-benchmark = ["moviepy==2.2.1", "psutil==7.2.2", "pillow==11.3.0", "imageio-ffmpeg==0.6.0", "maturin==1.14.1"]
+benchmark = ["moviepy==2.2.1", "psutil==7.2.2", "pillow==11.3.0", "imageio-ffmpeg==0.6.0", "maturin==1.14.1", "vestra"]
 
 [tool.ruff]
 target-version = "py311"

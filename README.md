@@ -1,7 +1,9 @@
 # Vestra
 
-Vestra is a native video composition and rendering engine with a Python
-authoring API and a Rust core. Render compositions through CPU or WGPU.
+Vestra is a video composition and rendering engine. You describe a video as a
+project — layers, sources, keyframes, effects, audio — and Vestra renders it to
+MP4 through a native Rust engine, on the CPU or GPU (WGPU). It ships as a
+Python library, with a canonical JSON format and a `ve` CLI built from source.
 
 ![Animated showcase: animation, media, compositing and audio-reactive graphics](examples/showcase/readme-demo/preview.gif)
 
@@ -11,73 +13,90 @@ authoring API and a Rust core. Render compositions through CPU or WGPU.
 
 ## Quick start
 
-With uv:
+Requires Python 3.11–3.14. Rendering needs `ffmpeg` and `ffprobe` on `PATH`
+(see [installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)).
 
 ```bash
-uv add vestra
-uv run python example.py
+pip install vestra   # or: uv add vestra
 ```
-
-Or with pip:
-
-```bash
-python -m pip install vestra
-python example.py
-```
-
-Install **ffmpeg and ffprobe** on `PATH` before rendering.
-Save this as `example.py` to create `output.mp4`:
 
 ```python
 from vestra import Project
 from vestra.sources import Color, Rectangle
 
-
 project = Project(size=(640, 360), fps=30, duration=2)
-project.root.add(Color("#171d20"), duration=2)
+project.root.add(Color("#171d20"))
 
-bar = project.root.add(Rectangle(width=240, height=8, fill="#a9c4aa"), duration=2)
+bar = project.root.add(Rectangle(width=240, height=8, fill="#a9c4aa"))
 bar.transform.scale.keyframe(0, (0.05, 1))
 bar.transform.scale.keyframe(2, (1, 1))
 
-project.render("output.mp4", backend="cpu", overwrite=True)
+project.render("output.mp4", overwrite=True)
 ```
 
-## Features
+## What you can build
 
-- Images, video, shapes, text and particles.
-- Keyframes, nested compositions, masks, effects and transitions.
-- Audio mixing, fades, spectrum graphics and audio signals.
-- Python authoring, Rust SDK and JSON CLI with validation and render progress.
+- **Video edits** — images, video, shapes and text on a timeline, with nested
+  compositions, masks, track mattes, blend modes and transitions.
+- **Motion graphics** — keyframed transforms and properties, flashes,
+  timeline presets, particles and animated effects.
+- **Audio-reactive visuals** — master-audio spectrum displays and signals that
+  drive any scalar property, plus a real audio mix (fades, gain automation,
+  EQ and playback-rate effects) in the same render.
+- **Stylized looks** — ASCII, palette mapping, ordered and blue-noise dither,
+  halftone, pixel sorting and CRT effects, on clips or the whole frame.
 
-## Examples
+See [the rendered showcases](https://github.com/evgen2571/vestra/blob/main/examples/showcase/README.md)
+and [reference examples](https://github.com/evgen2571/vestra/blob/main/examples/README.md).
 
-Browse the [showcases](https://github.com/evgen2571/vestra/blob/main/examples/showcase/README.md)
-for rendered videos and source, or the [reference examples](https://github.com/evgen2571/vestra/blob/main/examples/README.md)
-for individual features.
+## Design and limits
+
+Projects compile to a versioned canonical model validated before rendering,
+so timing and layering errors are reported up front, with locations —
+`ve validate` and `project.validate()` check semantics; `ve inspect` and
+`prepare()` check media and backends. CPU and GPU share one evaluated plan.
+
+- Output is MP4 (H.264 + AAC) up to 8192×8192; even dimensions are required.
+- Rendering shells out to `ffmpeg`/`ffprobe` at runtime; wheels only bundle
+  the FFmpeg libraries used internally for decoding.
+- `auto` uses WGPU when a usable adapter is found and falls back to CPU;
+  `cpu` and `wgpu` force a renderer. WGPU coverage per feature is in the
+  [feature matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md).
+- The Python wheel does not install the `ve` CLI — build it with
+  `cargo build -p vestra-cli` ([JSON authoring](https://github.com/evgen2571/vestra/blob/main/docs/guides/json-authoring.md)).
+- Text requires a font file; there is no system font fallback.
+
+Vestra is a rendering engine, not a live editor: it renders a finished project
+to a file rather than streaming interactive previews. If you need a timeline
+UI, a Node/browser stack, or a wide codec/container range, look at Remotion,
+Motion Canvas or MoviePy instead.
 
 ## Documentation
 
-[Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md)
+[Installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)
+· [Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md)
+· [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md)
 · [Docs index](https://github.com/evgen2571/vestra/blob/main/docs/index.md)
-· [API reference](https://github.com/evgen2571/vestra/blob/main/docs/reference/python-api.md)
+· [Python API](https://github.com/evgen2571/vestra/blob/main/docs/reference/python-api.md)
+· [Changelog](https://github.com/evgen2571/vestra/blob/main/CHANGELOG.md)
 · [Contributing](https://github.com/evgen2571/vestra/blob/main/CONTRIBUTING.md)
+
+Vestra 0.1.x: the Python API may still change between minor versions; the JSON
+schema and diagnostic codes are stable contracts.
 
 ## Development
 
 ```bash
-nix develop
-just check
+nix develop && just python-sync && just check
 ```
 
-See the contributing guide above and [testing](https://github.com/evgen2571/vestra/blob/main/docs/development/testing.md)
-for setup and verification details. Coding agents can start with
-[AGENTS.md](AGENTS.md); complex implementation work follows [PLANS.md](PLANS.md).
-
-To contribute performance results, follow the [portable benchmark collection guide](benchmarks/COLLECTING.md).
+See [contributing](CONTRIBUTING.md) and [testing](https://github.com/evgen2571/vestra/blob/main/docs/development/testing.md).
+Agents start with [AGENTS.md](AGENTS.md); benchmarks live in
+[benchmarks](benchmarks/README.md) with a
+[MoviePy comparison](https://github.com/evgen2571/vestra/blob/main/docs/benchmarks/vestra-vs-moviepy.md).
 
 ## License
 
-[MIT](https://github.com/evgen2571/vestra/blob/main/LICENSE).
-See [third-party notices](https://github.com/evgen2571/vestra/blob/main/THIRD_PARTY_NOTICES.md)
-and [asset licenses](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md).
+[MIT](LICENSE). Third-party software and example assets keep their own
+licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
+[asset credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md).

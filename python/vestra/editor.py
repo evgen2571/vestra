@@ -158,6 +158,12 @@ class Layer:
         self._matte: tuple[Layer, MatteMode, bool] | None = None
         self._presets = PresetCollection(self)
 
+    def __repr__(self) -> str:
+        return (
+            f"<{type(self).__name__} {self._id!r} {type(self._source).__name__}, "
+            f"start={self._start:g}s, duration={self._duration:g}s, z={self._z}>"
+        )
+
     @property
     def composition(self) -> Composition:
         return self._composition
@@ -362,6 +368,13 @@ class CompositionLayer(Layer):
         )
         self._child = Composition(composition.project, self)
 
+    def __repr__(self) -> str:
+        return (
+            f"<CompositionLayer {self.id!r} with "
+            f"{_count(len(self._child.layers), 'layer')}, start={self.start:g}s, "
+            f"duration={self.duration:g}s, z={self.z}>"
+        )
+
     @property
     def child(self) -> Composition:
         """The child composition containing this group's authored layers."""
@@ -442,6 +455,10 @@ class Composition:
         self._parent_layer = parent_layer
         self._transitions = TransitionCollection(self)
 
+    def __repr__(self) -> str:
+        owner = "root" if self._parent_layer is None else repr(self._parent_layer.id)
+        return f"<Composition {owner}, {_count(len(self._layers), 'layer')}>"
+
     @property
     def project(self) -> Project:
         return self._project
@@ -490,6 +507,14 @@ class Composition:
         name: str | None = None,
         blend_mode: BlendMode = BlendMode.NORMAL,
     ) -> Layer:
+        """Place a copy of ``source`` in this composition and return its layer.
+
+        Times are in seconds, local to this composition. ``duration`` defaults
+        to the remaining media length for ``Video`` and otherwise to the
+        composition's duration. Higher ``z`` values are drawn on top. Later
+        changes to ``source`` do not affect the layer; configure the returned
+        ``Layer`` instead.
+        """
         if not isinstance(source, Source):
             raise TypeError("source must be a vestra.sources.Source")
         if duration is None:
@@ -569,6 +594,18 @@ class Composition:
         return layer
 
 
+def _count(value: int, noun: str) -> str:
+    return f"{value} {noun}" if value == 1 else f"{value} {noun}s"
+
+
+def _frame_rate_text(rate: _native.FrameRate) -> str:
+    return (
+        str(rate.numerator)
+        if rate.denominator == 1
+        else f"{rate.numerator}/{rate.denominator}"
+    )
+
+
 def _layer_id(value: str | None, index: int, used: set[str]) -> str:
     if value is not None:
         if not isinstance(value, str):
@@ -586,15 +623,18 @@ def _layer_id(value: str | None, index: int, used: set[str]) -> str:
 
 
 class Project:
-    """Mutable normal-user project with one root composition.
+    """A video project: output settings, a root composition and an audio timeline.
 
-    ``output_audio`` is the only project-level configuration with editor-style
-    mutation. Size, frame rate, duration, background, quality, base directory,
-    name, metadata, and the default output path are construction-time
-    configuration; changing them after layers or prepared snapshots exist would
-    make their existing timing, validation, or asset-path assumptions unclear.
-    Pass new values to a new ``Project`` instead. ``snapshot(output=...)`` is
-    the supported per-render output-path override.
+    ::
+
+        project = Project(size=(1280, 720), fps=30, duration=5)
+        project.root.add(Color("#202830"))
+        project.render("out.mp4")
+
+    Relative media paths resolve against ``base_directory``. Size, frame rate,
+    duration, background, quality and paths are fixed at construction because
+    existing layer timing and asset paths depend on them; create a new
+    ``Project`` to change them. ``output_audio`` can be changed at any time.
     """
 
     __slots__ = (
@@ -663,8 +703,17 @@ class Project:
         self._post_effects = EffectStack("post")
         self._flashes = FlashCollection(self)
 
+    def __repr__(self) -> str:
+        width, height = self.size
+        duration = "auto" if self._duration is None else f"{self._duration:g}s"
+        return (
+            f"<Project {width}x{height} @ {_frame_rate_text(self._frame_rate)} fps, "
+            f"duration={duration}, {_count(len(self._root.layers), 'layer')}>"
+        )
+
     @property
     def root(self) -> Composition:
+        """The top-level composition; add layers here."""
         return self._root
 
     @property
@@ -708,6 +757,11 @@ class Project:
     def snapshot(
         self, *, output: str | os.PathLike[str] | None = None
     ) -> _native.Project:
+        """Return an immutable canonical copy of the project.
+
+        Later edits do not affect the snapshot. Use ``to_json()`` on the result
+        to obtain the canonical JSON accepted by the ``ve`` CLI.
+        """
         output_path = self._output_path if output is None else _path(output, "output")
         if output_path is None:
             output_path = "output.mp4"
@@ -737,11 +791,17 @@ class Project:
         return builder.build()
 
     def validate(self) -> _native.ValidationReport:
+        """Check timing, ranges and references without touching media or GPUs.
+
+        Media files, FFmpeg and graphics adapters are checked by ``prepare()``
+        and ``render()``.
+        """
         return _native.Editor().validate(self.snapshot())
 
     def prepare(
         self, *, backend: str | _native.BackendPreference = "auto"
     ) -> _native.PreparedProject:
+        """Decode media and initialize a renderer for repeated frame or video renders."""
         return _native.Editor().prepare(
             self.snapshot(), _native.PrepareOptions(backend=_backend(backend))
         )
@@ -749,6 +809,11 @@ class Project:
     def render_frame(
         self, seconds: float, *, backend: str | _native.BackendPreference = "auto"
     ) -> _native.Frame:
+        """Render one RGBA frame at ``seconds``.
+
+        This prepares the project on every call; call ``prepare()`` once and
+        reuse the result to render many frames.
+        """
         return self.prepare(backend=backend).render_frame_seconds(seconds)
 
     def render(
@@ -762,10 +827,14 @@ class Project:
         on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
     ) -> _native.RenderResult:
-        """Render using native Auto progress by default.
+        """Render the project to an MP4 file and return a ``RenderResult``.
 
-        ``show_progress=False`` disables the built-in presentation.
-        ``on_progress`` replaces it with a callback.
+        ``backend`` is ``"auto"`` (WGPU when an adapter is available, otherwise
+        CPU), ``"cpu"`` or ``"wgpu"``. An existing ``output`` is replaced only
+        with ``overwrite=True``. ``preview=True`` caps the longest side at
+        640 px. A progress bar is shown on interactive terminals unless
+        ``show_progress=False``; ``on_progress`` receives ``RenderEvent``
+        values instead. Requires ``ffmpeg`` and ``ffprobe`` on ``PATH``.
         """
         request = _native.RenderRequest(
             _path(output, "output"),

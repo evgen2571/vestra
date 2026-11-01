@@ -164,15 +164,39 @@ impl From<NativeDiagnostic> for PyDiagnostic {
 #[pymethods]
 impl PyDiagnostic {
     fn __str__(&self) -> String {
-        format!("{}: {}", self.code, self.message)
+        let mut text = format!("{}: {}", self.code, self.message);
+        if let Some(pointer) = self.pointer.as_deref().filter(|value| !value.is_empty()) {
+            text.push_str(&format!(" (at {pointer})"));
+        }
+        if let Some(hint) = self.hint.as_deref() {
+            text.push_str(&format!("\nhint: {hint}"));
+        }
+        text
     }
     fn __repr__(&self) -> String {
         format!(
-            "Diagnostic(code={:?}, severity={})",
+            "Diagnostic(code={:?}, severity={}, message={:?})",
             self.code,
-            self.severity.value()
+            self.severity.value(),
+            self.message
         )
     }
+}
+
+pub(crate) const fn python_bool(value: bool) -> &'static str {
+    if value { "True" } else { "False" }
+}
+
+/// Lists every diagnostic, or `summary` when there are none and the report passed.
+fn report_text(passed: bool, summary: &str, diagnostics: &[PyDiagnostic]) -> String {
+    if diagnostics.is_empty() {
+        return if passed { summary } else { "failed" }.to_owned();
+    }
+    diagnostics
+        .iter()
+        .map(PyDiagnostic::__str__)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub(crate) fn diagnostics(values: &[NativeDiagnostic]) -> Vec<PyDiagnostic> {
@@ -203,6 +227,17 @@ pub(crate) struct PyValidationReport {
 }
 #[pymethods]
 impl PyValidationReport {
+    fn __repr__(&self) -> String {
+        format!(
+            "ValidationReport(is_valid={}, errors={}, warnings={})",
+            python_bool(self.is_valid),
+            self.errors.len(),
+            self.warnings.len()
+        )
+    }
+    fn __str__(&self) -> String {
+        report_text(self.is_valid, "project is valid", &self.diagnostics)
+    }
     #[getter]
     fn diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         diagnostic_tuple(py, &self.diagnostics)
@@ -244,6 +279,18 @@ pub(crate) struct PyPreflightReport {
 }
 #[pymethods]
 impl PyPreflightReport {
+    fn __repr__(&self) -> String {
+        format!(
+            "PreflightReport(is_ready={}, is_valid={}, errors={}, warnings={})",
+            python_bool(self.is_ready),
+            python_bool(self.is_valid),
+            self.errors.len(),
+            self.warnings.len()
+        )
+    }
+    fn __str__(&self) -> String {
+        report_text(self.is_ready, "project is ready", &self.diagnostics)
+    }
     #[getter]
     fn diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         diagnostic_tuple(py, &self.diagnostics)

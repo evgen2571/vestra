@@ -626,6 +626,17 @@ impl From<NativeRenderResult> for PyRenderResult {
 }
 #[pymethods]
 impl PyRenderResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "RenderResult(output_path={:?}, size={}x{}, total_frames={}, selected_backend={:?}, elapsed_seconds={:.2})",
+            self.output_path.display().to_string(),
+            self.width,
+            self.height,
+            self.total_frames,
+            self.selected_backend,
+            self.elapsed_seconds()
+        )
+    }
     #[getter]
     fn elapsed_seconds(&self) -> f64 {
         self.elapsed_ms as f64 / 1_000.0

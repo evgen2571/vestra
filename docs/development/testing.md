@@ -95,7 +95,7 @@ the same comparisons against the exact baseline revision. Do not refresh the
 expected values from generated output to make a regression pass.
 
 Effect declarations and static semantic forwarding are described in
-[adding effects](adding-effects.md). Whole-catalog property tests compare typed
+[adding effects](extending/effect.md). Whole-catalog property tests compare typed
 visitors and compiled constraints with descriptors, exercise negative keyframe
 validation for scalar/plain/point tracks, and check declared active intervals.
 Frozen specimens additionally

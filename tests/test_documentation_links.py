@@ -1,5 +1,6 @@
 """Check the link gate against real small documentation trees."""
 
+import ast
 from pathlib import Path
 import subprocess
 import sys
@@ -46,3 +47,16 @@ def test_valid_nested_links_encoded_paths_and_code_blocks(tmp_path: Path) -> Non
     result = run(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Checked" in result.stdout
+
+
+def test_readme_and_tutorial_match_the_rendered_quickstart():
+    root = SCRIPT.parents[1]
+    source = ast.parse((root / "examples/showcase/quickstart/main.py").read_text())
+    # The runnable file has a module docstring and guards its render for imports.
+    expected = ast.Module(
+        body=source.body[1:-1] + source.body[-1].body, type_ignores=[]
+    )
+    for name in ("README.md", "docs/getting-started/python-quickstart.md"):
+        markdown = (root / name).read_text()
+        code = markdown.split("```python\n", 1)[1].split("\n```", 1)[0]
+        assert ast.dump(ast.parse(code)) == ast.dump(expected), name

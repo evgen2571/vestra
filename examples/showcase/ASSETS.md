@@ -81,10 +81,27 @@ distinct from the font source file.
 
 ## Rendered outputs
 
-Each of the four original showcases includes a `render.mp4`, `poster.jpg` and compact animated
+Each of the six showcases includes a `render.mp4`, `poster.jpg` and compact animated
 `preview.gif` (silent). These are actual CPU renders of the accompanying Python projects
-at 1280×720 and 30 fps. They may be viewed or downloaded directly on GitHub.
+at 1280×720 and 30 fps (the asset-free quickstart is 640×360). They may be viewed or downloaded directly on GitHub.
 The README demo and media edit (including their previews/posters) contain the
 CC BY 3.0 footage above; retain the credit and source/license links when redistributing them. Other outputs use the
 CC0 photograph/audio, OFL font, and original project graphics. The software MIT
 license does not supersede those asset terms.
+
+The [README quickstart](quickstart/README.md) contains only original geometric
+graphics, with no font, audio or external media. Its source and rendered outputs
+are MIT licensed. The redesigned README hero uses the existing city footage,
+CC0 landscape and OFL font above; their original terms still apply.
+
+The [effects lookbook](lookbook/README.md) reuses the CC0 landscape and OFL
+Manrope font. Its ASCII treatment uses Vestra’s bundled DejaVu face; the
+[Bitstream Vera/DejaVu notice](../../tests/assets/VestraTest-Regular.ttf.license)
+also accompanies that face. No new third-party inputs are introduced.
+
+## README branding
+
+The theme-aware SVG wordmarks under `docs/assets/brand/` use an original layered-V
+mark and outlined Manrope lettering. These are static vector artwork, with no
+embedded font, scripts or external resources. The font license remains
+[Manrope’s SIL OFL 1.1](assets/Manrope-OFL.txt).

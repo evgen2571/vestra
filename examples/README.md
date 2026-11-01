@@ -1,8 +1,10 @@
 # Examples
 
-The [showcases](showcase/README.md) contain four finished videos with Python
+The [showcases](showcase/README.md) contain six finished videos with Python
 source and bundled licensed assets. Watch the MP4s directly on GitHub, or render
 them with `just showcase`.
+
+Start with the [animated README quickstart](showcase/quickstart/README.md).
 
 The examples below are focused references and deterministic test fixtures.
 

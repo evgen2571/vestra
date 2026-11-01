@@ -16,6 +16,8 @@ SCENES = {
     "real-media-edit": 14,
     "audio-visualizer": 12,
     "compositing": 8,
+    "quickstart": 3,
+    "lookbook": 6,
 }
 
 
@@ -134,14 +136,19 @@ def main() -> None:
         for name, duration in SCENES.items():
             module = load(SHOWCASE / name / "main.py")
             module.SHOWCASE = base
-            project = module.build_project(size, fps)
+            scene_size, scene_fps = size, fps
+            if name == "quickstart":
+                project = module.project
+                scene_size, scene_fps = (640, 360), 30
+            else:
+                project = module.build_project(size, fps)
             # The public render path validates semantics, preflights inputs, and publishes output.
             output = args.output_dir / f"{name}.mp4"
             project.render(output, backend="cpu", overwrite=True, show_progress=False)
             probe(
                 output,
-                size,
-                fps,
+                scene_size,
+                scene_fps,
                 duration,
                 name == "audio-visualizer",
             )
@@ -166,7 +173,7 @@ def main() -> None:
                     "-v",
                     "error",
                     "-ss",
-                    "3",
+                    str(min(3, duration / 2)),
                     "-i",
                     str(output),
                     "-frames:v",
@@ -188,7 +195,7 @@ def main() -> None:
             "-i",
             str(args.output_dir / "readme-demo.mp4"),
             "-filter_complex",
-            "[0:v]fps=10,scale=640:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
+            "[0:v]fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
             "-loop",
             "0",
             "-y",

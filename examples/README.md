@@ -6,6 +6,9 @@ them with `just showcase`.
 
 Start with the [animated README quickstart](showcase/quickstart/README.md).
 
+The [README JSON composition](projects/readme-animation.json) is a complete,
+asset-free animated shape for CLI validation and rendering.
+
 The examples below are focused references and deterministic test fixtures.
 
 The JSON projects are the canonical CLI examples. Validate one from the

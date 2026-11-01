@@ -16,19 +16,29 @@ This is a read-only measurement of the existing portable benchmark infrastructur
 ## Reproduction commands
 
 ```bash
-git switch develop && git fetch origin develop && git reset --hard origin/develop
+git worktree add --detach ../vestra-benchmark 34dec665090aa5706a83eb8302d38f5d1801dbf5
+cd ../vestra-benchmark
 nix develop .#comparison
 uv run --no-project --python 3.13 scripts/collect-benchmarks.py --profile all --hours 1 --suite canonical --backend auto --graphics-api vulkan --timeout 900 --sustained-timeout 14400 --output target/benchmark-results/full-collection
-VESTRA_BENCH_VALIDATE=1 uv run --no-project --python 3.13 python scripts/benchmark.py run --suite <suite> --backend cpu --executable <cpu-executable> --output target/benchmark-results/complete-suites/cpu/<suite>
-VESTRA_BENCH_VALIDATE=1 VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_HARDWARE_WGPU=1 uv run --no-project --python 3.13 python scripts/benchmark.py run --suite <suite> --backend hardware-wgpu --executable <wgpu-executable> --output target/benchmark-results/complete-suites/hardware-wgpu/<suite>
-VESTRA_RENDER_BENCH=1 cargo test --release --locked -p vestra --no-default-features --features cpu preparation_matrix effect_scaling_matrix random_access_matrix -- --nocapture --test-threads=1
+VESTRA_BENCH_VALIDATE=1 uv run --no-project --python 3.13 scripts/benchmark.py run --suite canonical --backend cpu --output target/benchmark-results/complete-suites/cpu/canonical
+VESTRA_BENCH_VALIDATE=1 VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_HARDWARE_WGPU=1 uv run --no-project --python 3.13 scripts/benchmark.py run --suite canonical --backend hardware-wgpu --output target/benchmark-results/complete-suites/hardware-wgpu/canonical
+for filter in preparation_matrix effect_scaling_matrix random_access_matrix; do
+  VESTRA_RENDER_BENCH=1 cargo test --release --locked -p vestra --no-default-features --features cpu "$filter" -- --nocapture --test-threads=1
+done
 ```
 
 The collector archive is `target/benchmark-results/full-collection/vestra-bench-linux-20261031T130534Z-180e48c2.zip`. The direct suite executable hashes are recorded in each `suite.json` provenance and the collector diagnostics.
 
 ## Matched MoviePy v2 workloads
 
-The three matched scenarios are 640x360, 30 fps, 10 s (300 frames), silent H.264/yuv420p, CRF 23/veryfast. Inputs and output probes were identical. The verifier passed 135/135 sampled frames/regions; all nine output streams passed full decode and structural checks. Resampling/rounding differences are expected and are covered by the suite tolerance.
+The three matched scenarios are 640x360 at 30 fps: `basic` and `layered` are
+10 s (300 frames), while `editing` is 12 s (360 frames). All produce silent
+H.264/yuv420p at CRF 23/veryfast. The basic workload resizes and encodes one
+video. Editing adds three shots with
+dissolves, animated framing and brightness adjustment. Layered combines three
+videos with animated placement, opacity and an ellipse mask.
+
+Inputs and output probes were identical. The verifier passed 135/135 sampled frames/regions; all nine output streams passed full decode and structural checks. Resampling/rounding differences are expected and are covered by the suite tolerance.
 
 | Scenario | MoviePy CPU wall s | Vestra CPU wall s | CPU ratio | Vestra WGPU wall s | WGPU ratio | MoviePy FPS | Vestra CPU FPS | Vestra WGPU FPS | MoviePy RSS MiB | Vestra CPU RSS MiB | WGPU RSS MiB |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -37,6 +47,46 @@ The three matched scenarios are 640x360, 30 fps, 10 s (300 frames), silent H.264
 | layered | 4.227 | 1.789 | 0.42x | 1.305 | 0.31x | 70.97 | 167.71 | 229.85 | 365.3 | 599.5 | 668.5 |
 
 Variability is retained in the raw JSON. In the matched table, MoviePy CPU wall-time ranges were 1.00–1.11 s (basic), 8.35–8.85 s (editing), and 4.17–4.23 s (layered); Vestra CPU ranges were 0.83–0.89 s, 1.73–1.86 s, and 1.75–1.86 s. WGPU ranges are similarly recorded in `comparison.json`.
+
+## README summary and additional hardware
+
+The README reports all three matched scenarios, including `basic`, where WGPU
+is slower than both Vestra CPU and MoviePy. Each cell contains median complete
+worker wall time and median sampled peak process-tree RSS from the same three
+measured runs, following one warmup. RSS includes FFmpeg child processes and
+excludes GPU VRAM; it is not Vestra's internal allocation counter. Both Vestra
+backends decode and encode on the CPU in this comparison.
+
+The source records are `moviepy/{vestra-cpu,hardware-wgpu,moviepy-cpu}/comparison.json`
+under the full collector directory listed below. Their `records[].summary.wall_ms.median`
+and `records[].summary.peak_tree_rss_bytes.median` supply the README values, divided
+by 1000 and 1048576 respectively. The editing timeline is twelve seconds; its
+higher frame count must be retained when reproducing this capture.
+
+To add an RTX 4070 Ti or another system, append a separate set of system/workload
+rows. Record that machine's CPU, RAM, OS, driver, graphics API and actual adapter
+alongside the GPU name. Repeat all three engines and all three workloads on that
+machine; CPU and MoviePy results must not be copied from a different host. Keep
+640×360 / 30 fps, the same input manifest, encoding settings, one warmup and three
+samples, then run the existing comparison verifier. Keep unavailable measurements
+explicitly unavailable. No RTX 4070 Ti result has been measured here.
+
+The focused reproduction path is:
+
+```bash
+nix develop .#comparison
+uv sync --locked --extra benchmark --extra dev
+uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy prepare
+VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run \
+  --width 640 --height 360 --warmups 1 --samples 3 \
+  --engines vestra-cpu hardware-wgpu moviepy-cpu --output target/moviepy-new-system
+uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy verify \
+  target/moviepy-new-system --output target/moviepy-new-system-visuals
+```
+
+Use the actual graphics API found by adapter discovery rather than assuming
+Vulkan support. Full setup, input preparation and verifier details are in the
+[comparison guide](../../benchmarks/comparisons/moviepy/README.md).
 
 ## Complete Vestra suite results
 

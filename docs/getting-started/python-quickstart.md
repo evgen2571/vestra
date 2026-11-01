@@ -1,7 +1,7 @@
 # Python quickstart
 
-Make a three-second animation with rounded cards and eased keyframes, then render
-it to MP4. This is the same scene shown in the [README](../../README.md#try-it).
+This example renders three rounded cards with eased rotation to a three-second
+MP4. It is the same scene shown in the [README](../../README.md#usage).
 It needs no images, fonts or audio files.
 
 ## Prerequisites

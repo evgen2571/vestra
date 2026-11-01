@@ -1,6 +1,7 @@
 """Check the link gate against real small documentation trees."""
 
 import ast
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -60,3 +61,13 @@ def test_readme_and_tutorial_match_the_rendered_quickstart():
         markdown = (root / name).read_text()
         code = markdown.split("```python\n", 1)[1].split("\n```", 1)[0]
         assert ast.dump(ast.parse(code)) == ast.dump(expected), name
+
+
+def test_readme_json_matches_the_checked_in_composition():
+    root = SCRIPT.parents[1]
+    markdown = (root / "README.md").read_text()
+    code = markdown.split("```json\n", 1)[1].split("\n```", 1)[0]
+    expected = json.loads(
+        (root / "examples/projects/readme-animation.json").read_text()
+    )
+    assert json.loads(code) == expected

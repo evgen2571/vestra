@@ -8,11 +8,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-347860?style=flat-square" alt="License: MIT"></a>
 </p>
 
-Vestra is a video composition and rendering engine for making videos from code or
-data. It handles layers, animation, effects and audio in a shared timeline, so you
-can build reusable scenes instead of assembling every frame yourself. Use it for
-motion graphics, audio visualizers or automated video generation, through Python,
-JSON projects or the Rust SDK.
+Vestra is a library for making videos with code. Think animated titles, audio
+visualizers, or a scene you want to reuse with different text and images. You can
+build it in Python or describe it in JSON, then keep it in version control like
+the rest of your project.
 
 https://github.com/user-attachments/assets/9e7044ba-c4d5-49fc-a0aa-254eb1649b59
 
@@ -26,13 +25,13 @@ https://github.com/user-attachments/assets/9e7044ba-c4d5-49fc-a0aa-254eb1649b59
 
 ### Python
 
-Requires Python 3.11–3.14 and `ffmpeg`/`ffprobe`. [Installation guide](docs/getting-started/installation.md).
+You’ll need Python 3.11–3.14 and FFmpeg. [Setup instructions](docs/getting-started/installation.md).
 
 ```bash
 python -m pip install vestra
 ```
 
-Save this as `quickstart.py` and run `python quickstart.py`:
+Save this as `quickstart.py`, then run `python quickstart.py`:
 
 ```python
 from vestra import Interpolation, Project
@@ -54,12 +53,11 @@ project.render("quickstart.mp4", backend="cpu", overwrite=True)
   <a href="examples/showcase/quickstart/render.mp4"><img src="examples/showcase/quickstart/preview.gif" width="480" alt="The Python example: a rounded rectangle moving with eased keyframes"></a>
 </p>
 
-[Full example](examples/showcase/quickstart/main.py) · [Python tutorial](docs/getting-started/python-quickstart.md)
+[Python guide](docs/getting-started/python-quickstart.md)
 
 ### JSON
 
-Store a composition as data and render it with the CLI. This example animates a
-rounded rectangle; save it as `scene.json` or use the [full example](examples/projects/readme-animation.json).
+The same animation in JSON, saved as `scene.json`:
 
 <details>
 <summary>JSON composition</summary>
@@ -101,49 +99,40 @@ rounded rectangle; save it as `scene.json` or use the [full example](examples/pr
 
 </details>
 
-From a source checkout with Rust and FFmpeg installed:
+From a [source checkout](docs/getting-started/cli-quickstart.md):
 
 ```bash
 cargo run -p vestra-cli -- render scene.json --render-backend cpu --overwrite
 ```
 
-The CLI is separate from the Python wheel. [CLI setup](docs/getting-started/cli-quickstart.md) · [JSON guide](docs/guides/json-authoring.md)
+[Example file](examples/projects/readme-animation.json) · [JSON guide](docs/guides/json-authoring.md)
 
 ## Vestra vs MoviePy
 
-| If your work centres on… | Vestra | [MoviePy](https://zulko.github.io/moviepy/) |
-| :--- | :--- | :--- |
-| Animated compositions | Built-in keyframes, nested compositions and particles suit reusable motion graphics. | Flexible clip functions suit edits with custom timing and animation logic. |
-| Audio-driven visuals | Spectrum sources and audio-signal bindings connect sound to visual properties. | Python/NumPy gives you control over custom audio analysis and frame processing. |
-| Automated pipelines | Python and JSON share a project model; CPU and WGPU rendering suit different hardware ([support](docs/reference/feature-support.md)). | A mature Python ecosystem makes it easy to combine video with other libraries. |
-| Output and stability | Currently exports H.264/AAC MP4; the 0.1.x Python API is evolving. | A longer-established tool with broader output support. |
+| Vestra is a good fit for… | [MoviePy](https://zulko.github.io/moviepy/) is a good fit for… |
+| :--- | :--- |
+| Motion graphics with keyframes, nested compositions and particles. | Edits that need custom Python/NumPy frame processing. |
+| Binding animation to audio signals, or reusing scenes through Python or JSON. | Scripts that combine video with the wider Python ecosystem. |
+| [CPU or WGPU rendering](docs/reference/backends.md), if MP4 output is enough. The API is still young ([current support](docs/reference/feature-support.md)). | A mature tool with broader output support and flexible clip manipulation. |
 
-For measured performance, see the [workloads, methodology and benchmark results](docs/benchmarks/vestra-vs-moviepy.md).
-
-<details>
-<summary>Current limits</summary>
-
-Rendering produces a file; there is no timeline UI. Text requires an explicit
-font file. `auto` chooses WGPU when a usable adapter is available and otherwise
-falls back to CPU. GPU rendering does not imply hardware decoding or encoding.
-See [feature support](docs/reference/feature-support.md) and
-[backends](docs/reference/backends.md).
-
-</details>
+[Performance benchmarks and methodology](docs/benchmarks/vestra-vs-moviepy.md)
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and contribution guidance.
-The [development docs](docs/development/README.md) cover the
-[architecture](docs/development/architecture/overview.md), [testing](docs/development/testing.md)
-and [GPU validation](docs/development/gpu-validation.md).
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup and sending a patch. The
+[development docs](docs/development/README.md) cover architecture, testing and
+GPU validation.
 
 ## AI use disclaimer
 
-Vestra is developed with extensive use of AI tools, including help with code,
-tests and documentation. The project's direction, code quality and ongoing
-maintenance remain the responsibility of its human maintainers. AI assistance
-doesn't make a change correct: it still needs review, testing and care. If you
-find a problem, please [report it](https://github.com/evgen2571/vestra/issues).
+I use LLMs a lot while building Vestra. They help me write code, tests and docs,
+but I decide what belongs here, and I’m responsible for the quality of the
+project and for maintaining it.
+
+I’m still learning, and I’ll make mistakes. I care about making Vestra useful
+and the code understandable. If you spot a bug, a questionable design choice
+or an explanation that doesn’t make sense, please
+[point it out](https://github.com/evgen2571/vestra/issues). I appreciate people
+taking the time to do that.
 
 [MIT license](LICENSE) · [Software notices](THIRD_PARTY_NOTICES.md) · [Asset licenses](examples/showcase/ASSETS.md)

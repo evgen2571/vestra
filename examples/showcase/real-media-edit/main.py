@@ -60,7 +60,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     rule.transform.position = (0.5, 0.57)
     credit = project.root.add(
         Text(
-            "Footage: Location Kenya · CC BY 3.0",
+            "Footage: Yigang Yu · CC0",
             font=FONT,
             font_size=20 * unit,
             fill="#f0ece4",

@@ -4,12 +4,39 @@ Six complete CPU-rendered compositions, with their Python source, rendered MP4s,
 posters, silent animated previews and assets. Each project page displays a
 GIF preview directly on GitHub; the MP4 link opens the full video file for download.
 
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Video editing</strong><br><br>
+      <a href="real-media-edit/render.mp4"><img src="real-media-edit/preview.gif" width="400" alt="Shanghai footage with animated framing, colour grading and dissolves"></a>
+      <p>Three video clips with animated framing and dissolves.<br><a href="real-media-edit/main.py">Python source</a></p>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Visual effects</strong><br><br>
+      <a href="lookbook/render.mp4"><img src="lookbook/preview.gif" width="400" alt="A landscape with photographic, halftone and ASCII treatments"></a>
+      <p>A photograph with halftone and ASCII effects.<br><a href="lookbook/main.py">Python source</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Audio reactivity</strong><br><br>
+      <a href="audio-visualizer/render.mp4"><img src="audio-visualizer/preview.gif" width="400" alt="A radial audio spectrum, pulsing ring and particles"></a>
+      <p>Audio signals control a spectrum, ring and particles.<br><a href="audio-visualizer/main.py">Python source</a> · <a href="audio-visualizer/render.mp4">Video with sound</a></p>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Compositing</strong><br><br>
+      <a href="compositing/render.mp4"><img src="compositing/preview.gif" width="400" alt="Animated circular and rectangular photo cutouts on a cream background"></a>
+      <p>Masks and nested compositions with grouped animation.<br><a href="compositing/main.py">Python source</a></p>
+    </td>
+  </tr>
+</table>
+
 | Project | Render | Source / notes |
 | --- | --- | --- |
-| README demo | [Watch](readme-demo/render.mp4) | [10 seconds: motion design, masked footage and palette dithering](readme-demo/README.md) |
-| README quickstart | [Watch](quickstart/render.mp4) | [3 seconds: asset-free animated cards](quickstart/README.md) |
+| README demo | [Watch](readme-demo/render.mp4) | [10 seconds: keyframes, masked footage and audio-driven motion](readme-demo/README.md) |
+| README quickstart | [Watch](quickstart/render.mp4) | [3 seconds: an asset-free animated rectangle](quickstart/README.md) |
 | Effects lookbook | [Watch](lookbook/render.mp4) | [6 seconds: one photo, halftone and ASCII](lookbook/README.md) |
-| Video editing | [Watch](real-media-edit/render.mp4) | [14 seconds: a silent three-shot night-city edit](real-media-edit/README.md) |
+| Video editing | [Watch](real-media-edit/render.mp4) | [14 seconds: a silent day-to-night Shanghai edit](real-media-edit/README.md) |
 | Audio + spectrum | [Watch](audio-visualizer/render.mp4) | [12 seconds: spectrum, audio signals and particles](audio-visualizer/README.md) |
 | Masks + groups | [Watch](compositing/render.mp4) | [8 seconds: photo cutouts, masks and grouped animation](compositing/README.md) |
 

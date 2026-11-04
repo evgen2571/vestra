@@ -83,13 +83,65 @@ Motion Canvas or MoviePy instead.
 Vestra 0.1.x: the Python API may still change between minor versions; the JSON
 schema and diagnostic codes are stable contracts.
 
-## Development
+## Building and contributing
+
+Vestra uses Cargo to build the Rust engine and CLI, and Maturin to build
+the Python bindings. uv manages the Python environment; the Justfile
+provides common build and test commands.
+
+### With Nix (Linux and macOS)
+
+The Nix development shell supplies Rust, Python, uv, Just, and the native
+build dependencies, including NASM, libclang, and FFmpeg.
+
+With [Nix installed](https://nix.dev/install-nix) and
+[flakes enabled](https://nix.dev/manual/nix/stable/command-ref/conf-file.html#conf-experimental-features), clone
+the development branch and enter the shell:
 
 ```bash
-nix develop && just python-sync && just check
+git clone --branch develop https://github.com/evgen2571/vestra.git
+cd vestra
+nix develop
 ```
 
-See [contributing](CONTRIBUTING.md) and [testing](https://github.com/evgen2571/vestra/blob/main/docs/development/testing.md).
+Inside the development shell, build the editable Python package:
+
+```bash
+just python-sync
+uv run python -c "import vestra; print(vestra.__version__)"
+```
+
+To build and run the separate CLI:
+
+```bash
+cargo build -p vestra-cli
+cargo run -q -p vestra-cli -- version
+```
+
+### Without Nix
+
+Install these dependencies before running `uv sync`:
+
+- Rust toolchain, including rustfmt and Clippy.
+- Python 3.11–3.14.
+- uv for the Python environment and package build.
+- Just for the repository's build and test commands.
+- A C compiler and `make` to build bundled FFmpeg.
+- libclang for native bindings, and `pkg-config` for library discovery.
+- Git to fetch the source code.
+- **NASM** for FFmpeg's x86 assembly.
+- FFmpeg runtime: `ffmpeg` and `ffprobe` on `PATH` for rendering.
+
+See [native setup instructions](docs/getting-started/installation.md#without-nix)
+for the prerequisites and build commands, including an Ubuntu/Debian example.
+
+### Checking your changes
+
+Run `just check` for the Rust, schema, generation, and documentation checks,
+and `just python-test` for Python tests. Run `just` to list available commands.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and
+[testing](docs/development/testing.md) for focused checks.
 Agents start with [AGENTS.md](AGENTS.md); benchmarks live in
 [benchmarks](benchmarks/README.md) with a
 [MoviePy comparison](https://github.com/evgen2571/vestra/blob/main/docs/benchmarks/vestra-vs-moviepy.md).

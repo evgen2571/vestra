@@ -22,6 +22,17 @@ Other current source families include `Color`/`SolidColor`, `Text`,
 classes such as `Rectangle`, `Ellipse`, `Circle`, `Line`, and `Polygon`.
 Image and video sources can carry sizing and crop properties.
 
+Procedural shapes can be created with their default geometry and style:
+
+```python
+project.root.add(Rectangle())                    # white, 100 × 100 pixels
+project.root.add(Rectangle(stroke="#00ff00"))    # green outline, 2 pixels wide
+```
+
+See [shape defaults](../../reference/sources/shape.md) for all primitives.
+`Color()` creates an opaque black source. Image/video paths, text content and
+polygon points remain required.
+
 Text can use the bundled default, an installed font family, or an explicit file:
 
 ```python

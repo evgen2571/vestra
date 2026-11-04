@@ -14,3 +14,6 @@ High-level Python layers may still use a transform or a transition with
 it lowers the high-level project. Hand-authored canonical JSON must keep the
 `solid_color` clip itself free of `transform` and cannot name it directly in a
 transition placement.
+
+Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
+which are copied into each placement and can be individually overridden by `add()`.

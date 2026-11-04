@@ -1,4 +1,4 @@
-"""Small source-local groups usable as owned mask inputs."""
+"""Reusable source-local groups for visual and owned mask placements."""
 
 from __future__ import annotations
 

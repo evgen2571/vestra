@@ -106,3 +106,7 @@ before inversion, operation combination, and strength interpolation. Static
 masks remain cacheable; animated, modifier-driven, or signal-driven mask
 properties make the owning layer dynamic. Composition masks and track mattes
 are not supported.
+
+A mask placement also copies its source's constructor transform defaults.
+Edit `mask.transform` afterward; defaults are applied once and are independent
+of later source edits.

@@ -68,7 +68,7 @@ class Mask:
         self._invert = False
         self._strength = BindableScalarProperty(1.0, minimum=0.0, maximum=1.0)
         self._feather = BindableScalarProperty(feather, minimum=0.0, maximum=256.0)
-        self._transform = Transform()
+        self._transform = self._input._placement_transform()
 
     @property
     def id(self) -> str: return self._id

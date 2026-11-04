@@ -38,11 +38,12 @@ def lower_transform(source: Transform) -> dict[str, object]:
     scale = lower_point_property(source.scale)
     uniform = _lower_component_bindings(source.scale)
     scale.pop("modifiers", None)
+    scale.pop("component_modifiers", None)
     components = {
         "position_x": _lower_component_bindings(source.position_x),
         "position_y": _lower_component_bindings(source.position_y),
-        "scale_x": uniform + _lower_component_bindings(source.scale_x),
-        "scale_y": uniform + _lower_component_bindings(source.scale_y),
+        "scale_x": uniform + _lower_component_bindings(source.scale.x) + _lower_component_bindings(source.scale_x),
+        "scale_y": uniform + _lower_component_bindings(source.scale.y) + _lower_component_bindings(source.scale_y),
     }
     result: dict[str, object] = {
         "position": lower_point_property(source.position),

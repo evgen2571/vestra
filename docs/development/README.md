@@ -44,4 +44,3 @@ owns specs and dependencies; implementation plans track work on a selected issue
 ## Release procedures
 
 - [Releasing the Python package](releasing.md)
-- [Changelog](../../CHANGELOG.md)

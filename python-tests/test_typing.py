@@ -296,6 +296,14 @@ def test_invalid_audio_automation_fixture_is_rejected() -> None:
     assert result.stdout.count("error:") == 4
 
 
+def test_font_selection_fixture_typechecks() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_fonts.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_positive_standalone_group_fixture_typechecks() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "mypy", "python-tests/typing_groups.py"],
@@ -311,3 +319,11 @@ def test_invalid_group_transform_fixture_is_rejected() -> None:
     )
     assert result.returncode == 1
     assert result.stdout.count("error:") == 4, result.stdout + result.stderr
+
+
+def test_source_defaults_fixture_typechecks() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_source_defaults.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

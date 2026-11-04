@@ -48,6 +48,7 @@ from ._native import (
     ValidationReport,
     VestraError,
     native_version,
+    list_system_fonts,
     configure_logging,
 )
 
@@ -323,4 +324,5 @@ __all__ = [
     "OrderedDither",
     "PaletteMode",
     "DitherMatrix",
+    "list_system_fonts",
 ]

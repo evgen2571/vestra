@@ -12,6 +12,13 @@ from .base import Source
 PointValue: TypeAlias = Point | tuple[int | float, int | float] | list[int | float]
 
 
+class _Unset:
+    pass
+
+
+_UNSET = _Unset()
+
+
 def _number(value: int | float, name: str, *, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise TypeError(f"{name} must be a real number")
@@ -37,9 +44,9 @@ class Shape(Source):
     def __init__(
         self,
         *,
-        fill: Color | str | None,
+        fill: Color | str | None | _Unset,
         stroke: Color | str | None,
-        stroke_width: int | float,
+        stroke_width: int | float | _Unset,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,
@@ -55,6 +62,10 @@ class Shape(Source):
             rotation=rotation,
             rotation_degrees=rotation_degrees,
         )
+        if isinstance(fill, _Unset):
+            fill = "#ffffff" if stroke is None else None
+        if isinstance(stroke_width, _Unset):
+            stroke_width = 2.0 if stroke is not None else 0.0
         if fill is None and stroke is None:
             raise ValueError("shape must have a fill or stroke")
         self.fill = fill
@@ -112,11 +123,11 @@ class Rectangle(Shape):
     def __init__(
         self,
         *,
-        width: int | float,
-        height: int | float,
-        fill: Color | str | None = None,
+        width: int | float = 100,
+        height: int | float = 100,
+        fill: Color | str | None | _Unset = _UNSET,
         stroke: Color | str | None = None,
-        stroke_width: int | float = 0.0,
+        stroke_width: int | float | _Unset = _UNSET,
         corner_radius: int | float = 0.0,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
@@ -172,11 +183,11 @@ class Ellipse(Shape):
     def __init__(
         self,
         *,
-        width: int | float,
-        height: int | float,
-        fill: Color | str | None = None,
+        width: int | float = 100,
+        height: int | float = 100,
+        fill: Color | str | None | _Unset = _UNSET,
         stroke: Color | str | None = None,
-        stroke_width: int | float = 0.0,
+        stroke_width: int | float | _Unset = _UNSET,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,
@@ -217,10 +228,10 @@ class Circle(Ellipse):
     def __init__(
         self,
         *,
-        radius: int | float,
-        fill: Color | str | None = None,
+        radius: int | float = 50,
+        fill: Color | str | None | _Unset = _UNSET,
         stroke: Color | str | None = None,
-        stroke_width: int | float = 0.0,
+        stroke_width: int | float | _Unset = _UNSET,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,
@@ -252,10 +263,10 @@ class Line(Shape):
     def __init__(
         self,
         *,
-        start: PointValue,
-        end: PointValue,
-        stroke: Color | str,
-        stroke_width: int | float,
+        start: PointValue = (0, 0),
+        end: PointValue = (100, 0),
+        stroke: Color | str = "#ffffff",
+        stroke_width: int | float = 2,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,
@@ -300,9 +311,9 @@ class Polygon(Shape):
         self,
         *,
         points: list[PointValue] | tuple[PointValue, ...],
-        fill: Color | str | None = None,
+        fill: Color | str | None | _Unset = _UNSET,
         stroke: Color | str | None = None,
-        stroke_width: int | float = 0.0,
+        stroke_width: int | float | _Unset = _UNSET,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,

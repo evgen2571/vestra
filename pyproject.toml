@@ -53,6 +53,8 @@ module-name = "vestra._native"
 python-source = "python"
 python-packages = ["vestra"]
 include = [
+  { path = "python/vestra/fonts/*", format = "wheel" },
+  { path = "python/vestra/fonts/*", format = "sdist" },
   { path = "vendor/ffmpeg-sys-next/**/*", format = "sdist" },
   { path = "scripts/effects/schema.rs", format = "sdist" },
   { path = "tests/render_effect_cases.rs", format = "sdist" },

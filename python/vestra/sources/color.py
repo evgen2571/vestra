@@ -15,7 +15,7 @@ class Color(Source):
 
     def __init__(
         self,
-        value: str | AuthoringColor,
+        value: str | AuthoringColor = "#000000",
         *,
         transform: Transform | None = None,
         position: TransformPoint | None = None,

@@ -14,7 +14,7 @@ not reduced renderer support.
 | Text | supported, requires a font path | `text` | direct | supported, requires font preparation | supported, requires font preparation |
 | Spectrum2D | supported through authoring/source wrappers | `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | not fully verified |
 | Particle system | supported | `particle_system` | adapter-mediated | supported | not fully verified |
-| Nested composition | `CompositionLayer` | `group` | direct | supported | supported |
+| Nested composition | reusable `Group` or owned `CompositionLayer` | `group` | direct | supported | supported |
 | Geometric layer masks | `layer.masks` | `masks` (schema v1) | ordinary layer presentation | supported | supported |
 | Image alpha masks | `layer.masks` + `MaskCoverageMode.ALPHA` | `masks` (schema v1) | ordinary layer presentation | supported | supported |
 | Image luma masks | `layer.masks` + `MaskCoverageMode.LUMA` | `masks` (schema v1) | ordinary layer presentation | supported | supported |

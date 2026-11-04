@@ -26,3 +26,6 @@ Pass either an advanced authoring `ParticleSystem` as `definition`, or configure
 | `audio_reactive` | Optional `ParticleAudioReactive(size=None, opacity=None, intensity=None)` with bindable scalar properties. It affects current appearance, never historical spawn/motion reconstruction. |
 
 The canonical tag is `particle_system`. CPU and WGPU have render paths, but full backend parity is not verified. Particle systems can live in nested compositions but are not direct transform or transition endpoints.
+
+Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
+which are copied into each placement and can be individually overridden by `add()`.

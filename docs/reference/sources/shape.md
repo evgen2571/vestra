@@ -20,3 +20,6 @@ stroke. Colours are canonical `#RRGGBB`/`#RRGGBBAA`; `stroke_width` defaults to
 Layer timing, transform, animation, effects, and transitions apply normally.
 Shapes support canonical JSON, high-level Python, CPU, WGPU, nesting, and
 direct transition endpoints.
+
+Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
+which are copied into each placement and can be individually overridden by `add()`.

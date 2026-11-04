@@ -20,3 +20,6 @@ Image(path: str | PathLike[str], *, sizing: Sizing | Literal["original", "fit", 
 `Crop(x, y, width, height)` has four finite numeric fields. It uses normalized source coordinates: semantic validation requires `x >= 0`, `y >= 0`, positive `width`/`height`, `x + width <= 1`, and `y + height <= 1`. `crop` becomes a mutable `CropProperty`, so it can be assigned or animated with the property API. Crop applies while adapting the image before ordinary layer transform/compositing.
 
 Layer `start`/`duration` place the source on the project timeline. Layers own transform, opacity, blend mode, scalar animation, effects and transition placement. Images support direct transforms and transition endpoints. Missing/unreadable files fail preflight, not constructor validation.
+
+Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
+which are copied into each placement and can be individually overridden by `add()`.

@@ -107,6 +107,25 @@ def verify(output_dir: Path) -> None:
     if not (package_path.parent / "py.typed").is_file():
         raise AssertionError("the installed wheel is missing vestra/py.typed")
 
+    # Run outside the source tree with empty discovery: packaged Text must stand alone.
+    font_config = output_dir / "empty-fonts.conf"
+    empty_fonts = output_dir / "empty-fonts"
+    empty_fonts.mkdir(exist_ok=True)
+    font_config.write_text(f'<?xml version="1.0"?><fontconfig><dir>{empty_fonts}</dir></fontconfig>')
+    import os
+    import sys
+    subprocess.run([sys.executable, "-c", """
+from pathlib import Path
+import vestra
+p = vestra.Project(size=(160, 80), fps=1, duration=1)
+p.root.add(vestra.Text("Hello Vestra Δ", font_size=24))
+asset = Path(p.snapshot().to_dict()["assets"][0]["source"])
+assert asset.is_file() and "site-packages" in asset.parts
+assert asset.with_name("LICENSE.txt").is_file()
+pixels = p.render_frame(0, backend="cpu").to_bytes()
+assert any(pixels[i:i+3] != bytes(3) for i in range(0, len(pixels), 4))
+"""], cwd=output_dir, env=dict(os.environ, FONTCONFIG_FILE=str(font_config)), check=True)
+
     tone_440 = output_dir / "tone-440.wav"
     tone_880 = output_dir / "tone-880.wav"
     output = output_dir / "wheel-smoke.mp4"
@@ -198,7 +217,7 @@ def main() -> None:
         else tempfile.TemporaryDirectory(prefix="vestra-wheel-")
     )
     with context as directory:
-        output_dir = Path(directory)
+        output_dir = Path(directory).resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
         verify(output_dir)
 

@@ -20,6 +20,7 @@ use vestra_observability::{FileMode, LogFormat, LogOutput, ObservabilityConfig, 
 mod conversion;
 mod diagnostics;
 mod editor;
+mod fonts;
 mod inspection;
 mod prepared;
 mod project;
@@ -326,6 +327,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyInspectAudioClip>()?;
     module.add_class::<PyInspectAudioGainKeyframe>()?;
     module.add_class::<PyInspectionReport>()?;
+    module.add_function(wrap_pyfunction!(fonts::list_system_fonts, module)?)?;
+    module.add_function(wrap_pyfunction!(fonts::_resolve_system_font, module)?)?;
     prepared::register(module)?;
     render::register(module)?;
     module.add_function(wrap_pyfunction!(native_version, module)?)?;
@@ -387,6 +390,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
                 "RenderFailureContext",
                 "RenderFailureStage",
                 "native_version",
+                "list_system_fonts",
                 "effect_definitions",
                 "audio_effect_definitions",
                 "configure_logging",

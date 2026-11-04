@@ -264,3 +264,12 @@ def test_later_shapes_do_not_change_text_pixels(placement: str, backend: str) ->
     actual = _render_frame(project(True), 0.25, backend).to_bytes()
     assert _ink_bounds(reference, 160, 120), "reference must contain rendered text"
     assert actual == reference
+
+
+def test_default_text_uses_shared_cpu_wgpu_raster() -> None:
+    project = vestra.Project(size=(160, 80), fps=1, duration=1)
+    project.root.add(Text("Default Δ", font_size=28, fill="#ffffff80"))
+    cpu = project.render_frame(0, backend="cpu").to_bytes()
+    gpu = _render_frame(project, 0, "wgpu").to_bytes()
+    assert any(gpu[index:index + 3] != bytes(3) for index in range(0, len(gpu), 4))
+    assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 2

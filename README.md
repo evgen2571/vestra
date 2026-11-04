@@ -64,7 +64,7 @@ so timing and layering errors are reported up front, with locations —
   [feature matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md).
 - The Python wheel does not install the `ve` CLI — build it with
   `cargo build -p vestra-cli` ([JSON authoring](https://github.com/evgen2571/vestra/blob/main/docs/guides/json-authoring.md)).
-- Text requires a font file; there is no system font fallback.
+- Python text uses a bundled default, an installed font family, or an explicit font file.
 
 Vestra is a rendering engine, not a live editor: it renders a finished project
 to a file rather than streaming interactive previews. If you need a timeline

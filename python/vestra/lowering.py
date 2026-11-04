@@ -342,7 +342,11 @@ class LoweringContext:
         return asset
 
     def font_asset(self, source: Text) -> FontAsset:
-        return self._font_path_asset(source.font)
+        from ._fonts import resolve_font
+
+        path = resolve_font(source.font, explicit_path=source._font_is_path,
+                            base_directory=self.builder.base_directory)
+        return self._font_path_asset(path)
 
     def _font_path_asset(self, path: str) -> FontAsset:
         key = os.path.normpath(path)

@@ -33,3 +33,12 @@ EnvFilter settings without duplicating Rust formatting or filtering.
 If a Python callback raises, the binding requests native cancellation, preserves that original Python exception, and re-raises it after cleanup. It never returns a `RenderResult` or replaces the callback exception with a generic `RenderError`. When cleanup reports a native error, the binding attaches its Python error object as `error.render_cleanup_error`. Ordinary cooperative cancellation is different: it raises `CancelledError`, a `RenderError`.
 
 Native project/preparation/render errors become the documented Python exception hierarchy. Cooperative cancellation maps to `CancelledError`, a `RenderError`, rather than a result with partial success. Keep `.pyi`, PyO3 method signatures and package exports synchronized: users type against the stub, but behavior comes from the compiled extension.
+
+High-level Text resolves its optional bundled font or installed family at the
+authoring/lowering boundary, retaining canonical Font asset IDs and file paths.
+Private PyO3 discovery uses fontdb, scans once per process, and returns an exact
+case-insensitive family's preferred regular face as a file/index pair. Python
+materializes collection faces as content-addressed standalone sfnt files in the
+user cache; this keeps the renderer's file-backed contract and avoids rendering
+a different collection face. Explicit font files retain existing base-directory
+resolution and preparation diagnostics. No canonical schema fields are added.

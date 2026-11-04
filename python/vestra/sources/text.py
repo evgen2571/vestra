@@ -1,4 +1,4 @@
-"""Deterministic file-backed text source descriptors."""
+"""Text source descriptors with bundled, system-family or explicit file fonts."""
 
 from __future__ import annotations
 
@@ -31,26 +31,27 @@ def _finite(value: int | float, name: str) -> float:
 
 
 class Text(Source):
-    """A static text source using one explicit font file."""
+    """A static text source using the bundled default, an installed family, or a file."""
 
-    __slots__ = ("_text", "_font", "_font_size", "_fill", "_align", "_max_width", "_line_spacing", "_letter_spacing")
+    __slots__ = ("_text", "_font", "_font_is_path", "_font_size", "_fill", "_align", "_max_width", "_line_spacing", "_letter_spacing")
 
-    def __init__(self, text: str, *, font: str | os.PathLike[str], font_size: int | float,
+    def __init__(self, text: str, *, font: str | os.PathLike[str] | None = None, font_size: int | float,
                  fill: Color | str = "#ffffff", align: TextAlignment = "left",
                  max_width: int | float | None = None, line_spacing: int | float = 1.0,
                  letter_spacing: int | float = 0.0) -> None:
         if not isinstance(text, str):
             raise TypeError("text must be a string")
         try:
-            font_value = os.fspath(font)
+            font_value = None if font is None else os.fspath(font)
         except TypeError as error:
-            raise TypeError("font must be str or PathLike[str]") from error
-        if not isinstance(font_value, str) or not font_value or font_value.isspace():
-            raise ValueError("font must be a non-empty file path")
+            raise TypeError("font must be str, PathLike[str], or None") from error
+        if font is not None and (not isinstance(font_value, str) or not font_value or font_value.isspace()):
+            raise ValueError("font must be a non-empty family name or file path")
         if align not in {"left", "center", "right"}:
             raise ValueError("align must be 'left', 'center', or 'right'")
         self._text = text
         self._font = font_value
+        self._font_is_path = font is not None and not isinstance(font, str)
         self._font_size = _positive(font_size, "font_size")
         self._fill = color_to_canonical(fill)
         self._align = align
@@ -61,7 +62,7 @@ class Text(Source):
     @property
     def text(self) -> str: return self._text
     @property
-    def font(self) -> str: return self._font
+    def font(self) -> str | None: return self._font
     @property
     def font_size(self) -> float: return self._font_size
     @property

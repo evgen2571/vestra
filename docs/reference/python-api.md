@@ -32,7 +32,10 @@ project.render(output, *, backend="auto", overwrite=False, preview=False,
 `show_progress=False` to disable it, or pass `on_progress=my_callback` to
 replace the built-in terminal renderer with a callback.
 
-`validate()` lowers then performs canonical semantic validation only. It does not probe files or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
+`list_system_fonts() -> list[str]` lists installed font families without a project.
+`Text(..., font=None)` uses the bundled default; see [Text](sources/text.md).
+
+`validate()` lowers then performs canonical semantic validation only. It resolves authored font selections during lowering, but does not probe media or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
 
 Layers expose an ordered mask collection:
 

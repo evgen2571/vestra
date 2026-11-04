@@ -269,3 +269,42 @@ def test_cpu_applies_constructor_scale_and_position_once_and_snapshot_is_isolate
     source.transform.scale = 3
     assert snapshot.to_dict()["visual"]["clips"][0]["transform"]["position"]["base_value"] == {"x": 0.25, "y": 0.5}
     assert snapshot.to_dict()["visual"]["clips"][0]["transform"]["scale"]["base_value"] == {"x": 2, "y": 2}
+
+
+@pytest.mark.parametrize("placement", ["root", "group", "mask_group"])
+def test_scale_point_component_bindings_survive_canonical_lowering(placement: str) -> None:
+    composition = project()
+    signal = composition.audio.signal.rms()
+    defaults = vestra.Transform()
+    defaults.scale.bind(signal, operation="multiply")
+    defaults.scale.x.bind(signal, operation="replace")
+    defaults.scale.y.bind(signal, operation="add")
+    defaults.scale_x.bind(signal, operation="add")
+    defaults.scale_y.bind(signal, operation="multiply")
+    source = Rectangle(width=4, height=4, fill="#ffffff", transform=defaults)
+    if placement == "root":
+        composition.root.add(source)
+    elif placement == "group":
+        composition.root.add(Group([source]))
+    else:
+        composition.root.add(Color("#ffffff")).masks.add(Group([source]))
+    clip = composition.snapshot().to_dict()["visual"]["clips"][0]
+    if placement == "group":
+        clip = clip["source"]["clips"][0]
+    elif placement == "mask_group":
+        clip = clip["masks"][0]["input"]["source"]["clips"][0]
+    assert "component_modifiers" not in clip["transform"]["scale"]
+    modifiers = clip["transform"]["component_modifiers"]
+    assert [item["operation"] for item in modifiers["scale_x"]] == ["multiply", "replace", "add"]
+    assert [item["operation"] for item in modifiers["scale_y"]] == ["multiply", "add", "multiply"]
+
+
+def test_scale_point_component_bindings_require_a_presentation_adapter() -> None:
+    composition = project()
+    source = Color("#ffffff")
+    source.transform.scale.x.bind(composition.audio.signal.rms())
+    assert not source.transform.is_default()
+    composition.root.add(source)
+    clip = composition.snapshot().to_dict()["visual"]["clips"][0]
+    assert clip["source"]["type"] == "group"
+    assert clip["transform"]["component_modifiers"]["scale_x"]

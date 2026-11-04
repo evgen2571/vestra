@@ -125,6 +125,8 @@ class LoweringContext:
         self._audio_asset_ids: dict[str, AudioAsset] = {}
         self._local_ids: dict[tuple[tuple[str, ...], str], str] = {}
         self.layer_clips: dict[Layer, VisualClip] = {}
+        self._layer_scopes: dict[Layer, tuple[str, ...]] = {}
+        self._active_groups: set[int] = set()
         self._reserved_root_ids: set[str] = set()
         self._used_native_ids: set[str] = set()
         self._transition_endpoints: set[Layer] = set()
@@ -166,6 +168,7 @@ class LoweringContext:
         return clips
 
     def _lower_layer_parts(self, layer: Layer, scope: tuple[str, ...]) -> VisualClip:
+        self._layer_scopes[layer] = scope
         key = (scope, layer.id)
         if key in self._local_ids:
             raise ValueError(f"duplicate layer ID: {layer.id!r}")
@@ -462,6 +465,52 @@ def _lower_image(
     )
 
 
+def _lower_group(
+    context: LoweringContext, layer: Layer, native_id: str, placement: Placement
+) -> VisualClip:
+    from .editor import Layer
+
+    source = cast(Group, layer.source)
+    if id(source) in context._active_groups:
+        raise ValueError("recursive Group sources are not supported")
+    context._active_groups.add(id(source))
+    try:
+        scope = (*context._layer_scopes[layer], layer.id)
+        clips = []
+        for index, child in enumerate(source.children):
+            # Reuse normal source dispatch, asset registration and presentation.
+            child_layer = Layer(
+                layer.composition,
+                child.source,
+                identifier=f"group-child-{index}",
+                name=None,
+                start=child.start,
+                duration=child.duration if child.duration is not None else layer.duration,
+                source_start=child.source_start,
+                playback_rate=child.playback_rate,
+                z=child.layer,
+                visible=child.visible,
+                opacity=child.opacity.value,
+                transform=child.transform,
+                blend_mode=child.blend_mode,
+            )
+            child_layer.opacity = child.opacity
+            child_layer._effects = child.effects
+            child_layer._masks = child.masks
+            clips.append(context._lower_layer_parts(child_layer, scope))
+        return context.builder.add_group_clip(
+            clips=clips,
+            start=placement.start,
+            duration=placement.duration,
+            layer=placement.layer,
+            visible=placement.visible,
+            opacity=placement.opacity,
+            id=native_id,
+        )
+    finally:
+        context._active_groups.remove(id(source))
+
+
 def _lower_video(
     context: LoweringContext, layer: Layer, native_id: str, placement: Placement
 ) -> VisualClip:
@@ -602,6 +651,8 @@ def _lower_transform(source: Transform, target: Any) -> None:
     _lower_scalar_property(source.rotation_degrees, target.transform.rotation_degrees)
     _lower_component_bindings(source.position_x, target.transform.position_x)
     _lower_component_bindings(source.position_y, target.transform.position_y)
+    _lower_component_bindings(source.scale.x, target.transform.scale_x)
+    _lower_component_bindings(source.scale.y, target.transform.scale_y)
     _lower_component_bindings(source.scale_x, target.transform.scale_x)
     _lower_component_bindings(source.scale_y, target.transform.scale_y)
 
@@ -672,6 +723,9 @@ register_source(
     SourceCapabilities(requires_audio=True, supports_transition_adapter=True),
 )
 register_source(Text, _lower_text, SourceCapabilities(
+    supports_direct_transform=True, supports_direct_transition_endpoint=True,
+))
+register_source(Group, _lower_group, SourceCapabilities(
     supports_direct_transform=True, supports_direct_transition_endpoint=True,
 ))
 

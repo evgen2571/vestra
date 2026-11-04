@@ -33,3 +33,9 @@ EnvFilter settings without duplicating Rust formatting or filtering.
 If a Python callback raises, the binding requests native cancellation, preserves that original Python exception, and re-raises it after cleanup. It never returns a `RenderResult` or replaces the callback exception with a generic `RenderError`. When cleanup reports a native error, the binding attaches its Python error object as `error.render_cleanup_error`. Ordinary cooperative cancellation is different: it raises `CancelledError`, a `RenderError`.
 
 Native project/preparation/render errors become the documented Python exception hierarchy. Cooperative cancellation maps to `CancelledError`, a `RenderError`, rather than a result with partial success. Keep `.pyi`, PyO3 method signatures and package exports synchronized: users type against the stub, but behavior comes from the compiled extension.
+
+Standalone `Group` sources lower through the source registry into the same
+canonical group clips as `CompositionLayer`. Child placements use ordinary
+source handlers, scoped deterministic IDs and the snapshot's shared asset
+registry. Source transform defaults are copied into placement transforms once;
+individual overrides replace only the selected property's animation/bindings.

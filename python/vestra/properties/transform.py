@@ -236,6 +236,8 @@ class Transform:
             and not self.scale.keyframes
             and not self.rotation_degrees.keyframes
             and not self.scale.bindings
+            and not self.scale.x.bindings
+            and not self.scale.y.bindings
             and not self.rotation_degrees.bindings
             and not self.position_x.bindings
             and not self.position_y.bindings

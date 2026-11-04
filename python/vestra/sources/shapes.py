@@ -6,6 +6,7 @@ from math import isfinite
 from typing import TypeAlias
 
 from ..authoring.values import Color, Point, color_to_canonical
+from ..properties.transform import Transform, TransformPoint, TransformScale
 from .base import Source
 
 PointValue: TypeAlias = Point | tuple[int | float, int | float] | list[int | float]
@@ -39,7 +40,21 @@ class Shape(Source):
         fill: Color | str | None,
         stroke: Color | str | None,
         stroke_width: int | float,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
     ) -> None:
+        super().__init__(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
         if fill is None and stroke is None:
             raise ValueError("shape must have a fill or stroke")
         self.fill = fill
@@ -94,13 +109,36 @@ class Rectangle(Shape):
 
     __slots__ = ("_width", "_height", "_corner_radius")
 
-    def __init__(self, *, width: int | float, height: int | float, fill: Color | str | None = None,
-                 stroke: Color | str | None = None, stroke_width: int | float = 0.0,
-                 corner_radius: int | float = 0.0) -> None:
+    def __init__(
+        self,
+        *,
+        width: int | float,
+        height: int | float,
+        fill: Color | str | None = None,
+        stroke: Color | str | None = None,
+        stroke_width: int | float = 0.0,
+        corner_radius: int | float = 0.0,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
         self.width = width
         self.height = height
         self.corner_radius = corner_radius
-        super().__init__(fill=fill, stroke=stroke, stroke_width=stroke_width)
+        super().__init__(
+            fill=fill,
+            stroke=stroke,
+            stroke_width=stroke_width,
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
 
     @property
     def width(self) -> float: return self._width
@@ -131,11 +169,34 @@ class Ellipse(Shape):
 
     __slots__ = ("_width", "_height")
 
-    def __init__(self, *, width: int | float, height: int | float, fill: Color | str | None = None,
-                 stroke: Color | str | None = None, stroke_width: int | float = 0.0) -> None:
+    def __init__(
+        self,
+        *,
+        width: int | float,
+        height: int | float,
+        fill: Color | str | None = None,
+        stroke: Color | str | None = None,
+        stroke_width: int | float = 0.0,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
         self.width = _number(width, "width", positive=True)
         self.height = _number(height, "height", positive=True)
-        super().__init__(fill=fill, stroke=stroke, stroke_width=stroke_width)
+        super().__init__(
+            fill=fill,
+            stroke=stroke,
+            stroke_width=stroke_width,
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
 
     @property
     def width(self) -> float: return self._width
@@ -153,10 +214,34 @@ class Ellipse(Shape):
 class Circle(Ellipse):
     """Ellipse authoring convenience with equal dimensions."""
 
-    def __init__(self, *, radius: int | float, fill: Color | str | None = None,
-                 stroke: Color | str | None = None, stroke_width: int | float = 0.0) -> None:
+    def __init__(
+        self,
+        *,
+        radius: int | float,
+        fill: Color | str | None = None,
+        stroke: Color | str | None = None,
+        stroke_width: int | float = 0.0,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
         diameter = _number(radius, "radius", positive=True) * 2.0
-        super().__init__(width=diameter, height=diameter, fill=fill, stroke=stroke, stroke_width=stroke_width)
+        super().__init__(
+            width=diameter,
+            height=diameter,
+            fill=fill,
+            stroke=stroke,
+            stroke_width=stroke_width,
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
 
 
 class Line(Shape):
@@ -164,13 +249,35 @@ class Line(Shape):
 
     __slots__ = ("_start", "_end")
 
-    def __init__(self, *, start: PointValue, end: PointValue, stroke: Color | str,
-                 stroke_width: int | float) -> None:
+    def __init__(
+        self,
+        *,
+        start: PointValue,
+        end: PointValue,
+        stroke: Color | str,
+        stroke_width: int | float,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
         self._start = _point(start, "start")
         self._end = _point(end, "end")
         if self._start == self._end:
             raise ValueError("line endpoints must be distinct")
-        super().__init__(fill=None, stroke=stroke, stroke_width=stroke_width)
+        super().__init__(
+            fill=None,
+            stroke=stroke,
+            stroke_width=stroke_width,
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
 
     @property
     def start(self) -> Point:
@@ -189,12 +296,34 @@ class Polygon(Shape):
 
     __slots__ = ("_points",)
 
-    def __init__(self, *, points: list[PointValue] | tuple[PointValue, ...], fill: Color | str | None = None,
-                 stroke: Color | str | None = None, stroke_width: int | float = 0.0) -> None:
+    def __init__(
+        self,
+        *,
+        points: list[PointValue] | tuple[PointValue, ...],
+        fill: Color | str | None = None,
+        stroke: Color | str | None = None,
+        stroke_width: int | float = 0.0,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
         if len(points) < 3:
             raise ValueError("polygon needs at least three points")
         self._points = tuple(_point(point, "points item") for point in points)
-        super().__init__(fill=fill, stroke=stroke, stroke_width=stroke_width)
+        super().__init__(
+            fill=fill,
+            stroke=stroke,
+            stroke_width=stroke_width,
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
 
     @property
     def points(self) -> tuple[Point, ...]: return self._points

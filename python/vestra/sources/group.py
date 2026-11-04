@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
 
+from ..properties.transform import TransformPoint, TransformScale
 from .base import Source
 from .image import Image
 from .video import Video
@@ -38,6 +39,12 @@ class GroupChild:
         layer: int = 0,
         visible: bool = True,
         opacity: int | float = 1.0,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
     ) -> None:
         if not isinstance(source, Source):
             raise TypeError("Group child source must be a vestra source value")
@@ -56,6 +63,8 @@ class GroupChild:
         if isinstance(opacity, bool) or not isinstance(opacity, int | float) or not 0 <= opacity <= 1:
             raise ValueError("Group child opacity must be between 0 and 1")
         self.source = source.snapshot()
+        if not isinstance(self.source, Source):
+            raise TypeError("source.snapshot() must return a Source")
         self.start = float(start)
         self.duration = None if duration is None else float(duration)
         self.source_start = float(source_start)
@@ -63,7 +72,14 @@ class GroupChild:
         self.layer = layer
         self.visible = visible
         self._opacity = BindableScalarProperty(opacity, minimum=0.0, maximum=1.0)
-        self.transform = Transform()
+        self.transform = self.source._placement_transform(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
         self._effects = EffectStack("layer")
         self._blend_mode = BlendMode.NORMAL
         self._masks: MaskCollection | None = None
@@ -114,7 +130,25 @@ class Group(Source):
 
     __slots__ = ("_children",)
 
-    def __init__(self, children: Iterable[Source] = ()) -> None:
+    def __init__(
+        self,
+        children: Iterable[Source | GroupChild] = (),
+        *,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
+        super().__init__(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
         values = tuple(children)
         if not all(isinstance(child, Source | GroupChild) for child in values):
             raise TypeError("Group children must be source values or GroupChild objects")
@@ -138,6 +172,12 @@ class Group(Source):
         layer: int | None = None,
         visible: bool = True,
         opacity: int | float = 1.0,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
     ) -> GroupChild:
         child = GroupChild(
             source,
@@ -148,6 +188,12 @@ class Group(Source):
             layer=len(self._children) if layer is None else layer,
             visible=visible,
             opacity=opacity,
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
         )
         self._children = (*self._children, child)
         return child

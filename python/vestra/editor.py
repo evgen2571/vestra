@@ -20,6 +20,7 @@ from .presets import Preset, PresetCollection
 from .properties import BindableScalarProperty, ScalarProperty, Transform
 from .sources import Color as SourceColor
 from .sources import Source, Video
+from .properties.transform import TransformPoint, TransformScale
 from .transitions import TransitionCollection
 
 
@@ -149,7 +150,7 @@ class Layer:
         self._opacity = BindableScalarProperty(
             _opacity(opacity), minimum=0.0, maximum=1.0
         )
-        self._transform = transform.copy() if transform is not None else Transform()
+        self._transform = source._placement_transform(transform=transform)
         if not isinstance(blend_mode, BlendMode):
             raise TypeError("blend_mode must be BlendMode")
         self._blend_mode = blend_mode
@@ -270,6 +271,10 @@ class Layer:
         self._transform.anchor = copied.anchor
         self._transform.scale = copied.scale
         self._transform.rotation_degrees = copied.rotation_degrees
+        copied.position_x._copy_to(self._transform.position_x)
+        copied.position_y._copy_to(self._transform.position_y)
+        copied.scale_x._copy_to(self._transform.scale_x)
+        copied.scale_y._copy_to(self._transform.scale_y)
 
     @property
     def blend_mode(self) -> BlendMode:
@@ -402,6 +407,12 @@ class CompositionLayer(Layer):
         id: str | None = None,
         name: str | None = None,
         blend_mode: BlendMode = BlendMode.NORMAL,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
     ) -> Layer:
         return self._child.add(
             source,
@@ -415,6 +426,7 @@ class CompositionLayer(Layer):
             id=id,
             name=name,
             blend_mode=blend_mode,
+            transform=transform, position=position, anchor=anchor, scale=scale, rotation=rotation, rotation_degrees=rotation_degrees,
         )
 
     def group(
@@ -506,6 +518,12 @@ class Composition:
         id: str | None = None,
         name: str | None = None,
         blend_mode: BlendMode = BlendMode.NORMAL,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
     ) -> Layer:
         """Place a copy of ``source`` in this composition and return its layer.
 
@@ -549,6 +567,7 @@ class Composition:
             visible=visible,
             opacity=opacity,
             blend_mode=blend_mode,
+            transform=copied._placement_transform(transform=transform, position=position, anchor=anchor, scale=scale, rotation=rotation, rotation_degrees=rotation_degrees),
         )
         self._ids.add(identifier)
         self._layers.append(layer)

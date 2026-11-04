@@ -27,7 +27,7 @@ Text can use the bundled default, an installed font family, or an explicit file:
 ```python
 from vestra import Text, list_system_fonts
 
-title = Text("Hello", font_size=48)  # bundled default; font=None does the same
+title = Text("Hello")               # bundled font, 48 pixels; font=None does the same
 print(list_system_fonts())          # case-insensitively sorted, unique families
 title = Text("Hello", font="DejaVu Sans", font_size=48)  # if installed
 title = Text("Hello", font="assets/MyFont.ttf", font_size=48)

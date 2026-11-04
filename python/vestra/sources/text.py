@@ -41,7 +41,7 @@ class Text(Source):
         text: str,
         *,
         font: str | os.PathLike[str] | None = None,
-        font_size: int | float,
+        font_size: int | float = 48,
         fill: Color | str = "#ffffff",
         align: TextAlignment = "left",
         max_width: int | float | None = None,

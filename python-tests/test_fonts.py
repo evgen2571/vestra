@@ -28,9 +28,10 @@ def test_default_is_optional_and_none_uses_same_packaged_asset(monkeypatch):
         pytest.fail("the default font must not scan or resolve system fonts")
     monkeypatch.setattr(_native, "_resolve_system_font", no_system_fonts)
     project = project_with()
-    project.root.add(Text("Default", font_size=24))
+    project.root.add(Text("Default"))
     data = project.snapshot().to_dict()
     assert len(data["assets"]) == 1
+    assert data["visual"]["clips"][1]["source"]["font_size"] == 48
     path = Path(data["assets"][0]["source"])
     assert path.is_file() and path.name == "VestraDefault.ttf"
     assert path.with_name("LICENSE.txt").is_file()

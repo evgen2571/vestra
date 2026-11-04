@@ -2,8 +2,7 @@
 
 Learn to compose and render videos with Vestra's Python API or CLI. Start with
 installation and a quickstart, then use the guides for the features you need.
-The [changelog](../CHANGELOG.md) records released changes; the
-[feature-support matrix](reference/feature-support.md) states what each
+The [feature-support matrix](reference/feature-support.md) states what each
 backend actually implements.
 
 ## Get started
@@ -53,6 +52,5 @@ and effect options, project formats, [backend support](reference/backends.md),
 
 See [Contributing](../CONTRIBUTING.md) for setup and contribution guidance, the
 [development documentation](development/README.md) for testing, architecture,
-performance, extensions and release procedures, and the
-[changelog](../CHANGELOG.md) for released changes. Agent contributors can start
+performance, extensions and release procedures. Agent contributors can start
 with [AGENTS.md](../AGENTS.md) and use [PLANS.md](../PLANS.md) for larger tasks.

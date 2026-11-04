@@ -78,7 +78,6 @@ Motion Canvas or MoviePy instead.
 · [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md)
 · [Docs index](https://github.com/evgen2571/vestra/blob/main/docs/index.md)
 · [Python API](https://github.com/evgen2571/vestra/blob/main/docs/reference/python-api.md)
-· [Changelog](https://github.com/evgen2571/vestra/blob/main/CHANGELOG.md)
 · [Contributing](https://github.com/evgen2571/vestra/blob/main/CONTRIBUTING.md)
 
 Vestra 0.1.x: the Python API may still change between minor versions; the JSON

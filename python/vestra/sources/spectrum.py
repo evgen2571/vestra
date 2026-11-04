@@ -17,6 +17,7 @@ from ..authoring.spectrum2d import (
     _resolve_spectrum2d_source,
 )
 from ..authoring.values import Color as AuthoringColor, color_to_canonical
+from ..properties.transform import Transform, TransformPoint, TransformScale
 from .base import Source
 
 _SPECTRUM_FIELDS = (
@@ -64,7 +65,21 @@ class Spectrum2D(Source):
         min_bar_height_ratio: int | float | None = None,
         layout: Spectrum2DLayout | None = None,
         gradient: Spectrum2DGradient | None | _Unset = _UNSET,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
     ) -> None:
+        super().__init__(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
         values = {
             "band_count": band_count,
             "min_hz": min_hz,

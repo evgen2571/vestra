@@ -6,6 +6,7 @@ import os
 
 from ..authoring.values import Crop
 from ..properties import CropProperty
+from ..properties.transform import Transform, TransformPoint, TransformScale
 from .base import Source, Sizing, SizingValue, _sizing
 
 
@@ -14,8 +15,27 @@ class Video(Source):
 
     __slots__ = ("_path", "_sizing", "_crop")
 
-    def __init__(self, path: str | os.PathLike[str], *, sizing: SizingValue | None = None,
-                 crop: Crop | CropProperty | None = None) -> None:
+    def __init__(
+        self,
+        path: str | os.PathLike[str],
+        *,
+        sizing: SizingValue | None = None,
+        crop: Crop | CropProperty | None = None,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
+        super().__init__(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
         try:
             value = os.fspath(path)
         except TypeError as error:

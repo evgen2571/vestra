@@ -21,3 +21,6 @@ Text layout/raster data is preparation work, not JSON data. The font must exist
 and load successfully during preflight/preparation. Layer transform, animation,
 effects, transitions, nesting, CPU, and WGPU support follow the ordinary text
 source path, provided that font preparation succeeds.
+
+Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
+which are copied into each placement and can be individually overridden by `add()`.

@@ -205,3 +205,19 @@ p.root.add(vestra.Text('Hello', font=families[0], font_size=32))
 pixels = p.render_frame(0, backend='cpu').to_bytes()
 assert any(pixels[i:i+3] != bytes(3) for i in range(0, len(pixels), 4))
 """, str(copied)], cwd=tmp_path, env=dict(os.environ, FONTCONFIG_FILE=str(config)), check=True)
+
+
+@pytest.mark.parametrize("font", [None, "Fixture Family"])
+def test_font_selection_and_transform_defaults_render_inside_standalone_group(font, monkeypatch):
+    monkeypatch.setattr(_native, "_resolve_system_font", lambda family: (FONT, 0))
+    source = Text("Hello Δ", font=font, font_size=24,
+                  position=(0.5, 0.5), scale=0.8, rotation_degrees=12)
+    reference = vestra.Project(size=(160, 80), fps=1, duration=1)
+    reference.root.add(source)
+    grouped = vestra.Project(size=(160, 80), fps=1, duration=1)
+    grouped.root.add(vestra.Group([source]))
+    grouped.root.add(vestra.Group([source]), visible=False)
+    assert len(grouped.snapshot().to_dict()["assets"]) == 1
+    pixels = grouped.render_frame(0, backend="cpu").to_bytes()
+    assert any(pixels[i:i + 3] != bytes(3) for i in range(0, len(pixels), 4))
+    assert pixels == reference.render_frame(0, backend="cpu").to_bytes()

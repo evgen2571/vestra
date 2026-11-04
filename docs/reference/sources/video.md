@@ -16,3 +16,6 @@ composition.add(video, *, start=0, duration=None, source_start=0.0,
 `start` and `duration` are project or owning-composition local seconds. `source_start` is source-media seconds and may be zero; `playback_rate` is a finite positive multiplier. If `duration=None`, a `Video` layer probes the file immediately to derive the available media duration after `source_start`, divided by playback rate. Provide `duration` to avoid that authoring-time probe. Canonical video clips carry this placement timing; coded duration and dimensions remain media facts gathered by preflight/preparation.
 
 Video is a direct transform and transition endpoint. CPU and WGPU consume decoded frames after media preparation. A valid path can still fail preflight for unsupported/corrupt media, missing tools or an unavailable decoder.
+
+Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
+which are copied into each placement and can be individually overridden by `add()`.

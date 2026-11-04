@@ -50,7 +50,7 @@ and effect options, project formats, [backend support](reference/backends.md),
 
 ## Development
 
-See [Contributing](../CONTRIBUTING.md) for setup and contribution guidance, the
+See [Contributing](../CONTRIBUTING.md) for setup and contribution guidance and the
 [development documentation](development/README.md) for testing, architecture,
 performance, extensions and release procedures. Agent contributors can start
 with [AGENTS.md](../AGENTS.md) and use [PLANS.md](../PLANS.md) for larger tasks.

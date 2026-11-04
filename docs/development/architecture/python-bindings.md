@@ -42,3 +42,9 @@ materializes collection faces as content-addressed standalone sfnt files in the
 user cache; this keeps the renderer's file-backed contract and avoids rendering
 a different collection face. Explicit font files retain existing base-directory
 resolution and preparation diagnostics. No canonical schema fields are added.
+
+Standalone `Group` sources lower through the source registry into the same
+canonical group clips as `CompositionLayer`. Child placements use ordinary
+source handlers, scoped deterministic IDs and the snapshot's shared asset
+registry. Source transform defaults are copied into placement transforms once;
+individual overrides replace only the selected property's animation/bindings.

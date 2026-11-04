@@ -37,7 +37,7 @@ without publishing them.
 
 Before creating a tag or publishing a release:
 
-1. Prepare GitHub release notes describing the changes for the target version.
+1. Prepare GitHub release notes summarizing the changes since the previous release.
 2. Run `just style check python-test examples showcase-smoke` and `just wheel-smoke`.
 3. Validate and visually inspect the public showcase outputs using the examples
    instructions. Check documentation links with `just docs-check`.

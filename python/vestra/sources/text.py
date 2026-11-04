@@ -7,6 +7,7 @@ from math import isfinite
 from typing import Literal
 
 from ..authoring.values import Color, color_to_canonical
+from ..properties.transform import Transform, TransformPoint, TransformScale
 from .base import Source
 
 TextAlignment = Literal["left", "center", "right"]
@@ -35,10 +36,32 @@ class Text(Source):
 
     __slots__ = ("_text", "_font", "_font_is_path", "_font_size", "_fill", "_align", "_max_width", "_line_spacing", "_letter_spacing")
 
-    def __init__(self, text: str, *, font: str | os.PathLike[str] | None = None, font_size: int | float,
-                 fill: Color | str = "#ffffff", align: TextAlignment = "left",
-                 max_width: int | float | None = None, line_spacing: int | float = 1.0,
-                 letter_spacing: int | float = 0.0) -> None:
+    def __init__(
+        self,
+        text: str,
+        *,
+        font: str | os.PathLike[str] | None = None,
+        font_size: int | float,
+        fill: Color | str = "#ffffff",
+        align: TextAlignment = "left",
+        max_width: int | float | None = None,
+        line_spacing: int | float = 1.0,
+        letter_spacing: int | float = 0.0,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
+        super().__init__(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
         if not isinstance(text, str):
             raise TypeError("text must be a string")
         try:

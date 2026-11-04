@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Self, TypeAlias
 
 from ..authoring.signals import ScalarSignal
 from ..authoring.values import Crop, Point
@@ -114,6 +114,10 @@ class _ScaleProperty(BindablePointProperty):
         self, signal: ScalarSignal, *, operation: SignalOperation = "multiply"
     ) -> Self:
         return super().bind(signal, operation=operation)
+
+
+TransformPoint: TypeAlias = Point | tuple[int | float, int | float]
+TransformScale: TypeAlias = TransformPoint | int | float
 
 
 class Transform:
@@ -232,12 +236,52 @@ class Transform:
             and not self.scale.keyframes
             and not self.rotation_degrees.keyframes
             and not self.scale.bindings
+            and not self.scale.x.bindings
+            and not self.scale.y.bindings
             and not self.rotation_degrees.bindings
             and not self.position_x.bindings
             and not self.position_y.bindings
             and not self.scale_x.bindings
             and not self.scale_y.bindings
         )
+
+    def _with_overrides(
+        self,
+        *,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> Transform:
+        """Copy defaults, replacing the complete state of explicitly overridden properties."""
+        if rotation is not None and rotation_degrees is not None:
+            raise TypeError("specify only one of rotation and rotation_degrees")
+        if transform is not None:
+            if not isinstance(transform, Transform):
+                raise TypeError("transform must be Transform or None")
+            if any(value is not None for value in (position, anchor, scale, rotation, rotation_degrees)):
+                raise TypeError("transform cannot be combined with individual transform arguments")
+            return transform.copy()
+        result = self.copy()
+        if position is not None:
+            result._position = PointProperty(Point(0.5, 0.5))
+            result._position.value = position
+            result._position_x = ScalarBindingTarget()
+            result._position_y = ScalarBindingTarget()
+        if anchor is not None:
+            result._anchor = _AnchorProperty(Point(0.5, 0.5))
+            result._anchor.value = anchor
+        if scale is not None:
+            result._scale = _ScaleProperty(Point(1, 1))
+            result._scale.value = scale
+            result._scale_x = ScalarBindingTarget()
+            result._scale_y = ScalarBindingTarget()
+        degrees = rotation if rotation is not None else rotation_degrees
+        if degrees is not None:
+            result._rotation_degrees = BindableScalarProperty(degrees)
+        return result
 
     def copy(self) -> "Transform":
         result = Transform()

@@ -24,3 +24,6 @@ Spectrum2D(*, preset=None, band_count=None, min_hz=None, max_hz=None,
 Linear anchors are `bottom`, `top` or `center`; linear mappings are `forward`, `reverse` or `center_out`. Radial layout requires `0 <= inner_radius_ratio < 1`, `0 < sweep_angle_degrees <= 360`, direction `outward`/`inward`/`both`, and radial mapping `forward`/`reverse`.
 
 Spectrum2D lowers to `spectrum2d` and requires prepared master-audio analysis. It is not a direct transform or transition endpoint. CPU has dedicated support; WGPU source dispatch exists, but full visual parity is not verified.
+
+Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
+which are copied into each placement and can be individually overridden by `add()`.

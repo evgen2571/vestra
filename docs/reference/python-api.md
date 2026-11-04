@@ -11,12 +11,29 @@ Project(*, size: tuple[int, int], fps: int | tuple[int, int] | FrameRate,
 
 composition.add(source, *, start=0, duration=None, source_start=0.0,
                 playback_rate=1.0, z=0, visible=True, opacity=1.0,
-                id=None, name=None, blend_mode=BlendMode.NORMAL) -> Layer
+                id=None, name=None, blend_mode=BlendMode.NORMAL,
+                transform=None, position=None, anchor=None, scale=None,
+                rotation=None, rotation_degrees=None) -> Layer
 composition.group(name=None, *, start=0, duration=None, z=0, visible=True,
                   opacity=1, id=None, blend_mode=BlendMode.NORMAL) -> CompositionLayer
 ```
 
 `size` has positive integer width/height; `fps` is an integer, `(numerator, denominator)` pair or `FrameRate`; explicit `duration` is positive seconds. `root` is the top-level `Composition`; a `CompositionLayer.child` is another composition with child-local timing. `add` copies its `Source`; `duration=None` uses the owning duration except for `Video`, where it probes media to derive the usable source duration. `source_start` is source-media seconds and `playback_rate` is positive.
+
+`Group(children=(), *, transform=None, position=None, anchor=None, scale=None,
+rotation=None, rotation_degrees=None)` is an ordinary visual source.
+`group.add(source, *, start=0, duration=None, source_start=0, playback_rate=1,
+layer=None, visible=True, opacity=1, transform=None, position=None, anchor=None,
+scale=None, rotation=None, rotation_degrees=None)` returns a `GroupChild`.
+See [nested groups](../guides/python/nested-compositions.md) for ownership,
+local timing and the direct `CompositionLayer` alternative.
+
+All visual source constructors accept the same transform keywords; ParticleSystem
+keeps `rotation` for particle orientation and accepts `rotation_degrees` for
+presentation. Sources expose `transform` defaults; placements copy them.
+An individual placement override replaces only that property's animation and
+bindings. `transform=` replaces all defaults and is exclusive with individual
+keywords. See [precedence and validation](../guides/python/sources-and-layers.md).
 
 ```python
 project.snapshot(*, output=None) -> ProjectSnapshot

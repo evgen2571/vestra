@@ -19,6 +19,7 @@ from ..authoring.values import (
 )
 from ..properties import BindableScalarProperty, ScalarProperty, SignalOperation
 from ..authoring.signals import ScalarSignal
+from ..properties.transform import Transform, TransformPoint, TransformScale
 
 if TYPE_CHECKING:
     pass
@@ -121,7 +122,59 @@ class Source:
     override ``snapshot`` when a normal deep copy is not appropriate.
     """
 
-    __slots__ = ()
+    __slots__ = ("_transform",)
+
+    def __init__(
+        self,
+        *,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> None:
+        self._transform = Transform()._with_overrides(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
+
+    @property
+    def transform(self) -> Transform:
+        """Defaults copied into each placement, in normalized parent-canvas coordinates."""
+        # Custom Source subclasses need not call the base constructor.
+        if not hasattr(self, "_transform"):
+            self._transform = Transform()
+        return self._transform
+
+    @transform.setter
+    def transform(self, value: Transform) -> None:
+        if not isinstance(value, Transform):
+            raise TypeError("transform must be Transform")
+        self._transform = value.copy()
+
+    def _placement_transform(
+        self,
+        *,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation: int | float | None = None,
+        rotation_degrees: int | float | None = None,
+    ) -> Transform:
+        return self.transform._with_overrides(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation=rotation,
+            rotation_degrees=rotation_degrees,
+        )
 
     def snapshot(self) -> "Source":
         return deepcopy(self)

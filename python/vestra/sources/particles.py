@@ -22,6 +22,7 @@ from ..authoring.particles import (
 )
 from ..authoring.tracks import ModulatableScalarTrack
 from ..authoring.values import Color as AuthoringColor, Point
+from ..properties.transform import Transform, TransformPoint, TransformScale
 from .base import ParticleAudioReactive, Source
 
 if TYPE_CHECKING:
@@ -118,7 +119,19 @@ class ParticleSystem(Source):
         blend_mode: ParticleBlendMode = ParticleBlendMode.NORMAL,
         lifetime_style: ParticleLifetimeStyle | None = None,
         audio_reactive: ParticleAudioReactive | None = None,
+        transform: Transform | None = None,
+        position: TransformPoint | None = None,
+        anchor: TransformPoint | None = None,
+        scale: TransformScale | None = None,
+        rotation_degrees: int | float | None = None,
     ) -> None:
+        super().__init__(
+            transform=transform,
+            position=position,
+            anchor=anchor,
+            scale=scale,
+            rotation_degrees=rotation_degrees,
+        )
         if definition is not None:
             if not isinstance(definition, AuthoringParticleSystem):
                 raise TypeError("definition must be an authoring ParticleSystem")
@@ -207,6 +220,7 @@ class ParticleSystem(Source):
 
     def snapshot(self) -> "ParticleSystem":
         copied = object.__new__(type(self))
+        copied._transform = self.transform.copy()
         copied.definition = deepcopy(self.definition)
         copied._audio_reactive = (
             None if self._audio_reactive is None else self._audio_reactive.copy()

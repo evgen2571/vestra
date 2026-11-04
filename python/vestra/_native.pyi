@@ -7,7 +7,7 @@ __all__ = [
     "BackendPreference", "BackendKind", "BackendFallback", "AdapterDeviceType", "AdapterInfo", "GraphicsBackend", "PixelFormat", "Category", "Diagnostic", "Editor", "InspectAssets", "configure_logging",
     "InspectAudio", "InspectAudioClip", "InspectAudioEffect", "InspectAudioGainKeyframe", "InspectAudioTrack", "InspectOutput", "InspectionReport", "PreflightOptions",
     "PreflightReport", "Project", "ProjectError", "Severity", "ValidationReport",
-    "VestraError", "PreparationError", "FrameRenderError", "RenderError", "CancelledError", "PreparedProjectBusyError", "PrepareOptions", "PreparedProject", "PreparationReport", "PreparationTimings", "FrameRate", "Frame", "PreparedVideoRenderRequest", "RenderRequest", "CancellationToken", "RenderEvent", "RenderResult", "RenderTimingScope", "RenderTimings", "RenderPerformance", "RenderFailureContext", "RenderFailureStage", "native_version", "video_duration",
+    "VestraError", "PreparationError", "FrameRenderError", "RenderError", "CancelledError", "PreparedProjectBusyError", "PrepareOptions", "PreparedProject", "PreparationReport", "PreparationTimings", "FrameRate", "Frame", "PreparedVideoRenderRequest", "RenderRequest", "CancellationToken", "RenderEvent", "RenderResult", "RenderTimingScope", "RenderTimings", "RenderPerformance", "RenderFailureContext", "RenderFailureStage", "native_version", "video_duration", "list_system_fonts",
 ]
 
 class VestraError(Exception):
@@ -16,6 +16,9 @@ class VestraError(Exception):
     kind: str
     diagnostics: tuple[Diagnostic, ...]
     warnings: tuple[Diagnostic, ...]
+
+def list_system_fonts() -> list[str]: ...
+def _resolve_system_font(family: str) -> tuple[Path, int]: ...
 
 def configure_logging(level: str = "info", format: str = "human", output: str = "stderr", file: PathLike[str] | str | None = None, filter: str | None = None) -> None: ...
 

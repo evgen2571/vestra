@@ -68,7 +68,8 @@ def test_effect_exports_signatures_annotations_and_properties_match_baseline(
 ):
     module = MODULES[module_name]
     expected = API["modules"][module_name]
-    assert list(getattr(module, "__all__", [])) == expected["exports"]
+    exports = expected["exports"] + (["list_system_fonts"] if module_name == "vestra" else [])
+    assert list(getattr(module, "__all__", [])) == exports
     # Also catches accidental imports/classes outside an explicit __all__.
     names = []
     for name in sorted(

@@ -327,3 +327,12 @@ def test_source_defaults_fixture_typechecks() -> None:
         check=False, capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_invalid_group_size_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/high_level_invalid_group_sizes.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("error:") == 5, result.stdout + result.stderr

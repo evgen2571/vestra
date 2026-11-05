@@ -94,9 +94,10 @@ impl TexturePool {
         plan: &RenderPlan,
         topology: &PlanTopology,
     ) -> Self {
+        let (width, height) = topology.maximum_extent();
         let descriptor = WorkingTextureDescriptor {
-            width: plan.canvas.width,
-            height: plan.canvas.height,
+            width,
+            height,
             format: WORKING_FORMAT,
             usage: WORKING_TEXTURE_USAGE,
         };

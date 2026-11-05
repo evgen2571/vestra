@@ -128,6 +128,18 @@ fn validate_with_depth(
                 );
             }
             crate::project::VisualSource::Group(group) => {
+                if let Some(size) = group.size {
+                    for (name, value) in [("width", size.width), ("height", size.height)] {
+                        if !super::positive(value) || value > 8192.0 {
+                            errors.push(Diagnostic::error(
+                                "VESTRA-GROUP-SIZE",
+                                Category::Semantic,
+                                "group dimensions must be positive finite pixels, at most 8192",
+                                format!("{path}/source/size/{name}"),
+                            ));
+                        }
+                    }
+                }
                 let child_depth = group_depth.saturating_add(1);
                 if child_depth > MAX_GROUP_NESTING_DEPTH {
                     errors.push(Diagnostic::error(

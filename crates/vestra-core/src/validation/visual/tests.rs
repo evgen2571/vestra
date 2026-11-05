@@ -59,7 +59,7 @@ fn nested_diagnostics_preserve_order_messages_and_pointers() {
         (
             "VESTRA-SOURCE-COLOUR",
             "solid color must use #RRGGBB or #RRGGBBAA",
-            "/visual/clips/0/source/clips/0/source/colour",
+            "/visual/clips/0/source/clips/0/masks/0/input/source/colour",
         ),
         (
             "VESTRA-TRACK-VALUE",

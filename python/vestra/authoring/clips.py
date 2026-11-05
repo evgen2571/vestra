@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from ._internal import _IdAllocator, _Owner, _number
+from ._internal import _IdAllocator, _Owner, _group_size, _number
 from .assets import ImageAsset, VideoAsset
 from .effects import ClipEffectCollection
 from .tracks import CropTrack, ModulatableScalarTrack, Transform
@@ -640,7 +640,7 @@ class Spectrum2DClip(_Clip):
 class GroupClip(TransitionCapableClip):
     """A recursively owned composition of supported visual clips."""
 
-    __slots__ = ("_clips", "_transform", "_scope", "_transitions")
+    __slots__ = ("_clips", "_transform", "_scope", "_transitions", "_size")
     _clips: tuple[_Clip, ...]
     _transform: Transform
     _scope: object
@@ -651,11 +651,13 @@ class GroupClip(TransitionCapableClip):
     @classmethod
     def _create(cls, owner: _Owner, identifier: str, clips: tuple[_Clip, ...], *,
                 start: int | float, duration: int | float, layer: int, visible: bool,
-                opacity: int | float, ids: _IdAllocator) -> "GroupClip":
+                opacity: int | float, ids: _IdAllocator,
+                size: tuple[float, float] | None = None) -> "GroupClip":
         instance = object.__new__(cls)
         instance._initialize(owner, identifier, start=start, duration=duration, layer=layer,
                              visible=visible, opacity=opacity)
         instance._clips = clips
+        instance._size = _group_size(size)
         instance._transform = Transform._create(owner)
         instance._scope = object()
         from .transitions import TransitionCollection
@@ -666,6 +668,10 @@ class GroupClip(TransitionCapableClip):
         for child in clips:
             child._move_to_scope(ids, instance._scope)
         return instance
+
+    @property
+    def size(self) -> tuple[float, float] | None:
+        return self._size
 
     @property
     def clips(self) -> tuple[_Clip, ...]:
@@ -685,6 +691,8 @@ class GroupClip(TransitionCapableClip):
         source: dict[str, object] = {
             "type": "group", "clips": [clip.to_canonical() for clip in self.clips]
         }
+        if self.size is not None:
+            source["size"] = {"width": self.size[0], "height": self.size[1]}
         if self._transitions.items:
             source["transitions"] = [transition.to_canonical() for transition in self._transitions.items]
         data["source"] = source

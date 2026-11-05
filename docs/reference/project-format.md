@@ -91,6 +91,7 @@ extend scalar tracks with ordered `modifiers`.
 | Group field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |
 | `type` | literal | yes | `group`. |
+| `size` | object | no | Positive finite pixel `width` and `height`, each at most 8192. Omit to inherit the enclosing canvas. Explicit null is invalid. See [local coordinates](nested-compositions.md#sized-group-coordinates-and-bounds). |
 | `clips` | array of clip | yes | Child-local timeline and layer ordering. |
 | `transitions` | array of transition placement | no | Empty. See [nested compositions](nested-compositions.md) and [transitions](transitions.md). |
 

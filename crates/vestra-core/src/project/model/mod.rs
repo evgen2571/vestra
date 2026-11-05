@@ -61,8 +61,8 @@ pub use transitions::{
     TransitionPresentation,
 };
 pub use visual::{
-    BlendMode, Clip, Group, ShapeGeometry, ShapeSource, Sizing, TextAlignment, TextSource,
-    Transform, Visual, VisualSource,
+    BlendMode, Clip, Group, GroupSize, ShapeGeometry, ShapeSource, Sizing, TextAlignment,
+    TextSource, Transform, Visual, VisualSource,
 };
 
 pub use crate::domain::{Crop, Point};

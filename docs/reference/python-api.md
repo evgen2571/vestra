@@ -20,8 +20,12 @@ composition.group(name=None, *, start=0, duration=None, z=0, visible=True,
 
 `size` has positive integer width/height; `fps` is an integer, `(numerator, denominator)` pair or `FrameRate`; explicit `duration` is positive seconds. `root` is the top-level `Composition`; a `CompositionLayer.child` is another composition with child-local timing. `add` copies its `Source`; `duration=None` uses the owning duration except for `Video`, where it probes media to derive the usable source duration. `source_start` is source-media seconds and `playback_rate` is positive.
 
-`Group(children=(), *, transform=None, position=None, anchor=None, scale=None,
+`Group(children=(), *, size=None, transform=None, position=None, anchor=None, scale=None,
 rotation=None, rotation_degrees=None)` is an ordinary visual source.
+Its optional `size: tuple[float, float]` contains positive, finite pixel
+dimensions and is exposed as a read-only property. Omit it to inherit the
+containing coordinate system. Size changes child coordinates without scaling
+their geometry or changing timing/FPS.
 `group.add(source, *, start=0, duration=None, source_start=0, playback_rate=1,
 layer=None, visible=True, opacity=1, transform=None, position=None, anchor=None,
 scale=None, rotation=None, rotation_degrees=None)` returns a `GroupChild`.

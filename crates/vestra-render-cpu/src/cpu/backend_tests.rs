@@ -33,12 +33,18 @@ fn scratch_capacity_includes_nested_compositions_across_workers_and_resize() {
             let mut group = child.clone();
             group.source = EvaluatedSource::Group {
                 composition: vestra_core::plan::EvaluatedComposition {
+                    is_sized: false,
+                    width: size,
+                    height: size,
                     layers: vec![child],
                 },
             };
             let mut parent = group.clone();
             parent.source = EvaluatedSource::Group {
                 composition: vestra_core::plan::EvaluatedComposition {
+                    is_sized: false,
+                    width: size,
+                    height: size,
                     layers: vec![group],
                 },
             };

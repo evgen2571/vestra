@@ -172,7 +172,12 @@ fn group_layer(
         visible: true,
         content_dependency: TemporalDependency::Dynamic,
         source: EvaluatedSource::Group {
-            composition: EvaluatedComposition { layers: children },
+            composition: EvaluatedComposition {
+                is_sized: false,
+                width: 16,
+                height: 16,
+                layers: children,
+            },
         },
         transform,
         opacity: 1.0,
@@ -490,6 +495,9 @@ fn group_opacity_is_applied_once_to_the_isolated_child_result() {
             content_dependency: TemporalDependency::Dynamic,
             source: EvaluatedSource::Group {
                 composition: EvaluatedComposition {
+                    is_sized: false,
+                    width: 2,
+                    height: 2,
                     layers: vec![
                         child(51, [255, 0, 0, 128]),
                         EvaluatedLayer {
@@ -498,6 +506,9 @@ fn group_opacity_is_applied_once_to_the_isolated_child_result() {
                             content_dependency: TemporalDependency::Dynamic,
                             source: EvaluatedSource::Group {
                                 composition: EvaluatedComposition {
+                                    is_sized: false,
+                                    width: 2,
+                                    height: 2,
                                     layers: vec![child(53, [0, 0, 255, 128])],
                                 },
                             },
@@ -762,6 +773,111 @@ fn three_nested_groups_recurse_without_losing_the_child() {
     let level_a = group_layer(1, vec![level_b], Vec::new(), identity_transform());
     let output = render_test_frame(frame_with_layers(vec![level_a]));
     assert_eq!(output.get_pixel(8, 8), &Rgba([180, 20, 40, 255]));
+}
+
+fn sized_group(index: usize, size: (u32, u32), children: Vec<EvaluatedLayer>) -> EvaluatedLayer {
+    let mut group = group_layer(index, children, Vec::new(), identity_transform());
+    let EvaluatedSource::Group { composition } = &mut group.source else {
+        unreachable!()
+    };
+    composition.width = size.0;
+    composition.height = size.1;
+    group
+}
+
+#[test]
+fn sized_group_larger_than_output_scales_the_complete_local_canvas() {
+    let mut group = sized_group(1, (64, 32), vec![solid_layer(2, [255, 0, 0, 255])]);
+    group.transform.scale = crate::domain::Point { x: 0.25, y: 0.25 };
+    let output = render_test_frame(frame_with_layers(vec![group]));
+    for (x, y, pixel) in output.enumerate_pixels() {
+        let expected = if (4..12).contains(&y) {
+            Rgba([255, 0, 0, 255])
+        } else {
+            Rgba([0; 4])
+        };
+        assert_eq!(*pixel, expected, "pixel {x},{y}");
+    }
+}
+
+#[test]
+fn sized_group_nested_rotation_and_parent_effect_scratch_restore() {
+    let mut inner = sized_group(2, (8, 4), vec![solid_layer(3, [100, 20, 30, 255])]);
+    inner.transform.rotation_radians = std::f64::consts::FRAC_PI_2;
+    inner.effects = vec![EvaluatedEffect::GaussianBlur { radius: 0.0 }];
+    let outer = sized_group(1, (12, 10), vec![inner]);
+    let mut sibling = solid_layer(4, [0, 255, 0, 64]);
+    sibling.effects = vec![EvaluatedEffect::GaussianBlur { radius: 0.0 }];
+    let output = render_test_frame(frame_with_layers(vec![outer, sibling]));
+    let foreground = blend_pixel(
+        Rgba([100, 20, 30, 255]),
+        Rgba([0, 255, 0, 64]),
+        crate::project::BlendMode::Normal,
+        1.0,
+    );
+    for (x, y, pixel) in output.enumerate_pixels() {
+        let expected = if (6..10).contains(&x) && (4..12).contains(&y) {
+            foreground
+        } else {
+            Rgba([0, 255, 0, 64])
+        };
+        assert_eq!(*pixel, expected, "pixel {x},{y}");
+    }
+}
+
+#[test]
+fn sized_group_owned_mask_sources_preserve_local_extent_and_previous_coverage() {
+    let mut owner = sized_group(1, (8, 4), vec![solid_layer(2, [255, 0, 0, 255])]);
+    owner.masks = [(4, 4), (2, 4)]
+        .into_iter()
+        .enumerate()
+        .map(|(index, size)| {
+            let mut child = solid_layer(10 + index, [255; 4]);
+            child.effects = vec![EvaluatedEffect::GaussianBlur { radius: 0.0 }];
+            let source = sized_group(20 + index, size, vec![child]).source;
+            vestra_core::plan::EvaluatedMask {
+                input: EvaluatedMaskInput::Source {
+                    source: Box::new(source),
+                    mode: crate::project::MaskCoverageMode::Alpha,
+                },
+                transform: identity_transform(),
+                operation: crate::project::MaskOperation::Intersect,
+                invert: false,
+                strength: 1.0,
+                feather: 0.0,
+            }
+        })
+        .collect();
+    let output = render_test_frame(frame_with_layers(vec![owner]));
+    for (x, y, pixel) in output.enumerate_pixels() {
+        let expected = if (7..9).contains(&x) && (6..10).contains(&y) {
+            Rgba([255, 0, 0, 255])
+        } else {
+            Rgba([0; 4])
+        };
+        assert_eq!(*pixel, expected, "pixel {x},{y}");
+    }
+}
+
+#[test]
+fn sized_group_track_matte_uses_local_group_surface_and_parent_coordinates() {
+    let mut source = sized_group(2, (8, 4), vec![solid_layer(3, [255; 4])]);
+    source.visible = false;
+    let mut owner = solid_layer(1, [255, 0, 0, 255]);
+    owner.matte = Some(vestra_core::plan::EvaluatedTrackMatte {
+        source_layer_identity: 2,
+        mode: crate::project::MatteMode::Alpha,
+        invert: false,
+    });
+    let output = render_test_frame(frame_with_layers(vec![owner, source]));
+    for (x, y, pixel) in output.enumerate_pixels() {
+        let expected = if (4..12).contains(&x) && (6..10).contains(&y) {
+            Rgba([255, 0, 0, 255])
+        } else {
+            Rgba([0; 4])
+        };
+        assert_eq!(*pixel, expected, "pixel {x},{y}");
+    }
 }
 
 #[test]

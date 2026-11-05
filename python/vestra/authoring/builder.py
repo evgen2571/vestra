@@ -445,7 +445,7 @@ class ProjectBuilder:
     def add_group_clip(
         self, *, clips: list[VisualClip] | tuple[VisualClip, ...], start: int | float,
         duration: int | float, layer: int, visible: bool = True, opacity: int | float = 1.0,
-        id: str | None = None,
+        id: str | None = None, size: tuple[float, float] | None = None,
     ) -> GroupClip:
         """Create a recursively owned Group from builder-created visual clips."""
         if not isinstance(clips, list | tuple):
@@ -468,7 +468,7 @@ class ProjectBuilder:
                 self._ids.validate("clip", id)
         staged = GroupClip._create(
             self._owner, "", children, start=start, duration=duration, layer=layer,
-            visible=visible, opacity=opacity, ids=self._ids,
+            visible=visible, opacity=opacity, ids=self._ids, size=size,
         )
         staged._id = self._ids.allocate("clip", "group") if id is None else self._ids.reserve("clip", id)
         staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))

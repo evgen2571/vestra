@@ -504,6 +504,7 @@ def _lower_group(
             clips.append(context._lower_layer_parts(child_layer, scope))
         return context.builder.add_group_clip(
             clips=clips,
+            size=source.size,
             start=placement.start,
             duration=placement.duration,
             layer=placement.layer,

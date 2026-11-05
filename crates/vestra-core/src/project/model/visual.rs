@@ -51,7 +51,7 @@ pub struct Clip {
 }
 
 /// An isolated nested composition whose child clip times and layer values are
-/// local to this Group. Groups inherit the containing canvas dimensions and
+/// local to this Group. Unsized groups inherit the containing canvas dimensions and
 /// conceptually render into a transparent RGBA surface. Groups do not contain
 /// flashes or post effects. A Group's explicit parent
 /// interval clips descendants without rewriting their authored local starts or
@@ -61,9 +61,23 @@ pub struct Clip {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Group {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "optional_non_null"
+    )]
+    pub size: Option<GroupSize>,
     pub clips: Vec<Clip>,
     #[serde(default)]
     pub transitions: Vec<super::TransitionPlacement>,
+}
+
+/// A group's local canvas extent in pixels, independent of child geometry.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct GroupSize {
+    pub width: f64,
+    pub height: f64,
 }
 
 const fn default_visible() -> bool {

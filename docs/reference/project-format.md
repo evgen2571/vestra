@@ -20,7 +20,7 @@ not read files or probe media.
 | `audio` | object | no | Audio timeline; omitted when absent. |
 
 Schema version 1 is the first public project format for Vestra 0.1. It includes
-Masks v1 fields and the image `MaskInput` variant.
+owned source masks and track mattes.
 
 | Field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |
@@ -61,23 +61,26 @@ contracts.
 | `crop` | crop track | no | Applies to image/video sources. |
 | `transform` | transform object | conditional | Required for image sources. Optional for video, shape, text, and group sources; an absent optional transform has canvas presentation. Forbidden for solid-color, Spectrum2D, and particle-system sources. |
 | `effects` | array of effect | no | Empty. See [effects](effects.md). |
-| `masks` | array of shape or image masks | no | Empty; ordered layer-owned coverage inputs. See [masks](masks.md). |
+| `masks` | array of mask objects | no | Empty; ordered layer-owned coverage inputs. See [masks](masks.md). |
+| `matte` | track matte object | no | Omitted; references a sibling clip through `source_layer`, with required `mode` (`alpha` or `luma`) and optional `invert` (default `false`). See [track mattes](masks.md#track-mattes). |
 | `blend_mode` | enum | no | `normal`; also `add`, `screen`, `multiply`, `overlay`. |
 | `preset` | preset object | no | Omitted. See [presets and flashes](presets-and-flashes.md). |
 
 ## Timing, transform, groups, and bindings
 
-Each mask has an `id`, a shape or image `input`, `operation` (`replace`,
+Each mask has an `id`, an owned `input`, `operation` (`replace`,
 `intersect`, `union`, or `subtract`, default `intersect`), `invert` (default
 `false`), `strength` (default `1`), `feather` (default `0`), and a mask-local
 `transform`. These use the normal tracks, modifiers, and signal bindings.
 Mask transforms are local to the owning layer and follow its presentation
-transform. Inputs may be shapes or image assets interpreted as `alpha` or
-`luma` coverage.
+transform. Inputs use a `shape`, `image`, or `source` tag; the last wraps a
+self-contained visual source with `alpha` or `luma` coverage. See the
+[mask input fields](masks.md#canonical-inputs) for their JSON representation.
 
 Track objects contain a required `base_value` and optional `keyframes`. A
 keyframe has `time`, `value`, and `interpolation`; time is local seconds.
-Interpolation is a named mode or a `cubic_bezier` object. Scalar properties
+See [interpolation](../concepts/effects-transitions-and-animation.md#interpolation)
+for named modes, `cubic_bezier` objects and segment semantics. Scalar properties
 extend scalar tracks with ordered `modifiers`.
 
 | Transform field | Type | Required | Default / unit / notes |

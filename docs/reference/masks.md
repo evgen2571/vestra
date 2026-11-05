@@ -22,8 +22,34 @@ out       = lerp(a, operation(a, m), strength)
 Inversion happens before the operation. The supported operations are
 `replace`, `intersect`, `union`, and `subtract`. The default is `intersect`.
 
-Schema version 1 is the first public project format. It includes geometric and
-image mask inputs.
+## Canonical inputs
+
+Schema version 1 supports three `input` forms:
+
+| `input.type` | Fields | Coverage |
+| --- | --- | --- |
+| `shape` | `geometry`, optional `fill` and `stroke`, as for a shape source | Rendered shape alpha; no `mode` field. |
+| `image` | `asset` (image asset ID), `mode` (`alpha` or `luma`) | Intrinsic image pixels. |
+| `source` | `source` (a visual source object), `mode` (`alpha` or `luma`) | RGBA rendered by the owned source. |
+
+For example, this mask owns a text source; `mask-font` must reference a font
+asset in the project's `assets` array:
+
+```json
+{
+  "id": "title-mask",
+  "input": {
+    "type": "source",
+    "source": {"type": "text", "text": "MASK", "font": "mask-font", "font_size": 48, "fill": "#ffffff"},
+    "mode": "alpha"
+  }
+}
+```
+
+Omitted mask fields default to `operation: "intersect"`, `invert: false`,
+`strength: 1`, `feather: 0`, and a centered identity transform. See the complete
+[geometric](../../examples/projects/geometric-masks.json) and
+[image](../../examples/projects/image-masks.json) examples for other inputs.
 
 Masks consume coverage produced by owned sources. The supported geometric
 inputs are `Rectangle`, `Ellipse`, `Circle`, `Polygon`, and `Line`; Line masks
@@ -63,6 +89,20 @@ layer. An owned Group is rendered as a self-contained precomposition before
 coverage extraction.
 
 ## Track Mattes
+
+The consumer clip's optional `matte` field has this canonical representation:
+
+```json
+{
+  "source_layer": "matte-layer",
+  "mode": "alpha",
+  "invert": false
+}
+```
+
+`source_layer` is the ID of a sibling clip, `mode` is required (`alpha` or
+`luma`), and `invert` defaults to `false`. Omit `matte` for no relationship.
+See the [complete JSON example](../../examples/projects/track-matte.json).
 
 A Track Matte references existing timeline content; it does not own a new
 source. The two relationships are intentionally distinct:

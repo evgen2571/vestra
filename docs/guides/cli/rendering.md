@@ -13,6 +13,11 @@ ve render project.json --output preview.mp4 --overwrite
 the loaded project and asset information without rendering it. `render` runs
 preparation, frame evaluation, audio processing, and encoding.
 
+Keep the project's configured output path unused for repeated validation;
+the commands above render to a separate preview path. Validation always checks
+the configured destination with overwrite disabled. See
+[validation meaning](../../reference/cli.md#validation-meaning).
+
 Useful render options include:
 
 ```bash

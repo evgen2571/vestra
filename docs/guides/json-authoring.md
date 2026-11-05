@@ -50,12 +50,15 @@ Validate it, then render:
 
 ```bash
 ve validate project.json
-ve render project.json --output output.mp4 --render-backend cpu --overwrite
+ve render project.json --output preview.mp4 --render-backend cpu --overwrite
 ```
 
 The result is a 640×360, 30 fps MP4. `--overwrite` allows replacement of an
-existing output file. This guide only authors project files; no Python script
-is needed.
+existing preview file. Keep the project's `output.path` (`output.mp4`) unused
+while following the tutorial: `ve validate` checks that path with overwrite
+disabled. Rendering to `preview.mp4` lets you repeat validation and rendering
+after each edit. If `output.mp4` already exists, choose an unused `output.path`
+or move the existing file before validating. This guide needs no Python script.
 
 The following sections build on this file. Each smaller JSON block is a fragment;
 the accompanying text tells you where to insert or replace it. JSON does not
@@ -136,7 +139,7 @@ Keyframe times are measured from the clip's beginning, so the fade lasts half a
 second even if you later move the clip. `base_value` supplies the unanimated
 value; `keyframes` describe changes over time. Point properties such as position
 use `{"x": ..., "y": ...}` values instead of numbers. See
-[animation concepts](../concepts/effects-transitions-and-animation.md) for
+[animation concepts](../concepts/effects-transitions-and-animation.md#interpolation) for
 interpolation options.
 
 ## Add an effect
@@ -331,7 +334,11 @@ inside that group. See [nested compositions](../reference/nested-compositions.md
 ## Validate edits and diagnose errors
 
 Run `ve validate project.json` after each step. It checks the format, project
-relationships and usable resources. The [JSON Schema](../../schemas/project.schema.json)
+relationships, media, FFmpeg, the configured output path and Auto backend
+readiness. Unlike Python's semantic-only `project.validate()` or
+`Editor.validate(snapshot)`, this is a render-readiness preflight. It has no
+`--overwrite` option; render's `--overwrite` does not change validation.
+The [JSON Schema](../../schemas/project.schema.json)
 can also provide field completion and structural checks in editors that support
 JSON schemas. Schema validation alone does not check asset files or all timeline
 relationships.

@@ -162,7 +162,10 @@ AV-sync and failure criteria. Prefer existing seams:
 
 For each boundary, distinguish authored end, effective clipping and source EOF;
 test adjacent frames/timestamps and exclusive output end at rational rates.
-Pure validation must remain independent of filesystem/media availability.
+Canonical semantic validation must remain independent of filesystem/media
+availability; `ve validate` deliberately adds environment preflight. Default
+timeline budgets and representability constraints are documented in
+[validation layers](../reference/project-format.md#validation-layers).
 Use a focused regression to reproduce the defect before changing a contract;
 roadmap acceptance criteria do not describe features already available.
 

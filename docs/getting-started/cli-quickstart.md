@@ -72,6 +72,10 @@ error[VESTRA-KEYFRAME-TIME]: keyframe times must be finite, strictly increasing,
   at /visual/clips/0/opacity/keyframes/0/time
 ```
 
+Keep the configured `output.mp4` path unused while repeating validation: the
+command rejects an existing destination. The render below writes to
+`quickstart.mp4` instead. See [validation meaning](../reference/cli.md#validation-meaning).
+
 ## Render it
 
 Render to an explicit output path and allow replacement of an existing file:

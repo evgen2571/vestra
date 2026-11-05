@@ -53,8 +53,10 @@ and [reference examples](https://github.com/evgen2571/vestra/blob/main/examples/
 
 Projects compile to a versioned canonical model validated before rendering,
 so timing and layering errors are reported up front, with locations —
-`ve validate` and `project.validate()` check semantics; `ve inspect` and
-`prepare()` check media and backends. CPU and GPU share one evaluated plan.
+`project.validate()` checks semantics; `ve validate` also checks media, tools,
+the configured output path and backend readiness. `ve inspect` resolves media
+for a summary, while `prepare()` sets up reusable rendering. CPU and GPU share
+one evaluated plan.
 
 - Output is MP4 (H.264 + AAC) up to 8192×8192; even dimensions are required.
 - Rendering shells out to `ffmpeg`/`ffprobe` at runtime; wheels only bundle

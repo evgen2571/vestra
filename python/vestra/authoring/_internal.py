@@ -1,7 +1,8 @@
 """Private ownership and identifier helpers for future authoring nodes."""
 
 from collections import defaultdict
-from math import isfinite
+from math import ceil, isfinite
+from sys import maxsize
 
 from .errors import AuthoringError
 
@@ -26,8 +27,10 @@ def _group_size(size: tuple[float, float] | None) -> tuple[float, float] | None:
         height = _number(size[1], "Group size height")
     except OverflowError as error:
         raise ValueError("Group size dimensions must be finite") from error
-    if not 0 < width <= 8192 or not 0 < height <= 8192:
-        raise ValueError("Group size dimensions must be positive and at most 8192 pixels")
+    if not 0 < width <= 2**32 - 1 or not 0 < height <= 2**32 - 1:
+        raise ValueError("Group size dimensions must be positive finite pixels representable as u32 raster extents")
+    if ceil(width) * ceil(height) * 4 > maxsize:
+        raise ValueError("Group size RGBA canvas byte length is not representable")
     return width, height
 
 

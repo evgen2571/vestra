@@ -765,7 +765,7 @@ fn sized_group_requirements_include_large_canvases_in_owned_source_masks() {
     );
     let estimates = requirements.resource_estimates(256).unwrap();
     assert_eq!(estimates.layer_texture_bytes, 601 * 301 * 4);
-    assert_eq!(estimates.canvas_texture_bytes, 601 * 301 * 4 * 2);
+    assert_eq!(estimates.canvas_texture_bytes, 4 * 4 * 4 * 2);
     assert_eq!(estimates.packed_frame_bytes, 4 * 4 * 4);
     assert!(
         requirements

@@ -29,7 +29,7 @@ and individual placement overrides work on both `Group.add()` and
 ## Give reusable content local dimensions
 
 Set `size=(width, height)` to position children independently of the output
-resolution. Dimensions are positive, finite pixel values up to 8192; odd and
+resolution. Dimensions are positive, finite pixel values; odd and
 fractional values are supported. The group's placement uses its parent's coordinates:
 
 ```python
@@ -56,6 +56,22 @@ Here the badge is placed at `(450, 150)` in the card and its circle is at
 system. Existing unsized content requires no migration. Sizes survive source
 snapshots, reuse in projects with different resolutions, and owned mask
 serialization. Child-local timing and the project's FPS remain unchanged.
+
+Default resource limits allow group canvases up to 8192 pixels per axis and
+67,108,864 pixels. Larger canvases require an explicit execution budget:
+
+```python
+from vestra import Project, ResourceLimits
+
+limits = ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=32_768)
+project = Project(size=(640, 360), fps=30, duration=2, resource_limits=limits)
+strip = Group(size=(16_384, 2))
+strip.add(Rectangle(width=16_384, height=2, fill="#2563eb"))
+project.root.add(strip, scale=0.025)
+```
+
+The same limits apply to validation, preparation and rendering, including owned
+group masks. Budgets do not change coordinates, clipping or backend limits.
 
 Children clip to the local canvas before parent transforms. Fractional sizes
 use raster bounds rounded up to whole pixels; positions and anchors retain their

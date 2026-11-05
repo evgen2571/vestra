@@ -169,7 +169,8 @@ impl GpuRequirements {
         let (working_width, working_height) = topology.maximum_extent();
         let full_frame_bytes = estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)?;
         let working_frame_bytes = estimated_texture_bytes(working_width, working_height, 1)?;
-        let canvas_texture_bytes = estimated_texture_bytes(working_width, working_height, 2)?;
+        let canvas_texture_bytes =
+            estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 2)?;
         let layer_texture_bytes = working_frame_bytes;
         let requires_auxiliary = topology.requires_auxiliary();
         let has_masks = topology.has_masks();
@@ -189,16 +190,19 @@ impl GpuRequirements {
             .ok()
             .and_then(|depth| depth.checked_mul(2))
             .ok_or_else(|| resource_overflow("Group texture count overflow"))?;
-        let working_texture_bytes = estimated_texture_bytes(
+        let scratch_texture_bytes = estimated_texture_bytes(
             working_width,
             working_height,
-            BASE_WORKING_TEXTURE_COUNT
+            BASE_WORKING_TEXTURE_COUNT - 2
                 + effect_texture_count
                 + auxiliary_texture_count
                 + mask_coverage_texture_count
                 + mask_feather_texture_count
                 + group_texture_count,
         )?;
+        let working_texture_bytes = canvas_texture_bytes
+            .checked_add(scratch_texture_bytes)
+            .ok_or_else(|| resource_overflow("working texture total overflow"))?;
         fn image_bytes(width: u32, height: u32) -> Result<u64, Diagnostic> {
             u64::from(width)
                 .checked_mul(u64::from(height))

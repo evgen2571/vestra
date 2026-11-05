@@ -64,6 +64,29 @@ resource, media, output, and backend readiness checks selected by
 and exposes diagnostics, warnings, timings, cancellation status, and render
 failure context.
 
+`Editor::new()` and `Editor::default()` use safe resource limits. Configure the
+same budgets across validation, preflight, preparation and rendering through
+the builder:
+
+```rust
+use vestra::{Editor, ResourceLimits};
+
+let editor = Editor::builder()
+    .resource_limits(ResourceLimits {
+        maximum_group_width: 16_384,
+        maximum_group_pixels: 32_768,
+        ..ResourceLimits::default()
+    })
+    .build()?;
+```
+
+Group budgets are independent of output dimensions. Defaults allow 8192 pixels
+per axis and 67,108,864 rounded-up raster pixels in one local canvas. Larger
+canvases require explicit budgets and a backend that supports them. Checked
+dimension and RGBA byte-length representability always apply. See
+[validation layers](project-format.md#validation-layers) for the diagnostic
+contract and other resource budgets.
+
 ## Backend types
 
 `BackendPreference` requests `auto`, `cpu`, or `wgpu`. The result reports the

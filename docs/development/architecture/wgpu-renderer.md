@@ -15,12 +15,15 @@ pipeline entry points in Vestra, with matching Naga 23 shader validation.
 
 Preparation uploads static image/font/source data and creates reusable GPU resources. Frame evaluation still happens outside the backend. For each evaluated frame, the backend uploads changed video data, builds source/effect/composite passes from the evaluated layer tree, renders nested groups recursively, submits commands and schedules a readback of the completed RGBA frame. The readback path accounts for row alignment and repacks rows into the public tightly packed frame format.
 
-Sized groups retain the existing scratch-target count. Working textures use the
-componentwise maximum of output and local canvas extents; each operation carries
-its own logical extent for dispatch, source sizing, clipping and effect sampling.
-Resource estimates and adapter limits include the larger working textures, while
-readback remains output-sized. Large local canvases can therefore increase GPU
-memory even when placed at a small scale.
+Sized groups retain the existing scratch-target count. The two root canvases and
+readback use output dimensions. Shared layer/effect scratch and group targets use
+the componentwise maximum of output and local canvas extents; each operation
+carries its logical extent for dispatch, source sizing, clipping and sampling.
+Resource estimates and adapter limits account for those actual allocations.
+Orthogonal aspect ratios can still amplify shared scratch memory. Extent-aware
+pooling would require additional prepared target/binding sets and lifetime
+tracking; the current pool favors fixed preparation-time ownership and reuse.
+Group resource budgets constrain logical canvases, not total device memory.
 
 Owned group-mask recursion preserves both the consumer pixels and accumulated
 coverage in the existing reserved composition slots. In local canvas contexts,
@@ -29,6 +32,13 @@ remain in parent coordinates. The legacy unsized WGPU path retains its existing
 transform/feather ordering. Feather scratch preserves R/G coverage state and uses
 the unused B channel for alpha rounding residuals between box passes, avoiding
 accumulated byte-rounding error without allocating another target.
+
+Accumulated coverage between masks remains byte-valued. Repeated faint masks at
+12 or 64 stages can differ from CPU float coverage by three channel levels;
+ordinary mask parity checks retain their two-level tolerance. This rounding difference
+does not imply lost coverage state. Widening that state or packing extra precision
+would complicate the channel layout and compatibility path without a demonstrated
+benefit for ordinary mask stacks.
 
 The backend has bounded in-flight work. `VESTRA_WGPU_IN_FLIGHT` controls the implementation pipeline depth only when valid; it is not a semantic setting. Texture pools, source caches, staging buffers, pending static layers and readback slots are retained across a prepared operation. Release them only when their GPU completion token makes them safe to reuse. This is why a `PreparedProject` owns one backend instance and is not freely concurrent.
 

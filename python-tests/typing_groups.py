@@ -18,8 +18,13 @@ project.root.group().add(group, scale=0.5)
 project.root.add(group, transform=transform)
 
 from vestra import FrameRate
+from vestra import Editor, ResourceLimits
 from vestra.authoring import ProjectBuilder
 
 builder = ProjectBuilder(width=32, height=32, frame_rate=FrameRate(2, 1), output_path="out.mp4", duration=5)
 advanced = builder.add_group_clip(clips=[], size=(600.5, 300), start=0, duration=5, layer=0)
 advanced_size: tuple[float, float] | None = advanced.size
+limits = ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=32_768)
+pixel_budget: int = limits.maximum_group_pixels
+editor = Editor(resource_limits=limits)
+configured = Project(size=(32, 32), fps=2, duration=5, resource_limits=limits)

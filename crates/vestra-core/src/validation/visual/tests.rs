@@ -32,6 +32,10 @@ fn nested_diagnostics_preserve_order_messages_and_pointers() {
         &Default::default(),
         16,
         crate::validation::ResourceLimits::default(),
+        crate::project::GroupSize {
+            width: 640.0,
+            height: 360.0,
+        },
         &mut diagnostics,
         false,
     );

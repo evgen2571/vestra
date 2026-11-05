@@ -21,6 +21,8 @@ mod lifecycle;
 mod parity_gpu_tests;
 #[path = "support/resources_gpu.rs"]
 mod resource_gpu_tests;
+#[path = "support/sized_groups.rs"]
+mod sized_group_tests;
 #[path = "support/stylization.rs"]
 mod stylization_tests;
 #[path = "support/fixture_loader.rs"]

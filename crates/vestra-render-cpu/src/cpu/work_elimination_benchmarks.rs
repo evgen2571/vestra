@@ -122,6 +122,9 @@ fn cpu_work_elimination_benchmark() {
     group.effects.clear();
     group.source = EvaluatedSource::Group {
         composition: EvaluatedComposition {
+            is_sized: false,
+            width: 1280,
+            height: 720,
             layers: vec![image.clone()],
         },
     };

@@ -247,8 +247,8 @@ pub(crate) fn resolve_motion(
             &mut ignored_tracks,
         )?
         .position;
-        let dx = (end.x - start.x) * f64::from(width);
-        let dy = (end.y - start.y) * f64::from(height);
+        let dx = (end.x - start.x) * width;
+        let dy = (end.y - start.y) * height;
         let displacement = (dx * dx + dy * dy).sqrt();
         if displacement <= 0.000_1 || exposure == 0 {
             *radius = 0.0;

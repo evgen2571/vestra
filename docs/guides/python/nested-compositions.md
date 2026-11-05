@@ -24,8 +24,67 @@ video children. Set `source_start` and `playback_rate` on video children to trim
 and retime them. `layer` controls child ordering and defaults to insertion order.
 Groups nest by adding another `Group`. Source [transform defaults](sources-and-layers.md)
 and individual placement overrides work on both `Group.add()` and
-`Composition.add()`. Coordinates remain normalized to the parent canvas;
-there is no group size or separate group-local coordinate system.
+`Composition.add()`.
+
+## Give reusable content local dimensions
+
+Set `size=(width, height)` to position children independently of the output
+resolution. Dimensions are positive, finite pixel values; odd and
+fractional values are supported. The group's placement uses its parent's coordinates:
+
+```python
+card = Group(size=(600, 300))
+card.add(Rectangle(width=100, height=80, fill="#2563eb",
+                   position=(0.25, 0.5)))
+project.root.add(card, duration=5, position=(0.5, 0.5))
+```
+
+The rectangle's anchor is at `(150, 150)` inside the card. The card's own anchor
+is placed at the center of its parent. The rectangle remains 100×80 pixels
+before placement transforms; `size` does not stretch its geometry.
+
+Sized groups nest with their own dimensions:
+
+```python
+badge = Group(size=(120, 60))
+badge.add(Circle(radius=12, fill="#ffffff", position=(0.5, 0.5)))
+card.add(badge, position=(0.75, 0.5))
+```
+
+Here the badge is placed at `(450, 150)` in the card and its circle is at
+`(60, 30)` in the badge. Unsized groups inherit the containing coordinate
+system. Existing unsized content requires no migration. Sizes survive source
+snapshots, reuse in projects with different resolutions, and owned mask
+serialization. Child-local timing and the project's FPS remain unchanged.
+
+Default resource limits allow group canvases up to 8192 pixels per axis and
+67,108,864 pixels. Larger canvases require an explicit execution budget:
+
+```python
+from vestra import Project, ResourceLimits
+
+limits = ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=32_768)
+project = Project(size=(640, 360), fps=30, duration=2, resource_limits=limits)
+strip = Group(size=(16_384, 2))
+strip.add(Rectangle(width=16_384, height=2, fill="#2563eb"))
+project.root.add(strip, scale=0.025)
+```
+
+The same limits apply to validation, preparation and rendering, including owned
+group masks. Budgets do not change coordinates, clipping or backend limits.
+
+Children clip to the local canvas before parent transforms. Fractional sizes
+use raster bounds rounded up to whole pixels; positions and anchors retain their
+authored units. Child effects use the local canvas; effects on the group run
+after its placement in the parent. Group masks use owner-local coordinates,
+and sized group mask sources keep their own dimensions. See the exact
+[coordinate, bounds, and effect rules](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
+
+The advanced builder accepts the same `size` keyword on
+`ProjectBuilder.add_group_clip(...)`. Both paths serialize an optional
+`"size": {"width": 600.0, "height": 300.0}` on the canonical group source.
+
+## Edit a child composition directly
 
 For direct authoring, `composition.group()` creates one `CompositionLayer`
 that owns an editable child composition. Add children through `group.add()`

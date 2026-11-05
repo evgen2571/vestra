@@ -11,6 +11,7 @@ from .base import Source
 from .image import Image
 from .video import Video
 from ..authoring.values import BlendMode
+from ..authoring._internal import _group_size
 from ..effects import EffectStack
 from ..properties import BindableScalarProperty, ScalarProperty, Transform
 from ..properties.lowering import lower_effect, lower_scalar_property, lower_transform
@@ -128,12 +129,13 @@ class Group(Source):
     the Group and are lowered through the normal canonical Clip fields.
     """
 
-    __slots__ = ("_children",)
+    __slots__ = ("_children", "_size")
 
     def __init__(
         self,
         children: Iterable[Source | GroupChild] = (),
         *,
+        size: tuple[float, float] | None = None,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,
@@ -149,6 +151,7 @@ class Group(Source):
             rotation=rotation,
             rotation_degrees=rotation_degrees,
         )
+        self._size = _group_size(size)
         values = tuple(children)
         if not all(isinstance(child, Source | GroupChild) for child in values):
             raise TypeError("Group children must be source values or GroupChild objects")
@@ -156,6 +159,10 @@ class Group(Source):
             child.snapshot() if isinstance(child, GroupChild) else GroupChild(child)
             for child in values
         )
+
+    @property
+    def size(self) -> tuple[float, float] | None:
+        return self._size
 
     @property
     def children(self) -> tuple[GroupChild, ...]:
@@ -241,7 +248,10 @@ class Group(Source):
             if child.masks.items:
                 clip["masks"] = [mask.to_canonical(owner_duration=duration) for mask in child.masks.items]
             clips.append(clip)
-        return {"type": "group", "clips": clips}
+        result: dict[str, object] = {"type": "group", "clips": clips}
+        if self.size is not None:
+            result["size"] = {"width": self.size[0], "height": self.size[1]}
+        return result
 
 
 __all__ = ["Group", "GroupChild"]

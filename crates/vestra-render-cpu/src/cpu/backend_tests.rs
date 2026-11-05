@@ -33,12 +33,18 @@ fn scratch_capacity_includes_nested_compositions_across_workers_and_resize() {
             let mut group = child.clone();
             group.source = EvaluatedSource::Group {
                 composition: vestra_core::plan::EvaluatedComposition {
+                    is_sized: false,
+                    width: size,
+                    height: size,
                     layers: vec![child],
                 },
             };
             let mut parent = group.clone();
             parent.source = EvaluatedSource::Group {
                 composition: vestra_core::plan::EvaluatedComposition {
+                    is_sized: false,
+                    width: size,
+                    height: size,
                     layers: vec![group],
                 },
             };
@@ -1093,6 +1099,77 @@ fn automatic_worker_policy_preserves_legacy_canvas_heuristic() {
     plan.canvas.width = 3_840;
     plan.canvas.height = 2_160;
     assert_eq!(automatic_worker_count(&plan, 64), 2);
+}
+
+#[test]
+fn automatic_worker_policy_accounts_for_large_visual_and_mask_group_canvases() {
+    use vestra_core::plan::CompiledVisualSource;
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
+    plan.canvas.width = 16;
+    plan.canvas.height = 16;
+    plan.visual_dependency = TemporalDependency::Dynamic;
+    let group_source = |size| {
+        CompiledVisualSource::Group(Arc::new(vestra_core::plan::CompiledComposition {
+            size,
+            layers: Vec::new(),
+            schedule: vestra_core::plan::ActiveSchedule::compile(&plan),
+            dependency: TemporalDependency::Dynamic,
+        }))
+    };
+    let inherited = group_source(None);
+    let large = group_source(Some(vestra_core::project::GroupSize {
+        width: 8192.0,
+        height: 8192.0,
+    }));
+    let thin = group_source(Some(vestra_core::project::GroupSize {
+        width: 8192.0,
+        height: 16.0,
+    }));
+    plan.layers.truncate(1);
+    plan.layers[0].source = inherited;
+    plan.layers[0].masks.clear();
+    assert_eq!(
+        automatic_worker_count(&plan, 64),
+        8,
+        "legacy inherited canvas"
+    );
+    plan.layers[0].source = thin;
+    assert_eq!(
+        automatic_worker_count(&plan, 64),
+        8,
+        "use area, not squared maximum axis"
+    );
+    plan.layers[0].source = large.clone();
+    assert_eq!(automatic_worker_count(&plan, 64), 1, "large visual group");
+    plan.layers[0].source = CompiledVisualSource::SolidColor { colour: [255; 4] };
+    let transform = plan.layers[0].transform.clone();
+    plan.layers[0].masks.push(vestra_core::plan::CompiledMask {
+        input: vestra_core::plan::CompiledMaskInput::Source {
+            source: Box::new(large),
+            mode: crate::project::MaskCoverageMode::Alpha,
+        },
+        operation: crate::project::MaskOperation::Intersect,
+        invert: false,
+        strength: vestra_core::plan::CompiledScalarProperty::authored(
+            vestra_core::animation::Track::new(1.0),
+        ),
+        feather: vestra_core::plan::CompiledScalarProperty::authored(
+            vestra_core::animation::Track::new(0.0),
+        ),
+        transform,
+    });
+    assert_eq!(
+        automatic_worker_count(&plan, 64),
+        1,
+        "large owned group mask"
+    );
 }
 
 #[test]

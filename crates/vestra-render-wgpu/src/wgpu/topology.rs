@@ -24,6 +24,7 @@ pub(super) struct PlanTopology {
     requires_auxiliary: bool,
     has_masks: bool,
     has_mask_feather: bool,
+    maximum_extent: (u32, u32),
 }
 
 impl PlanTopology {
@@ -43,6 +44,10 @@ impl PlanTopology {
                 }),
             has_masks: summary.has_masks,
             has_mask_feather: summary.has_mask_feather,
+            maximum_extent: (
+                plan.canvas.width.max(summary.maximum_extent.0),
+                plan.canvas.height.max(summary.maximum_extent.1),
+            ),
         }
     }
 
@@ -74,6 +79,10 @@ impl PlanTopology {
         self.has_masks
     }
 
+    pub(super) const fn maximum_extent(self) -> (u32, u32) {
+        self.maximum_extent
+    }
+
     pub(super) const fn has_mask_feather(self) -> bool {
         self.has_mask_feather
     }
@@ -89,6 +98,7 @@ struct TopologySummary {
     requires_auxiliary: bool,
     has_masks: bool,
     has_mask_feather: bool,
+    maximum_extent: (u32, u32),
 }
 
 fn summarize_layers(layers: &[CompiledLayer]) -> TopologySummary {
@@ -130,6 +140,14 @@ fn summarize_layers(layers: &[CompiledLayer]) -> TopologySummary {
             owned_mask_summary.requires_auxiliary |= source.requires_auxiliary;
             owned_mask_summary.has_masks |= source.has_masks;
             owned_mask_summary.has_mask_feather |= source.has_mask_feather;
+            owned_mask_summary.maximum_extent.0 = owned_mask_summary
+                .maximum_extent
+                .0
+                .max(source.maximum_extent.0);
+            owned_mask_summary.maximum_extent.1 = owned_mask_summary
+                .maximum_extent
+                .1
+                .max(source.maximum_extent.1);
         }
         summary.compiled_layer_count = add(
             summary.compiled_layer_count,
@@ -169,6 +187,16 @@ fn summarize_layers(layers: &[CompiledLayer]) -> TopologySummary {
             ),
         );
 
+        summary.maximum_extent.0 = summary
+            .maximum_extent
+            .0
+            .max(source.maximum_extent.0)
+            .max(owned_mask_summary.maximum_extent.0);
+        summary.maximum_extent.1 = summary
+            .maximum_extent
+            .1
+            .max(source.maximum_extent.1)
+            .max(owned_mask_summary.maximum_extent.1);
         let layer_depth = source
             .required_group_depth
             .max(owned_mask_summary.required_group_depth);
@@ -208,6 +236,10 @@ fn summarize_source(source: &CompiledVisualSource) -> TopologySummary {
     };
 
     let mut summary = summarize_layers(&composition.layers);
+    if let Some(size) = composition.size {
+        summary.maximum_extent.0 = summary.maximum_extent.0.max(size.width.ceil() as u32);
+        summary.maximum_extent.1 = summary.maximum_extent.1.max(size.height.ceil() as u32);
+    }
     summary.compiled_group_count = add(summary.compiled_group_count, 1);
     summary.required_group_depth = add(1, summary.required_group_depth);
     summary

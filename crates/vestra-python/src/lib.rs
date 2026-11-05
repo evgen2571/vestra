@@ -30,7 +30,7 @@ pub(crate) use diagnostics::{
     PyCategory, PyDiagnostic, PyPreflightReport, PySeverity, PyValidationReport, diagnostic_tuple,
     diagnostics,
 };
-pub(crate) use editor::{PyBackendPreference, PyEditor, PyPreflightOptions};
+pub(crate) use editor::{PyBackendPreference, PyEditor, PyPreflightOptions, PyResourceLimits};
 pub(crate) use inspection::{
     PyInspectAssets, PyInspectAudio, PyInspectAudioClip, PyInspectAudioEffect,
     PyInspectAudioGainKeyframe, PyInspectAudioTrack, PyInspectOutput, PyInspectionReport,
@@ -312,6 +312,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add_class::<PyProject>()?;
     module.add_class::<PyEditor>()?;
+    module.add_class::<PyResourceLimits>()?;
     module.add_class::<PyPreflightOptions>()?;
     module.add_class::<PyBackendPreference>()?;
     module.add_class::<PyCategory>()?;

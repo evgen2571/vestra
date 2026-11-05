@@ -8,12 +8,12 @@ fn round_byte(pixel: vec4<f32>) -> vec4<f32> {
 }
 
 fn load_edge(texture: texture_2d<f32>, coordinate: vec2<i32>) -> vec4<f32> {
-    let dimensions = textureDimensions(texture);
+    let dimensions = vec2<u32>(params.canvas_width, params.canvas_height);
     return textureLoad(texture, clamp(coordinate, vec2<i32>(0), vec2<i32>(dimensions) - vec2<i32>(1)), 0);
 }
 
 fn bilinear_edge(texture: texture_2d<f32>, position: vec2<f32>) -> vec4<f32> {
-    let dimensions = vec2<f32>(textureDimensions(texture));
+    let dimensions = vec2<f32>(vec2<u32>(params.canvas_width, params.canvas_height));
     let adjusted = clamp(position - vec2<f32>(0.5), vec2<f32>(0.0), dimensions - vec2<f32>(1.0));
     let base = vec2<i32>(floor(adjusted));
     let fraction = adjusted - vec2<f32>(base);

@@ -68,7 +68,9 @@ def test_effect_exports_signatures_annotations_and_properties_match_baseline(
 ):
     module = MODULES[module_name]
     expected = API["modules"][module_name]
-    exports = expected["exports"] + (["list_system_fonts"] if module_name == "vestra" else [])
+    exports = expected["exports"] + (
+        ["list_system_fonts", "ResourceLimits"] if module_name == "vestra" else []
+    )
     assert list(getattr(module, "__all__", [])) == exports
     # Also catches accidental imports/classes outside an explicit __all__.
     names = []
@@ -322,8 +324,19 @@ def test_json_v1_schema_parser_validation_and_roundtrip_match_baseline(case):
     ] == case["diagnostics"]
 
 
-def test_generated_schema_is_byte_identical_to_pre_refactor_baseline():
-    assert sha256(SCHEMA_PATH.read_bytes()).hexdigest() == JSON_V1["schema_sha256"]
+def test_generated_schema_preserves_baseline_and_adds_only_group_size():
+    schema = json.loads(SCHEMA_PATH.read_bytes())
+    assert schema["$defs"]["group"]["properties"].pop("size") == {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["width", "height"],
+        "properties": {
+            field: {"type": "number", "exclusiveMinimum": 0, "maximum": 2**32 - 1}
+            for field in ("width", "height")
+        },
+    }
+    baseline = (json.dumps(schema, indent=2, sort_keys=True) + "\n").encode()
+    assert sha256(baseline).hexdigest() == JSON_V1["schema_sha256"]
 
 
 @pytest.mark.parametrize("field", ["glyph_style", "mode", "color_mode"])

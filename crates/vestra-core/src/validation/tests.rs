@@ -575,6 +575,217 @@ fn groups_use_composition_local_ids_and_preserve_local_times() {
 }
 
 #[test]
+fn group_sizes_validate_dimensions_and_reject_null_or_unknown_fields() {
+    for dimension in [
+        0.0,
+        -1.0,
+        f64::NAN,
+        f64::INFINITY,
+        f64::from(u32::MAX) + 1.0,
+    ] {
+        let mut project = grouped_project(vec![group_clip("group", vec![])]);
+        let crate::project::VisualSource::Group(group) = &mut project.visual.clips[0].source else {
+            panic!("group")
+        };
+        group.size = Some(crate::project::GroupSize {
+            width: dimension,
+            height: 30.0,
+        });
+        let report = validate(&project, ResourceLimits::default());
+        let diagnostic = report
+            .diagnostics()
+            .iter()
+            .find(|d| d.code == "VESTRA-GROUP-SIZE")
+            .expect("invalid size");
+        assert_eq!(
+            diagnostic.pointer.as_deref(),
+            Some("/visual/clips/0/source/size/width")
+        );
+    }
+    for size in [
+        json!(null),
+        json!({"width": 10}),
+        json!({"width": 10, "height": 20, "clip": false}),
+    ] {
+        assert!(
+            serde_json::from_value::<crate::project::VisualSource>(
+                json!({"type": "group", "size": size, "clips": []})
+            )
+            .is_err()
+        );
+    }
+    let legacy: crate::project::VisualSource =
+        serde_json::from_value(json!({"type": "group", "clips": []})).expect("legacy group");
+    assert!(
+        serde_json::to_value(legacy)
+            .expect("serialize")
+            .get("size")
+            .is_none()
+    );
+    let sized: crate::project::VisualSource = serde_json::from_value(
+        json!({"type": "group", "size": {"width": 600.5, "height": 300.25}, "clips": []}),
+    )
+    .expect("sized group");
+    assert_eq!(
+        serde_json::to_value(sized).expect("serialize")["size"],
+        json!({"width": 600.5, "height": 300.25})
+    );
+}
+
+#[test]
+fn large_representable_group_dimensions_are_rejected_as_resource_limits() {
+    let mut value = group_clip("large", vec![]);
+    value["source"]["size"] = json!({"width": 16_384.0, "height": 2.0});
+    let project = grouped_project(vec![value]);
+    let report = validate(&project, ResourceLimits::default());
+    let diagnostic = report
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code == "VESTRA-LIMIT-GROUP-DIMENSIONS")
+        .expect("representable dimensions should use configured resource limits");
+    assert_eq!(
+        diagnostic.pointer.as_deref(),
+        Some("/visual/clips/0/source/size")
+    );
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.code != "VESTRA-GROUP-SIZE")
+    );
+}
+
+#[test]
+fn group_canvas_budgets_are_configurable_and_count_rounded_pixels() {
+    let project_with_size = |width, height| {
+        let mut clip = group_clip("group", vec![]);
+        clip["source"]["size"] = json!({"width": width, "height": height});
+        grouped_project(vec![clip])
+    };
+    assert!(
+        validate(
+            &project_with_size(8192.0, 8192.0),
+            ResourceLimits::default()
+        )
+        .is_valid()
+    );
+    let limits = ResourceLimits {
+        maximum_group_width: 16_384,
+        ..ResourceLimits::default()
+    };
+    assert!(validate(&project_with_size(16_384.0, 2.0), limits).is_valid());
+    assert!(validate(&project_with_size(8192.01, 2.0), limits).is_valid());
+    let report = validate(&project_with_size(2.0, 8193.0), limits);
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "VESTRA-LIMIT-GROUP-DIMENSIONS")
+    );
+    let report = validate(
+        &project_with_size(10.1, 10.1),
+        ResourceLimits {
+            maximum_group_pixels: 120,
+            ..ResourceLimits::default()
+        },
+    );
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "VESTRA-LIMIT-GROUP-PIXELS")
+    );
+    let report = validate(
+        &project_with_size(f64::from(u32::MAX), f64::from(u32::MAX)),
+        ResourceLimits {
+            maximum_group_width: u32::MAX,
+            maximum_group_height: u32::MAX,
+            maximum_group_pixels: u64::MAX,
+            ..ResourceLimits::default()
+        },
+    );
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "VESTRA-GROUP-SIZE"
+                && d.pointer.as_deref() == Some("/visual/clips/0/source/size"))
+    );
+}
+
+#[test]
+fn group_canvas_limits_include_inherited_canvases_and_owned_mask_sources() {
+    let mut outer = group_clip("outer", vec![group_clip("inner", vec![])]);
+    outer["source"]["size"] = json!({"width": 20.0, "height": 10.0});
+    let project = grouped_project(vec![outer]);
+    let report = validate(
+        &project,
+        ResourceLimits {
+            maximum_group_width: 16,
+            ..ResourceLimits::default()
+        },
+    );
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "VESTRA-LIMIT-GROUP-DIMENSIONS"
+                && d.pointer.as_deref() == Some("/visual/clips/0/source/clips/0/source"))
+    );
+    let canonical = serde_json::to_value(&project).expect("canonical project");
+    for diagnostic in report
+        .diagnostics()
+        .iter()
+        .filter(|d| d.code.starts_with("VESTRA-LIMIT-GROUP"))
+    {
+        assert!(
+            canonical
+                .pointer(diagnostic.pointer.as_deref().expect("pointer"))
+                .is_some()
+        );
+    }
+    let mut owner = solid_clip("owner", 0.0, 1.0);
+    owner["masks"] = json!([{"id": "mask", "input": {"type": "source", "mode": "alpha", "source": {
+        "type": "group", "size": {"width": 10.5, "height": 10.5}, "clips": []
+    }}}]);
+    let report = validate(
+        &grouped_project(vec![owner]),
+        ResourceLimits {
+            maximum_group_pixels: 100,
+            ..ResourceLimits::default()
+        },
+    );
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "VESTRA-LIMIT-GROUP-PIXELS"
+                && d.pointer.as_deref() == Some("/visual/clips/0/masks/0/input/source/size"))
+    );
+}
+
+#[test]
+fn invalid_owned_group_size_points_to_the_mask_source() {
+    let mut owner = solid_clip("owner", 0.0, 1.0);
+    owner["masks"] = json!([{
+        "id": "owned", "input": {"type": "source", "mode": "alpha", "source": {
+            "type": "group", "size": {"width": 0, "height": 30}, "clips": []
+        }}
+    }]);
+    let project = grouped_project(vec![owner]);
+    let report = validate(&project, ResourceLimits::default());
+    let diagnostic = report
+        .diagnostics()
+        .iter()
+        .find(|d| d.code == "VESTRA-GROUP-SIZE")
+        .expect("size diagnostic");
+    assert_eq!(
+        diagnostic.pointer.as_deref(),
+        Some("/visual/clips/0/masks/0/input/source/size/width")
+    );
+}
+
+#[test]
 fn groups_reject_duplicate_sibling_ids_with_nested_path() {
     let project = grouped_project(vec![group_clip(
         "group",
@@ -699,6 +910,7 @@ fn nested_particle_validation_reuses_canonical_rules() {
     let mut project = particle_project();
     let particle = project.visual.clips[0].clone();
     project.visual.clips[0].source = crate::project::VisualSource::Group(crate::project::Group {
+        size: None,
         clips: vec![particle],
         transitions: vec![],
     });

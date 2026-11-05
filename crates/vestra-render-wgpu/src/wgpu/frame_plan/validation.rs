@@ -6,6 +6,14 @@ use std::collections::BTreeMap;
 
 impl GpuFramePlan {
     pub(in crate::wgpu) fn validate(&self, source_asset_count: usize) -> Result<(), Diagnostic> {
+        if self.extents.len() != self.operations.len()
+            || self.extents.iter().any(|&(w, h)| w == 0 || h == 0)
+        {
+            return Err(invalid(0, "has missing or empty composition extents"));
+        }
+        if self.local_mask_rules.len() != self.layers.len() {
+            return Err(invalid(0, "has missing layer coordinate contexts"));
+        }
         let mut states = BTreeMap::new();
         let mut next_value = 1_u64;
         let mut final_canvas = None;
@@ -248,6 +256,7 @@ impl GpuFramePlan {
                             | TextureSlot::Layer
                             | TextureSlot::GroupCanvasA(_)
                             | TextureSlot::GroupCanvasB(_)
+                            | TextureSlot::MaskCoverage
                     ) || source == destination
                         || !states.get(source).copied().unwrap_or_default().initialized
                         || states.get(source).and_then(|state| state.value) != Some(*value)

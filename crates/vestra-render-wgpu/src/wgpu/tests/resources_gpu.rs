@@ -432,3 +432,154 @@ fn render_staged_sequence(
     let metrics = backend.staged_metrics();
     (outputs, metrics)
 }
+
+/// Prepared-frame allocation/timing probe; run one case per process for VRAM profiling.
+#[test]
+#[ignore = "explicit sized-group GPU allocation and timing measurement"]
+fn gpu_sized_group_allocation_benchmark() {
+    use serde_json::json;
+    use std::{collections::BTreeMap, time::Instant};
+    use vestra_core::{
+        plan::{PlanCompileInput, ScheduledItem, evaluate},
+        project::Project,
+        validation::ResourceLimits,
+    };
+    fn clip(id: &str, source: serde_json::Value) -> serde_json::Value {
+        json!({"id": id, "source": source, "start": 0, "duration": 1, "layer": 0, "opacity": {"base_value": 1}})
+    }
+    fn group(
+        id: &str,
+        size: Option<(u32, u32)>,
+        children: Vec<serde_json::Value>,
+    ) -> serde_json::Value {
+        let mut source = json!({"type": "group", "clips": children});
+        if let Some((width, height)) = size {
+            source["size"] = json!({"width": width, "height": height});
+        }
+        clip(id, source)
+    }
+    let case = std::env::var("VESTRA_GROUP_BENCH_CASE").expect("set VESTRA_GROUP_BENCH_CASE");
+    let solid = || clip("fill", json!({"type": "solid_color", "colour": "#2060a0"}));
+    let clips = match case.as_str() {
+        "legacy" => vec![group(
+            "outer",
+            None,
+            vec![group("inner", None, vec![solid()])],
+        )],
+        "card" => vec![group("card", Some((600, 300)), vec![solid()])],
+        "wide" => vec![group("wide", Some((4096, 256)), vec![solid()])],
+        "mixed" => vec![
+            group("wide", Some((4096, 256)), vec![solid()]),
+            group("tall", Some((256, 4096)), vec![solid()]),
+        ],
+        "nested" => vec![group(
+            "wide",
+            Some((4096, 256)),
+            vec![group("tall", Some((256, 4096)), vec![solid()])],
+        )],
+        _ => panic!("unknown allocation benchmark case: {case}"),
+    };
+    let project: Project = serde_json::from_value(json!({"schema_version": 1,
+        "output": {"path": "allocation.mp4", "width": 1280, "height": 720, "frame_rate": "30/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
+        "assets": [], "visual": {"clips": clips}})).expect("benchmark project");
+    assert!(vestra_core::validation::validate(&project, ResourceLimits::default()).is_valid());
+    let assets = BTreeMap::new();
+    let durations = BTreeMap::new();
+    let plan = compile(
+        PlanCompileInput::new(
+            &project,
+            ResourceLimits::default(),
+            std::path::Path::new("."),
+            &assets,
+            &durations,
+            1.0,
+            (30, 1),
+            30,
+            &[],
+        ),
+        CompileOptions::default(),
+    )
+    .expect("benchmark plan");
+    let decoded = crate::DecodedAssets::build(&plan).expect("benchmark sources");
+    let active = (0..plan.layers.len())
+        .map(ScheduledItem)
+        .collect::<Vec<_>>();
+    let frames = (0..30)
+        .map(|number| {
+            evaluate(&plan, &active, number * 1_000_000_000 / 30).expect("benchmark frame")
+        })
+        .collect::<Vec<_>>();
+    let mut samples = Vec::new();
+    for sample in 0..6 {
+        let started = Instant::now();
+        let Some(mut gpu) = wgpu_backend_or_skip_depth(&plan, Arc::clone(&decoded), 3) else {
+            return;
+        };
+        let preparation_ns = started.elapsed().as_nanos();
+        let initial = gpu.stats();
+        let mut output = RgbaImage::new(1280, 720);
+        for frame in frames.iter().take(3) {
+            gpu.render_frame(frame, &mut output).expect("warmup frame");
+        }
+        let mut frame_ns = Vec::new();
+        for frame in &frames {
+            let started = Instant::now();
+            gpu.render_frame(frame, &mut output)
+                .expect("measured frame");
+            frame_ns.push(started.elapsed().as_nanos());
+        }
+        let staged_before = gpu.timings();
+        let staged_started = Instant::now();
+        let mut completed = 0;
+        for number in 0..240 {
+            while gpu.in_flight() >= gpu.capacity() {
+                let frame = gpu
+                    .poll_completed(PollMode::WaitForOne)
+                    .expect("staged wait")
+                    .expect("staged output");
+                assert_eq!(
+                    &frame.rgba[(360 * 1280 + 640) * 4..(360 * 1280 + 641) * 4],
+                    &[32, 96, 160, 255]
+                );
+                completed += 1;
+            }
+            gpu.submit_frame(number, &frames[number as usize % frames.len()])
+                .expect("staged submit");
+            while let Some(frame) = gpu
+                .poll_completed(PollMode::NonBlocking)
+                .expect("staged poll")
+            {
+                assert_eq!(
+                    &frame.rgba[(360 * 1280 + 640) * 4..(360 * 1280 + 641) * 4],
+                    &[32, 96, 160, 255]
+                );
+                completed += 1;
+            }
+        }
+        completed += gpu.flush().expect("staged flush").len();
+        assert_eq!(completed, 240);
+        let staged_ns = staged_started.elapsed().as_nanos();
+        let staged_after = gpu.timings();
+        assert_eq!(output.get_pixel(640, 360).0, [32, 96, 160, 255]);
+        let final_stats = gpu.stats();
+        assert_eq!(
+            initial.wgpu_temporary_texture_allocations,
+            final_stats.wgpu_temporary_texture_allocations,
+            "frame loop must allocate no working textures"
+        );
+        assert_eq!(
+            initial.wgpu_temporary_texture_estimated_bytes,
+            final_stats.wgpu_temporary_texture_estimated_bytes
+        );
+        if sample > 0 {
+            samples.push(json!({"preparation_ns": preparation_ns, "frame_ns": frame_ns, "staged_frames": 240, "staged_ns": staged_ns, "staged_encode_ns": (staged_after.gpu_frame_command_encode - staged_before.gpu_frame_command_encode).as_nanos(), "staged_submission_ns": (staged_after.gpu_submission - staged_before.gpu_submission).as_nanos(), "staged_readback_wait_ns": (staged_after.gpu_readback_wait - staged_before.gpu_readback_wait).as_nanos(), "staged_repack_ns": (staged_after.row_repack - staged_before.row_repack).as_nanos(), "working_texture_allocations": initial.wgpu_temporary_texture_allocations, "working_texture_bytes": initial.wgpu_temporary_texture_estimated_bytes}));
+        }
+    }
+    let report = json!({"case": case, "pid": std::process::id(), "output": [1280, 720], "frames_per_sample": 30, "warmups": 1, "samples": samples});
+    let path = std::env::var("VESTRA_GROUP_BENCH_REPORT").expect("set VESTRA_GROUP_BENCH_REPORT");
+    std::fs::write(
+        path,
+        serde_json::to_vec_pretty(&report).expect("benchmark JSON"),
+    )
+    .expect("benchmark report");
+}

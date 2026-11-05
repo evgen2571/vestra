@@ -80,6 +80,7 @@ pub(in crate::wgpu) enum GpuOperation {
         result_value: u64,
         parameters_index: u32,
         horizontal: bool,
+        transform_owner: bool,
     },
     RenderSurfaceLayer {
         layer_index: usize,

@@ -95,6 +95,16 @@ assert not errors(group), "nested Group source must validate"
 group_with_transform = copy.deepcopy(group)
 group_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
 assert not errors(group_with_transform), "Group sources may have a parent transform"
+sized_group = copy.deepcopy(group_with_transform)
+sized_group["visual"]["clips"][0]["source"]["size"] = {"width": 600.5, "height": 300.25}
+assert not errors(sized_group), "sized Group source must validate"
+sized_group["visual"]["clips"][0]["source"]["size"] = {"width": 16_384, "height": 2}
+assert not errors(sized_group), "resource budgets are semantic policy, not canonical schema bounds"
+for invalid_size in [None, {}, {"width": 0, "height": 30}, {"width": 60, "height": -1},
+                     {"width": 2**32, "height": 30}, {"width": 60, "height": True},
+                     {"width": 60, "height": 30, "clip": False}]:
+    sized_group["visual"]["clips"][0]["source"]["size"] = invalid_size
+    assert errors(sized_group), f"invalid Group size accepted: {invalid_size}"
 group["visual"]["clips"][0]["source"]["clips"].append(copy.deepcopy(group["visual"]["clips"][0]["source"]["clips"][0]))
 group["visual"]["clips"][0]["source"]["clips"][1]["id"] = "nested"
 group["visual"]["clips"][0]["source"]["clips"][1]["source"] = {

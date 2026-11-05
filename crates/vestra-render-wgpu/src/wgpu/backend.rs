@@ -711,8 +711,6 @@ impl RenderBackend for WgpuBackend {
             &slot.parameter_buffer,
             self.readback.buffer(&token)?,
             &textures,
-            evaluated.width,
-            evaluated.height,
             slot.particle_buffer.as_ref(),
             slot.particle_upload_buffer.as_ref(),
             &slot.particle_uploads,

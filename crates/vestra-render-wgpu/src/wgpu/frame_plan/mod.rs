@@ -19,6 +19,8 @@ pub(super) use operations::{
 #[derive(Clone, Debug)]
 pub(super) struct GpuFramePlan {
     pub(super) operations: Vec<GpuOperation>,
+    pub(super) extents: Vec<(u32, u32)>,
+    pub(super) local_mask_rules: Vec<bool>,
     pub(super) parameter_count: u32,
     pub(super) final_canvas: TextureSlot,
     pub(super) layers: Vec<vestra_core::plan::EvaluatedLayer>,
@@ -27,6 +29,8 @@ pub(super) struct GpuFramePlan {
 impl PartialEq for GpuFramePlan {
     fn eq(&self, other: &Self) -> bool {
         self.operations == other.operations
+            && self.extents == other.extents
+            && self.local_mask_rules == other.local_mask_rules
             && self.parameter_count == other.parameter_count
             && self.final_canvas == other.final_canvas
     }

@@ -694,7 +694,7 @@ impl PyPreparedProject {
     }
 }
 
-fn u64_from_python(value: &Bound<'_, PyAny>, name: &str) -> PyResult<u64> {
+pub(crate) fn u64_from_python(value: &Bound<'_, PyAny>, name: &str) -> PyResult<u64> {
     if value.is_instance_of::<PyBool>() {
         return Err(PyTypeError::new_err(format!(
             "{name} must be an integer, not bool"

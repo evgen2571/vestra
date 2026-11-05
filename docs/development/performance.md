@@ -109,6 +109,26 @@ After the platform preflight in [GPU validation](gpu-validation.md), run:
 python scripts/benchmark.py run --suite canonical --backend hardware-wgpu --output target/benchmark-results/hardware-before
 ```
 
+For local-canvas allocation investigations, the existing WGPU resource tests also
+provide an ignored prepared-backend probe:
+
+```bash
+mkdir -p target/benchmark-results/group-canvases
+VESTRA_GROUP_BENCH_CASE=mixed \
+VESTRA_GROUP_BENCH_REPORT=target/benchmark-results/group-canvases/mixed.json \
+cargo test --release -p vestra-render-wgpu --lib --features adapter-tests \
+  gpu_sized_group_allocation_benchmark -- --ignored --nocapture --test-threads=1
+```
+
+Cases are `legacy`, `card`, `wide`, `mixed` and `nested`, at 1280×720. One warmup
+preparation precedes five samples. Reports separate backend preparation,
+sequential frame latency including readback, and 240-frame staged throughput at
+depth three. Frames are evaluated before measurement. The probe checks expected
+pixels and stable working-texture allocation counts across both frame loops.
+Working bytes describe created texture payloads; measure resident/process GPU
+memory externally. Run timing comparisons separately from memory profiling and
+alternate frozen before/after executables to reduce order and clock effects.
+
 The runner requires an actual WGPU result with an integrated or discrete adapter
 for every measured sample. CPU fallback, software WGPU, and unknown adapter
 classes fail the suite. CPU and hardware runs have separate baselines. If

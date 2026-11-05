@@ -536,6 +536,7 @@ fn compile_group(
     );
     let schedule = crate::plan::ActiveSchedule::compile_layers(&layers);
     Ok(CompiledComposition {
+        size: group.size,
         layers,
         schedule,
         dependency,

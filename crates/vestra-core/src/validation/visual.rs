@@ -20,6 +20,7 @@ pub(super) fn validate(
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes_per_track: usize,
     limits: crate::validation::ResourceLimits,
+    canvas_size: crate::project::GroupSize,
     errors: &mut Vec<Diagnostic>,
     has_authored_audio: bool,
 ) {
@@ -28,6 +29,7 @@ pub(super) fn validate(
         assets,
         maximum_keyframes_per_track,
         limits,
+        canvas_size,
         errors,
         has_authored_audio,
         0,
@@ -41,11 +43,16 @@ pub(super) fn validate(
     );
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "hierarchy validation preserves local canvas and diagnostic context"
+)]
 fn validate_with_depth(
     visual: &crate::project::Visual,
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes_per_track: usize,
     limits: crate::validation::ResourceLimits,
+    canvas_size: crate::project::GroupSize,
     errors: &mut Vec<Diagnostic>,
     has_authored_audio: bool,
     group_depth: usize,
@@ -128,6 +135,14 @@ fn validate_with_depth(
                 );
             }
             crate::project::VisualSource::Group(group) => {
+                let size = group.size.unwrap_or(canvas_size);
+                validate_group_size(
+                    size,
+                    group.size.is_some(),
+                    &format!("{path}/source"),
+                    limits,
+                    errors,
+                );
                 let child_depth = group_depth.saturating_add(1);
                 if child_depth > MAX_GROUP_NESTING_DEPTH {
                     errors.push(Diagnostic::error(
@@ -149,6 +164,7 @@ fn validate_with_depth(
                         assets,
                         maximum_keyframes_per_track,
                         limits,
+                        size,
                         &mut nested_errors,
                         has_authored_audio,
                         child_depth,
@@ -220,10 +236,74 @@ fn validate_with_depth(
             &path,
             maximum_keyframes_per_track,
             limits,
+            match &clip.source {
+                crate::project::VisualSource::Group(group) => group.size.unwrap_or(canvas_size),
+                _ => canvas_size,
+            },
             errors,
             has_authored_audio,
             group_depth,
         );
     }
     masks::validate_mattes(&visual.clips, errors);
+}
+
+fn validate_group_size(
+    size: crate::project::GroupSize,
+    authored: bool,
+    path: &str,
+    limits: crate::validation::ResourceLimits,
+    errors: &mut Vec<Diagnostic>,
+) {
+    let path = if authored {
+        format!("{path}/size")
+    } else {
+        path.to_owned()
+    };
+    let mut representable = true;
+    for (name, value) in [("width", size.width), ("height", size.height)] {
+        if !super::positive(value) || value.ceil() > f64::from(u32::MAX) {
+            representable = false;
+            errors.push(Diagnostic::error(
+                "VESTRA-GROUP-SIZE",
+                Category::Semantic,
+                "group dimensions must be positive finite pixels representable as u32 raster extents",
+                if authored { format!("{path}/{name}") } else { path.clone() },
+            ));
+        }
+    }
+    if !representable {
+        return;
+    }
+    let width = size.width.ceil() as u32;
+    let height = size.height.ceil() as u32;
+    let pixels = u64::from(width) * u64::from(height);
+    if pixels
+        .checked_mul(4)
+        .is_none_or(|bytes| bytes > isize::MAX as u64)
+    {
+        errors.push(Diagnostic::error(
+            "VESTRA-GROUP-SIZE",
+            Category::Semantic,
+            "group RGBA canvas byte length is not representable",
+            path.as_str(),
+        ));
+        return;
+    }
+    if width > limits.maximum_group_width || height > limits.maximum_group_height {
+        errors.push(Diagnostic::error(
+            "VESTRA-LIMIT-GROUP-DIMENSIONS",
+            Category::Semantic,
+            "group canvas dimensions exceed configured resource limits",
+            path.as_str(),
+        ));
+    }
+    if pixels > limits.maximum_group_pixels {
+        errors.push(Diagnostic::error(
+            "VESTRA-LIMIT-GROUP-PIXELS",
+            Category::Semantic,
+            "group canvas pixels exceed the configured resource limit",
+            path.as_str(),
+        ));
+    }
 }

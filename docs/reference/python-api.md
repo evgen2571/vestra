@@ -7,7 +7,8 @@
 ```python
 Project(*, size: tuple[int, int], fps: int | tuple[int, int] | FrameRate,
         duration: float | None = None, background="#000000", quality=Quality.BALANCED,
-        base_directory=".", name=None, metadata=None, output_audio=None, output_path=None)
+        base_directory=".", name=None, metadata=None, output_audio=None, output_path=None,
+        resource_limits: ResourceLimits | None = None)
 
 composition.add(source, *, start=0, duration=None, source_start=0.0,
                 playback_rate=1.0, z=0, visible=True, opacity=1.0,
@@ -20,13 +21,35 @@ composition.group(name=None, *, start=0, duration=None, z=0, visible=True,
 
 `size` has positive integer width/height; `fps` is an integer, `(numerator, denominator)` pair or `FrameRate`; explicit `duration` is positive seconds. `root` is the top-level `Composition`; a `CompositionLayer.child` is another composition with child-local timing. `add` copies its `Source`; `duration=None` uses the owning duration except for `Video`, where it probes media to derive the usable source duration. `source_start` is source-media seconds and `playback_rate` is positive.
 
-`Group(children=(), *, transform=None, position=None, anchor=None, scale=None,
+`Group(children=(), *, size=None, transform=None, position=None, anchor=None, scale=None,
 rotation=None, rotation_degrees=None)` is an ordinary visual source.
+Its optional `size: tuple[float, float]` contains positive, finite pixel
+dimensions and is exposed as a read-only property. Omit it to inherit the
+containing coordinate system. Size changes child coordinates without scaling
+their geometry or changing timing/FPS.
 `group.add(source, *, start=0, duration=None, source_start=0, playback_rate=1,
 layer=None, visible=True, opacity=1, transform=None, position=None, anchor=None,
 scale=None, rotation=None, rotation_degrees=None)` returns a `GroupChild`.
 See [nested groups](../guides/python/nested-compositions.md) for ownership,
 local timing and the direct `CompositionLayer` alternative.
+
+## Resource limits
+
+`ResourceLimits(*, maximum_group_width=None, maximum_group_height=None,
+maximum_group_pixels=None)` configures group canvas budgets. Omitted or `None`
+values use safe defaults: 8192 pixels per axis and 67,108,864 pixels per canvas.
+Values are nonnegative integers within the native `u32`/`u64` ranges; the three
+properties are read-only. Zero disallows a positive canvas under that budget.
+Other native resource budgets retain their defaults.
+
+Pass the value to `Project(..., resource_limits=limits)` for high-level
+validation, preparation and one-shot rendering, or to
+`Editor(resource_limits=limits)` when operating on immutable snapshots. These
+settings are not serialized in project JSON. Canonical dimensions must remain
+positive, finite and safely representable; CPU allocation constraints and WGPU
+device limits still apply when budgets are raised.
+
+## Source presentation
 
 All visual source constructors accept the same transform keywords; ParticleSystem
 keeps `rotation` for particle orientation and accepts `rotation_degrees` for

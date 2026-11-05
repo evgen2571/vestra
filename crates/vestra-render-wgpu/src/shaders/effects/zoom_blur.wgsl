@@ -6,7 +6,7 @@ struct Params {
 @group(0) @binding(3) var<uniform> params: Params;
 
 fn zoom_blur(coord: vec2<i32>) -> vec4<f32> {
-    let dimensions = vec2<f32>(textureDimensions(source));
+    let dimensions = vec2<f32>(vec2<u32>(params.canvas_width, params.canvas_height));
     let amount = clamp(params.radius / max(dimensions.x, dimensions.y), 0.0, 0.5);
     let samples = max(i32(params.samples), 1);
     let centre = params.anchor * (dimensions - vec2<f32>(1.0));

@@ -10,6 +10,11 @@ use vestra_core::plan::{EvaluatedFrame, EvaluatedSource};
 /// Shared output and logical-generation state for recursive frame construction.
 pub(super) struct FramePlanBuilder {
     pub(super) operations: Vec<GpuOperation>,
+    pub(super) extents: Vec<(u32, u32)>,
+    pub(super) extent: (u32, u32),
+    // Preserve legacy mask sampling outside explicitly sized coordinate systems.
+    pub(super) sized_context: bool,
+    pub(super) local_mask_rules: Vec<bool>,
     pub(super) layers: Vec<vestra_core::plan::EvaluatedLayer>,
     pub(super) parameter_count: u32,
     pub(super) next_value: u64,
@@ -58,11 +63,15 @@ impl GpuFramePlan {
             .saturating_add(frame.post_effects.len().saturating_mul(2));
         let mut builder = FramePlanBuilder {
             operations: Vec::with_capacity(operation_capacity),
+            extents: Vec::with_capacity(operation_capacity),
+            extent: (frame.width, frame.height),
+            sized_context: false,
+            local_mask_rules: Vec::with_capacity(layer_capacity),
             layers: Vec::with_capacity(layer_capacity),
             parameter_count: 0,
             next_value: 1,
         };
-        builder.operations.push(GpuOperation::ClearCanvas {
+        builder.push(GpuOperation::ClearCanvas {
             destination: TextureSlot::CanvasA,
             parameters_index: builder.parameter_count,
         });
@@ -95,12 +104,14 @@ impl GpuFramePlan {
                 &mut final_value,
             );
         }
-        builder.operations.push(GpuOperation::CopyForReadback {
+        builder.push(GpuOperation::CopyForReadback {
             source: final_texture,
             expected_value: final_value,
         });
         Self {
             operations: builder.operations,
+            extents: builder.extents,
+            local_mask_rules: builder.local_mask_rules,
             parameter_count: builder.parameter_count,
             final_canvas: final_texture,
             layers: builder.layers,
@@ -114,6 +125,17 @@ impl GpuFramePlan {
 }
 
 impl FramePlanBuilder {
+    pub(super) fn push_layer(&mut self, layer: vestra_core::plan::EvaluatedLayer) {
+        let local_rules = self.sized_context || layer_contains_sized_group(&layer);
+        self.layers.push(layer);
+        self.local_mask_rules.push(local_rules);
+    }
+
+    pub(super) fn push(&mut self, operation: GpuOperation) {
+        self.operations.push(operation);
+        self.extents.push(self.extent);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(super) fn append_layer(
         &mut self,
@@ -140,12 +162,20 @@ impl FramePlanBuilder {
                 presented_source.blend_mode = crate::project::BlendMode::Normal;
                 vestra_core::plan::EvaluatedSource::Group {
                     composition: vestra_core::plan::EvaluatedComposition {
+                        is_sized: false,
+                        width: self.extent.0,
+                        height: self.extent.1,
                         layers: vec![presented_source],
                     },
                 }
             } else {
                 vestra_core::plan::EvaluatedSource::Group {
-                    composition: vestra_core::plan::EvaluatedComposition { layers: Vec::new() },
+                    composition: vestra_core::plan::EvaluatedComposition {
+                        is_sized: false,
+                        width: self.extent.0,
+                        height: self.extent.1,
+                        layers: Vec::new(),
+                    },
                 }
             };
             planned_layer.masks.push(vestra_core::plan::EvaluatedMask {
@@ -167,15 +197,19 @@ impl FramePlanBuilder {
             });
         }
         let layer_index = self.layers.len();
-        self.layers.push(planned_layer.clone());
+        self.push_layer(planned_layer.clone());
         if matches!(layer.source, EvaluatedSource::Group { .. }) {
             let composition = match &layer.source {
                 EvaluatedSource::Group { composition, .. } => composition,
                 _ => unreachable!(),
             };
+            let parent_extent = self.extent;
+            let parent_sized_context = self.sized_context;
+            self.sized_context |= composition.is_sized;
+            self.extent = (composition.width, composition.height);
             let mut group_canvas = TextureSlot::GroupCanvasA(depth);
             let mut group_value;
-            self.operations.push(GpuOperation::ClearCanvas {
+            self.push(GpuOperation::ClearCanvas {
                 destination: group_canvas,
                 parameters_index: self.parameter_count,
             });
@@ -194,7 +228,9 @@ impl FramePlanBuilder {
                     cache_targets,
                 );
             }
-            self.operations.push(GpuOperation::RenderSurfaceLayer {
+            self.extent = parent_extent;
+            self.sized_context = parent_sized_context;
+            self.push(GpuOperation::RenderSurfaceLayer {
                 layer_index,
                 source: group_canvas,
                 destination: TextureSlot::Layer,
@@ -238,7 +274,7 @@ impl FramePlanBuilder {
         if cached_layers.contains(&layer.compiled_layer_index) {
             let destination = alternate_canvas_for_bindings(*canvas)
                 .expect("composition slots contain only canvas textures");
-            self.operations.push(GpuOperation::CompositeCachedLayer {
+            self.push(GpuOperation::CompositeCachedLayer {
                 cache_key: layer.compiled_layer_index,
                 layer_index,
                 canvas_source: *canvas,
@@ -255,7 +291,7 @@ impl FramePlanBuilder {
         }
         match &layer.source {
             EvaluatedSource::Image { asset_index, .. } => {
-                self.operations.push(GpuOperation::RenderRasterLayer {
+                self.push(GpuOperation::RenderRasterLayer {
                     layer_index,
                     source_index: *asset_index,
                     destination: TextureSlot::Layer,
@@ -263,7 +299,7 @@ impl FramePlanBuilder {
                 })
             }
             EvaluatedSource::Video { source_index, .. } => {
-                self.operations.push(GpuOperation::RenderRasterLayer {
+                self.push(GpuOperation::RenderRasterLayer {
                     layer_index,
                     source_index: *source_index,
                     destination: TextureSlot::Layer,
@@ -271,42 +307,36 @@ impl FramePlanBuilder {
                 })
             }
             EvaluatedSource::Shape { shape_index, .. } => {
-                self.operations.push(GpuOperation::RenderRasterLayer {
+                self.push(GpuOperation::RenderRasterLayer {
                     layer_index,
                     source_index: *shape_index,
                     destination: TextureSlot::Layer,
                     parameters_index: self.parameter_count,
                 })
             }
-            EvaluatedSource::Text { text_index } => {
-                self.operations.push(GpuOperation::RenderRasterLayer {
-                    layer_index,
-                    source_index: *text_index,
-                    destination: TextureSlot::Layer,
-                    parameters_index: self.parameter_count,
-                })
-            }
-            EvaluatedSource::SolidColor { .. } => {
-                self.operations.push(GpuOperation::RenderSolidLayer {
-                    layer_index,
-                    destination: TextureSlot::Layer,
-                    parameters_index: self.parameter_count,
-                })
-            }
-            EvaluatedSource::Spectrum2D { .. } => {
-                self.operations.push(GpuOperation::RenderSpectrum2DLayer {
-                    layer_index,
-                    destination: TextureSlot::Layer,
-                    parameters_index: self.parameter_count,
-                })
-            }
+            EvaluatedSource::Text { text_index } => self.push(GpuOperation::RenderRasterLayer {
+                layer_index,
+                source_index: *text_index,
+                destination: TextureSlot::Layer,
+                parameters_index: self.parameter_count,
+            }),
+            EvaluatedSource::SolidColor { .. } => self.push(GpuOperation::RenderSolidLayer {
+                layer_index,
+                destination: TextureSlot::Layer,
+                parameters_index: self.parameter_count,
+            }),
+            EvaluatedSource::Spectrum2D { .. } => self.push(GpuOperation::RenderSpectrum2DLayer {
+                layer_index,
+                destination: TextureSlot::Layer,
+                parameters_index: self.parameter_count,
+            }),
             EvaluatedSource::ParticleSystem { system, .. } => {
                 let blend_mode = system.blend_mode;
                 let destination = match blend_mode {
                     crate::project::ParticleBlendMode::Normal => TextureSlot::ParticleAccumulation,
                     crate::project::ParticleBlendMode::Additive => TextureSlot::Layer,
                 };
-                self.operations.push(GpuOperation::RenderParticleLayer {
+                self.push(GpuOperation::RenderParticleLayer {
                     layer_index,
                     destination,
                     parameters_index: self.parameter_count,
@@ -315,7 +345,7 @@ impl FramePlanBuilder {
                     blend_mode,
                 });
                 if matches!(blend_mode, crate::project::ParticleBlendMode::Normal) {
-                    self.operations.push(GpuOperation::ResolveParticleLayer {
+                    self.push(GpuOperation::ResolveParticleLayer {
                         source: TextureSlot::ParticleAccumulation,
                         destination: TextureSlot::Layer,
                     });
@@ -354,7 +384,7 @@ impl FramePlanBuilder {
             cached_layers,
         );
         if cache_targets.contains(&layer.compiled_layer_index) {
-            self.operations.push(GpuOperation::StoreStaticLayer {
+            self.push(GpuOperation::StoreStaticLayer {
                 cache_key: layer.compiled_layer_index,
                 source: layer_result,
                 expected_source_value: layer_value,
@@ -381,7 +411,7 @@ impl FramePlanBuilder {
     ) {
         let destination = alternate_canvas_for_bindings(canvas_source)
             .expect("composition source must be a canvas texture");
-        self.operations.push(GpuOperation::CompositeLayer {
+        self.push(GpuOperation::CompositeLayer {
             layer_index,
             layer_source,
             expected_layer_value,
@@ -396,4 +426,14 @@ impl FramePlanBuilder {
         *canvas_value = self.next_value;
         self.next_value += 1;
     }
+}
+
+fn layer_contains_sized_group(layer: &vestra_core::plan::EvaluatedLayer) -> bool {
+    source_contains_sized_group(&layer.source) || layer.masks.iter().any(|mask| {
+        matches!(&mask.input, vestra_core::plan::EvaluatedMaskInput::Source { source, .. } if source_contains_sized_group(source))
+    })
+}
+
+fn source_contains_sized_group(source: &EvaluatedSource) -> bool {
+    matches!(source, EvaluatedSource::Group { composition } if composition.is_sized || composition.layers.iter().any(layer_contains_sized_group))
 }

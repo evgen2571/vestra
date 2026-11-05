@@ -72,6 +72,7 @@ impl CompositionSurfacePool {
 
 pub(crate) struct EffectSurfacePool {
     extent: (u32, u32),
+    mask_local_extent: (u32, u32),
     surfaces: [RgbaImage; SURFACE_COUNT],
     mask_local_surface: RgbaImage,
     mask_surface: RgbaImage,
@@ -91,6 +92,7 @@ impl EffectSurfacePool {
     pub(crate) fn new(width: u32, height: u32) -> Self {
         Self {
             extent: (width, height),
+            mask_local_extent: (width, height),
             surfaces: std::array::from_fn(|index| {
                 if index == 0 {
                     RgbaImage::new(width, height)
@@ -127,11 +129,22 @@ impl EffectSurfacePool {
     }
 
     pub(super) fn mask_local_surface(&mut self) -> &mut RgbaImage {
-        self.allocations += ensure_image(&mut self.mask_local_surface, self.extent);
+        self.allocations += ensure_image(&mut self.mask_local_surface, self.mask_local_extent);
         &mut self.mask_local_surface
     }
 
+    pub(super) fn resize_mask_local(&mut self, width: u32, height: u32) {
+        self.mask_local_extent = (width, height);
+    }
+
+    pub(super) fn record_nested_usage(&mut self, nested: &Self) {
+        self.allocations += nested.allocations;
+        self.reuses += nested.reuses;
+        self.copy_bytes += nested.copy_bytes;
+    }
+
     pub(super) fn copy_current_to_mask_local(&mut self) {
+        self.mask_local_extent = self.extent;
         self.mask_local_surface();
         let current_slot = self.current_slot;
         self.mask_local_surface

@@ -44,12 +44,15 @@ impl fmt::Display for EditorErrorKind {
 
 /// Reusable entry point for the supported SDK workflows.
 #[derive(Clone, Debug, Default)]
-pub struct Editor;
+pub struct Editor {
+    limits: crate::ResourceLimits,
+}
 
-/// Builder for persistent SDK configuration. The builder currently has no
-/// persistent runtime options, but it provides the stable construction path.
+/// Builder for persistent SDK resource configuration.
 #[derive(Clone, Debug, Default)]
-pub struct EditorBuilder;
+pub struct EditorBuilder {
+    limits: crate::ResourceLimits,
+}
 
 /// The operation whose environment requirements are being checked.
 #[derive(Clone, Debug)]
@@ -327,11 +330,11 @@ pub(crate) fn log_render_timing_summary(
 impl Editor {
     #[must_use]
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
     #[must_use]
     pub fn builder() -> EditorBuilder {
-        EditorBuilder
+        EditorBuilder::default()
     }
     #[expect(
         clippy::result_large_err,
@@ -368,11 +371,8 @@ impl Editor {
     /// initialize a rendering backend.
     #[must_use]
     pub fn validate(&self, project: &Project) -> ValidationReport {
-        let diagnostics = vestra_core::validation::validate(
-            project.canonical(),
-            vestra_core::validation::ResourceLimits::default(),
-        )
-        .into_diagnostics();
+        let diagnostics =
+            vestra_core::validation::validate(project.canonical(), self.limits).into_diagnostics();
         ValidationReport { diagnostics }
     }
 
@@ -392,7 +392,9 @@ impl Editor {
         let outcome = crate::project::validation::preflight(
             project,
             validation,
-            &ValidationOptions::default(),
+            &ValidationOptions {
+                limits: self.limits,
+            },
         );
         let mut diagnostics = outcome.diagnostics;
         let target = &options.target;
@@ -1128,12 +1130,21 @@ fn test_preflight_warning() -> Option<Diagnostic> {
 }
 
 impl EditorBuilder {
+    /// Applies the same caller resource budgets to validation, preflight and rendering.
+    #[must_use]
+    pub const fn resource_limits(mut self, limits: crate::ResourceLimits) -> Self {
+        self.limits = limits;
+        self
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "builder keeps the SDK error type consistent with other entry points"
     )]
     pub fn build(self) -> Result<Editor, EditorError> {
-        Ok(Editor::new())
+        Ok(Editor {
+            limits: self.limits,
+        })
     }
 }
 

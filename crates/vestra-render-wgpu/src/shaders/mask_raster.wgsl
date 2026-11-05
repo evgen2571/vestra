@@ -39,6 +39,7 @@ fn write_mask(coord: vec2<i32>, pixel: vec4<f32>) {
 fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= params.canvas_width || id.y >= params.canvas_height) { return; }
     let coord = vec2<i32>(id.xy);
+    if (id.x >= params._unused_stride || f32(id.y) >= params.effective.w) { write_mask(coord, vec4<f32>(0.0)); return; }
     let point = vec2<f32>(f32(id.x) + 0.5, f32(id.y) + 0.5);
     let mapped = vec2<f32>(dot(params.inverse_row0.xyz, vec3<f32>(point, 1.0)), dot(params.inverse_row1.xyz, vec3<f32>(point, 1.0)));
     let local_origin = params.solid_or_background.xy;

@@ -36,6 +36,11 @@ pub fn enforce_final_timeline_limits(
 pub struct ResourceLimits {
     pub maximum_width: u32,
     pub maximum_height: u32,
+    /// Per-group raster canvas limits, independent of output dimensions.
+    pub maximum_group_width: u32,
+    pub maximum_group_height: u32,
+    /// Maximum pixels in one group canvas after rounding dimensions up.
+    pub maximum_group_pixels: u64,
     /// Optional caller budget; defaults to `u64::MAX`. Checked timeline
     /// arithmetic still rejects unrepresentable frame counts.
     pub maximum_frames: u64,
@@ -67,6 +72,9 @@ impl Default for ResourceLimits {
         Self {
             maximum_width: 8192,
             maximum_height: 8192,
+            maximum_group_width: 8192,
+            maximum_group_height: 8192,
+            maximum_group_pixels: 8192 * 8192,
             maximum_frames: u64::MAX,
             maximum_duration_seconds: f64::MAX,
             maximum_source_pixels: 100_000_000,
@@ -143,6 +151,10 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         &asset_kinds,
         limits_config.maximum_keyframes_per_track,
         limits_config,
+        crate::project::GroupSize {
+            width: f64::from(project.output.width),
+            height: f64::from(project.output.height),
+        },
         &mut errors,
         has_authored_audio,
     );

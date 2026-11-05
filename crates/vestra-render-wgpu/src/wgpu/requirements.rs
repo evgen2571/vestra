@@ -166,10 +166,12 @@ impl GpuRequirements {
             wgpu::Limits::downlevel_defaults().min_uniform_buffer_offset_alignment;
         let parameter_buffer_bytes =
             parameter_buffer_bytes(uniform_bytes, default_alignment, parameter_record_count)?;
+        let (working_width, working_height) = topology.maximum_extent();
         let full_frame_bytes = estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)?;
+        let working_frame_bytes = estimated_texture_bytes(working_width, working_height, 1)?;
         let canvas_texture_bytes =
             estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 2)?;
-        let layer_texture_bytes = full_frame_bytes;
+        let layer_texture_bytes = working_frame_bytes;
         let requires_auxiliary = topology.requires_auxiliary();
         let has_masks = topology.has_masks();
         let effect_texture_count = if requires_auxiliary {
@@ -188,16 +190,19 @@ impl GpuRequirements {
             .ok()
             .and_then(|depth| depth.checked_mul(2))
             .ok_or_else(|| resource_overflow("Group texture count overflow"))?;
-        let working_texture_bytes = estimated_texture_bytes(
-            plan.canvas.width,
-            plan.canvas.height,
-            BASE_WORKING_TEXTURE_COUNT
+        let scratch_texture_bytes = estimated_texture_bytes(
+            working_width,
+            working_height,
+            BASE_WORKING_TEXTURE_COUNT - 2
                 + effect_texture_count
                 + auxiliary_texture_count
                 + mask_coverage_texture_count
                 + mask_feather_texture_count
                 + group_texture_count,
         )?;
+        let working_texture_bytes = canvas_texture_bytes
+            .checked_add(scratch_texture_bytes)
+            .ok_or_else(|| resource_overflow("working texture total overflow"))?;
         fn image_bytes(width: u32, height: u32) -> Result<u64, Diagnostic> {
             u64::from(width)
                 .checked_mul(u64::from(height))
@@ -282,18 +287,18 @@ impl GpuRequirements {
             canvas_texture_bytes,
             layer_texture_bytes,
             effect_texture_bytes: estimated_texture_bytes(
-                plan.canvas.width,
-                plan.canvas.height,
+                working_width,
+                working_height,
                 effect_texture_count,
             )?,
             auxiliary_texture_bytes: estimated_texture_bytes(
-                plan.canvas.width,
-                plan.canvas.height,
+                working_width,
+                working_height,
                 auxiliary_texture_count,
             )?,
             mask_coverage_texture_bytes: estimated_texture_bytes(
-                plan.canvas.width,
-                plan.canvas.height,
+                working_width,
+                working_height,
                 mask_coverage_texture_count,
             )?,
             working_texture_bytes,
@@ -306,17 +311,18 @@ impl GpuRequirements {
                 .ok_or_else(|| resource_overflow("staging memory estimate overflow"))?,
             peak_parameter_buffer_bytes: parameter_buffer_bytes,
         };
+        let working_copy_bytes = working_width
+            .checked_mul(4)
+            .and_then(|row| checked_align_up(row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT))
+            .and_then(|row| u64::from(row).checked_mul(u64::from(working_height)))
+            .ok_or_else(|| resource_overflow("working canvas upload size overflow"))?;
         let particles = ParticleStagingRequirements::from_layers(
             &plan.layers,
-            copy_bytes,
+            working_copy_bytes,
             &mut BTreeMap::new(),
         );
         Ok(Self {
-            max_texture_dimension_2d: plan
-                .canvas
-                .width
-                .max(plan.canvas.height)
-                .max(max_source_dimension),
+            max_texture_dimension_2d: working_width.max(working_height).max(max_source_dimension),
             row_bytes,
             padded_row_bytes,
             copy_bytes,
@@ -328,12 +334,9 @@ impl GpuRequirements {
                 .iter()
                 .any(|k| k == crate::kernel::EffectKernel::PixelSort)
             {
-                plan.canvas.width.max(plan.canvas.height)
+                working_width.max(working_height)
             } else {
-                plan.canvas
-                    .width
-                    .div_ceil(8)
-                    .max(plan.canvas.height.div_ceil(8))
+                working_width.div_ceil(8).max(working_height.div_ceil(8))
             },
             sort_workgroup_bytes: if crate::kernel::required_effect_kernels(plan)
                 .iter()

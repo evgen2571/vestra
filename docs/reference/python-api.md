@@ -80,19 +80,26 @@ replace the built-in terminal renderer with a callback.
 Layers expose an ordered mask collection:
 
 ```python
-mask = layer.masks.add(shape, operation=MaskOperation.INTERSECT, id=None, feather=12)
+mask = layer.masks.add(source, operation=MaskOperation.INTERSECT,
+                       id=None, feather=12, mode=None)
 layer.masks.items
 layer.masks.remove(mask_or_id)
 layer.masks.clear()
 ```
 
 `Mask` exposes `id`, `input`, `operation`, `invert`, `strength`, `feather`, and
-`transform`. Supported inputs are the existing `Rectangle`, `Ellipse`,
-`Circle`, and `Polygon` shape authoring objects, or the normal `Image` source
-with `mode=MaskCoverageMode.ALPHA` or `MaskCoverageMode.LUMA`. `strength`, `feather`, and
-transform properties support the normal keyframes, modifiers, and signal
-bindings. Masks are applied after layer effects and before final
+`transform`. Inputs include `Rectangle`, `Ellipse`, `Circle`, `Polygon`, `Line`,
+`Image`, `Color`, `Text`, `Video`, `Spectrum2D`, `ParticleSystem`, and owned
+`Group` sources. `mode` selects `MaskCoverageMode.ALPHA` (default) or `LUMA`
+for non-shape sources; shapes use their rendered alpha and reject `mode`.
+Direct Image/Video masks reject sizing and crop; use `mask.transform`.
+`strength`, `feather`, and transform properties support keyframes, modifiers
+and signal bindings. Masks are applied after layer effects and before final
 opacity/blending.
+
+`layer.set_matte(matte, *, mode=MatteMode.ALPHA, invert=False)` references
+a layer in the same immediate composition; `layer.clear_matte()` removes it.
+See [masks and track mattes](masks.md) for coverage, timing and visibility rules.
 
 `ProjectBuilder(*, width, height, frame_rate, output_path, duration=None, duration_mode=None, background="#000000", quality=Quality.BALANCED, base_directory=".", name=None, metadata=None, output_audio=False)` owns advanced canonical assets, visual clips, tracks, effects, transitions, flashes and audio. `build()` creates a native snapshot; `validate()` has the same semantic-only meaning.
 
@@ -101,12 +108,21 @@ opacity/blending.
 | Type | Exact construction or methods |
 | --- | --- |
 | `ProjectSnapshot` | `load(path)`, `from_json(text, *, base_directory=None)`, `from_dict(data, *, base_directory=None)`, `to_json()`, `to_dict()`, `save(path)`. |
-| `Editor` | `Editor()`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, on_progress=None, cancellation=None)`. |
+| `Editor` | `Editor(*, resource_limits=None)`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, show_progress=True, on_progress=None, cancellation=None)`. |
+| `PreflightOptions` | Class methods `for_validation()`, `for_inspection()`, `for_preparation(backend)`, `for_render(backend, output, *, overwrite=False)`. Backend arguments use `BackendPreference`. |
 | `PrepareOptions` | `PrepareOptions(*, backend=None)`. |
 | `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, on_progress=None, show_progress=True, cancellation=None)`. |
 | `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False)` for one-shot `Editor.render`. |
 | `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False)` for `PreparedProject.render_video`. |
 | `CancellationToken` | `CancellationToken()`, `cancel()`, read-only `is_cancelled`. |
+
+`Editor` methods take immutable `ProjectSnapshot` values. `validate()` checks
+canonical semantics only. `preflight(..., PreflightOptions.for_validation())`
+also checks media, tools, the configured output path with overwrite disabled,
+and Auto backend readiness, matching `ve validate`. `for_inspection()` resolves
+media without output/backend checks; `for_preparation(backend)` adds backend
+readiness; `for_render(backend, output, overwrite=...)` checks the supplied
+destination and render policy.
 
 `RenderEvent` v1 exposes `schema_version`, `kind`, `operation_id`, `stage`,
 `frame`, `total_frames`, `fraction`, and `output_path` with the applicable

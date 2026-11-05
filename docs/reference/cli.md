@@ -54,3 +54,11 @@ These are partial engine counters, not resident process memory.
 It can therefore report missing assets, FFmpeg/media failures, output
 problems, and backend readiness issues. Python `project.validate()` and Rust
 `Editor::validate()` perform canonical semantic validation only.
+
+Validation uses the project's `output.path`, Auto backend selection and
+overwrite disabled. An existing output causes `VESTRA-OUTPUT-PATH`; `validate`
+has no `--overwrite` or `--output` option. For repeated editing, keep that path
+unused and render to a separate file with `render --output preview.mp4 --overwrite`,
+as in the [JSON guide](../guides/json-authoring.md).
+`inspect` resolves project media without checking the render destination or
+backend readiness.

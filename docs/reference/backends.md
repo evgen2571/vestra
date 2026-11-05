@@ -26,7 +26,7 @@ Python passes `"auto"`/`"cpu"`/`"wgpu"` or `BackendPreference` to `render()`,
 
 ```python
 result = project.render("out.mp4", backend="auto")
-print(result.selected_backend)          # "cpu" or "wgpu"
+print(result.selected_backend.value)    # "cpu" or "wgpu"
 print(result.adapter)                    # adapter name/type/backend, or None
 print(result.fallback)                   # BackendFallback when WGPU was skipped
 ```
@@ -40,8 +40,12 @@ example `vulkan` or `gl`); it does not select Vestra's renderer preference.
 `wgpu` does not imply a hardware GPU. A WGPU adapter can itself be a CPU
 implementation. To claim GPU rendering, check the reported adapter:
 `AdapterInfo.device_type` distinguishes discrete, integrated, virtual and CPU
-adapters, and `AdapterInfo.is_software` identifies software devices. Performance
-claims should name the adapter, graphics API and driver.
+adapters through `AdapterDeviceType` values. `CPU` identifies a CPU adapter;
+`OTHER` alone does not establish whether it is hardware or software. Inspect
+`adapter_name`, `graphics_backend`, `driver_name` and `driver_info` as well.
+For example, llvmpipe and Lavapipe are software implementations. Performance
+claims should name the adapter, graphics API and driver. See the
+[native declarations](../../python/vestra/_native.pyi) for Python `AdapterInfo` fields.
 
 ## Parity and coverage
 

@@ -2,7 +2,12 @@
 
 Run date: 2026-10-31 (UTC). Baseline: `develop` at `34dec665090aa5706a83eb8302d38f5d1801dbf5` (clean).
 
-This is a read-only measurement of the existing portable benchmark infrastructure. The raw collection and suite JSON/logs remain under `target/benchmark-results/`; no production or benchmark source was changed. Ratios below are wall-time ratios (candidate / MoviePy CPU for matched workloads; hardware WGPU / CPU for Vestra-only pairs), so values below 1.00x are faster.
+These are historical measurements of that revision and environment, not current
+Vestra performance claims. No production or benchmark source was changed during
+the investigation. The raw collection and suite JSON/logs were retained locally
+under `target/benchmark-results/`; they are not included in a clean checkout.
+Ratios below are wall-time ratios (candidate / MoviePy CPU for matched workloads;
+hardware WGPU / CPU for Vestra-only pairs), so values below 1.00x are faster.
 
 ## Environment and fairness
 
@@ -15,16 +20,41 @@ This is a read-only measurement of the existing portable benchmark infrastructur
 
 ## Reproduction commands
 
+From an existing clone, fetch the history and create a separate checkout of the
+recorded revision. Choose a new worktree directory; these commands preserve
+your current branch and working files:
+
 ```bash
-git switch develop && git fetch origin develop && git reset --hard origin/develop
+git fetch origin develop
+git worktree add --detach ../vestra-benchmark-34dec665 34dec665090aa5706a83eb8302d38f5d1801dbf5
+cd ../vestra-benchmark-34dec665
 nix develop .#comparison
-uv run --no-project --python 3.13 scripts/collect-benchmarks.py --profile all --hours 1 --suite canonical --backend auto --graphics-api vulkan --timeout 900 --sustained-timeout 14400 --output target/benchmark-results/full-collection
-VESTRA_BENCH_VALIDATE=1 uv run --no-project --python 3.13 python scripts/benchmark.py run --suite <suite> --backend cpu --executable <cpu-executable> --output target/benchmark-results/complete-suites/cpu/<suite>
-VESTRA_BENCH_VALIDATE=1 VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_HARDWARE_WGPU=1 uv run --no-project --python 3.13 python scripts/benchmark.py run --suite <suite> --backend hardware-wgpu --executable <wgpu-executable> --output target/benchmark-results/complete-suites/hardware-wgpu/<suite>
-VESTRA_RENDER_BENCH=1 cargo test --release --locked -p vestra --no-default-features --features cpu preparation_matrix effect_scaling_matrix random_access_matrix -- --nocapture --test-threads=1
+# Keep Cargo artifacts separate from any other checkout.
+export CARGO_TARGET_DIR="$PWD/target"
+uv run --no-project --python "$(command -v python3)" scripts/collect-benchmarks.py --profile all --hours 1 --suite canonical --backend auto --graphics-api vulkan --timeout 900 --sustained-timeout 14400 --output target/benchmark-results/full-collection
 ```
 
-The collector archive is `target/benchmark-results/full-collection/vestra-bench-linux-20261031T130534Z-180e48c2.zip`. The direct suite executable hashes are recorded in each `suite.json` provenance and the collector diagnostics.
+Use the Nix shell's Python so the interpreter and native extension share
+runtime libraries. The collector builds its own executables and creates a
+uniquely named result directory. To run an additional suite from the tables below, use the runner;
+this example selects `stylized-effects-1080p` and builds the matching executable:
+
+```bash
+VESTRA_BENCH_VALIDATE=1 uv run --no-project --python "$(command -v python3)" python scripts/benchmark.py run --suite stylized-effects-1080p --backend cpu --output target/benchmark-results/complete-suites/cpu/stylized-effects-1080p
+VESTRA_BENCH_VALIDATE=1 VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_HARDWARE_WGPU=1 uv run --no-project --python "$(command -v python3)" python scripts/benchmark.py run --suite stylized-effects-1080p --backend hardware-wgpu --output target/benchmark-results/complete-suites/hardware-wgpu/stylized-effects-1080p
+for benchmark in preparation_matrix effect_scaling_matrix random_access_matrix; do
+  VESTRA_RENDER_BENCH=1 cargo test --release --locked -p vestra --no-default-features --features cpu "$benchmark" -- --nocapture --test-threads=1
+done
+```
+
+Use a fresh output directory when repeating a direct suite. Hardware commands
+require a verified eligible adapter; CPU runs can be collected separately.
+Toolchain, driver and host differences can change the results even at the same
+revision. For current-checkout measurements and native setup, follow
+[benchmark collection](../../benchmarks/COLLECTING.md); keep new results separate
+from these historical tables.
+
+The historical collector archive was `target/benchmark-results/full-collection/vestra-bench-linux-20261031T130534Z-180e48c2.zip`. The direct suite executable hashes were recorded in each `suite.json` provenance and the collector diagnostics.
 
 ## Matched MoviePy v2 workloads
 
@@ -164,7 +194,7 @@ The sustained test rendered the same 640x360/30 fps two-placement timeline for o
 
 All three gated internal benchmark tests (`preparation_matrix`, `effect_scaling_matrix`, `random_access_matrix`) passed. The effect-scaling run is a focused CPU control, not a MoviePy comparison.
 
-## Main weaknesses and optimization priorities
+## Historical weaknesses and optimization priorities
 
 | Rank | Measured weakness | Evidence | Impact | Effort | Confidence | Concrete next step |
 |---:|---|---|---|---|---|---|
@@ -175,7 +205,13 @@ All three gated internal benchmark tests (`preparation_matrix`, `effect_scaling_
 | 5 | Decoder/cache behavior on non-reuse access | Cache-on is slower for sequential (53.311 vs 44.667 ms), repeated-frame (8.698 vs 8.384 ms), eviction (21.128 vs 18.149 ms), and repeated-placement (56.143 vs 45.425 ms); random seeking is neutral (170.203 vs 168.501 ms). | Medium for seek-heavy edits; low for reuse-heavy edits | Medium | Medium | Instrument decoder seeks/conversions and cache hit/eviction decisions; tune budget/admission by access pattern instead of increasing the budget blindly. |
 | 6 | Worker scaling evidence is incomplete | CPU sustained uses ~8.0 observed cores; no public worker-count control was benchmarked in this run, and the native worker sweep requires private fixtures. | Unknown | Medium | Low–medium | Run the existing `native_workers_1/2/4/8` ignored sweep with the documented external FFmpeg references before changing scheduling. |
 
-These priorities separate measured bottlenecks from hypotheses. No claim is made that a particular third-party library will improve results without profiling; plausible candidates for follow-up are `rayon`-aligned SIMD kernels already present in the Rust ecosystem, `ffmpeg-next`/FFmpeg hardware frames for reducing copies, and `wgpu` staging/readback APIs. Adding a library is not justified by these measurements alone.
+These priorities describe the recorded baseline; remeasure the current revision
+before choosing optimization work. They separate measured bottlenecks from
+hypotheses. No claim is made that a particular third-party library will improve
+results without profiling; plausible candidates for follow-up are
+`rayon`-aligned SIMD kernels already present in the Rust ecosystem,
+`ffmpeg-next`/FFmpeg hardware frames for reducing copies, and `wgpu`
+staging/readback APIs. Adding a library is not justified by these measurements alone.
 
 ## Limitations and unverified comparisons
 

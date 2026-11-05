@@ -28,8 +28,13 @@ Fork the repository on GitHub, clone your fork and create a branch for the chang
 ```bash
 git clone https://github.com/YOUR_USERNAME/vestra.git
 cd vestra
-git switch -c fix-description
+git remote add upstream https://github.com/evgen2571/vestra.git
+git fetch upstream develop
+git switch -c fix-description upstream/develop
 ```
+
+The default branch is `main`; start changes from the latest upstream `develop`
+and target `develop` when opening a pull request.
 
 The repository provides a pinned development environment through Nix. From the
 repository root, enter it and build the editable Python package:

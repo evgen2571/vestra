@@ -182,7 +182,8 @@ prepare/render/abort cycles. Track throughput alongside process memory, file
 handles, decoder contexts, worker scratch, cache reservations and in-flight
 buffers. Streamed master PCM avoids retaining the whole waveform, but prepared
 signal/analysis data can still scale with duration; growth is not automatically
-a leak. Respect current timeline/resource limits when choosing workloads.
+a leak. Choose workloads within the checked arithmetic and resource budgets
+described in [validation layers](../reference/project-format.md#validation-layers).
 Report actual duration/frame count and output bytes: short smoke runs prove
 execution, not multi-hour stability or large-file behavior. Changes involving
 encoded output also need [media verification](media-pipeline.md#verify-encoded-output).

@@ -182,9 +182,11 @@ adapter and encoder separately. Selected-range video, resumability and alternate
 output codecs remain proposals rather than established test targets.
 
 For long-duration/large-file tests, state actual timeline length, frame count,
-encoded bytes, disk budget and timestamp coverage. Current default timeline
-caps still apply; low-cost sparse boundary tests do not prove sustained encoding
-or >4 GiB container behavior. Keep expensive runs explicit and outputs temporary;
+encoded bytes, disk budget and timestamp coverage. There is no default two-hour
+or 216,000-frame cap; checked timeline arithmetic and other
+[resource limits](../reference/project-format.md#validation-layers) still apply.
+Low-cost sparse boundary tests do not prove sustained encoding or >4 GiB
+container behavior. Keep expensive runs explicit and outputs temporary;
 combine with [sustained resource profiling](performance.md#allocation-and-sustained-render-profiling).
 
 Use existing sink/publication fault tests for decode, write, finalization,

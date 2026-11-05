@@ -2,11 +2,11 @@
 
 ## Canonical validation fails
 
-Use `Project.validate()` for a high-level Python project or `Editor.validate(snapshot)` for a native `ProjectSnapshot`. They check canonical structure and semantic relationships only. They do not read assets, start subprocesses or initialize a renderer. Inspect `ValidationReport.errors` and each diagnostic's code, pointer, related ID and hint. Typical causes are invalid timing, duplicate IDs, invalid transition endpoints, unsupported effect scope or a malformed signal binding.
+Use `Project.validate()` for a high-level Python project or `Editor.validate(snapshot)` for a native `ProjectSnapshot`. They check canonical structure and semantic relationships without probing media or initializing a renderer. High-level Python lowering resolves authored font selections before canonical validation. Inspect `ValidationReport.errors` and each diagnostic's code, pointer, related ID and hint. Typical causes are invalid timing, duplicate IDs, invalid transition endpoints, unsupported effect scope or a malformed signal binding.
 
 ## `ve validate` fails on a file or media tool
 
-`ve validate project.json` is different. It runs `Editor.preflight` with `PreflightOptions::for_validation()`, so it may resolve assets, probe media, check FFmpeg-related readiness and report environment failures. It is the right first command for a project file that will later render. Use `ve inspect project.json` to see a derived summary, and `ve validate --format json` when another tool needs diagnostics.
+`ve validate project.json` is different. It runs `Editor.preflight` with `PreflightOptions::for_validation()`, so it may resolve assets, probe media, check FFmpeg-related readiness and report environment failures. It also rejects an existing configured output; see [validation meaning](../reference/cli.md#validation-meaning) for a repeatable workflow. Use `ve inspect project.json` to see a derived summary, and `ve validate project.json --format json` when another tool needs diagnostics.
 
 ## Output will not start or publish
 

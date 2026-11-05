@@ -19,6 +19,10 @@ blur.radius.keyframe(1.0, 3.0)
 project.post_effects.add(Brightness(0.05))
 ```
 
+Both stacks copy effects on attachment. You can animate a reusable effect
+before adding it; use the returned handle for later changes to that placement.
+See [effect ownership](animation.md#effect-ownership).
+
 Motion Tile is intended for the common edge-filling edit where a layer is
 zoomed, rotated, or shaken:
 

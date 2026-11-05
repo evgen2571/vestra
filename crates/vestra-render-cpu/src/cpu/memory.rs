@@ -1,4 +1,4 @@
-//! Pixel storage estimates for reporting, not worker selection or process memory.
+//! Pixel storage estimates and canvas sizes, not whole-process memory accounting.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -45,7 +45,7 @@ pub(super) fn estimated_worker_bytes(plan: &RenderPlan) -> u64 {
     bytes.saturating_add(incoming_bytes)
 }
 
-fn largest_group_canvas_bytes(layers: &[CompiledLayer]) -> u64 {
+pub(super) fn largest_group_canvas_bytes(layers: &[CompiledLayer]) -> u64 {
     layers
         .iter()
         .flat_map(|layer| {

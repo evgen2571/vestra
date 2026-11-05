@@ -672,6 +672,7 @@ class Project:
         "_audio",
         "_post_effects",
         "_flashes",
+        "_resource_limits",
     )
 
     def __init__(
@@ -687,6 +688,7 @@ class Project:
         metadata: JsonValue | None = None,
         output_audio: bool | None = None,
         output_path: str | os.PathLike[str] | None = None,
+        resource_limits: _native.ResourceLimits | None = None,
     ) -> None:
         if not isinstance(size, tuple) or len(size) != 2:
             raise TypeError("size must be a (width, height) tuple")
@@ -721,6 +723,9 @@ class Project:
         self._audio = AudioTimeline(self)
         self._post_effects = EffectStack("post")
         self._flashes = FlashCollection(self)
+        if resource_limits is not None and not isinstance(resource_limits, _native.ResourceLimits):
+            raise TypeError("resource_limits must be ResourceLimits or None")
+        self._resource_limits = resource_limits
 
     def __repr__(self) -> str:
         width, height = self.size
@@ -815,13 +820,13 @@ class Project:
         Media files, FFmpeg and graphics adapters are checked by ``prepare()``
         and ``render()``.
         """
-        return _native.Editor().validate(self.snapshot())
+        return _native.Editor(resource_limits=self._resource_limits).validate(self.snapshot())
 
     def prepare(
         self, *, backend: str | _native.BackendPreference = "auto"
     ) -> _native.PreparedProject:
         """Decode media and initialize a renderer for repeated frame or video renders."""
-        return _native.Editor().prepare(
+        return _native.Editor(resource_limits=self._resource_limits).prepare(
             self.snapshot(), _native.PrepareOptions(backend=_backend(backend))
         )
 
@@ -861,7 +866,7 @@ class Project:
             overwrite=overwrite,
             preview=preview,
         )
-        return _native.Editor().render(
+        return _native.Editor(resource_limits=self._resource_limits).render(
             self.snapshot(output=output),
             request,
             show_progress=show_progress,

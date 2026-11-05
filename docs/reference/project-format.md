@@ -91,7 +91,7 @@ extend scalar tracks with ordered `modifiers`.
 | Group field | Type | Required | Default / unit / notes |
 | --- | --- | --- | --- |
 | `type` | literal | yes | `group`. |
-| `size` | object | no | Positive finite pixel `width` and `height`, each at most 8192. Omit to inherit the enclosing canvas. Explicit null is invalid. See [local coordinates](nested-compositions.md#sized-group-coordinates-and-bounds). |
+| `size` | object | no | Positive finite pixel `width` and `height`, each representable as a `u32` raster extent after rounding up. Omit to inherit the enclosing canvas. Explicit null is invalid. Configured group canvas budgets also apply. See [local coordinates](nested-compositions.md#sized-group-coordinates-and-bounds). |
 | `clips` | array of clip | yes | Child-local timeline and layer ordering. |
 | `transitions` | array of transition placement | no | Empty. See [nested compositions](nested-compositions.md) and [transitions](transitions.md). |
 
@@ -142,6 +142,19 @@ representable by the engine's checked timeline arithmetic, including the
 enforce smaller budgets; their defaults are `u64::MAX` and `f64::MAX`.
 Dimension, decoded-memory, cache, complexity and active-layer limits remain
 in force.
+Group canvases have independent `maximum_group_width`, `maximum_group_height`
+and `maximum_group_pixels` budgets. Defaults are 8192, 8192 and 67,108,864 pixels.
+Budgets apply to raster dimensions rounded up, including inherited unsized
+canvases and owned group mask sources. Dimension and pixel-budget failures use
+`VESTRA-LIMIT-GROUP-DIMENSIONS` and `VESTRA-LIMIT-GROUP-PIXELS`; invalid or
+unrepresentable dimensions/byte lengths use `VESTRA-GROUP-SIZE`. RGBA canvas
+lengths must fit the platform's addressable allocation range regardless of
+configured budgets. Raising a budget does not override backend texture limits.
+Use [Rust editor configuration](rust-sdk.md#validation-and-errors) or
+[Python resource limits](python-api.md#resource-limits) to opt in; the CLI retains
+the safe defaults. Resource settings are execution policy and are not stored
+in canonical JSON.
+
 Image preparation checks the projected RGBA byte size against per-asset and
 cumulative decoded-memory limits before decoding pixels, then checks the actual
 decoded dimensions again. These limits do not bound all decoder scratch memory

@@ -7,7 +7,8 @@
 ```python
 Project(*, size: tuple[int, int], fps: int | tuple[int, int] | FrameRate,
         duration: float | None = None, background="#000000", quality=Quality.BALANCED,
-        base_directory=".", name=None, metadata=None, output_audio=None, output_path=None)
+        base_directory=".", name=None, metadata=None, output_audio=None, output_path=None,
+        resource_limits: ResourceLimits | None = None)
 
 composition.add(source, *, start=0, duration=None, source_start=0.0,
                 playback_rate=1.0, z=0, visible=True, opacity=1.0,
@@ -31,6 +32,24 @@ layer=None, visible=True, opacity=1, transform=None, position=None, anchor=None,
 scale=None, rotation=None, rotation_degrees=None)` returns a `GroupChild`.
 See [nested groups](../guides/python/nested-compositions.md) for ownership,
 local timing and the direct `CompositionLayer` alternative.
+
+## Resource limits
+
+`ResourceLimits(*, maximum_group_width=None, maximum_group_height=None,
+maximum_group_pixels=None)` configures group canvas budgets. Omitted or `None`
+values use safe defaults: 8192 pixels per axis and 67,108,864 pixels per canvas.
+Values are nonnegative integers within the native `u32`/`u64` ranges; the three
+properties are read-only. Zero disallows a positive canvas under that budget.
+Other native resource budgets retain their defaults.
+
+Pass the value to `Project(..., resource_limits=limits)` for high-level
+validation, preparation and one-shot rendering, or to
+`Editor(resource_limits=limits)` when operating on immutable snapshots. These
+settings are not serialized in project JSON. Canonical dimensions must remain
+positive, finite and safely representable; CPU allocation constraints and WGPU
+device limits still apply when budgets are raised.
+
+## Source presentation
 
 All visual source constructors accept the same transform keywords; ParticleSystem
 keeps `rotation` for particle orientation and accepts `rotation_degrees` for

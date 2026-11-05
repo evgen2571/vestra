@@ -130,12 +130,13 @@ Accounting alone releases no memory.
 
 ## Worker selection and memory limits
 
-Automatic selection deliberately preserves the original compatibility policy:
+Automatic selection preserves the original policy for inherited canvases:
 static visual plans use one worker; dynamic plans reserve one CPU when possible,
-cap at eight, and divide 512 MiB by six output-sized RGBA frames per worker,
+cap at eight, and divide 512 MiB by six RGBA canvases per worker, using the
+larger of output area and the largest explicit visual or owned-mask group canvas,
 always permitting at least one. This legacy calculation depends only on canvas
-size and CPU availability, not effects, sources, measured capacities or the
-reported resource estimate. Correcting accounting or making scratch lazy must
+sizes and CPU availability, not effect topology, media sizes, measured capacities
+or the reported resource estimate. Correcting accounting or making scratch lazy must
 not indirectly change concurrency. Performance and memory comparisons must use
 matching worker counts; claim resident-memory savings only where demonstrated.
 

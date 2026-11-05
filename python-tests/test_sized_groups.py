@@ -24,7 +24,7 @@ def test_group_size_serializes_nested_sources_and_owned_masks() -> None:
     assert value["clips"][1]["masks"][0]["input"]["source"]["size"] == {"width": 60.0, "height": 30.0}  # type: ignore[index]
 
 
-@pytest.mark.parametrize("size", [(0, 20), (-1, 20), (8192.01, 20), (20, 8193), (20, float("nan")), (float("inf"), 20), (20, float("-inf")), (10**1000, 20)])
+@pytest.mark.parametrize("size", [(0, 20), (-1, 20), (2**32, 20), (2**32 - 1, 2**32 - 1), (20, float("nan")), (float("inf"), 20), (20, float("-inf")), (10**1000, 20)])
 def test_group_rejects_nonpositive_or_nonfinite_size(size: Any) -> None:
     with pytest.raises(ValueError, match="Group size"):
         Group(size=size)
@@ -40,6 +40,59 @@ def test_group_size_is_read_only() -> None:
     source = Group(size=(60, 30))
     with pytest.raises(AttributeError):
         source.size = (120, 60)  # type: ignore[misc]
+
+
+def test_group_can_author_large_representable_dimensions_before_resource_validation() -> None:
+    source = Group(size=(16_384, 2))
+    assert source.to_canonical()["size"] == {"width": 16_384.0, "height": 2.0}
+
+
+def test_group_resource_limits_are_safe_by_default_and_apply_to_native_and_high_level(tmp_path: Any) -> None:
+    source = Group(size=(16_384, 2))
+    source.add(Rectangle(width=16_384, height=2, fill="#ff0000"))
+    default = vestra.Project(size=(2, 2), fps=2, duration=0.5)
+    default.root.add(source, scale=(2 / 16_384, 1))
+    assert not default.validate().is_valid
+    assert any(d.code == "VESTRA-LIMIT-GROUP-DIMENSIONS" for d in default.validate().diagnostics)
+    limits = vestra.ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=32_768)
+    assert limits.maximum_group_width == 16_384
+    assert limits.maximum_group_height == 8192
+    assert limits.maximum_group_pixels == 32_768
+    editor = vestra.Editor(resource_limits=limits)
+    snapshot = default.snapshot()
+    assert editor.validate(snapshot).is_valid
+    assert editor.preflight(snapshot, vestra.PreflightOptions.for_inspection()).is_valid
+    frame = editor.prepare(snapshot, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU)).render_frame_number(0)
+    assert frame.to_bytes() == bytes((255, 0, 0, 255)) * 4
+    configured = vestra.Project(size=(2, 2), fps=2, duration=0.5, resource_limits=limits)
+    configured.root.add(source, scale=(2 / 16_384, 1))
+    assert configured.validate().is_valid
+    assert configured.snapshot().to_dict() == snapshot.to_dict()
+    assert configured.render_frame(0, backend="cpu").to_bytes() == frame.to_bytes()
+    result = configured.render(tmp_path / "large-thin.mp4", backend="cpu", show_progress=False)
+    assert result.output_path.is_file()
+    limited = vestra.Editor(resource_limits=vestra.ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=32_767))
+    assert any(d.code == "VESTRA-LIMIT-GROUP-PIXELS" for d in limited.validate(snapshot).diagnostics)
+    with pytest.raises(vestra.PreparationError, match="group canvas pixels"):
+        limited.prepare(snapshot, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU))
+
+
+@pytest.mark.parametrize("value", [True, 1.5, "8192"])
+def test_group_resource_limits_reject_noninteger_values(value: Any) -> None:
+    for name in ("maximum_group_width", "maximum_group_height", "maximum_group_pixels"):
+        with pytest.raises(TypeError):
+            vestra.ResourceLimits(**{name: value})
+
+
+def test_group_resource_limits_reject_out_of_range_and_are_frozen() -> None:
+    with pytest.raises(ValueError):
+        vestra.ResourceLimits(maximum_group_width=2**32)
+    with pytest.raises(ValueError):
+        vestra.ResourceLimits(maximum_group_pixels=2**64)
+    with pytest.raises(ValueError):
+        vestra.ResourceLimits(maximum_group_height=-1)
+    with pytest.raises(AttributeError):
+        vestra.ResourceLimits().maximum_group_width = 16_384  # type: ignore[misc]
 
 
 def test_advanced_group_size_validation_is_atomic_and_serializes() -> None:

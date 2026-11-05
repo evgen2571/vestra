@@ -67,6 +67,15 @@ fn project(width: u32, height: u32, clips: Vec<Value>) -> Value {
 }
 
 fn render(project: Value, times: &[u128], compare_gpu: bool) -> Vec<RgbaImage> {
+    render_with_tolerance(project, times, compare_gpu, 2)
+}
+
+fn render_with_tolerance(
+    project: Value,
+    times: &[u128],
+    compare_gpu: bool,
+    tolerance: u8,
+) -> Vec<RgbaImage> {
     let project: Project = serde_json::from_value(project).expect("sized-group project parses");
     let limits = ResourceLimits::default();
     let report = validate(&project, limits);
@@ -122,7 +131,8 @@ fn render(project: Value, times: &[u128], compare_gpu: bool) -> Vec<RgbaImage> {
                 let mut gpu_output = RgbaImage::new(frame.width, frame.height);
                 gpu.render_frame(&frame, &mut gpu_output)
                     .expect("WGPU sized group renders");
-                let difference = compare_rgba(output.as_raw(), gpu_output.as_raw(), 2);
+                let difference = compare_rgba(output.as_raw(), gpu_output.as_raw(), tolerance);
+                eprintln!("sized-group parity at {time}: {difference:?}");
                 let artifacts =
                     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/sized-groups");
                 std::fs::create_dir_all(&artifacts).expect("create parity artifact directory");
@@ -135,7 +145,7 @@ fn render(project: Value, times: &[u128], compare_gpu: bool) -> Vec<RgbaImage> {
                     .save(artifacts.join(format!("{label}-{time}-wgpu.png")))
                     .expect("save WGPU frame");
                 assert!(
-                    difference.maximum_absolute_channel_error <= 2,
+                    difference.maximum_absolute_channel_error <= tolerance,
                     "sized-group parity at {time}: {difference:?}"
                 );
             }
@@ -679,4 +689,247 @@ fn gpu_sized_groups_match_cpu_for_nested_masks_effects_sizing_and_animation() {
         &[1_000_000_000, 0, 500_000_000, 0],
         true,
     );
+}
+
+fn mask_rectangle(
+    id: &str,
+    width: f64,
+    height: f64,
+    position: (f64, f64),
+    operation: &str,
+) -> Value {
+    json!({
+        "id": id, "operation": operation, "input": {
+            "type": "shape", "geometry": {"type": "rectangle", "width": width, "height": height},
+            "fill": "#ffffff"
+        }, "transform": presentation(position, (0.5, 0.5), (1.0, 1.0), 0.0)
+    })
+}
+
+fn mixed_mask_operations_project(nested_source: bool, luma: bool) -> Value {
+    let mut value = stacked_masks_project(false);
+    let owner = &mut value["visual"]["clips"][0];
+    let mut replace = mask_rectangle("replace", 8.0, 12.0, (0.25, 0.5), "replace");
+    replace["strength"] = json!({"base_value": 0.75});
+    let mut union = mask_rectangle("union", 8.0, 12.0, (0.25, 0.5), "union");
+    union["invert"] = json!(true);
+    union["strength"] = json!({"base_value": 0.4});
+    let mut subtract = mask_rectangle("subtract", 16.0, 6.0, (0.5, 0.25), "subtract");
+    subtract["strength"] = json!({"base_value": 0.3});
+    let mut source = owner["masks"][1].clone();
+    source["strength"] = json!({"base_value": 0.6});
+    source["transform"] = presentation((0.5, 0.5), (0.5, 0.5), (1.0, 1.0), 0.0);
+    if luma {
+        source["input"]["mode"] = json!("luma");
+        source["input"]["source"]["clips"][0]["source"]["colour"] = json!("#808080");
+    }
+    if nested_source {
+        let child = source["input"]["source"]["clips"][0].clone();
+        source["input"]["source"]["clips"] = json!([group("inherited", None, vec![child])]);
+    }
+    owner["masks"] = json!([replace, union, subtract, source]);
+    value
+}
+
+#[test]
+fn gpu_sized_group_mixed_mask_operations_match_independent_coverage_golden() {
+    for luma in [false, true] {
+        let mut expected = golden(32, 24, &[]);
+        for y in 0..12 {
+            for x in 0..16 {
+                // Replace leaves 1 or 1/4; inverted union raises the right half to 0.55.
+                // Subtract removes 30% in the top half; final intersection removes
+                // 60% outside the masked source's [4,10]x[2,10] window.
+                let left_right = if x < 8 { 1.0_f64 } else { 0.55 };
+                let top_bottom = if y < 6 { 0.7 } else { 1.0 };
+                let window = if (4..10).contains(&x) && (2..10).contains(&y) {
+                    if luma { 0.4 + 0.6 * 128.0 / 255.0 } else { 1.0 }
+                } else {
+                    0.4
+                };
+                let red = (255.0 * left_right * top_bottom * window).round() as u8;
+                expected.put_pixel(x + 8, y + 6, Rgba([red, 0, 0, 255]));
+            }
+        }
+        for nested in [false, true] {
+            for frame in render(
+                mixed_mask_operations_project(nested, luma),
+                &[1_000_000_000, 0, 500_000_000, 0],
+                true,
+            ) {
+                assert_golden(&frame, &expected, 1);
+            }
+        }
+    }
+}
+
+fn animated_mask_owner_project() -> Value {
+    let mut value = masked_project(true);
+    let owner = &mut value["visual"]["clips"][0];
+    owner["transform"] = presentation((0.25, 0.5), (0.5, 0.5), (1.0, 1.0), 0.0);
+    owner["transform"]["position"]["keyframes"] = json!([
+        {"time": 0.0, "value": {"x": 0.25, "y": 0.5}, "interpolation": "linear"},
+        {"time": 1.0, "value": {"x": 0.75, "y": 0.5}, "interpolation": "linear"}
+    ]);
+    let source = &mut owner["masks"][0];
+    source["transform"]["position"]["keyframes"] = json!([
+        {"time": 0.0, "value": {"x": 0.25, "y": 0.5}, "interpolation": "linear"},
+        {"time": 1.0, "value": {"x": 0.75, "y": 0.5}, "interpolation": "linear"}
+    ]);
+    source["input"]["source"]["clips"][0]["masks"] = json!([mask_rectangle(
+        "source-window",
+        4.0,
+        8.0,
+        (0.5, 0.5),
+        "intersect"
+    )]);
+    let mut subtract = mask_rectangle("subtract", 16.0, 6.0, (0.5, 0.25), "subtract");
+    subtract["strength"] = json!({"base_value": 0.5});
+    owner["masks"]
+        .as_array_mut()
+        .expect("mask list")
+        .push(subtract);
+    value
+}
+
+#[test]
+fn gpu_sized_group_mask_and_owner_animation_match_goldens_in_random_access_order() {
+    let fixture = animated_mask_owner_project();
+    let times = [1_000_000_000, 0, 500_000_000, 0, 1_000_000_000];
+    let frames = render(fixture.clone(), &times, true);
+    for (frame, left) in frames.iter().zip([26, 2, 14, 2, 26]) {
+        assert_golden(
+            frame,
+            &golden(
+                32,
+                24,
+                &[
+                    (left, 8, left + 4, 12, [128, 0, 0, 255]),
+                    (left, 12, left + 4, 16, [255, 0, 0, 255]),
+                ],
+            ),
+            0,
+        );
+    }
+    let fresh = render(fixture, &[500_000_000], true);
+    assert_eq!(frames[2], fresh[0]);
+}
+
+#[test]
+fn gpu_sized_group_weak_mask_stacks_bound_rgba8_rounding_error() {
+    // shortcut: RGBA8 rounds coverage per stage; widen storage if deep faint stacks need sub-byte parity.
+    for (stages, expected_float, expected_byte) in [(12, 226, 229), (64, 134, 137)] {
+        let masks = (0..stages)
+            .map(|index| {
+                let mut mask =
+                    mask_rectangle(&format!("mask-{index}"), 16.0, 12.0, (0.5, 0.5), "subtract");
+                mask["strength"] = json!({"base_value": 0.01});
+                mask
+            })
+            .collect::<Vec<_>>();
+        let mut owner = group(
+            "owner",
+            Some((16.0, 12.0)),
+            vec![clip(
+                "red",
+                json!({"type": "solid_color", "colour": "#ff0000"}),
+            )],
+        );
+        owner["masks"] = json!(masks);
+        eprintln!("WEAK_MASK_STRESS stages={stages}");
+        let output = render_with_tolerance(project(32, 24, vec![owner]), &[0], true, 3).remove(0);
+        let red = (255.0_f64 * 0.99_f64.powi(stages)).round() as u8;
+        let byte_coverage = (0..stages).fold(255.0_f64, |value, _| (value * 0.99).round()) as u8;
+        assert_eq!((red, byte_coverage), (expected_float, expected_byte));
+        assert!(red.abs_diff(byte_coverage) <= 3);
+        assert_golden(
+            &output,
+            &golden(32, 24, &[(8, 6, 24, 18, [red, 0, 0, 255])]),
+            0,
+        );
+    }
+}
+
+fn animated_feather_stack_project() -> Value {
+    let mut value = mixed_mask_operations_project(true, false);
+    let owner = &mut value["visual"]["clips"][0];
+    owner["transform"] = presentation((0.5, 0.5), (0.5, 0.5), (1.0, 1.0), 0.0);
+    for (property, first, last) in [
+        (
+            "position",
+            json!({"x": 0.5, "y": 0.5}),
+            json!({"x": 0.4, "y": 0.6}),
+        ),
+        (
+            "scale",
+            json!({"x": 1.0, "y": 1.0}),
+            json!({"x": 1.3, "y": 0.8}),
+        ),
+        ("rotation_degrees", json!(0.0), json!(31.0)),
+    ] {
+        owner["transform"][property]["keyframes"] = json!([
+            {"time": 0.0, "value": first, "interpolation": "linear"},
+            {"time": 1.0, "value": last, "interpolation": "linear"}
+        ]);
+    }
+    for (index, mask) in owner["masks"]
+        .as_array_mut()
+        .expect("mask list")
+        .iter_mut()
+        .enumerate()
+    {
+        mask["feather"] = json!({"base_value": 0.0, "keyframes": [
+            {"time": 0.0, "value": 0.0, "interpolation": "linear"},
+            {"time": 1.0, "value": 1.25 + index as f64 * 0.5, "interpolation": "linear"}
+        ]});
+        mask["transform"]["rotation_degrees"]["keyframes"] = json!([
+            {"time": 0.0, "value": 0.0, "interpolation": "linear"},
+            {"time": 1.0, "value": -17.0, "interpolation": "linear"}
+        ]);
+    }
+    value
+}
+
+#[test]
+fn gpu_sized_group_recursive_feathered_mask_stack_is_stable_across_random_access() {
+    let fixture = animated_feather_stack_project();
+    let frames = render(
+        fixture.clone(),
+        &[1_000_000_000, 0, 250_000_000, 500_000_000, 0, 1_000_000_000],
+        true,
+    );
+    assert_eq!(frames[0], frames[5]);
+    assert_eq!(frames[1], frames[4]);
+    let fresh = render(fixture, &[500_000_000], true);
+    assert_eq!(frames[3], fresh[0]);
+}
+
+#[test]
+fn gpu_unsized_mask_stack_preserves_legacy_golden() {
+    let mut owner = group(
+        "legacy",
+        None,
+        vec![clip(
+            "red",
+            json!({"type": "solid_color", "colour": "#ff0000"}),
+        )],
+    );
+    owner["masks"] = json!([
+        mask_rectangle("replace", 8.0, 8.0, (0.25, 0.5), "replace"),
+        mask_rectangle("union", 8.0, 8.0, (0.5, 0.5), "union"),
+        mask_rectangle("subtract", 8.0, 4.0, (0.375, 0.5), "subtract")
+    ]);
+    let expected = golden(
+        32,
+        24,
+        &[
+            (4, 8, 20, 10, [255, 0, 0, 255]),
+            (4, 14, 20, 16, [255, 0, 0, 255]),
+            (4, 10, 8, 14, [255, 0, 0, 255]),
+            (16, 10, 20, 14, [255, 0, 0, 255]),
+        ],
+    );
+    for frame in render(project(32, 24, vec![owner]), &[0, 1_000_000_000, 0], true) {
+        assert_golden(&frame, &expected, 0);
+    }
 }

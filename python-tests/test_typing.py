@@ -335,4 +335,4 @@ def test_invalid_group_size_fixture_is_rejected() -> None:
         check=False, capture_output=True, text=True,
     )
     assert result.returncode == 1
-    assert result.stdout.count("error:") == 5, result.stdout + result.stderr
+    assert result.stdout.count("error:") == 8, result.stdout + result.stderr

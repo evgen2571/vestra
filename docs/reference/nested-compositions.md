@@ -24,8 +24,12 @@ remain backend and environment concerns.
 
 `Group(size=(600, 300))` establishes a 600 by 300 pixel local canvas.
 Canonical JSON represents this as `"size": {"width": 600, "height": 300}`.
-Both dimensions must be positive finite numbers no greater than 8192; odd and
-fractional dimensions are allowed. The size is static and belongs to the source.
+Both dimensions must be positive finite numbers whose rounded-up raster extents
+fit `u32`; the RGBA canvas byte length must also be addressable. Odd and fractional
+dimensions are allowed. The size is static and belongs to the source. Default
+resource budgets permit up to 8192 pixels per axis and 67,108,864 pixels per
+canvas; [configured limits](project-format.md#validation-layers) can permit larger
+canvases when the selected backend supports them.
 
 Child positions are normalized against that canvas: `(0.25, 0.5)` means
 `(150, 150)` pixels. The group's own placement position uses its parent's canvas.

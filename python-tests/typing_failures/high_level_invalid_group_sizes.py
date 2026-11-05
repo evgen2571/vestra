@@ -1,4 +1,5 @@
 from vestra import FrameRate
+from vestra import Editor, ResourceLimits
 from vestra.authoring import ProjectBuilder
 from vestra.sources import Group
 
@@ -8,3 +9,6 @@ Group(size=(600,))
 Group().size = (600, 300)
 builder = ProjectBuilder(width=32, height=32, frame_rate=FrameRate(2, 1), output_path="out.mp4", duration=5)
 builder.add_group_clip(clips=[], size=(600, "300"), start=0, duration=5, layer=0)
+ResourceLimits(maximum_group_width="16384")
+ResourceLimits().maximum_group_pixels = 100
+Editor(resource_limits=100)

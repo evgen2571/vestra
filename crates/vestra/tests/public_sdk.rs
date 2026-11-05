@@ -21,6 +21,65 @@ fn background_project(directory: &std::path::Path) -> vestra::Project {
     .expect("project")
 }
 
+#[test]
+fn configurable_group_resource_limits_reach_validation_preflight_and_cpu_preparation() {
+    let directory = tempdir().expect("temporary directory");
+    let project = vestra::Project::from_value(serde_json::json!({
+        "schema_version": 1,
+        "output": {"path": "large-thin.mp4", "width": 2, "height": 2, "frame_rate": "2/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 0.5},
+        "assets": [],
+        "visual": {"clips": [{"id": "group", "source": {"type": "group", "size": {"width": 16_384, "height": 2}, "clips": [{
+            "id": "fill", "source": {"type": "solid_color", "colour": "#ff0000"}, "start": 0, "duration": 0.5, "layer": 0, "opacity": {"base_value": 1}
+        }]}, "start": 0, "duration": 0.5, "layer": 0, "opacity": {"base_value": 1},
+        "transform": {
+            "position": {"base_value": {"x": 0.5, "y": 0.5}},
+            "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+            "scale": {"base_value": {"x": 2.0 / 16_384.0, "y": 1.0}},
+            "rotation_degrees": {"base_value": 0}
+        }}]}
+    }), directory.path()).expect("representable project parses");
+    assert!(!Editor::new().validate(&project).is_valid());
+    let editor = Editor::builder()
+        .resource_limits(vestra::ResourceLimits {
+            maximum_group_width: 16_384,
+            maximum_group_pixels: 32_768,
+            ..vestra::ResourceLimits::default()
+        })
+        .build()
+        .expect("editor");
+    assert!(editor.validate(&project).is_valid());
+    assert!(
+        editor
+            .preflight(&project, PreflightOptions::for_inspection())
+            .is_valid()
+    );
+    let mut prepared = editor
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("custom group limits prepare");
+    let frame = prepared
+        .render_frame(Duration::ZERO)
+        .expect("large thin group renders");
+    assert_eq!(frame.as_bytes(), [255, 0, 0, 255].repeat(4));
+    let limited = Editor::builder()
+        .resource_limits(vestra::ResourceLimits {
+            maximum_group_width: 16_384,
+            maximum_group_pixels: 32_767,
+            ..vestra::ResourceLimits::default()
+        })
+        .build()
+        .expect("limited editor");
+    let error = limited
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .err()
+        .expect("pixel budget prevents allocation");
+    assert!(
+        error
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-GROUP-PIXELS")
+    );
+}
+
 enum WgpuTestEnvironment {
     Available(Box<PreparedProject>),
     Unavailable { diagnostic: vestra::Diagnostic },

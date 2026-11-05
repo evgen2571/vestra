@@ -23,7 +23,7 @@ fn combine(current: f32, value: f32) -> f32 {
 }
 
 fn coverage_texel(coord: vec2<i32>) -> f32 {
-    if (coord.x < 0 || coord.y < 0 || coord.x >= i32(params.canvas.x) || coord.y >= i32(params.canvas.y)) {
+    if (coord.x < 0 || coord.y < 0 || coord.x >= i32(params.canvas.z) || coord.y >= i32(params.canvas.w)) {
         return 0.0;
     }
     return textureLoad(mask, coord, 0).a;

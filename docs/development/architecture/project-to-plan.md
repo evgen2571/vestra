@@ -15,6 +15,13 @@ Compilation exists so cross-clip work happens once. It turns the validated visua
 
 Evaluation remains time-dependent. For each frame it uses the checked frame time, active intervals, keyframes, signal values and transition progress to produce evaluated layers and source work. Renderers receive those evaluated sources and presentation channels, not public source objects. This matters for nested compositions: a group has its own local timeline, compilation preserves that ownership, and evaluation recurses into it instead of flattening away its timing rules.
 
+Compiled groups retain an optional local canvas size. Evaluation resolves
+inheritance and produces each composition's raster extent, converting fractional
+normalized positions and group anchors in core. Renderers consume these extents
+for isolation, source sizing, masks and effect work. Sized groups use their local
+canvas even when larger than the output; output-space coordinate conversion alone
+would clip content before parent scaling. See [group spatial semantics](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
+
 Transitions lower to generic outgoing/incoming presentation channels. Effects lower through the descriptor/catalog representation and retain ordered attachment scope. Both mechanisms stay in core planning/evaluation so CPU and WGPU apply the same meaning. Planning diagnostics retain canonical JSON pointers; preflight diagnostics add the environment or media fact that failed.
 
 ## Core source ownership

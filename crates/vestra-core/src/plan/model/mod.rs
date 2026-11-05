@@ -239,6 +239,7 @@ pub enum CompiledMaskInput {
 /// containing composition's root layer list.
 #[derive(Clone, Debug)]
 pub struct CompiledComposition {
+    pub size: Option<crate::project::GroupSize>,
     pub layers: Vec<CompiledLayer>,
     pub schedule: crate::plan::ActiveSchedule,
     pub dependency: TemporalDependency,

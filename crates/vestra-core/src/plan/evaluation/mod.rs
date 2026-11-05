@@ -193,6 +193,10 @@ impl EvaluatedSource {
 
 #[derive(Clone, Debug)]
 pub struct EvaluatedComposition {
+    /// Whether this source explicitly establishes a local coordinate canvas.
+    pub is_sized: bool,
+    pub width: u32,
+    pub height: u32,
     pub layers: Vec<EvaluatedLayer>,
 }
 
@@ -229,6 +233,10 @@ pub fn evaluate_with_context(
         plan.frame_rate,
         plan.canvas.width,
         plan.canvas.height,
+        crate::project::GroupSize {
+            width: f64::from(plan.canvas.width),
+            height: f64::from(plan.canvas.height),
+        },
         true,
         plan.images.len() + plan.shapes.len() + plan.texts.len(),
         context,
@@ -268,6 +276,7 @@ fn evaluate_layers(
     frame_rate: (u64, u64),
     width: u32,
     height: u32,
+    size: crate::project::GroupSize,
     root_composition: bool,
     raster_source_base: usize,
     context: &EvaluationContext<'_>,
@@ -304,8 +313,7 @@ fn evaluate_layers(
             relative,
             root_project_time,
             frame_rate,
-            width,
-            height,
+            size,
             raster_source_base,
             context,
             &mut evaluated_track_count,
@@ -324,6 +332,11 @@ fn evaluate_layers(
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let owner_size = group_size(&layer.source, size);
+        let owner_extent = (
+            owner_size.width.ceil() as u32,
+            owner_size.height.ceil() as u32,
+        );
         let masks = layer
             .masks
             .iter()
@@ -352,8 +365,7 @@ fn evaluate_layers(
                                     relative,
                                     root_project_time,
                                     frame_rate,
-                                    width,
-                                    height,
+                                    owner_size,
                                     raster_source_base,
                                     context,
                                     &mut evaluated_track_count,
@@ -372,13 +384,21 @@ fn evaluate_layers(
                         .feather
                         .evaluate(relative, root_project_time, context)?
                         as f32,
-                    transform: transform::evaluate_tracks(
-                        &mask.transform,
-                        relative,
-                        root_project_time,
-                        context,
-                        &mut evaluated_track_count,
-                    )?,
+                    transform: {
+                        let mut transform = transform::evaluate_tracks(
+                            &mask.transform,
+                            relative,
+                            root_project_time,
+                            context,
+                            &mut evaluated_track_count,
+                        )?;
+                        transform.position.x *= owner_size.width / f64::from(owner_extent.0);
+                        transform.position.y *= owner_size.height / f64::from(owner_extent.1);
+                        if let crate::plan::CompiledMaskInput::Source { source, .. } = &mask.input {
+                            resolve_group_anchor(&mut transform, source, owner_size);
+                        }
+                        transform
+                    },
                 })
             })
             .collect::<Result<Vec<_>, EvaluationError>>()?;
@@ -388,8 +408,8 @@ fn evaluate_layers(
                 relative,
                 root_project_time,
                 frame_rate,
-                width,
-                height,
+                width: size.width,
+                height: size.height,
                 root_composition,
                 context,
             })?;
@@ -399,6 +419,9 @@ fn evaluate_layers(
                 effect.apply_transform_semantic(&mut transform);
             }
         }
+        transform.position.x *= size.width / f64::from(width);
+        transform.position.y *= size.height / f64::from(height);
+        resolve_group_anchor(&mut transform, &layer.source, size);
         layers.push(EvaluatedLayer {
             compiled_layer_index: layer.compiled_identity,
             visible: layer.visible,
@@ -426,8 +449,7 @@ fn evaluate_source(
     relative: u128,
     root_project_time: u128,
     frame_rate: (u64, u64),
-    width: u32,
-    height: u32,
+    size: crate::project::GroupSize,
     raster_source_base: usize,
     context: &EvaluationContext<'_>,
     evaluated_track_count: &mut u64,
@@ -506,6 +528,9 @@ fn evaluate_source(
             appearance: system.evaluate_appearance_at(relative, root_project_time, context)?,
         },
         CompiledVisualSource::Group(composition) => {
+            let size = composition.size.unwrap_or(size);
+            let width = size.width.ceil() as u32;
+            let height = size.height.ceil() as u32;
             let nested_active = composition
                 .schedule
                 .active_at_time(&composition.layers, relative);
@@ -517,6 +542,7 @@ fn evaluate_source(
                 frame_rate,
                 width,
                 height,
+                size,
                 false,
                 raster_source_base,
                 context,
@@ -524,6 +550,9 @@ fn evaluate_source(
             *evaluated_track_count += nested_count;
             EvaluatedSource::Group {
                 composition: EvaluatedComposition {
+                    is_sized: composition.size.is_some(),
+                    width,
+                    height,
                     layers: nested_layers,
                 },
             }
@@ -552,5 +581,27 @@ impl EvaluatedSource {
             self,
             Self::Image { .. } | Self::Shape { .. } | Self::Text { .. } | Self::Group { .. }
         )
+    }
+}
+
+fn group_size(
+    source: &CompiledVisualSource,
+    inherited: crate::project::GroupSize,
+) -> crate::project::GroupSize {
+    match source {
+        CompiledVisualSource::Group(composition) => composition.size.unwrap_or(inherited),
+        _ => inherited,
+    }
+}
+
+fn resolve_group_anchor(
+    transform: &mut crate::animation::Transform2D,
+    source: &CompiledVisualSource,
+    inherited: crate::project::GroupSize,
+) {
+    if matches!(source, CompiledVisualSource::Group(_)) {
+        let size = group_size(source, inherited);
+        transform.anchor.x *= size.width / size.width.ceil();
+        transform.anchor.y *= size.height / size.height.ceil();
     }
 }

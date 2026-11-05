@@ -72,12 +72,20 @@ pub(in crate::wgpu) struct MaskFeatherParameters {
     pub(in crate::wgpu) radius: f32,
     pub(in crate::wgpu) direction: u32,
     pub(in crate::wgpu) _padding1: [u32; 2],
+    // The first pass presents local coverage before feathering in parent pixels.
+    pub(in crate::wgpu) inverse_row0: [f32; 4],
+    pub(in crate::wgpu) inverse_row1: [f32; 4],
+    pub(in crate::wgpu) local_extent: [u32; 2],
+    pub(in crate::wgpu) transform_owner: u32,
+    pub(in crate::wgpu) preserve_state: u32,
 }
 
 pub(in crate::wgpu) fn mask_feather(
     frame: &EvaluatedFrame,
     radius: f32,
     horizontal: bool,
+    owner: Option<MaskParameters>,
+    preserve_state: bool,
 ) -> MaskFeatherParameters {
     MaskFeatherParameters {
         canvas_width: frame.width,
@@ -86,6 +94,13 @@ pub(in crate::wgpu) fn mask_feather(
         radius,
         direction: u32::from(!horizontal),
         _padding1: [0; 2],
+        inverse_row0: owner.map_or([1.0, 0.0, 0.0, 0.0], |owner| owner.inverse_row0),
+        inverse_row1: owner.map_or([0.0, 1.0, 0.0, 0.0], |owner| owner.inverse_row1),
+        local_extent: owner.map_or([frame.width, frame.height], |owner| {
+            [owner.canvas[2], owner.canvas[3]]
+        }),
+        transform_owner: u32::from(owner.is_some()),
+        preserve_state: u32::from(preserve_state),
     }
 }
 
@@ -93,6 +108,7 @@ pub(in crate::wgpu) fn mask(
     frame: &EvaluatedFrame,
     mask: &vestra_core::plan::EvaluatedMask,
     layer_transform: Transform2D,
+    owner_extent: (u32, u32),
     first: bool,
 ) -> MaskParameters {
     let (sine, cosine) = layer_transform.rotation_radians.sin_cos();
@@ -102,10 +118,10 @@ pub(in crate::wgpu) fn mask(
     let inverse_y = cosine / layer_transform.scale.y;
     let position_x = layer_transform.position.x * f64::from(frame.width);
     let position_y = layer_transform.position.y * f64::from(frame.height);
-    let anchor_x = layer_transform.anchor.x * f64::from(frame.width);
-    let anchor_y = layer_transform.anchor.y * f64::from(frame.height);
+    let anchor_x = layer_transform.anchor.x * f64::from(owner_extent.0);
+    let anchor_y = layer_transform.anchor.y * f64::from(owner_extent.1);
     MaskParameters {
-        canvas: [frame.width, frame.height, 0, 0],
+        canvas: [frame.width, frame.height, owner_extent.0, owner_extent.1],
         inverse_row0: [
             inverse_x as f32,
             inverse_xy as f32,
@@ -367,13 +383,14 @@ pub(in crate::wgpu) fn raster(
 
 pub(in crate::wgpu) fn surface(
     frame: &EvaluatedFrame,
+    extent: (u32, u32),
     transform: Transform2D,
     colour: ColourTransform,
     motion_tile: Option<geometry::MotionTileParameters>,
 ) -> LayerParameters {
     raster(
         frame,
-        geometry::IntrinsicSize::new(frame.width, frame.height),
+        geometry::IntrinsicSize::new(extent.0, extent.1),
         Crop {
             x: 0.0,
             y: 0.0,

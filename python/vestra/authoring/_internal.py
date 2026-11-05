@@ -16,6 +16,21 @@ def _number(value: int | float, name: str) -> float:
     return number
 
 
+def _group_size(size: tuple[float, float] | None) -> tuple[float, float] | None:
+    if size is None:
+        return None
+    if not isinstance(size, tuple) or len(size) != 2:
+        raise TypeError("Group size must be a (width, height) tuple")
+    try:
+        width = _number(size[0], "Group size width")
+        height = _number(size[1], "Group size height")
+    except OverflowError as error:
+        raise ValueError("Group size dimensions must be finite") from error
+    if not 0 < width <= 8192 or not 0 < height <= 8192:
+        raise ValueError("Group size dimensions must be positive and at most 8192 pixels")
+    return width, height
+
+
 class _IdAllocator:
     """Builder-local, deterministic identifiers in their canonical namespaces."""
 

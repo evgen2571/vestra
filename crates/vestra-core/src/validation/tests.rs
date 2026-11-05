@@ -575,6 +575,79 @@ fn groups_use_composition_local_ids_and_preserve_local_times() {
 }
 
 #[test]
+fn group_sizes_validate_dimensions_and_reject_null_or_unknown_fields() {
+    for dimension in [0.0, -1.0, f64::NAN, f64::INFINITY, 8192.01] {
+        let mut project = grouped_project(vec![group_clip("group", vec![])]);
+        let crate::project::VisualSource::Group(group) = &mut project.visual.clips[0].source else {
+            panic!("group")
+        };
+        group.size = Some(crate::project::GroupSize {
+            width: dimension,
+            height: 30.0,
+        });
+        let report = validate(&project, ResourceLimits::default());
+        let diagnostic = report
+            .diagnostics()
+            .iter()
+            .find(|d| d.code == "VESTRA-GROUP-SIZE")
+            .expect("invalid size");
+        assert_eq!(
+            diagnostic.pointer.as_deref(),
+            Some("/visual/clips/0/source/size/width")
+        );
+    }
+    for size in [
+        json!(null),
+        json!({"width": 10}),
+        json!({"width": 10, "height": 20, "clip": false}),
+    ] {
+        assert!(
+            serde_json::from_value::<crate::project::VisualSource>(
+                json!({"type": "group", "size": size, "clips": []})
+            )
+            .is_err()
+        );
+    }
+    let legacy: crate::project::VisualSource =
+        serde_json::from_value(json!({"type": "group", "clips": []})).expect("legacy group");
+    assert!(
+        serde_json::to_value(legacy)
+            .expect("serialize")
+            .get("size")
+            .is_none()
+    );
+    let sized: crate::project::VisualSource = serde_json::from_value(
+        json!({"type": "group", "size": {"width": 600.5, "height": 300.25}, "clips": []}),
+    )
+    .expect("sized group");
+    assert_eq!(
+        serde_json::to_value(sized).expect("serialize")["size"],
+        json!({"width": 600.5, "height": 300.25})
+    );
+}
+
+#[test]
+fn invalid_owned_group_size_points_to_the_mask_source() {
+    let mut owner = solid_clip("owner", 0.0, 1.0);
+    owner["masks"] = json!([{
+        "id": "owned", "input": {"type": "source", "mode": "alpha", "source": {
+            "type": "group", "size": {"width": 0, "height": 30}, "clips": []
+        }}
+    }]);
+    let project = grouped_project(vec![owner]);
+    let report = validate(&project, ResourceLimits::default());
+    let diagnostic = report
+        .diagnostics()
+        .iter()
+        .find(|d| d.code == "VESTRA-GROUP-SIZE")
+        .expect("size diagnostic");
+    assert_eq!(
+        diagnostic.pointer.as_deref(),
+        Some("/visual/clips/0/masks/0/input/source/size/width")
+    );
+}
+
+#[test]
 fn groups_reject_duplicate_sibling_ids_with_nested_path() {
     let project = grouped_project(vec![group_clip(
         "group",
@@ -699,6 +772,7 @@ fn nested_particle_validation_reuses_canonical_rules() {
     let mut project = particle_project();
     let particle = project.visual.clips[0].clone();
     project.visual.clips[0].source = crate::project::VisualSource::Group(crate::project::Group {
+        size: None,
         clips: vec![particle],
         transitions: vec![],
     });

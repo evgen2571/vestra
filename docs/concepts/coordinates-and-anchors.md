@@ -8,9 +8,9 @@ A 160-pixel rectangle does not become 160% of the canvas. Vestra separates
 **source geometry in pixels** from **placement in normalized parent coordinates**.
 The anchor connects those spaces.
 
-<figure markdown="span">
+<figure class="diagram" markdown="span">
 ![On a 640 by 360 canvas, position 0.25, 0.5 is pixel 160, 180. A 160 by 80 rectangle places its center there with anchor 0.5, 0.5, or its top-left there with anchor 0, 0.](../assets/diagrams/coordinates-anchors.svg)
-<figcaption>Schematic canvases with identical position and geometry. Changing the anchor changes which point of the rectangle lands on the crosshair.</figcaption>
+<figcaption>The crosshair stays at pixel (160, 180). The anchor chooses which point of the rectangle attaches there.</figcaption>
 </figure>
 
 ## Three different measurements

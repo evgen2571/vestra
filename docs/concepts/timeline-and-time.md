@@ -26,9 +26,9 @@ excerpt = project.root.add(
 )
 ```
 
-<figure markdown="span">
+<figure class="diagram" markdown="span">
 ![Project seconds 2, 3, 4, 5 and the excluded end 6 align with layer-local seconds 0, 1, 2, 3 and 4, and video source seconds 10, 10.5, 11, 11.5 and 12.](../assets/diagrams/timeline-clocks.svg)
-<figcaption>Schematic aligned clocks for this placement. Half-speed playback advances the source by two seconds during four seconds of output.</figcaption>
+<figcaption>Read down a column to follow one output instant. At project second 4, the layer is two seconds old and samples video second 11.</figcaption>
 </figure>
 
 At project second `4`, the layer-local time is `4 - 2 = 2` seconds and the video

@@ -1,25 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 710" role="img" aria-labelledby="title desc">
-  <title id="title">Compose within group bounds, then place in parent</title>
-  <desc id="desc">A 600 by 300 group canvas contains a 100 by 80 rectangle at local 150, 150. A second rectangle crosses the top edge and is clipped to the group bounds. The completed group is scaled by one half and centered in a 640 by 360 parent.</desc>
-  <rect width="480" height="710" rx="12" fill="#f6f5f1"/>
-  <g font-family="system-ui, sans-serif" font-size="24" fill="#202522">
-    <text x="24" y="40">1. Local canvas: 600 × 300</text>
-    <rect x="24" y="64" width="432" height="216" fill="#e7ebee" stroke="#556673" stroke-width="2"/>
-    <path d="M132 64v216M24 172h432" stroke="#8a938c" stroke-dasharray="6 6"/>
-    <rect x="96" y="143.2" width="72" height="57.6" fill="#a6c9b0" stroke="#466451" stroke-width="2"/>
-    <rect x="348" y="42.4" width="72" height="21.6" fill="none" stroke="#745e51" stroke-width="2" stroke-dasharray="5 4"/>
-    <rect x="348" y="64" width="72" height="64.8" fill="#d1b69f" stroke="#745e51" stroke-width="2"/>
-    <text x="248" y="253">Clipped above</text>
-    <path d="M123 172h18m-9-9v18" stroke="#202522" stroke-width="2"/>
-    <text x="188" y="162">(0.25, 0.5)</text><text x="188" y="200">= (150, 150) px</text>
-    <text x="24" y="318">2. Clip to these local bounds</text>
-    <path d="M240 338v32m-9-12 9 12 9-12" fill="none" stroke="#466451" stroke-width="3"/>
-    <text x="24" y="411">3. Scale 0.5; center in parent</text>
-    <rect x="24" y="434" width="432" height="243" fill="#e7ebee" stroke="#556673" stroke-width="2"/>
-    <rect x="138.75" y="504.9" width="202.5" height="101.2" fill="#d5dfd7" stroke="#466451" stroke-width="2"/>
-    <rect x="172.5" y="542" width="33.75" height="27" fill="#a6c9b0" stroke="#466451" stroke-width="2"/>
-    <rect x="290.6" y="504.9" width="33.75" height="30.4" fill="#d1b69f" stroke="#745e51" stroke-width="2"/>
-    <path d="M230 555.5h20m-10-10v20" stroke="#202522" stroke-width="2"/>
-    <text x="40" y="660">Parent: 640 × 360 pixels</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="350" viewBox="0 0 480 350" role="img" aria-labelledby="title desc">
+  <title id="title">Clip locally, then transform the whole group</title>
+  <desc id="desc">A 600 by 300 local group canvas contains a 100 by 80 child centered at local position 0.25, 0.5. A second child crosses the top edge, where the dashed part is discarded. The clipped group is scaled by one half and centered in a 640 by 360 parent: group size 300 by 150, first child size 50 by 40. The clipped part does not reappear.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; --stripe:#466c8c; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; --stripe:#4b6e8d; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .small { font-size:21px; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--shape); stroke:var(--edge); stroke-width:2; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+    .point { fill:var(--ink); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="350" rx="10" fill="var(--bg)"/>
+  <text x="20" y="34">Compose → clip → place</text>
+  <text x="20" y="77" class="small">600 × 300 group</text>
+  <text x="258" y="77" class="small">640 × 360 parent</text>
+  <rect x="20" y="98" width="206" height="103" class="panel"/>
+  <rect x="258" y="98" width="206" height="115.875" class="panel"/>
+  <rect x="54.333" y="135.767" width="34.333" height="27.467" class="shape"/>
+  <path d="M64.5 149.5h14m-7-7v14" class="line" style="stroke:var(--ink);stroke-width:2.5"/>
+  <rect x="174.5" y="87.7" width="34.333" height="10.3" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="4 4"/>
+  <rect x="174.5" y="98" width="34.333" height="30.9" class="shape"/>
+  <path d="M233 150h18" class="arrow"/>
+  <rect x="312.719" y="131.797" width="96.562" height="48.281" class="panel"/>
+  <rect x="328.812" y="149.5" width="16.094" height="12.875" class="shape"/>
+  <rect x="385.141" y="131.797" width="16.094" height="14.484" class="shape"/>
+  <text x="123" y="241" class="small" text-anchor="middle">(0.25, 0.5)</text>
+  <text x="361" y="241" class="small" text-anchor="middle">Scale 0.5</text>
+  <text x="20" y="288" class="small">Child: 100 × 80 → 50 × 40 px</text>
+  <text x="20" y="325" class="small muted">Clipped pixels stay gone.</text>
 </svg>

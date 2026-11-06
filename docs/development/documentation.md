@@ -166,7 +166,7 @@ re-encoding unchanged scenes. No separate documentation branch is needed.
 
 ## Keep the site maintainable
 
-`zensical.toml` owns navigation, search, syntax highlighting, and theme settings. `docs/assets/stylesheets/site.css` adds Vestra's layout and color choices. The `overrides/partials/source.html` template keeps the repository link while avoiding GitHub statistics requests; no custom JavaScript is needed. Prefer Zensical's native components, semantic HTML, and Markdown over custom scripts. The palette uses cool paper, ink blue, and coral; the renders carry the visual personality. System fonts avoid a remote font request and keep the site usable offline after loading its assets.
+`zensical.toml` owns navigation, search, syntax highlighting, and theme settings. `docs/assets/stylesheets/site.css` adds Vestra's layout and color choices. The `overrides/partials/source.html` template keeps the repository link while avoiding GitHub statistics requests; no custom JavaScript is needed. Prefer Zensical's native components, semantic HTML, and Markdown over custom scripts. The palette uses neutral grays: soft paper in light mode and charcoal in dark mode; the renders carry the visual personality. Links and controls use a contrasting hover surface and short movement, with keyboard focus and reduced-motion support. System fonts avoid a remote font request and keep the site usable offline after loading its assets.
 
 The identity is text only. `overrides/partials/logo.html` suppresses the theme
 logo, and CSS removes its empty header/drawer links. `overrides/main.html`

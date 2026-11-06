@@ -1,4 +1,7 @@
-"""Build, inspect, prepare, and render a small audio-timeline mix."""
+"""Build, inspect, prepare, and render a small audio-timeline mix.
+
+Run from the repository root: uv run python examples/python/authoring/07_music_mix.py
+"""
 
 from pathlib import Path
 import tempfile

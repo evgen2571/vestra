@@ -25,6 +25,7 @@ def build_project(
     project.root.add(Color("#101010"), duration=4)
     for row, palette in enumerate(PALETTES):
         group = project.root.group(f"palette-{row}", duration=4)
+        # Sixty-four ten-pixel strips form one grayscale ramp.
         for column in range(64):
             tone = round(255 * column / 63)
             stripe = group.add(
@@ -33,13 +34,22 @@ def build_project(
                 ),
                 duration=4,
             )
-            stripe.transform.position = (
-                (column * 10 + 5) / 640,
-                (row * 120 + 60) / 360,
-            )
-        group.effects.add(ColorAdjust(0, 1, 0, 1))
+            center_x = column * 10 + 5
+            center_y = row * 120 + 60
+            stripe.transform.position = (center_x / 640, center_y / 360)
+
+        group.effects.add(
+            ColorAdjust(exposure=0, gamma=1, black_point=0, white_point=1)
+        )
         dither = group.effects.add(
-            OrderedDither(palette, scale=1, matrix=matrix, seed=seed, mode=mode, levels=levels)
+            OrderedDither(
+                palette=palette,
+                scale=1,
+                matrix=matrix,
+                seed=seed,
+                mode=mode,
+                levels=levels,
+            )
         )
         dither.strength.keyframe(0, 0.25)
         dither.strength.keyframe(1, 1)
@@ -58,7 +68,15 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
-        "--mode", choices=("nearest", "nearest_rgb", "nearest_hue", "rgb_channels", "nearest_oklab"), default="nearest"
+        "--mode",
+        choices=(
+            "nearest",
+            "nearest_rgb",
+            "nearest_hue",
+            "rgb_channels",
+            "nearest_oklab",
+        ),
+        default="nearest",
     )
     parser.add_argument("--levels", type=int, default=4)
     args = parser.parse_args()
@@ -69,6 +87,7 @@ if __name__ == "__main__":
         name += f"-{args.levels}"
     output = ROOT / f"examples/output/{name}.mp4"
     output.parent.mkdir(parents=True, exist_ok=True)
-    build_project(matrix=args.matrix, seed=args.seed, mode=args.mode, levels=args.levels).render(
-        str(output), backend="cpu", overwrite=True
+    project = build_project(
+        matrix=args.matrix, seed=args.seed, mode=args.mode, levels=args.levels
     )
+    project.render(output, backend="cpu", overwrite=True)

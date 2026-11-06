@@ -22,6 +22,7 @@ def prepare_source(directory: Path, size: tuple[int, int]) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     # Stationary shadows and whole-pixel periodic subject motion separate scene
     # changes from random threshold motion. Fine hair/cloth bands are intentional.
+    # FFmpeg st()/ld() store and read normalized x/y coordinates in registers 0/1.
     coordinates = "st(0,X/W-0.53-floor(8*sin(2*PI*T/4))/W);st(1,Y/H);"
     face = "lt(pow(ld(0)/0.125,2)+pow((ld(1)-0.38)/0.25,2),1)"
     coat = "lt(pow(ld(0)/0.29,2)+pow((ld(1)-0.94)/0.46,2),1)"
@@ -104,7 +105,7 @@ def main() -> None:
             directory,
             size,
             OrderedDither(
-                colors,
+                palette=colors,
                 matrix="bayer8",
                 scale=1,
                 input_scale=1,
@@ -151,6 +152,7 @@ def main() -> None:
                 indices[samples[0][i : i + 4]] for i in range(0, len(samples[0]), 4)
             )
             palette_geometry.append(hashlib.sha256(geometry).hexdigest())
+        # RGBA pixels are four bytes apart; inspect the red channel for contrast.
         values = samples[0][0::4]
         assert max(values) > 100 and min(values) <= 32, f"{name}: lost tonal range"
         assert len(set(values)) > 2, f"{name}: uniform/black output"

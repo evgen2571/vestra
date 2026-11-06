@@ -1,4 +1,7 @@
-"""Exercise the expanded effects with transforms, masks, mattes, and groups."""
+"""Exercise the expanded effects with transforms, masks, mattes, and groups.
+
+Run from the repository root: uv run python examples/python/high-level/12_effect_expansion_stress.py
+"""
 
 from __future__ import annotations
 
@@ -14,10 +17,12 @@ ROOT = Path(__file__).resolve().parents[3]
 def main() -> None:
     project = Project(size=(320, 180), fps=24, duration=2, base_directory=ROOT)
     content = project.root.add(
-        Image(str(ROOT / "examples/assets/red.png")),
+        Image(ROOT / "examples/assets/red.png"),
         duration=2,
         id="tiled-content",
     )
+
+    # Tile before moving the layer so its edges remain filled.
     tile = content.effects.add(
         MotionTile(output_width_percent=200, output_height_percent=180)
     )
@@ -37,6 +42,7 @@ def main() -> None:
         id="soft-window",
     )
 
+    # A hidden sibling supplies additional coverage without appearing in the scene.
     matte = project.root.add(
         Ellipse(width=260, height=140, fill="#ffffff"),
         duration=2,
@@ -47,14 +53,15 @@ def main() -> None:
     content.set_matte(matte, mode=MatteMode.ALPHA)
 
     group = project.root.group("radial-group", duration=2, z=1)
-    grouped = group.add(Image(str(ROOT / "examples/assets/blue.png")), duration=2)
-    grouped.effects.add(RadialBlur(amount=10, center=(0.45, 0.55)))
+    blue_panel = group.add(Image(ROOT / "examples/assets/blue.png"), duration=2)
+    blue_panel.effects.add(RadialBlur(amount=10, center=(0.45, 0.55)))
 
     report = project.validate()
     if not report.is_valid:
         raise SystemExit("effect expansion stress project failed validation")
-    frame = project.prepare(backend="cpu").render_frame_seconds(1.0)
-    print(frame.frame_number, len(frame.to_bytes()))
+    prepared = project.prepare(backend="cpu")
+    frame = prepared.render_frame_seconds(1.0)
+    print(f"Frame {frame.frame_number}: {len(frame.to_bytes())} RGBA bytes")
 
 
 if __name__ == "__main__":

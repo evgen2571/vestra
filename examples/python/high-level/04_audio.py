@@ -1,4 +1,7 @@
-"""Author a track, clip fades, automation, and supported audio effects."""
+"""Author a track, clip fades, automation, and supported audio effects.
+
+Run from the repository root: uv run python examples/python/high-level/04_audio.py
+"""
 
 from __future__ import annotations
 
@@ -12,22 +15,26 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def main() -> None:
     project = Project(size=(160, 90), fps=12, duration=1, base_directory=ROOT)
-    track = project.audio.track("music", gain=0.9)
-    clip = track.add(
+    music = project.audio.track("music", gain=0.9)
+    soundtrack = music.add(
         "examples/assets/tone.wav",
         start=0.0,
         trim_end=1.0,
         fade_in=0.1,
         fade_out=0.1,
     )
-    clip.set_gain_automation(
+
+    # Gain times start at the beginning of this clip, not the source recording.
+    soundtrack.set_gain_automation(
         [
             AudioGainKeyframe(0.0, 0.0),
             AudioGainKeyframe(0.5, 1.0),
         ]
     )
-    track.effects.add(BassBoost(gain_db=3.0, frequency_hz=100.0))
-    print(project.snapshot().to_dict()["audio"]["tracks"][0]["clips"][0]["gain"])
+
+    music.effects.add(BassBoost(gain_db=3.0, frequency_hz=100.0))
+    project.snapshot()
+    print(f"Music track gain: {music.gain}; clip gain: {soundtrack.gain}")
 
 
 if __name__ == "__main__":

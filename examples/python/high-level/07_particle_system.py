@@ -1,4 +1,7 @@
-"""Author and preview a procedural particle source through the high-level API."""
+"""Author and preview a procedural particle source through the high-level API.
+
+Run from the repository root: uv run python examples/python/high-level/07_particle_system.py
+"""
 
 from __future__ import annotations
 
@@ -28,8 +31,9 @@ def main() -> None:
     report = project.validate()
     if not report.is_valid:
         raise SystemExit("particle project validation failed")
-    frame = project.prepare(backend="cpu").render_frame_seconds(0.5)
-    print(frame.frame_number, len(frame.to_bytes()))
+    prepared = project.prepare(backend="cpu")
+    frame = prepared.render_frame_seconds(0.5)
+    print(f"Frame {frame.frame_number}: {len(frame.to_bytes())} RGBA bytes")
 
 
 if __name__ == "__main__":

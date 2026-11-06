@@ -1,4 +1,7 @@
-"""Small Video source example; provide examples/assets/clip.mp4 before running."""
+"""Small Video source example; provide examples/assets/clip.mp4 before running.
+
+Run from the repository root: uv run python examples/python/high-level/09_video_source.py
+"""
 
 from pathlib import Path
 

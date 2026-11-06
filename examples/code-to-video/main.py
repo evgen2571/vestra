@@ -15,9 +15,11 @@ def build_project(work, recording=None):
         )
         shot.opacity.keyframe(0, 0)
         shot.opacity.keyframe(0.75, 1)
-        shot.effects.add(Saturation(0.65))
+        shot.effects.add(Saturation(amount=0.65))
         shot.transform.scale.keyframe(0, 1)
         shot.transform.scale.keyframe(6.5, 1.04)
+
+    # Dim the footage before placing the title and editor above it.
     project.root.add(Color("#07151c"), opacity=0.42, z=1)
     title = project.root.add(
         Text("Code to video", font="prepared/Cinzel.ttf", font_size=88, fill="#fff2d6"),
@@ -26,12 +28,16 @@ def build_project(work, recording=None):
     title.transform.position = (0.5, 0.13)
     title.opacity.keyframe(0, 0)
     title.opacity.keyframe(1, 1)
+
     add_editor(project, recording)
-    line = project.root.add(Rectangle(width=1740, height=4, fill="#dfb676"), z=4)
-    line.transform.anchor = (0, 0.5)
-    line.transform.position = (0.047, 0.96)
-    line.transform.scale.keyframe(0, (0.001, 1))
-    line.transform.scale.keyframe(12, (1, 1))
+
+    progress_rule = project.root.add(
+        Rectangle(width=1740, height=4, fill="#dfb676"), z=4
+    )
+    progress_rule.transform.anchor = (0, 0.5)
+    progress_rule.transform.position = (0.047, 0.96)
+    progress_rule.transform.scale.keyframe(0, (0.001, 1))
+    progress_rule.transform.scale.keyframe(12, (1, 1))
     return project
 
 

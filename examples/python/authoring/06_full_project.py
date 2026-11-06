@@ -1,9 +1,11 @@
-"""A complete advanced-authoring example, run from the repository root."""
+"""A complete advanced-authoring example, run from the repository root.
+
+Run from the repository root: uv run python examples/python/authoring/06_full_project.py
+"""
 
 from pathlib import Path
 
-import vestra
-from vestra import FrameRate
+from vestra import BackendPreference, Crossfade, Editor, FrameRate, PrepareOptions
 from vestra.authoring import BlendMode, Interpolation, Point, ProjectBuilder, Sizing
 
 
@@ -17,15 +19,15 @@ builder = ProjectBuilder(
     base_directory=root,
 )
 # Register inputs once so multiple clips can reuse them.
-image = builder.add_image_asset("tests/assets/wgpu-small-rgba.png")
-audio = builder.add_audio_asset("examples/assets/tone.wav")
+photo = builder.add_image_asset("tests/assets/wgpu-small-rgba.png")
+music_file = builder.add_audio_asset("examples/assets/tone.wav")
 
 builder.add_solid_color_clip(colour="#102030", start=0, duration=2.5, layer=-1)
 outgoing = builder.add_image_clip(
-    source=image, start=0, duration=2, layer=0, sizing=Sizing.cover()
+    source=photo, start=0, duration=2, layer=0, sizing=Sizing.cover()
 )
 incoming = builder.add_image_clip(
-    source=image, start=1.5, duration=1, layer=1, sizing=Sizing.cover()
+    source=photo, start=1.5, duration=1, layer=1, sizing=Sizing.cover()
 )
 outgoing.transform.position.keyframe(
     time=0.5, value=Point(0.45, 0.5), interpolation=Interpolation.EASE_OUT
@@ -39,20 +41,19 @@ builder.timeline.shift_clip(incoming, delta=0.25)
 builder.transitions.add_transition(
     outgoing=outgoing,
     incoming=incoming,
-    definition=vestra.Crossfade().to_canonical(),
+    definition=Crossfade().to_canonical(),
     start=1.75,
     duration=0.25,
 )
 builder.flashes.add(start=1.8, duration=0.1, colour="#ffffff", opacity=0.4, layer=3)
 
 music = builder.audio.add_track(id="music")
-music.add_clip(asset=audio, start=0, trim_start=0, trim_end=0.2)
+music.add_clip(asset=music_file, start=0, trim_start=0, trim_end=0.2)
 
 assert builder.validate().is_valid
 # Prepare once, then request a frame without encoding a video.
 project = builder.build()
-prepared = vestra.Editor().prepare(
-    project, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU)
-)
+options = PrepareOptions(backend=BackendPreference.CPU)
+prepared = Editor().prepare(project, options)
 frame = prepared.render_frame_number(0)
-print(frame.width, frame.height)
+print(f"Prepared frame: {frame.width} × {frame.height} pixels")

@@ -1,4 +1,7 @@
-"""Render a deterministic audio-reactive reference scene."""
+"""Render a deterministic audio-reactive reference scene.
+
+Run from the repository root: uv run python examples/python/authoring/08_audio_reactive.py
+"""
 
 from __future__ import annotations
 
@@ -56,18 +59,18 @@ with tempfile.TemporaryDirectory(prefix="vestra-example-") as directory:
         output_audio=False,
         base_directory=ROOT,
     )
-    image = builder.add_image_asset("examples/assets/blue.png")
-    clip = builder.add_image_clip(
-        source=image,
+    photo = builder.add_image_asset("examples/assets/blue.png")
+    background = builder.add_image_clip(
+        source=photo,
         start=0,
         duration=DURATION,
         layer=0,
         sizing=Sizing.cover(),
     )
-    asset = builder.add_audio_asset(str(audio_path), id="reference-master")
+    soundtrack = builder.add_audio_asset(str(audio_path), id="reference-master")
 
     builder.audio.add_track(id="music").add_clip(
-        asset=asset, start=0, trim_end=DURATION
+        asset=soundtrack, start=0, trim_end=DURATION
     )
 
     # Smooth the bass signal before using it to control visual properties.
@@ -79,19 +82,22 @@ with tempfile.TemporaryDirectory(prefix="vestra-example-") as directory:
         .envelope(attack=0.02, release=0.18)
         .response_curve(0.42, 0, 0.58, 1)
     )
-    clip.transform.scale.react_to(bass.remap(0, 1, 1.0, 1.08), mode="multiply")
-    clip.effects.add_glow(
+    background.transform.scale.react_to(bass.remap(0, 1, 1.0, 1.08), mode="multiply")
+    glow = background.effects.add_glow(
         threshold=0.25,
         radius=8,
         intensity=0,
         colour="#FFFFFF",
-    ).intensity.modulate(builder.audio.master.rms().gain(8), mode="replace")
-    clip.effects.add_chromatic_aberration(
+    )
+    loudness = builder.audio.master.rms().gain(8)
+    glow.intensity.modulate(loudness, mode="replace")
+
+    colour_split = background.effects.add_chromatic_aberration(
         amount=0,
         angle_degrees=0,
-    ).amount.modulate(
-        builder.audio.master.band(2_000, 12_000).gain(100), mode="replace"
     )
+    high_frequencies = builder.audio.master.band(2_000, 12_000).gain(100)
+    colour_split.amount.modulate(high_frequencies, mode="replace")
 
     project = builder.build()
     validation = builder.validate()

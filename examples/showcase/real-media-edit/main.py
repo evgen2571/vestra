@@ -13,7 +13,8 @@ FONT = "assets/Manrope.ttf"
 
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
-    unit = size[0] / 1280
+    # Keep pixel-sized geometry proportional in the smaller smoke render.
+    resolution_scale = size[0] / 1280
     project = Project(
         size=size,
         fps=fps,
@@ -24,7 +25,8 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     )
     # Five-second shots overlap by half a second on the project timeline.
     shots = []
-    for number, start in enumerate((0, 4.5, 9), 1):
+    shot_starts = (0, 4.5, 9)
+    for number, start in enumerate(shot_starts, 1):
         shot = project.root.add(
             Video(f"assets/city-{number}.mp4", sizing="cover"),
             start=start,
@@ -37,7 +39,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         shot.transform.scale.keyframe(0, 1.02)
         shot.transform.scale.keyframe(5, 1.10)
 
-        shot.effects.add(Saturation(0.65))
+        shot.effects.add(Saturation(amount=0.65))
         shot.effects.add(
             Vignette(amount=0.25, radius=1.0, softness=0.7, colour="#000000")
         )
@@ -52,7 +54,9 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     # Title and rule move together as a small nested overlay.
     title = project.root.group(start=0.6, duration=3.6, z=5, id="title")
     title.add(
-        Text("Video editing", font=FONT, font_size=56 * unit, fill="#f0ece4"),
+        Text(
+            "Video editing", font=FONT, font_size=56 * resolution_scale, fill="#f0ece4"
+        ),
         duration=3.6,
     )
     title.transform.position = (0.5, 0.78)
@@ -61,7 +65,11 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     title.opacity.keyframe(3.0, 1)
     title.opacity.keyframe(3.6, 0)
     rule = title.add(
-        Rectangle(width=190 * unit, height=2 * unit, fill="#c9ac76"), duration=3.6, z=1
+        Rectangle(
+            width=190 * resolution_scale, height=2 * resolution_scale, fill="#c9ac76"
+        ),
+        duration=3.6,
+        z=1,
     )
     rule.transform.position = (0.5, 0.57)
 
@@ -69,7 +77,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         Text(
             "Footage: Yigang Yu · CC0",
             font=FONT,
-            font_size=20 * unit,
+            font_size=20 * resolution_scale,
             fill="#f0ece4",
         ),
         start=11.5,

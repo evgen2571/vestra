@@ -35,6 +35,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     project.root.add(Color(BACKGROUND), z=-100)
     # Keep the analysis input audible in the mix; only the exported track is disabled.
     project.audio.track("synth").add("assets/synth.wav", trim_end=DURATION)
+    # Bound the RMS multiplier before smoothing so beats expand the ring gently.
     energy = (
         project.audio.signal.rms()
         .remap(input=(0.06, 0.14), output=(0.8, 1.25))
@@ -57,6 +58,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         layer = label(project.root, text, (0.075, y), font_size, fill)
         layer.transform.anchor = (0, 0.5)
 
+    # Persistent labels and the progress rule sit outside the three scenes.
     left_label("Vestra", 0.105, 28, MINT)
     label(project.root, "Python + JSON", (0.74, 0.105), 21)
     left_label("Video", 0.34, 92)
@@ -75,7 +77,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     progress.transform.scale.keyframe(0, (0.001, 1))
     progress.transform.scale.keyframe(DURATION, (1, 1))
 
-    # Fade adjacent groups over the persistent background.
+    # Scene keyframes start at zero, even when the scene starts later in the project.
     def scene(start, duration, caption):
         group = project.root.group(start=start, duration=duration)
         group.opacity.keyframe(0, 0)
@@ -86,7 +88,12 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         return group
 
     motion = scene(0, 3.5, "Keyframes + nested compositions")
-    for index, colour in enumerate(("#527e79", MINT, PAPER)):
+    cards = (
+        ("#527e79", 0.67, 0.42, -20),
+        (MINT, 0.74, 0.46, 0),
+        (PAPER, 0.81, 0.50, 20),
+    )
+    for index, (colour, card_x, raised_y, angle) in enumerate(cards):
         card = motion.group(duration=3.5, z=index)
         card.add(
             Rectangle(
@@ -96,14 +103,12 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
                 fill=colour,
             ),
         )
-        x = 0.67 + index * 0.07
-        angle = -20 + index * 20
-        card.transform.position.keyframe(0, (x, 0.47))
+        card.transform.position.keyframe(0, (card_x, 0.47))
         card.transform.position.keyframe(
-            1.7, (x, 0.42 + index * 0.04), interpolation=Interpolation.EASE_IN_OUT
+            1.7, (card_x, raised_y), interpolation=Interpolation.EASE_IN_OUT
         )
         card.transform.position.keyframe(
-            3.5, (x, 0.47), interpolation=Interpolation.EASE_IN_OUT
+            3.5, (card_x, 0.47), interpolation=Interpolation.EASE_IN_OUT
         )
         card.transform.rotation_degrees.keyframe(0, angle)
         card.transform.rotation_degrees.keyframe(
@@ -121,6 +126,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     media = scene(3.2, 3.6, "Video + masks + palette effects")
     clip = media.group(duration=3.6)
     footage = clip.add(Video("assets/city-2.mp4", sizing="cover"))
+    # The footage zoom and the group mask are independent; the group rotates both.
     footage.transform.scale = 0.46
     clip.masks.add(
         Rectangle(
@@ -133,6 +139,8 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     clip.transform.rotation_degrees.keyframe(
         3.6, 4, interpolation=Interpolation.EASE_IN_OUT
     )
+
+    # Introduce dithering only after the footage has become visible.
     dither = clip.effects.add(
         OrderedDither(
             (BACKGROUND, "#527e79", MINT, PAPER),
@@ -145,6 +153,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     dither.amount.keyframe(1.5, 0)
     dither.amount.keyframe(2.7, 1, interpolation=Interpolation.EASE_IN_OUT)
 
+    # Spectrum analysis follows project audio time, including this delayed scene.
     reactive = scene(6.5, 3.5, "Spectrum + audio-signal bindings")
     reactive.add(
         Spectrum2D(

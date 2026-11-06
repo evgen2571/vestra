@@ -77,7 +77,7 @@ def main() -> None:
     args = parser.parse_args()
     print("Original synth audio: CC0. Footage: Shanghai Bund / Yigang Yu / CC0 1.0.")
     print(
-        "Read examples/showcase/ASSETS.md for source, license and redistribution requirements."
+        "Read the showcase README and individual example READMEs for sources and licenses."
     )
     write_audio(ROOT / "assets/synth.wav")
     if args.audio_only:

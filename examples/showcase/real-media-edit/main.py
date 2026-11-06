@@ -13,8 +13,7 @@ FONT = "assets/Manrope.ttf"
 
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
-    width, _ = size
-    unit = width / 1280
+    unit = size[0] / 1280
     project = Project(
         size=size,
         fps=fps,
@@ -23,6 +22,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         quality=Quality.HIGH,
         output_audio=False,
     )
+    # Five-second shots overlap by half a second on the project timeline.
     shots = []
     for number, start in enumerate((0, 4.5, 9), 1):
         shot = project.root.add(
@@ -32,11 +32,17 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
             z=number,
             id=f"shot-{number}",
         )
+
+        # Each shot's keyframes start at its own zero, regardless of start time.
         shot.transform.scale.keyframe(0, 1.02)
         shot.transform.scale.keyframe(5, 1.10)
+
         shot.effects.add(Saturation(0.65))
-        shot.effects.add(Vignette(0.25, 1.0, 0.7, "#000000"))
+        shot.effects.add(
+            Vignette(amount=0.25, radius=1.0, softness=0.7, colour="#000000")
+        )
         shots.append(shot)
+
     # Fade each incoming shot over the opaque outgoing shot. This keeps the
     # dissolve fully covered, without a dip to black from two fading layers.
     for shot in shots[1:]:
@@ -58,6 +64,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         Rectangle(width=190 * unit, height=2 * unit, fill="#c9ac76"), duration=3.6, z=1
     )
     rule.transform.position = (0.5, 0.57)
+
     credit = project.root.add(
         Text(
             "Footage: Yigang Yu · CC0",
@@ -70,14 +77,11 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         z=6,
     )
     credit.transform.position = (0.5, 0.91)
-    # Finish gently instead of cutting off a moving shot.
-    for shot in shots:
-        if shot is shots[0]:
-            shot.opacity.keyframe(0, 0)
-            shot.opacity.keyframe(0.6, 1)
-        if shot is shots[-1]:
-            shot.opacity.keyframe(4.2, 1)
-            shot.opacity.keyframe(5, 0)
+    # Opening and closing fades use the first and last shot's local time.
+    shots[0].opacity.keyframe(0, 0)
+    shots[0].opacity.keyframe(0.6, 1)
+    shots[-1].opacity.keyframe(4.2, 1)
+    shots[-1].opacity.keyframe(5, 0)
     return project
 
 

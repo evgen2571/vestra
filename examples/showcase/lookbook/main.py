@@ -33,31 +33,42 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         layer.transform.position = position
 
     label("Photo, halftone and ASCII", (0.5, 0.11), 36)
-    for index, name in enumerate(("Original", "Halftone", "ASCII")):
+    # Keep the crop and motion identical so only the treatment changes.
+    treatments = (
+        ("Original", 0.19, None),
+        (
+            "Halftone",
+            0.50,
+            Halftone(
+                cell_size=max(2, 7 * unit),
+                foreground="#ffb08c",
+                background="#301f35",
+            ),
+        ),
+        (
+            "ASCII",
+            0.81,
+            Ascii(
+                cell_width=max(2, 7 * unit),
+                cell_height=max(3, 10 * unit),
+                foreground="#b8e3bc",
+                background="#101c24",
+                mode="fill",
+                source_mix=0.05,
+            ),
+        ),
+    )
+    for name, panel_x, effect in treatments:
         group = project.root.group(duration=DURATION)
         photo = group.add(Image("assets/landscape.jpg", sizing="cover"))
+        if effect is not None:
+            photo.effects.add(effect)
+
         photo.transform.scale.keyframe(0, 1)
         photo.transform.scale.keyframe(3, 1.06, interpolation=Interpolation.EASE_IN_OUT)
         photo.transform.scale.keyframe(6, 1, interpolation=Interpolation.EASE_IN_OUT)
-        if index == 1:
-            photo.effects.add(
-                Halftone(
-                    cell_size=max(2, 7 * unit),
-                    foreground="#ffb08c",
-                    background="#301f35",
-                )
-            )
-        elif index == 2:
-            photo.effects.add(
-                Ascii(
-                    cell_width=max(2, 7 * unit),
-                    cell_height=max(3, 10 * unit),
-                    foreground="#b8e3bc",
-                    background="#101c24",
-                    mode="fill",
-                    source_mix=0.05,
-                )
-            )
+
+        # Mask the group, not the image, to keep the frame fixed during the zoom.
         group.masks.add(
             Rectangle(
                 width=360 * unit,
@@ -66,8 +77,8 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
                 corner_radius=20 * unit,
             )
         )
-        group.transform.position = (0.19 + index * 0.31, 0.51)
-        label(name, (0.19 + index * 0.31, 0.87), 20, "#b8e3bc")
+        group.transform.position = (panel_x, 0.51)
+        label(name, (panel_x, 0.87), 20, "#b8e3bc")
     return project
 
 

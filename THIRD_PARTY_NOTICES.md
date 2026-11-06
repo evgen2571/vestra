@@ -1,7 +1,8 @@
 # Third-party notices
 
-Vestra's original software is MIT licensed. Dependencies and example assets
-retain their own licenses.
+This notice accompanies Vestra software distributions, including binary wheels
+and source archives. Vestra's original software is [MIT licensed](LICENSE);
+bundled third-party software and fonts retain the terms and notices below.
 
 ## FFmpeg
 
@@ -42,9 +43,13 @@ MIT-licensed code. The sRGB transfer function follows
 
 ## Showcase assets
 
-The showcase's photo and synthesized audio are CC0, footage is CC BY 3.0, and
-Manrope is SIL OFL 1.1. Attribution, source links, modifications and distribution
-terms are recorded in [showcase asset credits](examples/showcase/ASSETS.md).
+The current documentation checkout uses CC0 Shanghai footage, a CC0 landscape
+photo and original CC0 synthesized audio. Example media is documented beside
+the [showcase sources](https://github.com/evgen2571/vestra/tree/docs/learning-navigation/examples/showcase),
+including Manrope's accompanying OFL copy. These inputs are not bundled in wheels.
+Older Location Kenya footage copies remain CC BY 3.0; preserve their
+[source, license and modification credits](https://github.com/evgen2571/vestra/blob/docs/learning-navigation/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
+when redistributing them.
 
 ## Bundled text and ASCII glyph font
 

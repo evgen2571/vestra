@@ -1,5 +1,5 @@
 ---
-description: "Explore complete Vestra projects through their rendered output: motion graphics, photo cutouts, audio visualization and video editing."
+description: "Complete Vestra Python projects with previews: animated layers, masked images, audio-reactive graphics, video editing and visual effects."
 ---
 
 # Examples
@@ -15,12 +15,12 @@ For a smaller introduction, start with the
 
 <div class="gallery-card" markdown>
 
-[![Three cards animated against a dark background](../assets/gallery/motion-design.webp)](motion-design.md)
+[![Overlapping numbered cards beside a Video composition heading](../assets/gallery/motion-design.webp)](motion-design.md)
 
-## [Animated layers and effects](motion-design.md)
+## [Layers, masks and audio signals](motion-design.md)
 
-A ten-second sequence combines moving shapes, masked video, image effects,
-nested groups and audio-reactive graphics.
+Three scenes show grouped card animation, masked Shanghai footage with ordered
+dithering, and an audio-reactive radial spectrum.
 
 </div>
 
@@ -37,23 +37,34 @@ move as a group, with a different saturation treatment.
 
 <div class="gallery-card" markdown>
 
-[![A mirrored peach-colored audio spectrum with a circular halo on a dark background](../assets/gallery/audio-reactive.webp)](audio-reactive.md)
+[![Cyan and coral spectrum bars arranged around a ring on a dark purple background](../assets/gallery/audio-reactive.webp)](audio-reactive.md)
 
 ## [Audio-reactive graphics](audio-reactive.md)
 
-Frequency analysis controls the spectrum bars; loudness controls a halo and
-particle opacity. The preview includes the synthesized soundtrack.
+Frequency analysis controls 48 radial spectrum bars; loudness controls a ring
+and particle opacity. The preview includes the synthesized soundtrack.
 
 </div>
 
 <div class="gallery-card" markdown>
 
-[![Nighttime city footage with an overlaid Video editing title](../assets/gallery/video-editing.webp)](video-editing.md)
+[![Shanghai skyline at blue hour with illuminated buildings reflected in the river](../assets/gallery/video-editing.webp)](video-editing.md)
 
-## [A three-shot video edit](video-editing.md)
+## [A day-to-night video edit](video-editing.md)
 
-Three city shots use slow zooms, half-second dissolves, colour adjustments and
-a grouped title overlay.
+Three Shanghai shots use slow zooms, half-second dissolves, colour adjustments
+and a grouped title overlay.
+
+</div>
+
+<div class="gallery-card" markdown>
+
+[![A landscape shown side by side as a photograph, warm halftone dots and green ASCII characters](../assets/gallery/visual-effects.webp)](visual-effects.md)
+
+## [Halftone and ASCII effects](visual-effects.md)
+
+Compare two effects with the original photograph. The three masked panels
+share the same zoom animation.
 
 </div>
 
@@ -61,18 +72,28 @@ a grouped title overlay.
 
 ## Run the examples
 
-The commands below set up the repository examples. Unlike the standalone
-tutorials, these projects load media and fonts from `examples/showcase/assets/`.
+These projects load media and fonts from `examples/showcase/assets/`. The
+sources and inputs are included in the documentation checkout. If you already
+have that checkout, enter `nix develop` and run `just python-sync` from its root.
+
+To obtain the exact example versions used for these previews independently:
 
 ```bash
-git clone https://github.com/evgen2571/vestra.git
+git clone --branch docs/readme-landing https://github.com/evgen2571/vestra.git
 cd vestra
-git switch develop
+
+# Keep the example sources and input assets at the captured revision.
+git switch --detach a57ddfaecea62035c5042f02d0be397d87262d09
 
 # Enter the native development environment and build the Python package once.
 nix develop
 just python-sync
 ```
+
+Source and full-resolution video links point to this captured commit, so they
+remain usable before the documentation branch is published. The
+[preview provenance](../assets/gallery/README.md) records the source revision
+and processing commands.
 
 If you don't use Nix, follow the
 [source-build installation instructions](../getting-started/installation.md#build-from-source--development)
@@ -81,8 +102,10 @@ rendering also needs `ffmpeg` and `ffprobe` on `PATH`.
 
 Each project page gives its render command. Add `--smoke` for a 320 × 180,
 6 fps version of the full timeline. Full renders use the CPU at 1280 × 720
-and 30 fps; the website previews are downscaled copies.
+and 30 fps with Vestra's high quality tier; the website previews are downscaled
+copies.
 
 The required media and fonts are committed with the examples, so rendering
-needs no asset download after setup. Asset terms vary; see the
-[preview provenance and credits](../assets/gallery/README.md) before sharing outputs.
+needs no asset download after setup. See the
+[asset credits](../assets/gallery/README.md#sources-and-licenses) for provenance
+and license information.

@@ -57,7 +57,7 @@ Store complete tutorial programs in `docs/assets/examples/`. Include them direct
 
 Put the directive `--8<-- "docs/assets/examples/first_animation.py"` on its own line inside a fenced Python block.
 
-The include path is relative to the repository root. Do not maintain a separate, subtly different copy of the complete example in Markdown. Small excerpts are useful when they explain one change; check that they still match the full program. Keep the maintained examples formatted and linted:
+The include path is relative to the repository root. The introductory animation is an exact download copy of `examples/showcase/quickstart/main.py`; `just site-check` checks that they match. Do not maintain a separate, subtly different copy of the complete example in Markdown. Small excerpts are useful when they explain one change; check that they still match the full program. Keep the maintained examples formatted and linted:
 
 ```bash
 uvx --from 'ruff>=0.12,<0.13' ruff check docs/assets/examples scripts/render-docs-media.py
@@ -82,13 +82,13 @@ just python-sync
 just docs-media
 ```
 
-The renderer runs all four downloadable examples on CPU, probes the original MP4s, and refreshes the web assets. Inspect the new output before committing it. Existing showcase previews can be rebuilt with the commands in the gallery provenance file. Encoding bytes may differ with FFmpeg versions.
+The renderer runs all three downloadable examples on CPU, probes the original MP4s, and refreshes the web assets. Inspect the new output before committing it. Existing showcase previews can be rebuilt with the commands in the gallery provenance file. Encoding bytes may differ with FFmpeg versions.
 
 ## Keep the site maintainable
 
 `zensical.toml` owns navigation, search, syntax highlighting, and theme settings. `docs/assets/stylesheets/site.css` adds Vestra's layout and color choices. The small `overrides/partials/source.html` template keeps the repository link while avoiding GitHub statistics requests; no custom JavaScript is needed. Prefer Zensical's native components, semantic HTML, and Markdown over custom scripts. The palette uses cool paper, ink blue, and coral; the renders carry the visual personality. System fonts avoid a remote font request and keep the site usable offline after loading its assets.
 
-Use relative Markdown file links for other documentation pages. Zensical 0.1.0 rebases raw HTML `src` and `href` paths from the Markdown source directory, just like Markdown links. It leaves `poster` paths unchanged. On `learn/first-animation.md`, use `src="../assets/renders/first-animation.mp4"` but `poster="../../assets/renders/first-animation.webp"` for the generated `learn/first-animation/` URL. The generated-site checker covers both paths; recheck this behavior when upgrading Zensical. Never hardcode a domain or `/assets/` in an internal link. Files outside `docs/` should link to their explicit GitHub `develop` source URL. `README.md` and `index.md` map to the same output location, so do not place both in one directory. Check older incoming heading anchors when renaming a section.
+Use relative Markdown file links for other documentation pages. Zensical 0.1.0 rebases raw HTML `src` and `href` paths from the Markdown source directory, just like Markdown links. It leaves `poster` paths unchanged. On `learn/first-animation.md`, use `src="../assets/renders/first-animation.mp4"` but `poster="../../assets/renders/first-animation.webp"` for the generated `learn/first-animation/` URL. The generated-site checker covers both paths; recheck this behavior when upgrading Zensical. Never hardcode a domain or `/assets/` in an internal link. Files outside `docs/` should link to their explicit GitHub source URL. Pin an imported example to its source commit when the version differs from `develop`, and record that provenance alongside its assets. `README.md` and `index.md` map to the same output location, so do not place both in one directory. Check older incoming heading anchors when renaming a section.
 
 Preview desktop and mobile widths. Check navigation, code overflow, light and dark themes, keyboard focus, media controls, and search. Keep body text readable; shorten a passage by removing repetition, not by removing necessary reasoning. There are no diagram or word-count quotas.
 

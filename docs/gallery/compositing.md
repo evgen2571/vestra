@@ -12,11 +12,11 @@ three different frames while the photograph slowly zooms underneath each one.
     <source src="../assets/gallery/compositing.mp4" type="video/mp4">
     Your browser cannot play this video. <a href="../assets/gallery/compositing.mp4">Download the preview</a>.
   </video>
-  <figcaption>A circle, a rounded rectangle and a rectangle rise into view and drift gently. The image in each cutout zooms independently. The left cutout is monochrome; the other two use different saturation settings.</figcaption>
+  <figcaption>A circle, a rounded rectangle and a rectangle rise into view and drift gently. The image in each cutout zooms independently. The left cutout is monochrome; the other two use different saturation settings. The cutouts fade out together at the end.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/compositing/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/compositing/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/a57ddfaecea62035c5042f02d0be397d87262d09/examples/showcase/compositing/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/a57ddfaecea62035c5042f02d0be397d87262d09/examples/showcase/compositing/render.mp4)
 
 ## Reproduce the example
 

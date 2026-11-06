@@ -1,42 +1,15 @@
-"""Render a title card with Vestra. Run: python first_render.py"""
+"""A static version of the README quickstart; no external assets required."""
 
-from pathlib import Path
+from vestra import Project
+from vestra.sources import Color, Rectangle
 
-from vestra import Ellipse, Project, Rectangle, Text
-
-project = Project(
-    size=(960, 540),
-    fps=30,
-    duration=3,
-    background="#172c4b",
+project = Project(size=(640, 360), fps=30, duration=3)
+project.root.add(Color("#101c24"))
+card = project.root.add(
+    Rectangle(width=180, height=140, corner_radius=16, fill="#b8e3bc")
 )
+card.transform.position = (0.25, 0.5)
 
-project.root.add(
-    Ellipse(width=210, height=210, fill="#f07860"),
-    position=(0.78, 0.47),
-)
 
-project.root.add(
-    Rectangle(width=240, height=8, fill="#f5f7fb"),
-    position=(0.78, 0.47),
-    rotation_degrees=-25,
-    z=1,
-)
-
-project.root.add(
-    Text("Shape\nstudy", font_size=82, fill="#f5f7fb"),
-    position=(0.12, 0.44),
-    anchor=(0, 0.5),
-    z=2,
-)
-
-project.root.add(
-    Text("Position, scale, and opacity", font_size=22, fill="#b8c9e2"),
-    position=(0.12, 0.79),
-    anchor=(0, 0.5),
-    z=2,
-)
-
-output = Path("first-render.mp4")
-result = project.render(output, backend="cpu", overwrite=True)
-print(f"Rendered {result.output_path}")
+if __name__ == "__main__":
+    project.render("first-render.mp4", backend="cpu", overwrite=True)

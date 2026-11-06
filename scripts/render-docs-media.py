@@ -14,14 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "target/docs-media"
 ASSETS = ROOT / "docs/assets/renders"
 EXAMPLES = (
-    ("home_card", "home-card", 1.5),
-    ("first_render", "first-render", 1.5),
-    ("first_animation", "first-animation", 1.5),
-    ("keyframes", "keyframes", 1.3),
+    ("first_render", "first-render", (640, 360), 0.5),
+    ("first_animation", "quickstart", (640, 360), 0.75),
+    ("keyframes", "keyframes", (960, 540), 1.3),
 )
 
 
-def verify_video(path: Path) -> None:
+def verify_video(path: Path, size: tuple[int, int]) -> None:
     """Fail before publishing a preview if encoding lost frames or timing."""
     result = subprocess.run(
         [
@@ -43,24 +42,27 @@ def verify_video(path: Path) -> None:
     video = info["streams"][0]
     assert len(info["streams"]) == 1, path
     assert video["codec_name"] == "h264", path
-    assert (video["width"], video["height"]) == (960, 540), path
+    assert (video["width"], video["height"]) == size, path
     assert video["avg_frame_rate"] == "30/1", path
     assert int(video["nb_read_frames"]) == 90, path
     assert abs(float(info["format"]["duration"]) - 3) < 0.05, path
-    print(f"Verified {path.name}: H.264, 960×540, 90 frames, 3 seconds, silent")
+    print(
+        f"Verified {path.name}: H.264, {size[0]}×{size[1]}, 90 frames, 3 seconds, silent"
+    )
 
 
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     ASSETS.mkdir(parents=True, exist_ok=True)
-    for source_name, output_name, poster_time in EXAMPLES:
+    for source_name, output_name, size, poster_time in EXAMPLES:
+        asset_name = source_name.replace("_", "-")
         subprocess.run(
             [sys.executable, str(ROOT / f"docs/assets/examples/{source_name}.py")],
             cwd=OUTPUT,
             check=True,
         )
         original = OUTPUT / f"{output_name}.mp4"
-        verify_video(original)
+        verify_video(original, size)
         subprocess.run(
             [
                 "ffmpeg",
@@ -79,12 +81,12 @@ def main() -> None:
                 "85",
                 "-map_metadata",
                 "-1",
-                str(ASSETS / f"{output_name}.webp"),
+                str(ASSETS / f"{asset_name}.webp"),
             ],
             check=True,
         )
         if source_name in {"first_animation", "keyframes"}:
-            preview = ASSETS / f"{output_name}.mp4"
+            preview = ASSETS / f"{asset_name}.mp4"
             subprocess.run(
                 [
                     "ffmpeg",
@@ -110,7 +112,7 @@ def main() -> None:
                 ],
                 check=True,
             )
-            verify_video(preview)
+            verify_video(preview, size)
 
 
 if __name__ == "__main__":

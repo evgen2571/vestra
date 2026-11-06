@@ -9,11 +9,11 @@ keyframes, Vestra calculates the value using the interval's interpolation.
 This lets you control both the endpoints of a change and its timing.
 
 <figure>
-  <video controls playsinline preload="metadata" poster="../../assets/renders/keyframes.webp" width="960" height="540" aria-label="Four dots travel the same distance in the same two seconds, using linear, ease out, ease in out and hold interpolation.">
+  <video controls playsinline preload="metadata" poster="../../assets/renders/keyframes.webp" width="960" height="540" aria-label="Four mint rectangles travel the same distance in two seconds, using linear, ease out, ease in out and hold interpolation.">
     <source src="../assets/renders/keyframes.mp4" type="video/mp4">
     <a href="../assets/renders/keyframes.mp4">Download the interpolation comparison</a>.
   </video>
-  <figcaption>Each dot travels between the same positions over two seconds. The rows compare interpolation modes; the labels identify them without relying on colour.</figcaption>
+  <figcaption>Each rectangle travels between the same positions over two seconds. The row labels identify the interpolation modes.</figcaption>
 </figure>
 
 If you have not animated a layer yet, start with the
@@ -23,11 +23,12 @@ keyframe tracks are evaluated.
 ## Property values
 
 A layer has properties such as position, scale, rotation and opacity. Without
-keyframes, a property's **base value** applies for the whole layer:
+keyframes, a property's **base value** applies for the whole layer. For the
+rectangle layer named `card`:
 
 ```python
-headline.opacity = 0.5
-headline.transform.position = (0.5, 0.5)
+card.opacity = 0.5
+card.transform.position = (0.5, 0.5)
 ```
 
 `opacity` is a single number. `position` is a pair: x across the composition,
@@ -36,23 +37,23 @@ centre. Both position components follow the same interpolation curve.
 
 Keyframes belong to the property on the **placed layer**, returned by
 `project.root.add(...)`. Animate a shape's scale to make it grow; the static
-source dimensions such as `Ellipse(width=210, height=210)` are not themselves
+source dimensions such as `Rectangle(width=180, height=140)` are not themselves
 property tracks.
 
 ## Position keyframes
 
-In the tutorial, these two keyframes move the heading upward:
+In the tutorial, these two keyframes move the rectangle to the right:
 
 ```python
-headline.transform.position.keyframe(0, (0.12, 0.53))
-headline.transform.position.keyframe(
-    0.8,
-    (0.12, 0.44),
-    interpolation=Interpolation.EASE_OUT,
+card.transform.position.keyframe(0, (0.25, 0.5))
+card.transform.position.keyframe(
+    1.5,
+    (0.75, 0.5),
+    interpolation=Interpolation.EASE_IN_OUT,
 )
 ```
 
-The two position values define the endpoints. `0.8` is an **absolute time on
+The two position values define the endpoints. `1.5` is an **absolute time on
 the layer's clock**, not a duration measured from the previous keyframe.
 Import the enum with `from vestra import Interpolation`.
 
@@ -62,23 +63,24 @@ In Vestra, `interpolation=` controls the interval **ending at that keyframe**.
 The interval from A to B uses B's interpolation, and the interval from B to C
 uses C's:
 
-![Two intervals: keyframe A at zero, keyframe B at 0.8 seconds with ease out governing A to B, and keyframe C at 1.6 seconds with linear governing B to C.](../assets/diagrams/keyframe-intervals.svg)
+![Two intervals: keyframe A at zero, keyframe B at 1.5 seconds with ease in/out controlling A to B, and keyframe C at three seconds with linear controlling B to C.](../assets/diagrams/keyframe-intervals.svg)
 
-For three position keyframes:
+For example, keep the tutorial's ease in/out on the outward movement but use
+linear interpolation for the return:
 
 ```python
-headline.transform.position.keyframe(0, (0.12, 0.53))
-headline.transform.position.keyframe(
-    0.8, (0.12, 0.44), interpolation=Interpolation.EASE_OUT
+card.transform.position.keyframe(0, (0.25, 0.5))
+card.transform.position.keyframe(
+    1.5, (0.75, 0.5), interpolation=Interpolation.EASE_IN_OUT
 )
-headline.transform.position.keyframe(
-    1.6, (0.30, 0.44), interpolation=Interpolation.LINEAR
+card.transform.position.keyframe(
+    3, (0.25, 0.5), interpolation=Interpolation.LINEAR
 )
 ```
 
-The first interval eases out **into** the key at 0.8 seconds. The second interval
-moves at a constant rate **into** the key at 1.6 seconds. Setting easing only
-on the first keyframe does not ease the interval after it.
+The first interval eases in and out between 0 and 1.5 seconds. The second
+interval moves at a constant rate between 1.5 and 3 seconds. Setting easing
+only on the first keyframe does not ease the interval after it.
 
 ### What happens outside the keyframes?
 
@@ -89,7 +91,8 @@ on the first keyframe does not ease the interval after it.
 | Between two keyframes | An interpolated value using the **later** key's interpolation. |
 | After the final keyframe | The final keyframe's value, for the rest of the layer. |
 
-For example, a delayed caption fade needs **two** keyframes:
+This also applies to other properties. For example, a separate text layer
+named `caption` needs **two** keyframes for a delayed fade:
 
 ```python
 caption.opacity = 0
@@ -104,7 +107,7 @@ Changing the base value later does not remove existing keyframes; use
 
 ## Interpolation modes
 
-Play the comparison above. Each dot travels from x `0.38` to `0.88` between
+Play the comparison above. Each rectangle travels from x `0.38` to `0.88` between
 0.3 and 2.3 seconds. Only the destination's interpolation changes.
 
 | Interpolation | What you see | A useful starting point for |
@@ -127,9 +130,9 @@ curves with similarly named keywords.
     ```python
     from vestra import CubicBezier
 
-    headline.transform.position.keyframe(
-        0.8,
-        (0.12, 0.44),
+    card.transform.position.keyframe(
+        1.5,
+        (0.75, 0.5),
         interpolation=CubicBezier(0.42, 0, 0.58, 1),
     )
     ```
@@ -178,13 +181,15 @@ relative to that composition. Effects with their own active intervals use
 ### Seconds and frames are different
 
 `fps=30` samples the animation 30 times a second; it does not make keyframe times
-frame numbers. A keyframe at `0.8` seconds falls on frame 24 at 30 fps.
+frame numbers. A keyframe at `1.5` seconds falls on frame 45 at 30 fps.
 A one-second video contains frames at `0`, `1/30`, …, `29/30` seconds;
 the end time `1.0` is excluded.
 
-Put the final keyframe before the end of the layer if the viewer should see
-the final value. In the tutorial, the last fade ends at 1.1 seconds. The
-composition then stays unchanged until 3 seconds.
+The tutorial places the return keyframe at second 3, which is the video's
+excluded end time. Its last sampled frame is at `89/30` seconds, so the
+rectangle is nearly at the return position rather than exactly on it. To show
+a held final position, put the return keyframe earlier, such as `2.5`, while
+keeping the project duration at three seconds.
 
 ## Track validation
 

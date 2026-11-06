@@ -1,16 +1,15 @@
 ---
-description: Render a geometric composition as an MP4 and learn how projects, sources and layers fit together.
+description: Render a rounded rectangle as an MP4 and learn how projects, sources and layers fit together.
 ---
 
 # Your first render
 
-Create a three-second composition with text, a circle and a rectangle.
-Vestra draws the shapes and uses its bundled font for the text, so this
-example needs no external assets.
+Create a three-second video with a rounded rectangle on a dark background.
+The example uses generated shapes, so it needs no images, fonts or audio files.
 
 <figure>
-  <img src="../assets/renders/first-render.webp" alt="A navy composition with the heading Shape study, a coral circle crossed by a white line, and the caption Position, scale, and opacity." width="960" height="540">
-  <figcaption>Expected output: a static composition at 960 × 540 pixels.</figcaption>
+  <img src="../assets/renders/first-render.webp" alt="A mint rounded rectangle positioned on the left side of a dark 640 by 360 pixel canvas." width="640" height="360">
+  <figcaption>Expected output: a static rectangle at 640 × 360 pixels.</figcaption>
 </figure>
 
 Complete [installation](installation.md) first, including both FFmpeg checks.
@@ -33,9 +32,9 @@ From the directory containing your script:
 uv run python first_render.py
 ```
 
-The command prints `Rendered first-render.mp4`. Open **`first-render.mp4` in the
-current directory** with an MP4-capable video player. It should show the composition
-above for three seconds: 960 × 540 pixels at 30 frames per second, with no audio.
+Open **`first-render.mp4` in the current directory** with an MP4-capable video
+player. It should show the rectangle above for three seconds at 30 frames per
+second, with no audio.
 
 !!! note "Running the example again"
 
@@ -47,47 +46,43 @@ above for three seconds: 960 × 540 pixels at 30 frames per second, with no audi
 If the render fails, check [installation](installation.md#3-check-the-environment)
 and [rendering troubleshooting](../troubleshooting/rendering.md).
 
-## 3. Understand the layers
-
-The script makes four layers over the project's background:
+## 3. Understand the composition
 
 | Part | What it does |
 | --- | --- |
-| `Project(...)` | Defines the canvas, frame rate, duration and background colour. |
-| `Ellipse`, `Rectangle`, `Text` | Describe the content of a layer. These are **sources**. |
-| `project.root.add(...)` | Places a copy of a source in the project's root **composition**. It returns the layer. |
+| `Project(...)` | Defines a 640 × 360 pixel canvas, 30 fps and a three-second duration. |
+| `Color("#101c24")` | Describes a solid-colour source that fills the canvas. |
+| `Rectangle(...)` | Describes a 180 × 140 pixel shape with rounded corners and a mint fill. |
+| `project.root.add(...)` | Places a copy of a source in the root **composition** and returns its **layer**. |
 | `project.render(...)` | Prepares the project and writes an encoded MP4. |
 
-Each layer inherits the full three-second duration here. The circle uses the
-default `z=0`; the stripe uses `z=1`; the text uses `z=2`. **Higher `z` values
-are drawn on top.** Use explicit `z` values when layers should overlap in a
-particular order.
+Both layers inherit the project's three-second duration. The background stays
+fixed, and `card` is the rectangle layer you can reposition or animate. For
+larger compositions, use explicit `z` values when overlapping layers need a
+particular drawing order: higher values are drawn on top.
 
 ### Sizes and positions
 
-`size=(960, 540)` defines the output in pixels. Shape dimensions and `font_size`
-also use pixels. A layer's `position` uses the composition's normalized
-coordinates:
+The canvas and rectangle dimensions use pixels. A layer's `position` uses the
+composition's normalized coordinates:
 
 ![A canvas with top-left at 0,0, centre at 0.5,0.5, and bottom-right at 1,1. The x axis points right and y points down.](../assets/diagrams/coordinates.svg)
 
 - `(0, 0)` is the top-left corner; `(1, 1)` is the bottom-right.
-- `(0.78, 0.47)` puts the circle's centre 78% across and 47% down the canvas.
-- `anchor=(0, 0.5)` places the **left edge, halfway down** the text's own bounds
-  at its position. The default anchor is the source's centre, `(0.5, 0.5)`.
+- `(0.25, 0.5)` puts the rectangle 25% across and halfway down the canvas.
+  On this canvas, that is 160 pixels from the left and 180 pixels from the top.
+- The default **anchor** is the centre of the source, so these coordinates
+  place the rectangle's centre rather than its top-left corner.
 
-The stripe's `rotation_degrees=-25` tilts it around its centre. You can move,
-rotate or scale a layer without changing the source's dimensions.
+`card.transform.position = (0.25, 0.5)` sets a static position for the whole
+layer. Changing that property does not change the rectangle's dimensions.
 
-## Change the circle colour
+## Change the position
 
-Change the circle's fill from `"#f07860"` to `"#83b6ff"`, then run the script
-again. The new MP4 should have the same layout with a blue circle.
-
-The next tutorial animates these layers using position, scale, rotation and
-opacity keyframes.
+Set the position to `(0.75, 0.5)` and render again. The rectangle should now sit
+on the right, at x = 480 pixels. In the next tutorial, keyframes move it between
+these two positions during one video.
 
 [Continue to your first animation](first-animation.md){ .md-button .md-button--primary }
 
-For a deeper look at placement, see
-[sources and layers](../guides/python/sources-and-layers.md).
+For more about placement, see [sources and layers](../guides/python/sources-and-layers.md).

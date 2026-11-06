@@ -1,24 +1,24 @@
 ---
-description: A ten-second sequence demonstrating layer animation, masked video, effects, nested groups and audio-reactive graphics.
+description: Three scenes demonstrating grouped animation, masked Shanghai footage, ordered dithering and audio-reactive graphics.
 ---
 
-# Animated layers and effects
+# Layers, masks and audio signals
 
-This project arranges five scenes in a ten-second composition. Animated cards
-are followed by masked city footage, a photograph with effects, nested groups,
-and an audio-reactive scene. A shared scene builder supplies the background
-and title; each scene defines its own layers and animation.
+This ten-second composition contains three scenes: numbered cards move as
+nested groups, Shanghai footage plays inside a rotating mask, and a radial
+spectrum responds to a synthesized soundtrack. The scene captions identify the
+features as they appear.
 
 <figure>
-  <video controls preload="metadata" playsinline width="640" height="360" poster="../../assets/gallery/motion-design.webp" aria-label="Ten-second silent sequence demonstrating animated layers, masks, effects and audio-reactive graphics">
+  <video controls preload="metadata" playsinline width="640" height="360" poster="../../assets/gallery/motion-design.webp" aria-label="Ten-second silent composition showing animated cards, masked Shanghai footage and an audio-reactive radial spectrum">
     <source src="../assets/gallery/motion-design.mp4" type="video/mp4">
     Your browser cannot play this video. <a href="../assets/gallery/motion-design.mp4">Download the preview</a>.
   </video>
-  <figcaption>Cards slide and rotate into place; a soft mask reveals city footage; a photograph resolves into focus; grouped cards lead into a halo, particles and an audio spectrum. The preview is silent.</figcaption>
+  <figcaption>Cards and their inset labels move together. Blue-hour footage is revealed through a rounded mask, then changes to a four-colour dithered image. A spectrum and pulsing ring finish the sequence. The preview is silent.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-demo/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-demo/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/a57ddfaecea62035c5042f02d0be397d87262d09/examples/showcase/readme-demo/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/a57ddfaecea62035c5042f02d0be397d87262d09/examples/showcase/readme-demo/render.mp4)
 
 ## Reproduce the example
 
@@ -37,38 +37,38 @@ uv run --no-sync python examples/showcase/readme-demo/main.py \
   --output examples/output/animated-scenes.mp4
 ```
 
-The project uses the bundled Manrope font, landscape photograph, city selections
-and synthesized soundtrack. The soundtrack drives analysis but is deliberately
-excluded from this video's output.
+The project uses the bundled Manrope font, blue-hour Shanghai selection and
+synthesized soundtrack. `output_audio=False` excludes audio from the exported
+video while keeping it available for analysis.
 
-## How the scenes are organized
+## Organize related layers into scenes
 
-`build_layers_scene()` assigns a position, scale and rotation track to each
-card. `create_scene()` places the content of each scene inside a group, so the
-entire scene can enter or leave as one unit.
+The local `scene()` helper creates a group with a start time, duration and
+opacity animation. Each scene fades in and out over a persistent background.
+Moving a scene later in the composition preserves the timing of its children.
 
-Each group has its own start and duration. Its children use scene-local times,
-so moving a scene later in the composition preserves the timing of the
-animations inside it.
+The card scene adds another level of groups: each card contains a rectangle,
+a circle and a label. Animating the card's transform moves all three together.
+In the media scene, `OrderedDither.amount` changes from zero to one, introducing
+the palette treatment after the footage is visible. The final scene combines
+`Spectrum2D` frequency analysis with an RMS signal bound to the ring's scale.
 
-For the individual techniques, see
+For these techniques, see
 [Animation and keyframes](../learn/animation.md),
-[Groups and nested compositions](../guides/python/nested-compositions.md), and
-[Visual effects](../guides/python/effects.md). The
-[first animation tutorial](../learn/first-animation.md) introduces the same
-keyframe API in a smaller project.
+[Groups and nested compositions](../guides/python/nested-compositions.md),
+[Masks](../guides/python/masks.md), and
+[Audio-reactive authoring](../guides/python/signals-and-audio-reactivity.md).
 
 ## Credits
 
-“City timelapse video” by Location Kenya,
-[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/),
-[from Wikimedia Commons](https://commons.wikimedia.org/wiki/File:City_timelapse_video.webm).
-Trimmed, resized, reframed, colour-adjusted and edited with the original audio
-removed. The documentation preview is additionally downscaled and compressed.
-No author endorsement is implied.
+“Shanghai Bund, Lujiazui Skyline Timelapse” by Yigang Yu,
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/),
+[from Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Shanghai_Bund,_Lujiazui_Skyline_Timelapse.webm).
+The footage is trimmed, resized, reframed, masked and dithered; its original
+audio is removed. The documentation preview is additionally downscaled and
+compressed. Attribution is retained as provenance.
 
-The photograph by Dimitry Anikin is CC0; Manrope is SIL OFL 1.1. Full asset
-provenance and license links are in the
-[preview credits](../assets/gallery/README.md).
+The original synth loop is CC0; Manrope is SIL OFL 1.1. Full source and license
+links are in the [preview credits](../assets/gallery/README.md).
 
 [Back to the gallery](index.md)

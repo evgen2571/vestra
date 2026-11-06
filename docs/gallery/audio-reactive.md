@@ -1,23 +1,23 @@
 ---
-description: An audio visualization combining frequency analysis, smoothed loudness-driven motion and deterministic particles.
+description: An audio visualization with a radial frequency spectrum, smoothed loudness-driven motion and deterministic particles.
 ---
 
 # Audio-reactive graphics
 
 This example uses two measurements of a synthesized soundtrack. Frequency-band
-analysis controls the spectrum bars. Overall loudness controls the halo's size
-and the particle layer's opacity.
+analysis controls 48 bars arranged around a circle. Overall loudness controls
+the ring's size and the particle layer's opacity.
 
 <figure>
-  <video controls preload="metadata" playsinline width="640" height="360" poster="../../assets/gallery/audio-reactive.webp" aria-label="Twelve-second spectrum animation with synthesized music">
+  <video controls preload="metadata" playsinline width="640" height="360" poster="../../assets/gallery/audio-reactive.webp" aria-label="Twelve-second radial spectrum animation with synthesized music">
     <source src="../assets/gallery/audio-reactive.mp4" type="video/mp4">
     Your browser cannot play this video. <a href="../assets/gallery/audio-reactive.mp4">Download the preview</a>.
   </video>
-  <figcaption>Forty spectrum bars mirror above and below a baseline. A circular halo pulses gently behind them while small particles drift upwards. The preview includes synthesized music and no speech.</figcaption>
+  <figcaption>Cyan-to-coral bars extend out from a ring, with particles drifting behind them. The ring expands and contracts with the soundtrack. The preview includes synthesized music and no speech.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/audio-visualizer/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/audio-visualizer/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/a57ddfaecea62035c5042f02d0be397d87262d09/examples/showcase/audio-visualizer/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/a57ddfaecea62035c5042f02d0be397d87262d09/examples/showcase/audio-visualizer/render.mp4)
 
 ## Reproduce the example
 
@@ -32,9 +32,8 @@ with audio. The script replaces this output on each run.
 Use `--output PATH` for another destination or `--smoke` for a smaller version
 of the full timeline.
 
-The synthesized soundtrack and Manrope font are bundled. If you want to
-regenerate the original soundtrack, the asset generator uses Python's standard
-library and needs no network download:
+The synthesized soundtrack and Manrope font are bundled. To regenerate the
+original soundtrack without a network download:
 
 ```bash
 uv run --no-sync python examples/showcase/prepare-assets.py --audio-only
@@ -46,14 +45,17 @@ The spectrum source and property bindings have separate roles:
 
 | Picture | Measurement | What changes |
 | --- | --- | --- |
-| Spectrum bars | Frequency-band analysis through `Spectrum2D` | The height of each bar |
-| Halo | Master-audio RMS signal | The circle's scale |
+| Spectrum bars | Frequency-band analysis through `Spectrum2D` | The length of each bar |
+| Ring | Master-audio RMS signal | The circle's scale |
 | Particles | The same RMS signal | The particle layer's opacity |
 
-The code remaps loudness into a narrow scale range, clamps it and adds an
-attack/release envelope. This smooths sudden changes in the halo's size while
-preserving its response to the soundtrack. The particle system uses a fixed
-seed so the layout is repeatable.
+`Spectrum2DRadialLayout` wraps the bands around the centre, and a gradient
+assigns colours across the bands. A bloom effect softens the brightest parts.
+
+The RMS binding remaps loudness into a narrow scale range, clamps it and adds
+an attack/release envelope. This smooths sudden changes in the ring's size
+while preserving its response to the soundtrack. The particle system uses a
+fixed seed so the layout is repeatable.
 
 Start with [Audio and signals](../concepts/audio-and-signals.md), then see
 [Audio-reactive authoring](../guides/python/signals-and-audio-reactivity.md) and

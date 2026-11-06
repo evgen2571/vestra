@@ -1,110 +1,79 @@
 ---
-description: Animate the geometric composition with position, opacity, scale and rotation keyframes.
+description: Animate a rectangle's position with three keyframes and ease in/out interpolation.
 ---
 
 # Your first animation
 
-Animate the composition from [your first render](first-render.md). The circle
-grows, the stripe rotates, and the text moves upward while fading in. The
-caption fades in after a short delay. After 1.1 seconds, all four layers stay
-at their final values until the video ends.
+Animate the rectangle from [your first render](first-render.md). It moves from
+the left to the right over 1.5 seconds, then moves back toward the left over
+the remaining 1.5 seconds.
 
 <figure>
-  <video controls playsinline preload="metadata" poster="../../assets/renders/first-animation.webp" width="960" height="540" aria-label="Animated Shape study composition: a circle grows, a white stripe rotates, the heading moves up and fades in, then the caption appears.">
+  <video controls playsinline preload="metadata" poster="../../assets/renders/first-animation.webp" width="640" height="360" aria-label="A mint rounded rectangle moves across a dark canvas from left to right, then back toward its initial position.">
     <source src="../assets/renders/first-animation.mp4" type="video/mp4">
     <a href="../assets/renders/first-animation.mp4">Download the animation</a>.
   </video>
-  <figcaption>Expected output: a three-second animation with no audio. Select play to see how the layers change.</figcaption>
+  <figcaption>Expected output: a three-second position animation with no audio.</figcaption>
 </figure>
 
-The steps below add keyframes to the existing composition. The
-[complete script](#the-complete-script) includes all of the changes. Edit the
-returned **layers**, because Vestra copies a source when you add it to a
-composition.
+The steps below replace the rectangle's static position with keyframes. Keep
+the same project, background and rectangle, or use the
+[complete script](#the-complete-script).
 
-## 1. Assign the circle layer to a variable
+## 1. Move the rectangle to the right
 
-Add `Interpolation` to your imports. Then give the circle layer a name by
-assigning the return value of `add`:
+Add `Interpolation` to the first import:
 
 ```python
-from vestra import Ellipse, Interpolation, Project, Rectangle, Text
+from vestra import Interpolation, Project
+```
 
-# Keep the Project(...) from the first render.
-circle = project.root.add(
-    Ellipse(width=210, height=210, fill="#f07860"),
-    position=(0.78, 0.47),
+Replace `card.transform.position = (0.25, 0.5)` with these two keyframes:
+
+```python
+card.transform.position.keyframe(0, (0.25, 0.5))
+card.transform.position.keyframe(
+    1.5, (0.75, 0.5), interpolation=Interpolation.EASE_IN_OUT
 )
 ```
 
-`circle` is the placed layer. Its transform describes where the content is,
-how large it is and how it rotates.
+At zero seconds the rectangle is 25% across the canvas. At 1.5 seconds it is
+75% across. Its y coordinate stays at `0.5`, so it moves horizontally. Vestra
+calculates the position between the two keys.
 
-## 2. Animate scale and rotation
+`EASE_IN_OUT` makes the rectangle accelerate at the beginning and slow down at
+the end. **Interpolation belongs to the destination keyframe**: the setting on
+the key at 1.5 seconds controls the interval from 0 to 1.5 seconds. Without a
+third keyframe, the rectangle would stay on the right for the rest of the video.
 
-Immediately after creating it, add two keyframes:
+## 2. Add the return movement
 
-```python
-circle.transform.scale.keyframe(0, 0.4)
-circle.transform.scale.keyframe(0.8, 1, interpolation=Interpolation.EASE_OUT)
-```
-
-At zero seconds the circle is 40% of its original size. At 0.8 seconds it reaches
-100%. Vestra calculates the values between them. `EASE_OUT` starts quickly
-and slows toward the final size.
-
-**Put the easing on the destination keyframe.** Here it controls the interval
-from 0 to 0.8 seconds. After 0.8 seconds, the final scale remains `1`.
-
-Use the same timing for the stripe, changing rotation rather than scale:
+Add a third keyframe after the first two:
 
 ```python
-stripe.transform.rotation_degrees.keyframe(0, -70)
-stripe.transform.rotation_degrees.keyframe(
-    0.8, -25, interpolation=Interpolation.EASE_OUT
+card.transform.position.keyframe(
+    3, (0.25, 0.5), interpolation=Interpolation.EASE_IN_OUT
 )
 ```
 
-This snippet uses `stripe`, the layer returned when adding the rectangle in
-the complete script below.
+This defines a return to x = `0.25` at second 3. The time is measured from the
+start of the layer, so the return interval lasts **1.5 seconds**, not three.
+Its destination also uses ease in/out interpolation.
 
-## 3. Move and fade in the text
+![Position timeline: at zero seconds x is 0.25, at 1.5 seconds x is 0.75, and at three seconds x is 0.25. Both intervals use ease in/out interpolation.](../assets/diagrams/first-animation-timeline.svg)
 
-Create the headline with `opacity=0`, then animate its position and opacity
-independently:
+!!! note "The end timestamp is not a rendered frame"
 
-```python
-headline.transform.position.keyframe(0, (0.12, 0.53))
-headline.transform.position.keyframe(
-    0.8, (0.12, 0.44), interpolation=Interpolation.EASE_OUT
-)
-headline.opacity.keyframe(0, 0)
-headline.opacity.keyframe(0.6, 1)
-```
-
-The y coordinate gets smaller, so the text moves **up**. Opacity runs from `0`
-(fully transparent) to `1` (fully opaque). It finishes fading in before it
-finishes moving; the two tracks need not have identical timing.
-
-## 4. Delay the caption fade
-
-Create the caption with `opacity=0`. Start its fade half a second later:
-
-```python
-caption.opacity.keyframe(0.5, 0)
-caption.opacity.keyframe(1.1, 1)
-```
-
-Before the first keyframe, the base opacity stays at `0`. The first keyframe
-marks the beginning of the fade; the second marks its end. A single keyframe
-at `1.1` would make the caption jump into view at that time.
-
-![Timeline showing circle scale and stripe rotation from 0 to 0.8 seconds, title opacity from 0 to 0.6 and position from 0 to 0.8, then caption opacity from 0.5 to 1.1. All layers hold until 3 seconds.](../assets/diagrams/first-animation-timeline.svg)
+    At 30 fps, a three-second video contains 90 frames at times `0`, `1/30`,
+    …, `89/30` seconds. The last frame is at about **2.967 seconds**, just
+    before the third keyframe. The rectangle is almost back at its initial
+    position; the final frame is not an exact duplicate of the first.
 
 ## The complete script
 
-Save this as `first_animation.py`, alongside the first example. It is
-self-contained; you do not need to import or run `first_render.py`.
+Save this as `first_animation.py`. It is a complete copy of the quickstart
+example from the repository's README showcase. You do not need to run or
+import `first_render.py`.
 
 [Download first_animation.py](../assets/examples/first_animation.py)
 
@@ -118,17 +87,19 @@ Run it in your project environment:
 uv run python first_animation.py
 ```
 
-Open **`first-animation.mp4` in the current directory**. The render is 960 × 540
-at 30 fps, lasts three seconds and has no audio. Running it again replaces the
-same output because the example uses `overwrite=True`.
+Open **`quickstart.mp4` in the current directory**. The render is 640 × 360 at
+30 fps, lasts three seconds and has no audio. The output name comes from the
+script's final `project.render(...)` call, independently of the Python
+filename. Running it again replaces `quickstart.mp4` because the example uses
+`overwrite=True`.
 
-## Change the animation duration
+## Change the timing
 
-Change the circle and stripe's destination times from `0.8` to `1.6`. Their
-scale and rotation changes now take twice as long, while the text and caption
-keep their original timing.
+Move the middle keyframe from `1.5` to `1`. The rectangle now takes one second
+to move right and two seconds to return. The overall duration remains three
+seconds. Keep keyframe times in increasing order when adjusting them.
 
 [Continue to animation and keyframes](animation.md){ .md-button .md-button--primary }
 
-Or browse the [examples gallery](../gallery/index.md) for effects, compositing
-and audio-reactive motion.
+The [examples gallery](../gallery/index.md) includes larger projects with
+effects, compositing and audio-reactive motion.

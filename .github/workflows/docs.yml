@@ -8,6 +8,8 @@ on:
       - 'overrides/**'
       - 'scripts/check-site.py'
       - 'tests/test_site_links.py'
+      - 'tests/test_documentation_examples.py'
+      - 'examples/showcase/quickstart/main.py'
       - 'justfile'
       - '.github/workflows/docs.yml'
   push:
@@ -18,6 +20,8 @@ on:
       - 'overrides/**'
       - 'scripts/check-site.py'
       - 'tests/test_site_links.py'
+      - 'tests/test_documentation_examples.py'
+      - 'examples/showcase/quickstart/main.py'
       - 'justfile'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
@@ -51,7 +55,7 @@ jobs:
       - name: Check generated links and media paths
         run: uv run --no-project python scripts/check-site.py
       - name: Test link checker
-        run: uv run --no-project --with pytest python -m pytest tests/test_site_links.py -q
+        run: uv run --no-project --with pytest python -m pytest tests/test_site_links.py tests/test_documentation_examples.py -q
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/develop'
         with:

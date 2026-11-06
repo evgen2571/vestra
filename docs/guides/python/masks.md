@@ -1,8 +1,22 @@
+---
+description: Build a circular crop, animate a soft reveal, combine masks and choose a sibling track matte.
+---
+
 # Layer masks
 
 A mask reveals part of a layer without changing its source image. Start with a
 circular portrait crop, then add a soft reveal and a cutout one step at a time.
 Use your own `character.png` in the directory where you run the script.
+For the coverage model, read [masks and mattes](../../concepts/masks-and-mattes.md).
+
+<figure markdown="span">
+![Four CPU-rendered stripe patterns: alpha preserves the whole rectangle of opaque mask artwork; luma dims its dark background around a bright circle; union joins two circles; subtract removes a circle from a larger one.](../../assets/renders/concepts-masks.webp)
+<figcaption>Actual Vestra output. Alpha and luma use identical mask artwork: a white circle over an opaque dark gray background. Only luma uses that background's brightness as partial coverage.</figcaption>
+</figure>
+
+The lower examples show two circles combined with union and subtract. The
+[complete procedural comparison](../../assets/examples/concepts_masks.py)
+needs no image files; its source and reproduction command are below.
 
 ## Start with a circular crop
 
@@ -121,70 +135,104 @@ mask_artwork.add(Text("Vestra", font_size=96))
 portrait.masks.add(mask_artwork)
 ```
 
+For an opaque backdrop inside a `Group` mask, use a filled `Rectangle` sized to
+its canvas. A `Color` child currently fails validation with
+`VESTRA-SOLID-TRANSFORM` in this owned-mask path; the comparison uses a rectangle
+and leaves engine behavior unchanged.
+
 Video, spectrum and particle sources can also provide coverage. Video masks play
 from source time zero; spectrum masks need audio on the project timeline. See the
 [masks reference](../../reference/masks.md) for supported sources and timing rules.
 
+## Use a sibling layer as a matte
+
+An owned mask takes a source and follows the portrait. A track matte takes a
+separate layer in the same composition and keeps its own timeline and transform.
+Continue with the existing `project` and `portrait`, replacing the owned masks:
+
+```python
+from vestra import MatteMode
+
+portrait.masks.clear()
+matte_layer = project.root.add(
+    Text("Vestra", font_size=180),
+    duration=5,
+    visible=False,
+    id="portrait-matte",
+)
+portrait.set_matte(matte_layer, mode=MatteMode.ALPHA)
+```
+
+The text reveals the portrait without also drawing white letters over it.
+`visible=False` suppresses its ordinary display while preserving matte coverage
+in its active interval. Moving the portrait does not move the matte. A layer can
+have one matte and multiple owned masks; masks apply first, then matte coverage,
+then final opacity and compositing. See [track matte rules](../../reference/masks.md#track-mattes)
+for timing, inversion and validation restrictions.
+
 ## Coverage, timing and ordering
 
 `portrait.masks.items` preserves declaration order. Use `remove()` to remove one
-mask or `clear()` to start again. Geometric inputs include `Rectangle`, `Ellipse`,
-`Circle`, `Polygon` and `Line`; a shape needs a fill or stroke. Lines use their
-rendered stroke alpha, including antialiased edges.
-
-`MaskCoverageMode` selects alpha or luma coverage. These are owned source masks,
-not references to another timeline Layer.
-
-`Group` is an owned nested visual composition. Child timing is local to the
-Group: omitted `duration` inherits the containing Group lifetime, while an
-explicit `start` and `duration` clip the child to that local interval. Children
-also expose the normal presentation fields (`transform`, `effects`, `opacity`,
-`blend_mode`, and `masks`). The Group is composited normally before its final
-RGBA is converted to alpha or luma coverage. `mask.transform` is applied after
-that Group rendering, so it moves the complete Group coverage rather than an
-individual child.
+mask or `clear()` to start again. Every addition copies the source and its
+constructor transform defaults; edit the returned mask afterward.
 
 ### Alpha and brightness
 
-`ALPHA` uses source alpha without thresholding. `LUMA` uses encoded RGB values
-with Rec.709 coefficients (`0.2126R + 0.7152G + 0.0722B`) multiplied by
-source alpha. Image pixels use their intrinsic dimensions before the
-mask-local transform. Direct Image and Video `sizing` and `crop` settings are
-rejected for mask inputs. Use `mask.transform` for placement and scale; Video
-timing remains owner-layer-local. Group child placements retain their normal
-clip sizing and crop fields.
+The default is alpha coverage: opaque pixels reveal regardless of color.
+`LUMA` uses encoded RGB brightness multiplied by alpha. Shapes use their rendered
+alpha, including strokes and antialiased edges. See [coverage examples](../../concepts/masks-and-mattes.md#alpha-and-brightness-answer-different-questions)
+and [exact input rules](../../reference/masks.md#canonical-inputs).
 
 ### Combine masks
 
-Coverage starts at `1`. The default operation is `INTERSECT`, so one ordinary
-mask reveals the part of the layer covered by its shape. `REPLACE`, `UNION`,
-and `SUBTRACT` use normalized coverage and can be combined in order. `invert`
-changes coverage to `1 - coverage`. `strength=0` leaves the accumulated
-coverage unchanged; `strength=1` applies the selected operation completely.
+Coverage starts at one. An initial `INTERSECT` or `REPLACE` establishes a
+silhouette; `UNION` adds another region and `SUBTRACT` removes one. An initial
+`UNION` alone cannot reduce full coverage. `invert` reverses the incoming mask;
+`strength=0` leaves accumulated coverage unchanged. See the
+[operation table](../../concepts/masks-and-mattes.md#combine-coverage-in-order)
+and [reference equations](../../reference/masks.md).
 
 ### Animate mask properties
 
-`strength` and `feather` are scalar properties and support the normal
-keyframes, modifiers, and signal bindings. Mask transforms use the existing
-transform properties and are local to the owning layer. Uniform bindings such
-as `mask.transform.scale.bind(signal)` lower to the same `scale_x` and
-`scale_y` component modifiers used by layer transforms. The layer transform
-moves the layer and its attached mask together. Effects run before masks, and
-layer opacity runs after masks.
-Groups are maskable layers, so a group mask clips the already-composited group
-result.
+`strength`, `feather` and mask transforms support the ordinary property tracks
+and signal bindings. Their animation uses the owning layer's local time. Refer
+to [animation and keyframes](../../learn/animation.md) for interpolation rather
+than changing source geometry. Moving the layer moves its owned masks together;
+moving `mask.transform` changes the reveal within it.
+
+??? note "Runtime property details"
+
+    A uniform `mask.transform.scale.bind(signal)` lowers to the same `scale_x`
+    and `scale_y` component modifiers used by layer transforms. Static masks can
+    be cached; animated, modifier-driven or signal-driven mask properties make
+    their owning layer dynamic.
 
 ### Feathering and source defaults
 
-Feather applies a smooth Gaussian-like coverage blur measured in output
-pixels. Values from `0` through `256` px are supported, fractional values are
-kept, and samples outside the canvas have zero coverage. It filters coverage
-before inversion, operation combination, and strength interpolation. Static
-masks remain cacheable; animated, modifier-driven, or signal-driven mask
-properties make the owning layer dynamic. Masks attach to layers, including
-group layers; a composition has no mask stack. For coverage from another layer,
-use a [track matte](../../reference/masks.md#track-mattes).
+Feather filters coverage before inversion and combination. It supports fractional
+values from `0` to `256` output pixels, with zero coverage beyond the canvas.
+Effects run before masks; final opacity runs afterward. Groups can own masks,
+but a composition has no mask stack. Video masks start at source zero at normal
+speed, independently of the owning layer's video offset and rate. For owned group
+children and direct image/video sizing restrictions, see
+[mask source and timing reference](../../reference/masks.md#canonical-inputs).
 
-A mask placement also copies its source's constructor transform defaults.
-Edit `mask.transform` afterward; defaults are applied once and are independent
-of later source edits.
+## Reproduce the comparison
+
+[Download concepts_masks.py](../../assets/examples/concepts_masks.py), then run
+`uv run python concepts_masks.py` using the same installation as the tutorials.
+It writes `concepts-masks.mp4`: three seconds of static, silent output at
+640 × 480 and 30 fps on CPU. Rerunning replaces that file. The preview above is
+its frame at 0.5 seconds. All graphics and code are original project work under
+MIT; labels use the bundled font and its packaged notice.
+
+??? example "Complete comparison source"
+
+    ```python title="concepts_masks.py"
+    --8<-- "docs/assets/examples/concepts_masks.py"
+    ```
+
+Contributors regenerate the site still using the
+[documentation media workflow](../../development/documentation.md#reproduce-tutorial-previews).
+The comparison supplies the same original artwork to each placement, changing
+only masks. Use it to isolate coverage behavior before adding animation or media.

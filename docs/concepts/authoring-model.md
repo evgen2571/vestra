@@ -1,81 +1,86 @@
+---
+description: Distinguish reusable visual content from its placements and understand what Vestra copies while authoring.
+---
+
 # The authoring model
 
-Vestra describes a video as a project graph. The graph says what the project
-contains and where each item appears. Rendering evaluates that graph at a
-particular time.
+A source answers **what is drawn**. A layer answers **where, when and how it is
+shown**. A composition owns those layers, and a project owns the output settings
+and root composition. Understanding these relationships makes reuse and later
+edits predictable.
 
-```text
-Project
-└── root Composition
-    ├── Layer ── Source
-    ├── Layer ── Source
-    └── CompositionLayer
-        └── child Composition
-```
+<figure markdown="span">
+![One Rectangle source is copied into two independent layers in the project's root composition. Each layer owns its timing and transform.](../assets/diagrams/sources-placements.svg)
+<figcaption>Schematic ownership diagram. Adding a source twice creates two placements; it does not establish a live link between them.</figcaption>
+</figure>
 
 ## Project
 
-`Project` owns the output-wide settings: size, frame rate, optional duration,
-background, output audio policy, and the root composition. It also owns the
-audio timeline, project-level visual effects, and root flash overlays.
+`Project` owns the output size, frame rate, optional duration, background and
+root composition. It also owns the audio timeline, project-level visual effects,
+root flash overlays and output audio policy.
 
-The high-level Python `Project` is mutable while you author it. Calls such as
-`project.root.add(...)` update that authoring graph. `snapshot()` lowers the
-graph to Vestra's canonical project model. `validate()`, `prepare()`, and
-`render()` operate on that canonical snapshot.
+The Python project is mutable while you author it. `snapshot()` copies and lowers
+it to the canonical project model. Validation, preparation and rendering operate
+on a snapshot; later authoring edits do not alter an existing snapshot or
+prepared runtime.
 
 ## Composition and layer
 
-A `Composition` is an ordered collection of layers in one local time space. A
-`Layer` is a placement, not a piece of media. It has a start, duration, source
-offset, playback rate, z position, visibility, opacity, transform, and blend
-mode. Its `source` property supplies the visual content evaluated at that
-placement.
+A `Composition` is an ordered collection of layers in one local time space.
+Higher `z` values draw over lower values. A `Layer` supplies a start, duration,
+source offset, playback rate, visibility, opacity, transform, blend mode and
+attached processing. Its `source` supplies the content.
 
-The distinction matters. Reusing a source does not place it twice. Add it to a
-composition twice to create two independent placements with different timing
-or presentation properties.
+For example, place one rectangle source twice:
+
+```python
+from vestra import Project, Rectangle
+
+project = Project(size=(640, 360), fps=30, duration=3)
+panel = Rectangle(width=160, height=80, fill="#2563eb")
+
+left = project.root.add(panel, position=(0.25, 0.5), id="left")
+right = project.root.add(panel, position=(0.75, 0.5), id="right")
+right.opacity = 0.5
+```
+
+Both rectangles have the same initial geometry. Changing `right.opacity` affects
+only the right placement. Changing `panel.fill` afterward affects future
+placements, because the existing layers already hold copies.
 
 ## Sources
 
-A `Source` describes content such as an image, video, colour, shape, text,
-particle system, or spectrum. It does not own a timeline position. The layer
-created by `composition.add(source, ...)` supplies that position.
+Sources describe images, video, colors, shapes, text, groups, particles and
+spectra. Sources do not own a timeline position. Python sources may carry
+**default transforms**, including animation and bindings, which each placement
+copies. An `add(position=...)` override replaces that property's copied state;
+other properties keep their defaults.
 
-The high-level editor copies a source when it creates a layer. Later changes to
-the original source object do not turn into a second hidden placement. Treat a
-layer as the object you configure for timing and presentation.
+Copying a file-backed source copies its descriptor and path. It does not create
+another image, video or font file on disk. Reusing a source therefore creates
+independent authoring state while still referring to the same media asset.
+
+Use the returned layer for placement edits. For the exact override behavior and
+practical source examples, see [sources and layers](../guides/python/sources-and-layers.md).
 
 ## Nested compositions
 
-`composition.group(...)` creates a `CompositionLayer`. The returned layer is
-the parent placement. Its `child` composition is where you author the child
-layers:
+A reusable `Group` source is copied on placement, including its current children.
+`composition.group()` instead creates a `CompositionLayer` with an editable
+`child` composition. Both become canonical group content, with local coordinates
+and local time. They serve different authoring needs: reusable content versus
+ongoing edits to one child composition.
 
-```python
-from vestra import Color, Project
-
-project = Project(
-    size=(1280, 720),
-    fps=30,
-    duration=5,
-)
-title_card = project.root.group(start=1, duration=3, id="title-card")
-title_card.add(Color("#202020"), duration=3)
-```
-
-The child layers keep their own local times. The group placement controls when
-the child composition appears in its parent. This is an authoring relationship,
-not a claim that `CompositionLayer` and canonical `Group` are the same public
-object. Lowering converts the high-level graph to the canonical representation.
+Continue with [coordinates and anchors](coordinates-and-anchors.md), then
+[groups and nesting](groups-and-nesting.md) to see how placement applies inside
+a group.
 
 ## When lower-level objects matter
 
-Most Python projects should stay with `Project`, `Composition`, `Layer`, and
-the source classes. Use `ProjectBuilder` when exact canonical authoring and
-asset IDs matter. Use `ProjectSnapshot`, `Editor`, `PrepareOptions`, and
-`PreparedProject` when you need explicit validation, preparation, repeated
-frame rendering, or a lower-level render request.
-
-Those representations share the same project semantics. They are different
-interfaces for different jobs.
+Most Python editing uses `Project`, `Composition`, `Layer` and source classes.
+`ProjectBuilder` provides exact canonical authoring and asset IDs.
+`ProjectSnapshot`, `Editor`, `PrepareOptions` and `PreparedProject` expose
+explicit validation, preparation and repeated rendering. These interfaces share
+the same project semantics. The [rendering lifecycle](rendering-lifecycle.md)
+explains when to use each step.

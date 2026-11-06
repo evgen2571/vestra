@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 536" role="img" aria-labelledby="title desc">
+  <title id="title">One source, two independent placements</title>
+  <desc id="desc">A Rectangle source is copied by each add call into independent left and right layers within the root composition. Source edits apply only to future placements.</desc>
+  <rect width="480" height="536" rx="12" fill="#f6f5f1"/>
+  <g font-family="system-ui, sans-serif" font-size="24" fill="#202522">
+    <rect x="28" y="24" width="424" height="104" rx="8" fill="#e3ece5" stroke="#466451" stroke-width="2"/>
+    <text x="48" y="64">Rectangle source</text>
+    <text x="48" y="101">Geometry + defaults</text>
+    <path d="M240 128v48m0 0H132v43m108-43h108v43" fill="none" stroke="#466451" stroke-width="3"/>
+    <path d="m123 209 9 12 9-12m198 0 9 12 9-12" fill="none" stroke="#466451" stroke-width="3"/>
+    <rect x="16" y="232" width="448" height="282" rx="8" fill="none" stroke="#8a938c" stroke-width="2"/>
+    <text x="38" y="273">Project → root composition</text>
+    <rect x="32" y="296" width="200" height="190" rx="8" fill="#e7ebee" stroke="#556673" stroke-width="2"/>
+    <rect x="248" y="296" width="200" height="190" rx="8" fill="#e7ebee" stroke="#556673" stroke-width="2"/>
+    <text x="48" y="334">Left layer</text><text x="264" y="334">Right layer</text>
+    <text x="48" y="377">Source copy</text><text x="264" y="377">Source copy</text>
+    <text x="48" y="420">Own timing</text><text x="264" y="420">Own timing</text>
+    <text x="48" y="463">Own transform</text><text x="264" y="463">Own transform</text>
+  </g>
+</svg>

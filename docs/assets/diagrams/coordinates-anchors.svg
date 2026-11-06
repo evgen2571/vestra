@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 720" role="img" aria-labelledby="title desc">
+  <title id="title">Anchor connects source geometry to placement</title>
+  <desc id="desc">Two 640 by 360 canvases share position 0.25, 0.5, or pixel 160, 180. A 160 by 80 rectangle centers there with anchor 0.5, 0.5. With anchor 0, 0 its top-left lands there instead.</desc>
+  <rect width="480" height="720" rx="12" fill="#f6f5f1"/>
+  <g font-family="system-ui, sans-serif" font-size="24" fill="#202522">
+    <text x="24" y="40">Canvas: 640 × 360 pixels</text>
+    <text x="24" y="78">Position: (0.25, 0.5)</text>
+    <text x="24" y="129">Anchor: (0.5, 0.5)</text>
+    <rect x="24" y="146" width="432" height="243" fill="#e7ebee" stroke="#556673" stroke-width="2"/>
+    <path d="M132 146v243M24 267.5h432" stroke="#8a938c" stroke-dasharray="6 6"/>
+    <rect x="78" y="240.5" width="108" height="54" fill="#a6c9b0" stroke="#466451" stroke-width="2"/>
+    <path d="M122 267.5h20m-10-10v20" stroke="#202522" stroke-width="3"/>
+    <text x="202" y="260">160 × 80 px</text>
+    <text x="202" y="298">Center attached</text>
+    <text x="24" y="433">Anchor: (0, 0)</text>
+    <rect x="24" y="450" width="432" height="243" fill="#e7ebee" stroke="#556673" stroke-width="2"/>
+    <path d="M132 450v243M24 571.5h432" stroke="#8a938c" stroke-dasharray="6 6"/>
+    <rect x="132" y="571.5" width="108" height="54" fill="#a6c9b0" stroke="#466451" stroke-width="2"/>
+    <path d="M122 571.5h20m-10-10v20" stroke="#202522" stroke-width="3"/>
+    <text x="256" y="563">Top-left</text><text x="256" y="600">attached</text>
+  </g>
+</svg>

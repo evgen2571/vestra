@@ -1,69 +1,87 @@
+---
+description: Know what validation, preflight, preparation, frame rendering and successful output publication establish.
+---
+
 # The rendering lifecycle
 
-At a high level, Vestra takes an authored project through a small number of
-stages:
+`project.render(...)` takes an authored project to a published video. A successful
+validation report or a fully rendered last frame is an earlier milestone; the
+output is complete only after encoding, finalization and publication succeed.
 
-```text
-author
-  → snapshot and validate
-  → prepare
-  → select a backend
-  → evaluate frames and audio
-  → encode and publish output
-  → return a result
-```
+<figure markdown="span">
+![A snapshot passes through semantic validation, environment preflight, preparation, frame and audio rendering with encoding, then finalization and publication before completion.](../assets/diagrams/lifecycle-render.svg)
+<figcaption>Schematic lifecycle. The high-level render call handles the full operation; preparation stops at a reusable runtime.</figcaption>
+</figure>
 
-`Project.render(...)` performs this flow for a normal one-shot render. It
-creates a canonical snapshot, runs semantic validation and environment
-preflight, prepares the render plan, and sends the resulting frames and audio
-to the output encoder.
+<span id="validation-and-preparation"></span>
 
-## Validation and preparation
+## Validate the description
 
-`Editor.validate(project)` checks canonical project structure and semantic
-constraints. It does not read assets, run FFmpeg, inspect the output path, or
-initialize a renderer. `Editor.preflight(project, options)` performs the
-environment-dependent checks for a selected operation, including assets/media,
-FFmpeg, output readiness, and backend availability where applicable.
+`project.validate()` checks the canonical snapshot's structure, timing, ranges
+and relationships. It does not probe media, test FFmpeg, inspect the destination
+or initialize a graphics adapter. A valid report means the description satisfies
+semantic rules; a missing media file can still fail the next step.
 
-Preparation runs semantic validation and preflight before resolving media and
-audio analysis, compiling the plan, and setting up the renderer. A preparation
-failure does not mean that a frame was rendered successfully. The CLI
-`ve validate` command uses the validation preflight target, so it can report
-environment failures that SDK/Python `project.validate()` does not inspect.
+Snapshot creation itself can report authoring errors, such as an unavailable
+font family. The pure validation boundary applies to the resulting canonical
+project.
 
-Advanced Python code can call `project.validate()` or `project.prepare()`
-before rendering. The immutable runtime SDK exposes the same split through
-`Editor`, `ProjectSnapshot`, `PrepareOptions`, and `PreparedProject`.
+## Check the environment and prepare
 
-## Render requests and events
+Preflight checks the assets and media facts needed by the operation, FFmpeg,
+output readiness and backend availability where applicable. CLI `ve validate`
+includes its validation preflight target, so it can report environment problems
+that Python `project.validate()` does not inspect.
 
-A render request supplies an output path, overwrite policy, preview choice, and
-backend preference. Native Rust render observers and Python progress callbacks
-receive the typed lifecycle `started`, `stage_changed`, `progress`, and one
-terminal outcome. `Completed` is emitted only after encoder finalization and
-successful output publication. Rendering fraction is frame progress only and
-may reach `1.0` before encoding/finalizing complete. A callback error before
-terminal success may abort the operation; a callback error while receiving
-`Completed` cannot invalidate a published render. The result includes the
-output path, timing data, requested backend, selected backend, and adapter
-information when the backend provides it.
+Preparation validates and preflights, resolves media and audio analysis, compiles
+the project plan and initializes the renderer. `project.prepare()` returns a
+reusable `PreparedProject`; it does not encode or publish a video. The prepared
+runtime is isolated from later authoring edits. Prepare again to include them.
 
-Cancellation is cooperative. Pass a `CancellationToken` to the native or
-Python runtime operation and request cancellation from the controlling code.
-Rust returns a render error marked as cancelled. Python raises
-`vestra.CancelledError`; cancellation is not a successful `RenderResult`.
-That is separate from a Python callback exception. Vestra stops the render,
-then re-raises the original callback exception. If native cleanup reports an
-error, Vestra attaches it to that exception as `render_cleanup_error`.
+Backend selection is a result to inspect. Requesting WGPU does not prove use of
+a hardware GPU: a software adapter can also provide WGPU. Check the selected
+backend and adapter information, and use the [backend reference](../reference/backends.md)
+for the limits of each claim.
 
-## Publication
+## Evaluate and render
 
-Encoding and output publication happen after preparation and frame evaluation.
-Use `overwrite=True` or the corresponding CLI flag when replacing an existing
-file is intentional. A successful render result describes the published output;
-it is not just an indication that preparation succeeded.
-With overwrite disabled, publication atomically refuses an existing destination,
-including one created while rendering. This uses a hard link from the sibling
-temporary file and requires a filesystem that supports hard links; unsupported
-filesystems return a publication error. Explicit overwrite uses a rename.
+For each output frame, Vestra evaluates active layers, their local times,
+keyframes, effects, signals and transitions, then renders that work. Audio is
+prepared and processed for the output timeline. A single-frame render provides
+RGBA pixels at a requested time; it does not exercise video encoding or output
+publication.
+
+For one inspection, `project.render_frame(seconds)` is convenient. It prepares
+on every call. Reuse `project.prepare()` when inspecting several times or making
+several outputs from the same snapshot. The [Python rendering guide](../guides/python/rendering-and-preparation.md)
+shows both routes.
+
+<span id="publication"></span>
+
+## Finish and publish the output
+
+Encoding and finalization must succeed before output publication. A rendering
+progress fraction of `1.0` describes completed frame progress; finalizing the file
+can still be underway. The terminal `completed` event and returned `RenderResult`
+follow successful publication.
+
+With `overwrite=False`, publication refuses an existing destination atomically,
+including one created during the render. It uses a hard link from a sibling
+temporary file, so a filesystem without hard-link support can fail publication.
+`overwrite=True` deliberately replaces the destination using a rename.
+
+The result reports the output path, timing data, requested and selected backends,
+and adapter information where provided. Use the result or terminal event as the
+success signal, then inspect the file when validating a new workflow.
+
+<span id="render-requests-and-events"></span>
+
+## Failure and cancellation
+
+A failure during validation, preparation, rendering or publication is not a
+successful render. Cancellation is cooperative: `CancellationToken.cancel()`
+requests it, and Python raises `CancelledError` rather than returning a result.
+Progress callbacks receive typed lifecycle events. Callback exceptions and cleanup
+errors have explicit behavior; the [Python runtime reference](../reference/python-api.md#native-runtime)
+and [rendering guide](../guides/python/rendering-and-preparation.md#progress-and-cancellation)
+cover these advanced integration details.

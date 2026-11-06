@@ -1,19 +1,20 @@
 ---
-description: Map audio RMS to bounded visual properties and compare attack and release smoothing with an audible example.
+description: Map audio RMS to bounded visual properties and see how attack and release change the response.
 ---
 
 # Make a visual respond to audio
 
 Start with an audio clip on the project timeline, measure it, then map its
 range to the property you want to move. This study uses an original generated
-pulse recording so you can hear each change and reproduce it without downloads.
+bass-and-melody phrase. The preview is silent: its waveform and moving marker
+show when the input changes. The audio clips remain in the project for analysis.
 
 <figure>
-  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-bounded.webp" width="640" height="360" aria-label="A mint circle grows on each audible pulse, remaining between two fixed outline circles that mark scale 0.75 and 1.30.">
+  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-bounded.webp" width="640" height="440" aria-label="Silent study: a waveform marks five input beats. A mint circle grows between fixed minimum and maximum rings, and a moving marker follows the measured scale curve.">
     <source src="../../assets/renders/audio-bounded.mp4" type="video/mp4">
     <a href="../../assets/renders/audio-bounded.mp4">Download the bounded response</a>.
   </video>
-  <figcaption>The fixed outlines mark the minimum and maximum size. Louder pulses grow the filled circle further; the release lets it settle between pulses.</figcaption>
+  <figcaption>The rings mark scale 0.75 and 1.30. The lower curve traces the same multiplier, rising with each beat and settling during release. Follow the marker against the waveform to see the timing.</figcaption>
 </figure>
 
 The [audio and signals concept](../../concepts/audio-and-signals.md) explains
@@ -46,7 +47,7 @@ Continue the same project:
 ```python
 scale_response = energy.remap(input=(0, 0.18), output=(0.75, 1.30))
 bounded_scale = scale_response.clamp(0.75, 1.30)
-smoothed_scale = bounded_scale.envelope(0.01, 0.15)
+smoothed_scale = bounded_scale.envelope(0.01, 0.20)
 
 pulse.transform.scale.bind(smoothed_scale, operation="multiply")
 ```
@@ -65,11 +66,11 @@ Keep the clamp while tuning.
 ## Compare attack and release
 
 <figure>
-  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-smoothing.webp" width="640" height="360" aria-label="Three circles hear the same pulses. Raw RMS changes quickly, a 0.01 second attack and 0.20 second release follow the pulse then linger, and a 0.15 second attack reduces the response to short pulses.">
+  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-smoothing.webp" width="640" height="440" aria-label="Silent comparison: three measured response curves share one waveform and playhead. Raw RMS has sharp peaks, fast attack retains a tail, and slow attack reduces each short peak.">
     <source src="../../assets/renders/audio-smoothing.mp4" type="video/mp4">
     <a href="../../assets/renders/audio-smoothing.mp4">Download the smoothing comparison</a>.
   </video>
-  <figcaption>All three use the same RMS, remap and clamp. The middle and right share a 0.20 s release; changing only attack shows why a slower attack suppresses short pulses.</figcaption>
+  <figcaption>Read all three rows on the same 0–1 vertical scale. The two smoothed rows share a 0.20 s release: the fast attack rises sharply, while the slow attack reduces short peaks. Both retain a tail after raw RMS returns to zero.</figcaption>
 </figure>
 
 Attack controls movement toward a rising value; release controls movement
@@ -86,56 +87,33 @@ in call order: this example bounds the target before smoothing it.
 To finish the small project above:
 
 ```python
+project.output_audio = False
 project.render("audio-response.mp4", backend="cpu", overwrite=True)
 ```
 
-This replaces `audio-response.mp4`. It includes the authored audio by default.
-Use `project.output_audio = False` to keep analysis while publishing a silent
-video. See the [signals reference](../../reference/signals.md) for binding
-operations, frequency constraints and other transforms.
+This replaces `audio-response.mp4` with a silent video. Setting
+`output_audio = False` retains the clips and prepared analysis; changing it to
+`True` publishes the same visuals with sound. See the
+[signals reference](../../reference/signals.md) for binding operations, frequency
+constraints and other transforms.
 
-## Run the audible comparisons
+## Complete example
 
-[Download audio_response.py](../../assets/examples/audio_response.py), install
-Vestra with its native media requirements, then run:
+[Download audio_response.py](../../assets/examples/audio_response.py) and run:
 
 ```bash
 python audio_response.py
 ```
 
-The program writes `audio-pulses.wav` and replaces `audio-bounded.mp4`,
-`audio-smoothing.mp4` and `audio-spectra.mp4` in the current directory. All three
-are 640 × 360, 30 fps, three seconds, with sound and no speech. The third is
+The program creates `audio-pulses.wav` with Python's standard-library `wave`
+module and replaces `audio-bounded.mp4`, `audio-smoothing.mp4` and
+`audio-spectra.mp4` in the current directory. The three four-second videos are
+silent; the generated WAV is their analysis input. The spectrum study is
 explained in [draw an audio spectrum](spectra.md).
 
-```python
---8<-- "docs/assets/examples/audio_response.py"
-```
-
-## Credits and reproduction
-
-The tones and procedural graphics are original to this documentation; the
-program uses Python's standard-library `wave` module and Vestra's bundled
-default font. There are no external media inputs. Previews were rendered with
-CPU and encoded as H.264/yuv420p plus AAC, with fast-start metadata. Posters
-sample **1.0 s** for the bounded response and **0.9 s** for smoothing and
-spectra. Original-render checksums are recorded below. Encoding bytes may differ
-across FFmpeg versions; these originals used FFmpeg **8.1.3**.
-
-| Original render | SHA-256 |
-| --- | --- |
-| `audio-bounded.mp4` | `e0533d8999b3038a79168dd3934116e90497c62ab03c32ac6190bf5b2c144a95` |
-| `audio-smoothing.mp4` | `90a7dc1d2ae3695edb7c55e5d0735d62219cc942bf10a2e64baf1c2bdd607da1` |
-| `audio-spectra.mp4` | `b9e71108aca6c190edcc105d4a1ab16ce8a6377a4e95a228559b27cf0d70cadd` |
-
-From the repository root in the native contributor environment, regenerate the
-previews and posters with:
-
-```bash
-just python-sync
-python scripts/render-docs-media.py --learning
-```
-
-Original renders and inspection frames stay under `target/docs-media/`.
-The website build uses the committed delivery copies and does not run the
-engine or download media.
+The curves come from actual prepared Vestra signal values sampled at 30 fps;
+the moving dots are bound directly to those signals. The input waveform comes
+from the WAV samples. This makes the plots useful when playback is paused as
+well as while it runs. See
+[preview reproduction](../../development/documentation.md#reproduce-visual-learning-studies)
+for contributor checks and regeneration.

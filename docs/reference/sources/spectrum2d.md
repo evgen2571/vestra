@@ -1,8 +1,8 @@
 # Spectrum2D source
 
-For an audible linear/radial comparison and tuning guidance, see
-[draw an audio spectrum](../../guides/python/spectra.md). Its input is prepared
-master frequency analysis, separate from scalar signal bindings.
+For a silent linear/radial comparison with visible input timing and tuning
+guidance, see [draw an audio spectrum](../../guides/python/spectra.md). Its input
+is prepared master frequency analysis, separate from scalar signal bindings.
 
 ```text title="API signature"
 Spectrum2D(*, preset=None, band_count=None, min_hz=None, max_hz=None,

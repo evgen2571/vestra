@@ -13,8 +13,10 @@ itself.
 
 The branches matter when editing. Removing a visual binding leaves playback
 intact. Disabling audio in the render output can make a silent visualizer while
-retaining the clips needed for analysis. Removing those clips removes the
-analysis input too. A valid input that contains silence is different from
+retaining the clips needed for analysis. In the learning previews,
+`project.output_audio = False` removes the published audio track while the
+bindings and spectra still follow the prepared input. Removing those clips
+removes the analysis input too. A valid input that contains silence is different from
 having no usable audio input.
 
 ## Clips describe what plays and when
@@ -51,7 +53,7 @@ position component to move with the recording. Choose a range appropriate to
 that property. A useful scale multiplier might be `0.75`–`1.30`; an opacity
 requires `0`–`1`. Remapping does **not** clamp values outside its input range.
 The [audio-reactivity guide](../guides/python/signals-and-audio-reactivity.md)
-shows bounded values and an audible smoothing comparison.
+shows bounded values and measured smoothing curves with visible input timing.
 
 ## Spectra draw a distribution
 

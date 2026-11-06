@@ -1,13 +1,13 @@
 # Video source
 
-```python
+```text title="API signature"
 Video(path: str | PathLike[str], *, sizing: Sizing | Literal["original", "fit", "cover"] | None = None,
       crop: Crop | CropProperty | None = None)
 ```
 
 `path` must be a non-empty text path. `sizing` and `crop` have the exact [Image](image.md) contract, including `Sizing.scale`/`Sizing.stretch` and normalized `Crop`. The high-level constructor does not accept source trim or playback rate: those belong to the layer placement.
 
-```python
+```text title="API signature"
 composition.add(video, *, start=0, duration=None, source_start=0.0,
                 playback_rate=1.0, z=0, visible=True, opacity=1.0,
                 id=None, name=None, blend_mode=BlendMode.NORMAL)

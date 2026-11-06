@@ -16,8 +16,8 @@ All three follow the same eased zoom, making the differences easy to see.
   <figcaption>The photograph slowly zooms in and out across all three panels. Halftone converts image detail into dots; ASCII converts it into a grid of characters. The preview is silent.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/lookbook/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/lookbook/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/lookbook/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/lookbook/render.mp4)
 
 ## Reproduce the example
 
@@ -59,7 +59,7 @@ The photograph is resized, cropped, animated and processed with halftone and
 ASCII effects.
 
 Manrope is SIL OFL 1.1. The bundled DejaVu face retains its Bitstream Vera/DejaVu
-notice. See the [example credits](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/lookbook/README.md#credits)
+notice. See the [example credits](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/lookbook/README.md#credits)
 for accompanying license copies and the photo reproduction record.
 
 ## Preview details
@@ -67,7 +67,7 @@ for accompanying license copies and the photo reproduction record.
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 2.5 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/lookbook/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/lookbook/README.md).
 The source render's SHA-256 is `91455e376d50a5a91d0746dccb1304b0b0b8a57d8db1fb13cdd0bd1ab7f3bcda`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

@@ -51,7 +51,21 @@ Choose rendered text, demo titles, labels, captions, and alt text as carefully a
 
 ## Make examples easy to read and run
 
-Write code someone would be comfortable maintaining. Use names such as `headline` and `caption`, blank lines between meaningful steps, and comments for decisions the code cannot explain. Show imports, setup, rendering, the run command, and the output filename. State when a rerun overwrites an output. Keep optional GPU setup out of a beginner's first render.
+Write code someone would be comfortable maintaining. Introduce one operation
+per snippet: show a circular crop before combining feathering, animation and
+subtraction. Present alternative effects or source types separately rather than
+attaching all of them in one demonstration. State whether a block continues the
+previous project or starts a new one, and make required media paths visible.
+
+Name the source, layer and attached effect for their roles. Give multi-parameter
+effects keyword arguments so readers can identify units and settings. Keep long
+source definitions separate from their timeline placement when nesting hides
+those two decisions. Use blank lines between setup, content, changes and output;
+comments should explain timing, ownership or a choice the code cannot show.
+API signatures in reference pages are inventories, labelled as such rather than
+presented as runnable Python.
+
+Show imports, setup, rendering, the run command, and the output filename. State when a rerun overwrites an output. Keep optional GPU setup out of a beginner's first render.
 
 Store complete tutorial programs in `docs/assets/examples/`. Include them directly in fenced code blocks with `pymdownx.snippets`, and offer the same file as a download:
 
@@ -63,6 +77,12 @@ The include path is relative to the repository root. The introductory animation 
 uvx --from 'ruff>=0.12,<0.13' ruff check docs/assets/examples scripts/render-docs-media.py
 uvx --from 'ruff>=0.12,<0.13' ruff format --check docs/assets/examples scripts/render-docs-media.py
 ```
+
+`just site-check` also parses Python snippet syntax and checks the introductory
+download against its showcase source. With the native contributor environment,
+run `just python-test python-tests/test_documentation_examples.py` to execute the
+guide snippets and check that their edits reach the intended layers and effects.
+That test captures video render requests; encoding and visual checks remain separate.
 
 Check behavior against the current implementation and its callers/tests. A Python import proves installation, not encoding. Execute the main examples, inspect their actual frames, and record the selected backend when changing a rendering explanation. Document possible API problems separately instead of changing engine behavior to make a tutorial work.
 
@@ -78,9 +98,9 @@ Keep source, author, license, modifications and reproduction instructions beside
 the example that uses an asset: in its README for source inputs, and under
 **Credits** on its gallery page for site previews. Link to a shared input's record
 rather than copying attribution tables. Shared preparation and font provenance
-belong in the [showcase README](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/README.md#prepare-shared-inputs).
-The [photo cutouts](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/compositing/README.md#photo-source)
-and [video edit](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/real-media-edit/README.md#footage-source)
+belong in the [showcase README](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/README.md#prepare-shared-inputs).
+The [photo cutouts](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/compositing/README.md#photo-source)
+and [video edit](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/real-media-edit/README.md#footage-source)
 show the convention, including original checksums and processing steps.
 
 Check the actual source terms before making license claims. Credit CC0 inputs

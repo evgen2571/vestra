@@ -1,13 +1,24 @@
 # Sources and layers
 
 A source describes visual content. Adding it to a composition creates a layer
-that supplies timing and presentation.
+that supplies timing and presentation. This example uses your own
+`assets/photo.png` and a video with at least three seconds of footage at
+`assets/clip.mp4`. Both paths are relative to the directory where you run Python.
 
 ```python
-from vestra.sources import Color, Image, Rectangle, Text, Video
+from vestra import Project
+from vestra.sources import Image, Rectangle, Text, Video
 
-project.root.add(Image("assets/photo.png"), start=0, duration=5, id="photo")
-project.root.add(Video("assets/clip.mp4"), start=1, duration=3, id="clip")
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=5,
+)
+
+photo = Image("assets/photo.png")
+footage = Video("assets/clip.mp4")
+project.root.add(photo, duration=5, id="photo")
+project.root.add(footage, start=1, duration=3, id="clip")
 project.root.add(
     Rectangle(width=600, height=180, fill="#0f172a"),
     start=2,
@@ -25,10 +36,15 @@ Image and video sources can carry sizing and crop properties.
 Procedural shapes can be created with their default geometry and style:
 
 ```python
-project.root.add(Rectangle())                    # white, 100 × 100 pixels
-project.root.add(Rectangle(stroke="#00ff00"))    # green outline, 2 pixels wide
+square = Rectangle()
+outline = Rectangle(stroke="#00ff00")
+
+project.root.add(square)
+project.root.add(outline, position=(0.7, 0.5))
 ```
 
+The square is white and 100 × 100 pixels. Supplying only a stroke creates an
+outline, here green and two pixels wide.
 See [shape defaults](../../reference/sources/shape.md) for all primitives.
 `Color()` creates an opaque black source. Image/video paths, text content and
 polygon points remain required.
@@ -38,10 +54,23 @@ Text can use the bundled default, an installed font family, or an explicit file:
 ```python
 from vestra import Text, list_system_fonts
 
-title = Text("Hello")               # bundled font, 48 pixels; font=None does the same
-print(list_system_fonts())          # case-insensitively sorted, unique families
-title = Text("Hello", font="DejaVu Sans", font_size=48)  # if installed
-title = Text("Hello", font="assets/MyFont.ttf", font_size=48)
+title = Text("Hello", font_size=48)
+project.root.add(title)
+```
+
+To choose an installed family, check which names are available first:
+
+```python
+print(list_system_fonts())
+
+system_title = Text("Hello", font="DejaVu Sans", font_size=48)
+```
+
+Use that family only if it appears in the list. For a font file you distribute
+with the project, provide its path instead:
+
+```python
+file_title = Text("Hello", font="assets/MyFont.ttf", font_size=48)
 ```
 
 The bundled DejaVu-derived regular font works without host fonts and provides
@@ -85,10 +114,10 @@ presentation wrapper when it lowers the project.
 Configure the returned layer for the edit:
 
 ```python
-layer = project.root.add(Image("assets/photo.png"), duration=5)
-layer.opacity.value = 0.85
-layer.transform.scale.value = 1.1
-layer.transform.position.value = (0.5, 0.45)
+portrait = project.root.add(photo)
+portrait.opacity = 0.85
+portrait.transform.scale = 1.1
+portrait.transform.position = (0.5, 0.45)
 ```
 
 Use a reusable `Group` source or author a `CompositionLayer` directly through
@@ -98,12 +127,14 @@ Visual sources accept `position`, `anchor`, `scale`, and `rotation` (alias
 `rotation_degrees`) as constructor defaults. For example:
 
 ```python
-panel = Rectangle(width=200, height=100, fill="#ff0000",
-                  position=(0.4, 0.5), rotation=15)
-first = project.root.add(panel)
-second = project.root.add(panel, position=(0.75, 0.5))
-second.transform.rotation.keyframe(0, 15)
-second.transform.rotation.keyframe(2, 180)
+panel = Rectangle(
+    width=200, height=100, fill="#ff0000", position=(0.4, 0.5), rotation=15
+)
+left_panel = project.root.add(panel)
+right_panel = project.root.add(panel, position=(0.75, 0.5))
+
+right_panel.transform.rotation.keyframe(0, 15)
+right_panel.transform.rotation.keyframe(2, 180)
 ```
 
 These values initialize the placement's existing transform; they add no extra

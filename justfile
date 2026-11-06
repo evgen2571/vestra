@@ -123,10 +123,10 @@ benchmark output backend='cpu':
 benchmark-compare before after:
     uv run --no-project python scripts/benchmark.py compare "$1" "$2"
 
-# Check showcase authoring/scripts without importing the native extension.
+# Check Python examples and showcase scripts without importing the native extension.
 showcase-style:
-    uvx --from 'ruff>=0.12,<0.13' ruff check examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check examples/python examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py tests/test_documentation_examples.py python-tests/test_documentation_examples.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/python examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py tests/test_documentation_examples.py python-tests/test_documentation_examples.py
 
 # Check the external comparison and Code to Video authoring tools.
 comparison-style:

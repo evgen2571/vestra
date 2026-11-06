@@ -53,8 +53,15 @@ the parent placement. Its `child` composition is where you author the child
 layers:
 
 ```python
-group = project.root.group(start=1, duration=3, id="title-card")
-group.child.add(Color("#202020"), duration=3)
+from vestra import Color, Project
+
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=5,
+)
+title_card = project.root.group(start=1, duration=3, id="title-card")
+title_card.add(Color("#202020"), duration=3)
 ```
 
 The child layers keep their own local times. The group placement controls when

@@ -1,6 +1,6 @@
 # Spectrum2D source
 
-```python
+```text title="API signature"
 Spectrum2D(*, preset=None, band_count=None, min_hz=None, max_hz=None,
            sensitivity=None, attack_seconds=None, release_seconds=None,
            x=None, y=None, width=None, height=None, bar_gap_ratio=None,

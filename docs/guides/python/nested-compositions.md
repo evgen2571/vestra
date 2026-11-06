@@ -5,16 +5,23 @@ source, so placing the same group again creates independent children and
 presentation state:
 
 ```python
-from vestra.sources import Group, Rectangle, Circle
+from vestra import Circle, Color, Group, Project, Rectangle
 
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=5,
+)
 card = Group()
-card.add(Rectangle(width=200, height=100, fill="#ff0000",
-                   position=(0.4, 0.5), rotation=15))
+card.add(
+    Rectangle(width=200, height=100, fill="#ff0000", position=(0.4, 0.5), rotation=15)
+)
 card.add(Circle(radius=30, fill="#2563eb", position=(0.6, 0.5)))
 project.root.add(card, duration=5)
-second = project.root.add(card, duration=5, position=(0.75, 0.5))
-second.transform.rotation.keyframe(0, 0)
-second.transform.rotation.keyframe(5, 180)
+right_card = project.root.add(card, duration=5, position=(0.75, 0.5))
+
+right_card.transform.rotation.keyframe(0, 0)
+right_card.transform.rotation.keyframe(5, 180)
 ```
 
 `Group.add()` returns a child placement with `transform`, `opacity`, `effects`,
@@ -34,21 +41,21 @@ fractional values are supported. The group's placement uses its parent's coordin
 
 ```python
 card = Group(size=(600, 300))
-card.add(Rectangle(width=100, height=80, fill="#2563eb",
-                   position=(0.25, 0.5)))
-project.root.add(card, duration=5, position=(0.5, 0.5))
+card.add(Rectangle(width=100, height=80, fill="#2563eb", position=(0.25, 0.5)))
 ```
 
 The rectangle's anchor is at `(150, 150)` inside the card. The card's own anchor
 is placed at the center of its parent. The rectangle remains 100×80 pixels
 before placement transforms; `size` does not stretch its geometry.
 
-Sized groups nest with their own dimensions:
+Sized groups nest with their own dimensions. Add the badge before placing the
+card: placement copies the children that exist at that moment.
 
 ```python
 badge = Group(size=(120, 60))
 badge.add(Circle(radius=12, fill="#ffffff", position=(0.5, 0.5)))
 card.add(badge, position=(0.75, 0.5))
+project.root.add(card, duration=5, position=(0.5, 0.5))
 ```
 
 Here the badge is placed at `(450, 150)` in the card and its circle is at
@@ -63,12 +70,20 @@ Default resource limits allow group canvases up to 8192 pixels per axis and
 ```python
 from vestra import Project, ResourceLimits
 
-limits = ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=32_768)
-project = Project(size=(640, 360), fps=30, duration=2, resource_limits=limits)
+limits = ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=640 * 360)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+    resource_limits=limits,
+)
 strip = Group(size=(16_384, 2))
 strip.add(Rectangle(width=16_384, height=2, fill="#2563eb"))
 project.root.add(strip, scale=0.025)
 ```
+
+The pixel budget must also cover unsized groups, which inherit the project canvas.
+Here the 640 × 360 project needs more pixels than the wide, two-pixel strip.
 
 The same limits apply to validation, preparation and rendering, including owned
 group masks. Budgets do not change coordinates, clipping or backend limits.
@@ -91,11 +106,15 @@ that owns an editable child composition. Add children through `group.add()`
 or its `child` composition:
 
 ```python
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=5,
+)
 group = project.root.group(start=1, duration=3, z=2, id="scene")
 group.add(Color("#0f172a"), duration=3)
-# This starts 0.5 seconds into the group, at project time 1.5 seconds.
 badge = group.child.add(Color("#f97316"), start=0.5, duration=1.5, z=1)
-badge.transform.scale.value = 0.5
+badge.transform.scale = 0.5
 ```
 
 The group starts at parent time one. `badge` starts at child time 0.5, so it

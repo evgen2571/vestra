@@ -1,9 +1,12 @@
-# Vestra development
+<span id="vestra-development"></span>
+
+# Contributing to Vestra
 
 Start with the root [contribution guide](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md) for setup and
 pull request guidance. Use [Testing](testing.md) to choose checks for your change,
 and the [architecture overview](architecture/overview.md) to find your way
-around the codebase. Agents should also consult [AGENTS.md](https://github.com/evgen2571/vestra/blob/develop/AGENTS.md)
+around the codebase. For site content and previews, use
+[Documentation authoring](documentation.md). Agents should also consult [AGENTS.md](https://github.com/evgen2571/vestra/blob/develop/AGENTS.md)
 and [PLANS.md](https://github.com/evgen2571/vestra/blob/develop/PLANS.md).
 
 The [Vestra skill index](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md) routes agent work to

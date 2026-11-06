@@ -45,10 +45,10 @@ MIT-licensed code. The sRGB transfer function follows
 
 The current documentation checkout uses CC0 Shanghai footage, a CC0 landscape
 photo and original CC0 synthesized audio. Example media is documented beside
-the [showcase sources](https://github.com/evgen2571/vestra/tree/docs/learning-navigation/examples/showcase),
+the [showcase sources](https://github.com/evgen2571/vestra/tree/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase),
 including Manrope's accompanying OFL copy. These inputs are not bundled in wheels.
 Older Location Kenya footage copies remain CC BY 3.0; preserve their
-[source, license and modification credits](https://github.com/evgen2571/vestra/blob/docs/learning-navigation/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
+[source, license and modification credits](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
 when redistributing them.
 
 ## Bundled text and ASCII glyph font

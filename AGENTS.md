@@ -51,8 +51,8 @@ have to rediscover. Link to the source documentation instead of copying it.
   support as public contracts. Do not silently broaden support claims.
 - Reuse existing utilities and fixtures. Avoid unrelated rewrites. If behavior
   changes, update the appropriate guide, reference or support matrix. Preserve
-  licenses for third-party shaders, assets and fonts; use
-  [showcase assets](examples/showcase/ASSETS.md) as the provenance pattern.
+  licenses for third-party shaders, assets and fonts; follow the
+  [asset credit convention](docs/development/documentation.md#asset-credits).
 
 ## Commands and evidence
 

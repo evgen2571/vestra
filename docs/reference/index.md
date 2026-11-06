@@ -1,11 +1,11 @@
 ---
-title: Reference & guides
+title: Reference overview
 description: Find Vestra's Python API, guides, source types, effects, JSON format and rendering contracts.
 ---
 
 # Guides and reference
 
-Use the task guides for practical examples and the references for signatures, parameters, and constraints. For an introduction, start with [your first render](../learn/first-render.md). The existing technical material is preserved here while the new learning pages are developed.
+Use the task guides for practical examples and the references for signatures, parameters, and constraints. For an introduction, start with [your first render](../learn/first-render.md). The navigation separates task guides, concepts and exact reference contracts by topic. This overview pairs common tasks with their detailed references.
 
 ## Work in Python
 
@@ -47,4 +47,4 @@ Start with the failing part: [Python installation](../troubleshooting/python.md)
 
 ## Contribute
 
-Read the [documentation authoring guide](../development/documentation.md) to improve this site, or the [development hub](../development/README.md) for architecture, testing, and engine contributions. The [full reference index](catalog.md) remains available.
+Start with [Contributing to Vestra](../development/README.md) for general contribution and development guidance; [Documentation authoring](../development/documentation.md) covers this site. The [full reference index](catalog.md) remains available.

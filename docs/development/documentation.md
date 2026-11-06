@@ -41,7 +41,7 @@ just site-check   # Clean strict build, generated links/assets/anchors, checker 
 | Concept | “Why does it behave like this?” | Use a concrete case, a visual if helpful, and the rule that explains it. |
 | Reference | “What exactly is accepted or returned?” | Give signatures, units, defaults, constraints, errors, and support limits. |
 
-Keep API inventories in reference pages. Link to them when a learner needs more detail. The [reference hub](../reference/index.md) keeps the existing technical material accessible while the new learning path grows. When extending a page, reconsider its order and purpose; split or rewrite it if the new material would bury the main task.
+Keep API inventories in reference pages. Link to them when a learner needs more detail. **Learn** contains the introductory sequence, **Guides** organizes tasks by topic, **Concepts** explains the model, and **Reference** gives exact contracts. Put pages in the appropriate navigation section in `zensical.toml`; retain a useful sidebar context on individual gallery pages. When extending a page, reconsider its order and purpose; split or rewrite it if the new material would bury the main task.
 
 ## Use descriptive developer-facing language
 
@@ -72,7 +72,30 @@ For motion, show the actual rendered result. For timing or coordinate relationsh
 
 Videos use a small poster, native controls, `playsinline`, and `preload="metadata"` so the controls can show duration before playback. Playback starts when requested; the gallery index uses still previews rather than loading every video. Provide a nearby text description and a download link. Spoken content needs captions. Give informative images meaningful alt text and diagrams a text explanation; do not encode meaning in color alone. Check diagrams at mobile width in both themes. A static picture should remain useful when someone cannot play a video.
 
-For new assets, record the source, license, modifications, and regeneration command. Prefer original, deterministic scenes and bundled fonts. Keep originals and QA frames in `target/`; commit only compact previews used by the site. Follow the [tutorial media provenance](../assets/renders-README.md) and [gallery provenance](../assets/gallery/README.md).
+## Asset credits
+
+Keep source, author, license, modifications and reproduction instructions beside
+the example that uses an asset: in its README for source inputs, and under
+**Credits** on its gallery page for site previews. Link to a shared input's record
+rather than copying attribution tables. Shared preparation and font provenance
+belong in the [showcase README](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/README.md#prepare-shared-inputs).
+The [photo cutouts](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/compositing/README.md#photo-source)
+and [video edit](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/real-media-edit/README.md#footage-source)
+show the convention, including original checksums and processing steps.
+
+Check the actual source terms before making license claims. Credit CC0 inputs
+as useful provenance. Preserve attribution for CC BY copies that remain distributed,
+including older previews; a replacement asset does not relicense them. Keep full
+required license copies and copyright notices beside redistributed font files.
+Showing rendered text is distinct from redistributing fonts. Preserve packaged
+software notices and the release source/rebuild route when changing credit placement.
+`THIRD_PARTY_NOTICES.md` serves software distributions, not as an asset catalog.
+
+Prefer original, deterministic scenes and bundled fonts. Keep originals and QA
+frames in `target/`; commit compact previews actually used by the site. Record
+poster times and original-render checksums on the relevant gallery page.
+
+## Reproduce tutorial previews
 
 To regenerate the introductory media with the current source checkout:
 
@@ -82,13 +105,60 @@ just python-sync
 just docs-media
 ```
 
-The renderer runs all three downloadable examples on CPU, probes the original MP4s, and refreshes the web assets. Inspect the new output before committing it. Existing showcase previews can be rebuilt with the commands in the gallery provenance file. Encoding bytes may differ with FFmpeg versions.
+The renderer runs all three downloadable examples on CPU, probes the original MP4s, and refreshes the web assets. Inspect the new output before committing it. Gallery previews can be rebuilt from the checkout as described below. Encoding bytes may differ with FFmpeg versions.
+
+## Reproduce gallery previews
+
+The site uses committed previews, so building it needs no engine, render or network
+asset download. From the repository root, with FFmpeg installed, this Bash loop
+transcodes the original renders already bundled beside the cleaned sources:
+
+```bash
+for example in \
+  "readme-demo motion-design 1.7" \
+  "compositing compositing 2" \
+  "audio-visualizer audio-reactive 3" \
+  "real-media-edit video-editing 6" \
+  "lookbook visual-effects 2.5"
+do
+  read -r source name poster_time <<< "$example"
+  input="examples/showcase/$source/render.mp4"
+  output="docs/assets/gallery/$name"
+  audio=(-an)
+  if [ "$name" = "audio-reactive" ]; then
+    audio=(-c:a aac -b:a 80k)
+  fi
+  ffmpeg -y -i "$input" -vf scale=640:-2:flags=lanczos \
+    -c:v libx264 -preset slow -crf 27 -pix_fmt yuv420p \
+    "${audio[@]}" -map_metadata -1 -movflags +faststart "$output.mp4"
+  ffmpeg -y -ss "$poster_time" -i "$input" -frames:v 1 \
+    -vf scale=640:-2:flags=lanczos -c:v libwebp -quality 86 \
+    -map_metadata -1 "$output.webp"
+done
+```
+
+This replaces the delivery copies. The existing previews were encoded with FFmpeg
+8.1.3; encoding bytes can vary between versions. Their original-render checksums
+are recorded beside the examples. To change the scenes, render their Python
+sources first, inspect the output and update the source/render/preview revision
+together. Naming, formatting and comment-only source cleanup does not require
+re-encoding unchanged scenes. No separate documentation branch is needed.
 
 ## Keep the site maintainable
 
-`zensical.toml` owns navigation, search, syntax highlighting, and theme settings. `docs/assets/stylesheets/site.css` adds Vestra's layout and color choices. The small `overrides/partials/source.html` template keeps the repository link while avoiding GitHub statistics requests; no custom JavaScript is needed. Prefer Zensical's native components, semantic HTML, and Markdown over custom scripts. The palette uses cool paper, ink blue, and coral; the renders carry the visual personality. System fonts avoid a remote font request and keep the site usable offline after loading its assets.
+`zensical.toml` owns navigation, search, syntax highlighting, and theme settings. `docs/assets/stylesheets/site.css` adds Vestra's layout and color choices. The `overrides/partials/source.html` template keeps the repository link while avoiding GitHub statistics requests; no custom JavaScript is needed. Prefer Zensical's native components, semantic HTML, and Markdown over custom scripts. The palette uses cool paper, ink blue, and coral; the renders carry the visual personality. System fonts avoid a remote font request and keep the site usable offline after loading its assets.
 
-Use relative Markdown file links for other documentation pages. Zensical 0.1.0 rebases raw HTML `src` and `href` paths from the Markdown source directory, just like Markdown links. It leaves `poster` paths unchanged. On `learn/first-animation.md`, use `src="../assets/renders/first-animation.mp4"` but `poster="../../assets/renders/first-animation.webp"` for the generated `learn/first-animation/` URL. The generated-site checker covers both paths; recheck this behavior when upgrading Zensical. Never hardcode a domain or `/assets/` in an internal link. Files outside `docs/` should link to their explicit GitHub source URL. Pin an imported example to its source commit when the version differs from `develop`, and record that provenance alongside its assets. `README.md` and `index.md` map to the same output location, so do not place both in one directory. Check older incoming heading anchors when renaming a section.
+The identity is text only. `overrides/partials/logo.html` suppresses the theme
+logo, and CSS removes its empty header/drawer links. `overrides/main.html`
+overrides the pinned theme's `site_meta` block to retain description, canonical
+and previous/next metadata while setting an empty `data:,` browser icon. Merely
+deleting logo/favicon configuration would restore theme defaults. Recheck these
+overrides and browser requests when upgrading Zensical. The mobile sidebar also
+uses `:focus-within` to reveal links when reached by keyboard; Zensical 0.1.0
+otherwise leaves focus on offscreen drawer links. Removing the asset from
+this branch does not purge earlier commits, caches, forks or clones.
+
+Use relative Markdown file links for other documentation pages. Zensical 0.1.0 rebases raw HTML `src` and `href` paths from the Markdown source directory, just like Markdown links. It leaves `poster` paths unchanged. On `learn/first-animation.md`, use `src="../assets/renders/first-animation.mp4"` but `poster="../../assets/renders/first-animation.webp"` for the generated `learn/first-animation/` URL. The generated-site checker covers both paths; recheck this behavior when upgrading Zensical. Never hardcode a domain or `/assets/` in an internal link. Files outside `docs/` should link to their explicit GitHub source URL. Pin an imported example to its source commit when the version differs from `develop`, and record that provenance beside the example. `README.md` and `index.md` map to the same output location, so do not place both in one directory. Check older incoming heading anchors when renaming a section.
 
 Preview desktop and mobile widths. Check navigation, code overflow, light and dark themes, keyboard focus, media controls, and search. Keep body text readable; shorten a passage by removing repetition, not by removing necessary reasoning. There are no diagram or word-count quotas.
 

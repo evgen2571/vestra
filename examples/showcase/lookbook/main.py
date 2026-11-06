@@ -13,7 +13,8 @@ DURATION = 6
 
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
-    unit = size[0] / 1280
+    # Keep pixel-sized geometry proportional in the smaller smoke render.
+    resolution_scale = size[0] / 1280
     project = Project(
         size=size,
         fps=fps,
@@ -26,37 +27,35 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     def label(text, position, font_size, colour="#f1efe5"):
         layer = project.root.add(
             Text(
-                text, font="assets/Manrope.ttf", font_size=font_size * unit, fill=colour
+                text,
+                font="assets/Manrope.ttf",
+                font_size=font_size * resolution_scale,
+                fill=colour,
             ),
             z=10,
         )
         layer.transform.position = position
 
     label("Photo, halftone and ASCII", (0.5, 0.11), 36)
-    # Keep the crop and motion identical so only the treatment changes.
+    halftone = Halftone(
+        cell_size=max(2, 7 * resolution_scale),
+        foreground="#ffb08c",
+        background="#301f35",
+    )
+    ascii_letters = Ascii(
+        cell_width=max(2, 7 * resolution_scale),
+        cell_height=max(3, 10 * resolution_scale),
+        foreground="#b8e3bc",
+        background="#101c24",
+        mode="fill",
+        source_mix=0.05,
+    )
+
+    # Each panel uses the same crop and motion, so only its treatment changes.
     treatments = (
         ("Original", 0.19, None),
-        (
-            "Halftone",
-            0.50,
-            Halftone(
-                cell_size=max(2, 7 * unit),
-                foreground="#ffb08c",
-                background="#301f35",
-            ),
-        ),
-        (
-            "ASCII",
-            0.81,
-            Ascii(
-                cell_width=max(2, 7 * unit),
-                cell_height=max(3, 10 * unit),
-                foreground="#b8e3bc",
-                background="#101c24",
-                mode="fill",
-                source_mix=0.05,
-            ),
-        ),
+        ("Halftone", 0.50, halftone),
+        ("ASCII", 0.81, ascii_letters),
     )
     for name, panel_x, effect in treatments:
         group = project.root.group(duration=DURATION)
@@ -71,10 +70,10 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         # Mask the group, not the image, to keep the frame fixed during the zoom.
         group.masks.add(
             Rectangle(
-                width=360 * unit,
-                height=430 * unit,
+                width=360 * resolution_scale,
+                height=430 * resolution_scale,
                 fill="#ffffff",
-                corner_radius=20 * unit,
+                corner_radius=20 * resolution_scale,
             )
         )
         group.transform.position = (panel_x, 0.51)

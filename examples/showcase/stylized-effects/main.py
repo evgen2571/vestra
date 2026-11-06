@@ -44,6 +44,7 @@ LOOKS = (
 
 def prepare_assets(directory: Path, size: tuple[int, int], fps: int) -> None:
     directory.mkdir(parents=True, exist_ok=True)
+    width, height = size
     # Every temporal frequency completes an integer number of cycles in four seconds.
     tone = (
         "32+90*Y/H+40*sin(2*PI*X/W)+10*cos(2*PI*Y/7)"
@@ -60,7 +61,7 @@ def prepare_assets(directory: Path, size: tuple[int, int], fps: int) -> None:
             "-f",
             "lavfi",
             "-i",
-            f"nullsrc=size={size[0]}x{size[1]}:rate={fps},geq=lum='{tone}':cb=128:cr=128",
+            f"nullsrc=size={width}x{height}:rate={fps},geq=lum='{tone}':cb=128:cr=128",
             "-t",
             str(PERIOD),
             "-an",
@@ -120,7 +121,7 @@ def build_project(
             )
         elif look == "custom-ascii":
             effect = Ascii(
-                " .oO@",
+                characters=" .oO@",
                 font=ROOT / "tests/assets/VestraTest-Regular.ttf",
                 color_mode="rainbow",
                 period=PERIOD,
@@ -148,7 +149,7 @@ def build_project(
             )
         elif look in {"dither", "dither-blue-noise"}:
             effect = OrderedDither(
-                palette,
+                palette=palette,
                 mode=mode,
                 levels=levels,
                 stops=stops,
@@ -170,10 +171,12 @@ def build_project(
             effect = sorted_neon()
         else:
             raise ValueError(f"unknown look: {look}")
-        for item in effect if isinstance(effect, tuple) else (effect,):
+        # Recipes return a tuple; individual looks return one effect.
+        effect_chain = effect if isinstance(effect, tuple) else (effect,)
+        for item in effect_chain:
             attached = layer.effects.add(item)
             if hasattr(attached, "amount"):
-                # Existing interpolation fades each stylization into its source and back.
+                # Effect times restart at zero for each repeated clip.
                 attached.amount.keyframe(0, 0.75)
                 attached.amount.keyframe(PERIOD / 2, 1)
                 attached.amount.keyframe(PERIOD, 0.75)

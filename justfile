@@ -173,5 +173,5 @@ site-check: docs-build
     uv run --no-project --with pytest python -m pytest tests/test_site_links.py tests/test_site_navigation.py tests/test_documentation_examples.py -q
 
 # Reproduce documentation previews from the checkout (requires python-sync + FFmpeg).
-docs-media:
-    uv run --no-sync python scripts/render-docs-media.py
+docs-media *args:
+    uv run --no-sync python scripts/render-docs-media.py "$@"

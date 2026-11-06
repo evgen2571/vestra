@@ -127,6 +127,44 @@ just docs-media
 
 The renderer runs all three downloadable examples on CPU, probes the original MP4s, and refreshes the web assets. Inspect the new output before committing it. Gallery previews can be rebuilt from the checkout as described below. Encoding bytes may differ with FFmpeg versions.
 
+## Reproduce visual learning studies
+
+The concepts, transition, effect-catalog and audio studies use original
+procedural artwork, generated audio and bundled fonts. From the native
+contributor environment:
+
+```bash
+just python-sync
+just docs-media --learning
+```
+
+The maintained sources are `docs/assets/examples/concepts_masks.py`,
+`effects_catalog.py`, `transition_comparisons.py` and `audio_response.py`. Each
+runs independently; download links and exact run commands live on its guide.
+The shared renderer writes originals to `target/docs-media/`, makes compact
+H.264/WebP delivery copies, checks decoded frame counts/timestamps and AAC
+presence/duration, and writes
+[learning-media.json](../assets/renders/learning-media.json). That manifest records
+source-program hashes, original-video checksums, CPU selection and poster times;
+encoding bytes may vary with FFmpeg versions. It also records static previews at
+0.7 seconds. The mask comparison is 640×480; the other studies are 640×360.
+
+Inspect all new static frames and sample each moving result before accepting a
+regeneration. Frame counts alone do not establish a useful comparison or audio
+synchronization. Compare matching source/timing/settings, inspect beginning,
+middle and end, and listen to the pulse studies alongside the bound motion.
+Keep originals/contact sheets in ignored `target/` and commit only delivery assets
+used by a page. There is no speech to caption in these original tone studies.
+
+Run the maintained code checks as well as the site checks:
+
+```bash
+uv run pytest python-tests/test_documentation_examples.py python-tests/test_visual_learning_effects.py
+uv run pytest tests/test_docs_media.py
+uvx --from 'ruff>=0.12,<0.13' ruff check docs/assets/examples scripts/render-docs-media.py
+uvx --from 'ruff>=0.12,<0.13' ruff format --check docs/assets/examples scripts/render-docs-media.py
+```
+
 ## Reproduce gallery previews
 
 The site uses committed previews, so building it needs no engine, render or network

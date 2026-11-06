@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import runpy
 import shutil
 import textwrap
 from types import SimpleNamespace
@@ -14,13 +15,22 @@ GUIDES = sorted((ROOT / "docs/guides/python").glob("*.md"))
 
 
 def snippets(page: Path) -> list[str]:
-    return [
+    blocks = [
         textwrap.dedent(block)
         for block in re.findall(
             r"^ *```python[^\n]*\n(.*?)^ *```",
             page.read_text(),
             re.MULTILINE | re.DOTALL,
         )
+    ]
+    return [
+        re.sub(
+            r'^ *--8<-- "([^"]+)"$',
+            lambda match: (ROOT / match[1]).read_text(),
+            code,
+            flags=re.MULTILINE,
+        )
+        for code in blocks
     ]
 
 
@@ -44,13 +54,18 @@ def test_guide_snippets_author_valid_projects(page, tmp_path, monkeypatch):
     monkeypatch.setattr(Project, "render", capture_render)
     # The rendering guide explicitly starts with a project from the first tutorial.
     namespace = {"project": Project(size=(160, 90), fps=30, duration=3)}
+    if page.stem == "effect-catalog":
+        # Catalog blocks show constructor settings; setup lives in the linked source.
+        namespace.update(
+            runpy.run_path(str(ROOT / "docs/assets/examples/effects_catalog.py"))
+        )
     for index, code in enumerate(snippets(page)):
         exec(compile(code, f"{page.name}:snippet-{index + 1}", "exec"), namespace)
-        if page.stem == "effects" and "custom_letters =" in code:
-            assert len(namespace["photo"].effects.items) == 1, (
-                "The custom-font alternative should show one ASCII treatment"
-            )
-        if page.stem == "effects" and re.search(
+        if page.stem == "effects":
+            assert namespace["blur"] in namespace["title"].effects.items
+        if page.stem == "ascii":
+            assert namespace["letters"] in namespace["photo"].effects.items
+        if page.stem == "palettes-and-dithering" and re.search(
             r"^look(?:\s*=|\.)", code, re.MULTILINE
         ):
             assert namespace["look"] in namespace["photo"].effects.items, (
@@ -61,7 +76,8 @@ def test_guide_snippets_author_valid_projects(page, tmp_path, monkeypatch):
 
     if page.stem == "masks":
         assert renders == [
-            ("portrait-reveal.mp4", {"backend": "cpu", "overwrite": True})
+            ("portrait-reveal.mp4", {"backend": "cpu", "overwrite": True}),
+            ("concepts-masks.mp4", {"backend": "cpu", "overwrite": True}),
         ]
 
 

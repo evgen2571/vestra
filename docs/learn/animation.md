@@ -138,7 +138,7 @@ curves with similarly named keywords.
     All four controls must be finite; x controls must be between 0 and 1.
     Y controls can go outside that range, which can overshoot the endpoint
     values. Keep the result valid for the property you are animating. See the
-    [interpolation reference](../concepts/effects-transitions-and-animation.md#interpolation)
+    [interpolation reference](../reference/animation.md)
     for the canonical JSON form and validation rules.
 
 [Download the runnable comparison](../assets/examples/keyframes.py), then run
@@ -165,6 +165,7 @@ caption = project.root.add(
     duration=2,
     opacity=0,
 )
+
 caption.opacity.keyframe(0, 0)
 caption.opacity.keyframe(0.5, 1)
 ```
@@ -202,7 +203,7 @@ keeping the project duration at three seconds.
   Validation alone does not check media files or FFmpeg.
 
 For the low-level forms, see
-[the animation reference](../concepts/effects-transitions-and-animation.md#interpolation)
+[the animation reference](../reference/animation.md)
 and [the project format](../reference/project-format.md). For a practical next
 step, explore [effects](../guides/python/effects.md) or find a project in the
 [examples gallery](../gallery/index.md).
@@ -224,15 +225,4 @@ The **Guides** navigation contains task-oriented Python, JSON and CLI pages.
 Use **Concepts** to understand timing and evaluation, or **Reference** for source
 types, accepted values and backend limits.
 
-
-## Preview reproduction
-
-The comparison is a three-second, silent CPU render at 960 × 540 and 30 fps;
-the poster is the frame at 1.3 seconds. Graphics and code are original MIT-licensed
-project work. Labels use Vestra's bundled DejaVu-derived font; its
-[complete notice](https://github.com/evgen2571/vestra/blob/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/python/vestra/fonts/LICENSE.txt)
-remains with the package. Rendered labels do not redistribute the font file.
-
-From the native contributor environment, `just docs-media` runs the downloadable
-programs, probes their full outputs under `target/docs-media/`, and refreshes the
-site copies. See [tutorial preview reproduction](../development/documentation.md#reproduce-tutorial-previews).
+<span id="preview-reproduction"></span>

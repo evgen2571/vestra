@@ -90,13 +90,4 @@ these two positions during one video.
 
 For more about placement, see [sources and layers](../guides/python/sources-and-layers.md).
 
-
-## Preview reproduction
-
-The preview is CPU output from the downloadable source, 640 × 360 at 30 fps,
-three seconds and silent. The poster is the frame at 0.5 seconds. The project
-uses no fonts or external inputs.
-
-From the native contributor environment, `just docs-media` runs the downloadable
-programs, probes their full outputs under `target/docs-media/`, and refreshes the
-site copies. See [tutorial preview reproduction](../development/documentation.md#reproduce-tutorial-previews).
+<span id="preview-reproduction"></span>

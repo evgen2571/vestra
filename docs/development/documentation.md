@@ -32,6 +32,14 @@ just site-check   # Clean strict build, generated links/assets/anchors, checker 
 
 `just docs-build` builds only the site into `site/`. The output is disposable and untracked. The generated-site check also verifies the `/vestra/` repository path. It does not check external URLs or judge the technical accuracy of prose.
 
+The pinned Zensical 0.1.0 preview server does not answer HTTP byte-range
+requests. Chromium can therefore reset a seek in a silent MP4 to its beginning,
+even when the same file plays and seeks correctly on a range-capable server.
+For seek verification, serve the built `site/` directory with byte-range support
+(or download the MP4 and inspect it locally). Keep the native controls; this is
+a preview-server limitation, not a reason to replace the media player. The
+repository-path check still needs the site mounted at `/vestra/`.
+
 ## Choose the page type
 
 | Page type | Reader's question | A useful shape |
@@ -126,6 +134,96 @@ just docs-media
 ```
 
 The renderer runs all three downloadable examples on CPU, probes the original MP4s, and refreshes the web assets. Inspect the new output before committing it. Gallery previews can be rebuilt from the checkout as described below. Encoding bytes may differ with FFmpeg versions.
+
+## Reproduce visual learning studies
+
+Learner pages link runnable examples and explain what to notice. Keep encoding,
+poster choices, checksums and regeneration records here and in
+[learning-media.json](../assets/renders/learning-media.json).
+
+From the native contributor environment:
+
+```bash
+just python-sync
+just docs-media --learning
+```
+
+| Program in `docs/assets/examples/` | Media | Size and duration | Poster |
+| --- | --- | --- | --- |
+| `effects_catalog.py` | Source/treatment stills; four synchronized temporal comparisons | 640×520 stills and motion; 3 s for motion | 0.7 s |
+| `audio_response.py` | Bounded response, smoothing curves, linear/radial spectra | 640×560, 4 s | 1.2 s |
+| `transition_comparisons.py` | Crossfade, push, zoom, Gaussian blur | 640×360, 3 s | 1.5 s |
+| `group_placements.py` | One source placed twice, with independent transforms and opacity | 640×360 still | 0.7 s |
+| `concepts_masks.py` | Alpha/luma, union/subtract coverage | 640×480, 3 s static | 0.5 s |
+
+Audio studies reserve a lower band for native controls at mobile widths.
+Effect comparisons use the same 640×520 framing for stills and videos, with
+no encoded control footer or divider; native controls overlay the lower edge
+while visible. Video and image cards share the responsive two-column grid.
+
+All learning previews are CPU renders with **no audio streams**. The audio
+program still generates a 48 kHz mono PCM16 phrase for analysis: five recurring
+bass notes with ascending melody notes. Waveform highlights and playheads expose
+timing without sound. Curve samples come from actual prepared signal-bound
+markers; the animated markers use the same bindings. Regression checks compare
+frames with output audio enabled/disabled and check the plot against those values.
+
+The catalog uses a cropped copy of the existing CC0 landscape, original bright
+lettering and a moving striped object. [learning-inputs.txt](../assets/examples/learning-inputs.txt)
+records attribution and the exact crop command. Keep this record beside the
+photograph and downloadable code. Bundled-font notices remain with Vestra;
+no font files are redistributed by these previews.
+
+The renderer stores original MP4s under ignored `target/docs-media/`, exports
+compact H.264/yuv420p delivery copies with fast-start metadata and WebP posters,
+and probes dimensions, decoded frame counts, timestamps and absence of audio.
+The manifest records source-program/input hashes, original video checksums,
+backend, dimensions, duration and poster settings. Encoding bytes may vary with
+FFmpeg versions; these previews were encoded with FFmpeg 8.1.3. The original introductory previews retain their source settings
+in the script's `EXAMPLES` table and regenerate with `just docs-media`.
+
+Inspect beginning/middle/end frames and each comparison at its displayed size.
+Compare matching times and parameters; do not accept a subtle or empty result
+merely because it encoded. Check manual light/dark switching and mobile diagram
+labels as well as file validity. Keep diagnostic frames in `target/` and commit
+only delivery assets used by pages.
+
+```bash
+uv run pytest python-tests/test_documentation_examples.py python-tests/test_visual_learning_effects.py python-tests/test_documentation_audio_transitions.py
+uv run pytest tests/test_docs_media.py
+uvx --from 'ruff>=0.12,<0.13' ruff check docs/assets/examples scripts/render-docs-media.py
+uvx --from 'ruff>=0.12,<0.13' ruff format --check docs/assets/examples scripts/render-docs-media.py
+```
+
+### Motion Tile anchor limitation
+
+The reviewed chart's uncovered regions reproduce with an opaque rectangle,
+so they are not source alpha or a browser background. On CPU, a 640×360
+rectangle at scale 0.7 and centered position/anchor covers `(96,54)`–`(544,306)`
+at 100%. At both 200% and 400%, it expands left/up but still stops at
+`(544,306)`, leaving 27.75% of the canvas uncovered:
+
+```python
+from vestra import Project, Rectangle
+from vestra.effects import MotionTile
+
+project = Project(size=(640, 360), fps=30, duration=1, background="#ff00ff")
+layer = project.root.add(Rectangle(width=640, height=360, fill="#93cbb5"), scale=0.7)
+layer.effects.add(MotionTile(output_width_percent=400, output_height_percent=400))
+project.render("tile-centered.mp4", backend="cpu", overwrite=True)
+```
+
+`resolve_raster_geometry_with_motion_tile` expands dimensions and shifts the
+logical origin negative, while its affine anchor calculation uses the expanded
+dimensions without that shifted origin. This displaces centered virtual bounds.
+The geometry is shared with WGPU, but this reproduction was verified on CPU.
+The engine issue remains unresolved by this documentation branch.
+
+The catalog uses `anchor=(0,0)` and places the nominal image's top-left explicitly
+on **both** baseline and treatment. Its outlined original bounds then remain
+fixed while a 300% mirrored region supplies edge pixels. Tests sample multiple
+times and reject uncovered pixels in the treated viewport. The outline itself
+is a separate transformed rectangle and is never tiled.
 
 ## Reproduce gallery previews
 

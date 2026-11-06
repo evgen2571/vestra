@@ -3,7 +3,12 @@
 from vestra import Interpolation, Project
 from vestra.sources import Color, Rectangle
 
-project = Project(size=(640, 360), fps=30, duration=3)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=3,
+)
+
 project.root.add(Color("#101c24"))
 
 card = project.root.add(

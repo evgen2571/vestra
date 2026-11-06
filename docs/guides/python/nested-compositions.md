@@ -1,4 +1,16 @@
+---
+description: Reuse a group snapshot or edit one child composition, with explicit local dimensions and timing.
+---
+
 # Use nested compositions
+
+Choose a reusable `Group` when placing copies of the same artwork. Use
+`composition.group()` when you want to keep editing one owned child composition.
+Both compose children locally before placing their result in the parent. The
+[groups concept](../../concepts/groups-and-nesting.md) explains transforms,
+clipping and ownership visually.
+
+## Snapshot a reusable group
 
 A standalone `Group` is reusable visual content. Each `add()` snapshots the
 source, so placing the same group again creates independent children and
@@ -64,40 +76,11 @@ system. Existing unsized content requires no migration. Sizes survive source
 snapshots, reuse in projects with different resolutions, and owned mask
 serialization. Child-local timing and the project's FPS remain unchanged.
 
-Default resource limits allow group canvases up to 8192 pixels per axis and
-67,108,864 pixels. Larger canvases require an explicit execution budget:
-
-```python
-from vestra import Project, ResourceLimits
-
-limits = ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=640 * 360)
-project = Project(
-    size=(640, 360),
-    fps=30,
-    duration=2,
-    resource_limits=limits,
-)
-strip = Group(size=(16_384, 2))
-strip.add(Rectangle(width=16_384, height=2, fill="#2563eb"))
-project.root.add(strip, scale=0.025)
-```
-
-The pixel budget must also cover unsized groups, which inherit the project canvas.
-Here the 640 × 360 project needs more pixels than the wide, two-pixel strip.
-
-The same limits apply to validation, preparation and rendering, including owned
-group masks. Budgets do not change coordinates, clipping or backend limits.
-
-Children clip to the local canvas before parent transforms. Fractional sizes
-use raster bounds rounded up to whole pixels; positions and anchors retain their
-authored units. Child effects use the local canvas; effects on the group run
-after its placement in the parent. Group masks use owner-local coordinates,
-and sized group mask sources keep their own dimensions. See the exact
-[coordinate, bounds, and effect rules](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
-
-The advanced builder accepts the same `size` keyword on
-`ProjectBuilder.add_group_clip(...)`. Both paths serialize an optional
-`"size": {"width": 600.0, "height": 300.0}` on the canonical group source.
+Children clip to the local canvas **before** parent transforms. Scaling down a
+group cannot recover children already outside its local bounds. Size sets the
+canvas; it does not scale the rectangle or font geometry. See the
+[coordinate diagram](../../concepts/groups-and-nesting.md#compose-locally-then-transform-the-result)
+and [exact bounds rules](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
 
 ## Edit a child composition directly
 
@@ -136,3 +119,39 @@ Groups remain supported as owned mask inputs.
 Nesting is recursive, subject to the project's validation limits. Keep a
 composition's timing explicit and validate after building deep or dynamically
 generated graphs.
+
+## Resource limits and exact bounds
+
+Default resource limits allow group canvases up to 8192 pixels per axis and
+67,108,864 pixels. Larger canvases require an explicit execution budget:
+
+```python
+from vestra import Project, ResourceLimits
+
+limits = ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=640 * 360)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+    resource_limits=limits,
+)
+strip = Group(size=(16_384, 2))
+strip.add(Rectangle(width=16_384, height=2, fill="#2563eb"))
+project.root.add(strip, scale=0.025)
+```
+
+The pixel budget must also cover unsized groups, which inherit the project canvas.
+Here the 640 × 360 project needs more pixels than the wide, two-pixel strip.
+
+The same limits apply to validation, preparation and rendering, including owned
+group masks. Budgets do not change coordinates, clipping or backend limits.
+
+Fractional dimensions use raster bounds rounded up to whole pixels while
+coordinates and anchors retain their authored units. Child effects use the
+local canvas; group effects use its completed placement in the parent. Group
+masks follow their owner, and sized group mask sources retain their own dimensions.
+See [exact coordinate and effect rules](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
+
+The advanced builder accepts the same `size` keyword on
+`ProjectBuilder.add_group_clip(...)`. Both paths serialize an optional
+`"size": {"width": 600.0, "height": 300.0}` on the canonical group source.

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 790" role="img" aria-labelledby="title desc">
+  <title id="title">From authored project to completed output</title>
+  <desc id="desc">Snapshot, validate semantic rules, preflight environment and media, prepare a reusable runtime, render and encode frames and audio, then finalize and publish. Only published output is completed.</desc>
+  <rect width="480" height="790" rx="12" fill="#f6f5f1"/>
+  <g font-family="system-ui, sans-serif" font-size="24" fill="#202522" text-anchor="middle">
+    <g fill="#e7ebee" stroke="#556673" stroke-width="2">
+      <rect x="28" y="24" width="424" height="70" rx="8"/>
+      <rect x="28" y="126" width="424" height="86" rx="8"/>
+      <rect x="28" y="244" width="424" height="86" rx="8"/>
+      <rect x="28" y="362" width="424" height="86" rx="8"/>
+      <rect x="28" y="480" width="424" height="86" rx="8"/>
+      <rect x="28" y="598" width="424" height="86" rx="8"/>
+      <rect x="28" y="716" width="424" height="50" rx="8" fill="#e3ece5" stroke="#466451"/>
+    </g>
+    <text x="240" y="68">Snapshot the authored project</text>
+    <text x="240" y="160">Validate</text><text x="240" y="194">Structure, timing, relationships</text>
+    <text x="240" y="278">Preflight</text><text x="240" y="312">Assets, tools, operation readiness</text>
+    <text x="240" y="396">Prepare</text><text x="240" y="430">Analysis, plan, selected renderer</text>
+    <text x="240" y="514">Render and encode</text><text x="240" y="548">Frames + output audio</text>
+    <text x="240" y="632">Finalize and publish</text><text x="240" y="666">The file must finish successfully</text>
+    <text x="240" y="750">Completed + RenderResult</text>
+    <path d="M240 94v24m-8-10 8 10 8-10M240 212v24m-8-10 8 10 8-10M240 330v24m-8-10 8 10 8-10M240 448v24m-8-10 8 10 8-10M240 566v24m-8-10 8 10 8-10M240 684v24m-8-10 8 10 8-10" fill="none" stroke="#466451" stroke-width="3"/>
+  </g>
+</svg>

@@ -1,7 +1,13 @@
+---
+description: Set output dimensions and timing, add ordered layers and move related content as one child composition.
+---
+
 # Projects and compositions
 
 A project defines the video size, frame rate and duration. Its root composition
-holds the visual layers that appear in the video.
+holds the visual layers that appear in the video. Use this guide for setup;
+[the authoring model](../../concepts/authoring-model.md) explains sources,
+placements and snapshot copies.
 
 ```python
 from vestra import Project
@@ -62,9 +68,16 @@ See [nested compositions](nested-compositions.md) for more examples.
 
 ## Set a duration
 
-An explicit project duration makes the output length predictable. Without one,
-non-video layers need either an explicit layer duration or a duration supplied
-by their composition.
+An explicit project duration fixes the output length. Content extending beyond
+it is clipped, and shorter content can leave a background or silent tail.
+Without one, non-video layers need an explicit duration or a duration supplied
+by their composition; video layers can use their remaining media duration.
+
+An omitted non-video duration inherits the whole containing duration, even when
+`start` is later than zero. It does not mean “until the project ends.” For a layer
+starting at `1` in a five-second project, use `duration=4` to end at `5`.
+[Timeline and time](../../concepts/timeline-and-time.md#duration-is-not-an-end-timestamp)
+explains automatic duration and frame boundaries.
 
 Continue with [sources and layers](sources-and-layers.md) to add media or text,
 or [rendering and preparation](rendering-and-preparation.md) to export the

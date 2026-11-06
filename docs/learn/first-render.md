@@ -8,8 +8,11 @@ Create a three-second video with a rounded rectangle on a dark background.
 The example uses generated shapes, so it needs no images, fonts or audio files.
 
 <figure>
-  <img src="../assets/renders/first-render.webp" alt="A mint rounded rectangle positioned on the left side of a dark 640 by 360 pixel canvas." width="640" height="360">
-  <figcaption>Expected output: a static rectangle at 640 × 360 pixels.</figcaption>
+  <video controls playsinline preload="metadata" poster="../../assets/renders/first-render.webp" width="640" height="360" aria-label="A mint rounded rectangle stays on the left side of a dark canvas for three seconds.">
+    <source src="../assets/renders/first-render.mp4" type="video/mp4">
+    <a href="../assets/renders/first-render.mp4">Download the video</a>.
+  </video>
+  <figcaption>Expected output: a three-second video of a static rectangle at 640 × 360 pixels, with no audio.</figcaption>
 </figure>
 
 Complete [installation](installation.md) first, including both FFmpeg checks.
@@ -90,8 +93,9 @@ For more about placement, see [sources and layers](../guides/python/sources-and-
 
 ## Preview reproduction
 
-The static preview is a CPU frame at 0.5 seconds from `first-render.mp4`,
-640 × 360 at 30 fps. The project is three seconds and silent, with no font or external input.
+The preview is CPU output from the downloadable source, 640 × 360 at 30 fps,
+three seconds and silent. The poster is the frame at 0.5 seconds. The project
+uses no fonts or external inputs.
 
 From the native contributor environment, `just docs-media` runs the downloadable
 programs, probes their full outputs under `target/docs-media/`, and refreshes the

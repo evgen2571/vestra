@@ -85,34 +85,33 @@ def main() -> None:
             ],
             check=True,
         )
-        if source_name in {"first_animation", "keyframes"}:
-            preview = ASSETS / f"{asset_name}.mp4"
-            subprocess.run(
-                [
-                    "ffmpeg",
-                    "-v",
-                    "error",
-                    "-y",
-                    "-i",
-                    str(original),
-                    "-an",
-                    "-c:v",
-                    "libx264",
-                    "-crf",
-                    "26",
-                    "-preset",
-                    "slow",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-movflags",
-                    "+faststart",
-                    "-map_metadata",
-                    "-1",
-                    str(preview),
-                ],
-                check=True,
-            )
-            verify_video(preview, size)
+        preview = ASSETS / f"{asset_name}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-y",
+                "-i",
+                str(original),
+                "-an",
+                "-c:v",
+                "libx264",
+                "-crf",
+                "26",
+                "-preset",
+                "slow",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                "-map_metadata",
+                "-1",
+                str(preview),
+            ],
+            check=True,
+        )
+        verify_video(preview, size)
 
 
 if __name__ == "__main__":

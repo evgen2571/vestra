@@ -1,25 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 500" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="330" viewBox="0 0 480 330" role="img" aria-labelledby="title desc">
   <title id="title">Three aligned clocks for half-speed video</title>
-  <desc id="desc">A layer is active from project second two until the excluded end six. Project times 2 through 6 correspond to layer-local 0 through 4 and source times 10 through 12 in half-second source increments.</desc>
-  <rect width="480" height="500" rx="12" fill="#f6f5f1"/>
-  <g font-family="system-ui, sans-serif" font-size="24" fill="#202522">
-    <text x="24" y="40">Project time (seconds)</text>
-    <path d="M40 108V432m100-324V432m100-324V432m100-324V432m100-324V432" stroke="#a6aea8" stroke-dasharray="5 6"/>
-    <rect x="40" y="78" width="400" height="32" rx="4" fill="#a6c9b0"/>
-    <circle cx="40" cy="94" r="5" fill="#202522"/><circle cx="440" cy="94" r="6" fill="#f6f5f1" stroke="#202522" stroke-width="2"/>
-    <g text-anchor="middle">
-      <text x="40" y="149">2</text><text x="140" y="149">3</text><text x="240" y="149">4</text><text x="340" y="149">5</text><text x="440" y="149">6</text>
-    </g>
-    <text x="24" y="208">Layer-local time (seconds)</text>
-    <path d="M40 243h400" stroke="#556673" stroke-width="3"/>
-    <g text-anchor="middle">
-      <text x="40" y="285">0</text><text x="140" y="285">1</text><text x="240" y="285">2</text><text x="340" y="285">3</text><text x="440" y="285">4</text>
-    </g>
-    <text x="24" y="343">Video source time (seconds)</text>
-    <path d="M40 378h400" stroke="#556673" stroke-width="3"/>
-    <g text-anchor="middle">
-      <text x="40" y="420">10</text><text x="140" y="420">10.5</text><text x="240" y="420">11</text><text x="340" y="420">11.5</text><text x="440" y="420">12</text>
-    </g>
-    <text x="24" y="475">○ End excluded from activity</text>
-  </g>
+  <desc id="desc">For a layer starting at project second 2, project times 2, 3, 4, 5 and the excluded end 6 align with layer-local times 0, 1, 2, 3, 4 and video source times 10, 10.5, 11, 11.5, 12. At project second 4 the source is sampled at second 11.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; --stripe:#466c8c; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; --stripe:#4b6e8d; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .small { font-size:21px; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--shape); stroke:var(--edge); stroke-width:2; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+    .point { fill:var(--ink); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="330" rx="10" fill="var(--bg)"/>
+  <text x="20" y="34">Aligned clocks (seconds)</text>
+  <rect x="294" y="59" width="40" height="214" fill="var(--panel)"/>
+  <path d="M190 66v207M252 66v207M314 66v207M376 66v207M438 66v207" class="guide"/>
+  <text x="20" y="97" class="small">Project</text>
+  <text x="20" y="174" class="small">Layer local</text>
+  <text x="20" y="251" class="small">Video source</text>
+  <text x="190" y="97" class="small" text-anchor="middle">2</text>
+  <text x="252" y="97" class="small" text-anchor="middle">3</text>
+  <text x="314" y="97" class="small" text-anchor="middle">4</text>
+  <text x="376" y="97" class="small" text-anchor="middle">5</text>
+  <text x="438" y="97" class="small" text-anchor="middle">6</text>
+  <text x="190" y="174" class="small" text-anchor="middle">0</text>
+  <text x="252" y="174" class="small" text-anchor="middle">1</text>
+  <text x="314" y="174" class="small" text-anchor="middle">2</text>
+  <text x="376" y="174" class="small" text-anchor="middle">3</text>
+  <text x="438" y="174" class="small" text-anchor="middle">4</text>
+  <text x="190" y="251" class="small" text-anchor="middle">10</text>
+  <text x="252" y="251" class="small" text-anchor="middle">10.5</text>
+  <text x="314" y="251" class="small" text-anchor="middle">11</text>
+  <text x="376" y="251" class="small" text-anchor="middle">11.5</text>
+  <text x="438" y="251" class="small" text-anchor="middle">12</text>
+  <path d="M190 112h248" class="line"/>
+  <circle cx="190" cy="112" r="4" class="point"/>
+  <circle cx="438" cy="112" r="5" fill="var(--bg)" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M314 120v24" class="arrow"/>
+  <path d="M314 197v24" class="arrow"/>
+  <text x="20" y="303" class="small muted">○ 6 s is the excluded end</text>
 </svg>

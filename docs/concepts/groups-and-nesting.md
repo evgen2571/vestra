@@ -8,25 +8,11 @@ A group composes several children into one visual result, then places that resul
 in its parent. This lets a title, its background and its decoration move together
 while retaining their own relative positions and timing.
 
-## Choose how to author the children
-
-| Need | Python interface | What later edits affect |
-| --- | --- | --- |
-| Reuse a card or badge | Create a `Group`, then `composition.add(group)` | Each placement copies the children and state present when added |
-| Keep editing one scene | Call `composition.group()`, then edit its `child` | The owned child composition remains part of that placement |
-
-A reusable group is a source, not a live template. Finish adding its badge before
-placing the card. Later edits to the original group or its original child handles
-do not update earlier placements. A direct `CompositionLayer` exposes `add()` and
-`child.add()` for continued editing, including transitions between its children.
-See [the nested composition guide](../guides/python/nested-compositions.md) for
-both workflows.
-
 ## Compose locally, then transform the result
 
-<figure markdown="span">
+<figure class="diagram" markdown="span">
 ![A 600 by 300 local group canvas contains a rectangle centered at 150, 150. Another rectangle crosses its upper edge and is clipped. The group is then scaled by one half and placed at the center of a 640 by 360 parent canvas.](../assets/diagrams/groups-local-canvas.svg)
-<figcaption>Schematic sequence. The dashed area above the local canvas is clipped away before the parent transform moves and scales the group.</figcaption>
+<figcaption>The dashed part is lost at the local edge. Scaling the group halves the visible children and their spacing together.</figcaption>
 </figure>
 
 `Group(size=(600, 300))` gives its children a local canvas. A child at
@@ -52,6 +38,20 @@ Child effects run in the local canvas. Effects on the group run on its completed
 transformed placement in the parent, so an outer blur can spread beyond its
 bounds. A group mask applies to the already-composited group and follows its
 placement. [Masks and mattes](masks-and-mattes.md) explain this distinction.
+
+## Choose how to author the children
+
+| Need | Python interface | What later edits affect |
+| --- | --- | --- |
+| Reuse a card or badge | Create a `Group`, then `composition.add(group)` | Each placement copies the children and state present when added |
+| Keep editing one scene | Call `composition.group()`, then edit its `child` | The owned child composition remains part of that placement |
+
+A reusable group is a source, not a live template. Finish adding its badge before
+placing the card. Later edits to the original group or its original child handles
+do not update earlier placements. A direct `CompositionLayer` exposes `add()` and
+`child.add()` for continued editing, including transitions between its children.
+See [the nested composition guide](../guides/python/nested-compositions.md) for
+both workflows.
 
 ## Child time starts with the group
 

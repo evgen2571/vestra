@@ -9,23 +9,12 @@ shown**. A composition owns those layers, and a project owns the output settings
 and root composition. Understanding these relationships makes reuse and later
 edits predictable.
 
-<figure markdown="span">
-![One Rectangle source is copied into two independent layers in the project's root composition. Each layer owns its timing and transform.](../assets/diagrams/sources-placements.svg)
-<figcaption>Schematic ownership diagram. Adding a source twice creates two placements; it does not establish a live link between them.</figcaption>
+<figure class="diagram" markdown="span">
+![A 160 by 80 Rectangle source produces two visible copies in a 640 by 360 root canvas: one at position 0.25, 0.5 with full opacity and one at 0.75, 0.5 with half opacity.](../assets/diagrams/sources-placements.svg)
+<figcaption>Two placements of the same source. Changing the right layer's position or opacity leaves the left layer alone.</figcaption>
 </figure>
 
-## Project
-
-`Project` owns the output size, frame rate, optional duration, background and
-root composition. It also owns the audio timeline, project-level visual effects,
-root flash overlays and output audio policy.
-
-The Python project is mutable while you author it. `snapshot()` copies and lowers
-it to the canonical project model. Validation, preparation and rendering operate
-on a snapshot; later authoring edits do not alter an existing snapshot or
-prepared runtime.
-
-## Composition and layer
+## Place one source twice
 
 A `Composition` is an ordered collection of layers in one local time space.
 Higher `z` values draw over lower values. A `Layer` supplies a start, duration,
@@ -49,7 +38,7 @@ Both rectangles have the same initial geometry. Changing `right.opacity` affects
 only the right placement. Changing `panel.fill` afterward affects future
 placements, because the existing layers already hold copies.
 
-## Sources
+## What each placement copies
 
 Sources describe images, video, colors, shapes, text, groups, particles and
 spectra. Sources do not own a timeline position. Python sources may carry
@@ -76,11 +65,14 @@ Continue with [coordinates and anchors](coordinates-and-anchors.md), then
 [groups and nesting](groups-and-nesting.md) to see how placement applies inside
 a group.
 
-## When lower-level objects matter
+## Freeze the authored scene
 
-Most Python editing uses `Project`, `Composition`, `Layer` and source classes.
-`ProjectBuilder` provides exact canonical authoring and asset IDs.
-`ProjectSnapshot`, `Editor`, `PrepareOptions` and `PreparedProject` expose
-explicit validation, preparation and repeated rendering. These interfaces share
-the same project semantics. The [rendering lifecycle](rendering-lifecycle.md)
-explains when to use each step.
+The Python project is mutable while you author it. `snapshot()` copies and lowers
+it to the canonical project model. Validation, preparation and rendering operate
+on that snapshot; later edits do not alter an existing snapshot or prepared
+runtime. The project also holds the output size, frame rate, duration, background
+and audio timeline.
+
+The [rendering lifecycle](rendering-lifecycle.md) explains when to validate,
+prepare and render. Use the [Python API reference](../reference/python-api.md)
+for the explicit snapshot, editor and runtime interfaces.

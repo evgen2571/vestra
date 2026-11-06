@@ -8,9 +8,9 @@ A mask supplies **coverage**: how much of a layer survives at each pixel. The
 layer still supplies the visible color. A white circle used as a mask reveals a
 circular part of a photograph; it does not draw a white circle over it.
 
-<figure markdown="span">
-![A colored layer is combined with circle coverage. Full coverage preserves the layer, zero coverage hides it, and partial coverage makes it translucent. A second circle subtracts a hole.](../assets/diagrams/masks-coverage.svg)
-<figcaption>Schematic coverage diagram. White represents full coverage, black represents none, and the colored result comes from the content layer.</figcaption>
+<figure class="diagram" markdown="span">
+![A striped blue layer is multiplied by circle coverage: white one reveals and black zero hides. The result retains the blue stripes. Subtracting a smaller circle removes the center and leaves a striped ring.](../assets/diagrams/masks-coverage.svg)
+<figcaption>The mask changes visibility. The blue stripes still come from the content layer, including after a second mask removes the center.</figcaption>
 </figure>
 
 ## Alpha and brightness answer different questions

@@ -1,20 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 270" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="280" viewBox="0 0 480 280" role="img" aria-labelledby="title desc">
   <title id="title">Rectangle position keyframes</title>
-  <desc id="description">At zero seconds the rectangle's x position is 0.25. At 1.5 seconds it is 0.75. At three seconds it is 0.25 again. Both intervals use ease in/out interpolation. The three-second endpoint is outside the video's sampled frames.</desc>
-  <rect width="660" height="270" rx="12" fill="#f5f7fb"/>
-  <g font-family="system-ui, sans-serif" font-size="22" text-anchor="middle" fill="#101c24">
-    <path d="M70 130H590" stroke="#5d7065" stroke-width="3"/>
-    <path d="M83 94H302M349 94H568" stroke="#3a7351" stroke-width="3"/>
-    <path d="m293 85 12 9-12 9M559 85l12 9-12 9" fill="none" stroke="#3a7351" stroke-width="3"/>
-    <text x="195" y="61">Ease in/out</text><text x="461" y="61">Ease in/out</text>
-    <g fill="#b8e3bc" stroke="#3a7351" stroke-width="2">
-      <rect x="61" y="120" width="20" height="20" rx="4"/>
-      <rect x="320" y="120" width="20" height="20" rx="4"/>
-      <rect x="579" y="120" width="20" height="20" rx="4"/>
-    </g>
-    <text x="71" y="181">0 s</text><text x="330" y="181">1.5 s</text><text x="589" y="181">3 s</text>
-    <text x="71" y="222" font-size="20" fill="#445d50">x = 0.25</text>
-    <text x="330" y="222" font-size="20" fill="#445d50">x = 0.75</text>
-    <text x="589" y="222" font-size="20" fill="#445d50">x = 0.25</text>
-  </g>
+  <desc id="desc">Position x is 0.25 at zero seconds, 0.75 at 1.5 seconds, and 0.25 at three seconds. Both intervals use ease in/out. The key at three seconds is a target outside this video's sampled frames.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; --stripe:#466c8c; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; --stripe:#4b6e8d; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .small { font-size:21px; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--shape); stroke:var(--edge); stroke-width:2; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+    .point { fill:var(--ink); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="280" rx="10" fill="var(--bg)"/>
+  <text x="142" y="44" class="small" text-anchor="middle">Ease in/out</text>
+  <text x="338" y="44" class="small" text-anchor="middle">Ease in/out</text>
+  <path d="M56 78h168" class="arrow"/>
+  <path d="M252 78h168" class="arrow"/>
+  <path d="M45 129h390" class="line"/>
+  <rect x="36" y="120" width="18" height="18" class="shape"/>
+  <rect x="231" y="120" width="18" height="18" class="shape"/>
+  <rect x="426" y="120" width="18" height="18" fill="var(--bg)" stroke="var(--edge)" stroke-width="2"/>
+  <text x="55" y="181" class="small" text-anchor="middle">0 s</text>
+  <text x="240" y="181" class="small" text-anchor="middle">1.5 s</text>
+  <text x="425" y="181" class="small" text-anchor="middle">3 s</text>
+  <text x="65" y="218" class="small" text-anchor="middle">x = 0.25</text>
+  <text x="240" y="218" class="small" text-anchor="middle">x = 0.75</text>
+  <text x="415" y="218" class="small" text-anchor="middle">x = 0.25</text>
+  <text x="240" y="263" class="small muted" text-anchor="middle">3 s: target outside sampled frames</text>
 </svg>

@@ -8,9 +8,9 @@ description: Know what validation, preflight, preparation, frame rendering and s
 validation report or a fully rendered last frame is an earlier milestone; the
 output is complete only after encoding, finalization and publication succeed.
 
-<figure markdown="span">
+<figure class="diagram" markdown="span">
 ![A snapshot passes through semantic validation, environment preflight, preparation, frame and audio rendering with encoding, then finalization and publication before completion.](../assets/diagrams/lifecycle-render.svg)
-<figcaption>Schematic lifecycle. The high-level render call handles the full operation; preparation stops at a reusable runtime.</figcaption>
+<figcaption>Each step establishes something different. A valid description can still reference a missing file; a prepared runtime can render frames without publishing a video.</figcaption>
 </figure>
 
 <span id="validation-and-preparation"></span>
@@ -37,11 +37,6 @@ Preparation validates and preflights, resolves media and audio analysis, compile
 the project plan and initializes the renderer. `project.prepare()` returns a
 reusable `PreparedProject`; it does not encode or publish a video. The prepared
 runtime is isolated from later authoring edits. Prepare again to include them.
-
-Backend selection is a result to inspect. Requesting WGPU does not prove use of
-a hardware GPU: a software adapter can also provide WGPU. Check the selected
-backend and adapter information, and use the [backend reference](../reference/backends.md)
-for the limits of each claim.
 
 ## Evaluate and render
 
@@ -70,9 +65,8 @@ including one created during the render. It uses a hard link from a sibling
 temporary file, so a filesystem without hard-link support can fail publication.
 `overwrite=True` deliberately replaces the destination using a rename.
 
-The result reports the output path, timing data, requested and selected backends,
-and adapter information where provided. Use the result or terminal event as the
-success signal, then inspect the file when validating a new workflow.
+Use the result or terminal event as the success signal. Rendering progress alone
+does not establish that the output file is ready.
 
 <span id="render-requests-and-events"></span>
 

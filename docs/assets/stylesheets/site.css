@@ -31,7 +31,6 @@
 }
 .md-grid { max-width: 76rem; }
 .md-header { box-shadow: none; }
-.md-header__button.md-logo img { height: 1.65rem; width: 1.65rem; }
 .md-tabs { color: var(--md-default-fg-color); border-bottom: 1px solid var(--vestra-line); }
 .md-tabs__link { color: var(--md-default-fg-color); }
 .md-typeset { font-size: .84rem; line-height: 1.7; }
@@ -180,4 +179,9 @@
 .md-header__button.md-logo,
 .md-nav__button.md-logo {
   display: none;
+}
+
+@media (max-width: 76.234375em) {
+  /* Zensical 0.1.0 leaves closed drawer links in the keyboard tab order. */
+  .md-sidebar--primary:focus-within { transform: translateX(12.5rem); }
 }

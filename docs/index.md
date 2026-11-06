@@ -92,13 +92,13 @@ The introductory tutorials start with the rectangle's static layout, then add th
 <a href="gallery/video-editing/" class="home-gallery__item"><img src="assets/gallery/video-editing.webp" width="640" height="360" loading="lazy" alt="Shanghai skyline transitioning from daytime through blue hour to night"><span><strong>Video editing</strong><span>Video layers, reframing, and transitions</span></span></a>
 </div>
 
-[Browse all examples and their source code](gallery/index.md). Shanghai footage by [Yigang Yu](https://commons.wikimedia.org/wiki/File:Shanghai_Bund,_Lujiazui_Skyline_Timelapse.webm), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); trimmed, resized, reframed, and colour-adjusted. [Asset provenance](assets/gallery/README.md).
+[Browse all examples and their source code](gallery/index.md). Shanghai footage by [Yigang Yu](https://commons.wikimedia.org/wiki/File:Shanghai_Bund,_Lujiazui_Skyline_Timelapse.webm), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); trimmed, resized, reframed, and colour-adjusted. [Example credits](gallery/motion-design.md#credits).
 
 <div class="home-reference" markdown="1">
 
 ## Guides and API reference
 
-The [reference hub](reference/index.md) covers the Python API, source types, effects, canonical JSON format, and CLI. It also links to the existing task guides and technical documentation.
+Use the **Guides** navigation for tasks such as [grouping layers](guides/python/nested-compositions.md), [masking images](guides/python/masks.md), [applying effects](guides/python/effects.md), or [working with audio and spectra](guides/python/signals-and-audio-reactivity.md). **Concepts** explains the authoring and timing model. **Reference** lists [source types](reference/index.md#choose-a-source), APIs, parameters and support limits.
 
 Vestra renders finished videos to H.264 MP4. The Python API is evolving in the 0.1 series. Check [feature support](reference/feature-support.md) for backend coverage and [troubleshooting](troubleshooting/rendering.md) if a render fails.
 

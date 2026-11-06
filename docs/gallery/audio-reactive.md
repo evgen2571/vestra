@@ -16,8 +16,8 @@ the ring's size and the particle layer's opacity.
   <figcaption>Cyan-to-coral bars extend out from a ring, with particles drifting behind them. The ring expands and contracts with the soundtrack. The preview includes synthesized music and no speech.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/a57ddfaecea62035c5042f02d0be397d87262d09/examples/showcase/audio-visualizer/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/a57ddfaecea62035c5042f02d0be397d87262d09/examples/showcase/audio-visualizer/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/audio-visualizer/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/audio-visualizer/render.mp4)
 
 ## Reproduce the example
 
@@ -66,6 +66,17 @@ Start with [Audio and signals](../concepts/audio-and-signals.md), then see
 The original synth loop is dedicated to
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) by Vestra contributors.
 The graphics are original project work; the Manrope font is SIL OFL 1.1.
-See the [preview provenance](../assets/gallery/README.md).
+See the [synth dedication and font notice](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/audio-visualizer/README.md#credits).
+
+## Preview details
+
+This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
+H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 3 seconds.
+The original render and cleaned source are together at the
+[reviewed example revision](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/audio-visualizer/README.md).
+The source render's SHA-256 is `2abfd5976d5c948cc77aaec688fd73f6bd9044940ecc8b5718a313f9d97f4db5`.
+
+[Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).
+The previews contain rendered text; they do not distribute font files.
 
 [Back to the gallery](index.md)

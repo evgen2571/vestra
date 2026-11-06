@@ -86,3 +86,13 @@ these two positions during one video.
 [Continue to your first animation](first-animation.md){ .md-button .md-button--primary }
 
 For more about placement, see [sources and layers](../guides/python/sources-and-layers.md).
+
+
+## Preview reproduction
+
+The static preview is a CPU frame at 0.5 seconds from `first-render.mp4`,
+640 × 360 at 30 fps. The project is three seconds and silent, with no font or external input.
+
+From the native contributor environment, `just docs-media` runs the downloadable
+programs, probes their full outputs under `target/docs-media/`, and refreshes the
+site copies. See [tutorial preview reproduction](../development/documentation.md#reproduce-tutorial-previews).

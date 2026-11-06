@@ -208,3 +208,33 @@ For the low-level forms, see
 and [the project format](../reference/project-format.md). For a practical next
 step, explore [effects](../guides/python/effects.md) or find a project in the
 [examples gallery](../gallery/index.md).
+
+
+## What to build next
+
+Choose a task that builds on the position and opacity tracks used here:
+
+| Task | Start here | See it in a complete project |
+| --- | --- | --- |
+| Draw shapes or add text and media | [Sources and layers](../guides/python/sources-and-layers.md), [shape reference](../reference/sources/shape.md) | [Photo cutouts](../gallery/compositing.md) |
+| Move several layers together or reveal an image | [Groups](../guides/python/nested-compositions.md), [masks](../guides/python/masks.md) | [Photo cutouts](../gallery/compositing.md) |
+| Apply a visual treatment | [Effects](../guides/python/effects.md) | [Halftone and ASCII](../gallery/visual-effects.md) |
+| Connect shots | [Transitions](../guides/python/transitions-flashes-and-presets.md) | [Day-to-night edit](../gallery/video-editing.md) |
+| Add sound or make graphics respond to it | [Audio](../guides/python/audio.md), [signals and spectra](../guides/python/signals-and-audio-reactivity.md) | [Audio-reactive graphics](../gallery/audio-reactive.md) |
+
+The **Guides** navigation contains task-oriented Python, JSON and CLI pages.
+Use **Concepts** to understand timing and evaluation, or **Reference** for source
+types, accepted values and backend limits.
+
+
+## Preview reproduction
+
+The comparison is a three-second, silent CPU render at 960 × 540 and 30 fps;
+the poster is the frame at 1.3 seconds. Graphics and code are original MIT-licensed
+project work. Labels use Vestra's bundled DejaVu-derived font; its
+[complete notice](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/python/vestra/fonts/LICENSE.txt)
+remains with the package. Rendered labels do not redistribute the font file.
+
+From the native contributor environment, `just docs-media` runs the downloadable
+programs, probes their full outputs under `target/docs-media/`, and refreshes the
+site copies. See [tutorial preview reproduction](../development/documentation.md#reproduce-tutorial-previews).

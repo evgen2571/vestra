@@ -7,9 +7,9 @@ Python library, with a canonical JSON format and a `ve` CLI built from source.
 
 ![Animated showcase: animation, media, compositing and audio-reactive graphics](examples/showcase/readme-demo/preview.gif)
 
-[Full demo](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4)
-· [Python source](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/main.py)
-· [Asset credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md)
+[Full demo](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/readme-demo/render.mp4)
+· [Python source](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/readme-demo/main.py)
+· [Asset credits](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/readme-demo/README.md#credits)
 
 ## Quick start
 
@@ -46,7 +46,7 @@ project.render("output.mp4", overwrite=True)
 - **Stylized looks** — ASCII, palette mapping, ordered and blue-noise dither,
   halftone, pixel sorting and CRT effects, on clips or the whole frame.
 
-See [the rendered showcases](https://github.com/evgen2571/vestra/blob/main/examples/showcase/README.md)
+See [the rendered showcases](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/README.md)
 and [reference examples](https://github.com/evgen2571/vestra/blob/main/examples/README.md).
 
 ## Design and limits
@@ -152,4 +152,4 @@ Agents start with [AGENTS.md](AGENTS.md); benchmarks live in
 
 [MIT](LICENSE). Third-party software and example assets keep their own
 licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
-[asset credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md).
+[asset credits](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/readme-demo/README.md#credits).

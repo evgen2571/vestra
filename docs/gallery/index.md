@@ -79,21 +79,26 @@ have that checkout, enter `nix develop` and run `just python-sync` from its root
 To obtain the exact example versions used for these previews independently:
 
 ```bash
-git clone --branch docs/readme-landing https://github.com/evgen2571/vestra.git
+git clone https://github.com/evgen2571/vestra.git
 cd vestra
 
 # Keep the example sources and input assets at the captured revision.
-git switch --detach a57ddfaecea62035c5042f02d0be397d87262d09
+git switch --detach 84c042123474eaa5176585d72d5605b043a5a251
 
 # Enter the native development environment and build the Python package once.
 nix develop
 just python-sync
 ```
 
-Source and full-resolution video links point to this captured commit, so they
-remain usable before the documentation branch is published. The
-[preview provenance](../assets/gallery/README.md) records the source revision
-and processing commands.
+Source links, bundled inputs and full-resolution renders all use revision
+`84c042123474eaa5176585d72d5605b043a5a251`. Its source cleanup preserves the scenes used for the existing previews;
+no media was regenerated for naming, layout or comment changes. A review checkout
+of this branch already contains that revision. Public commit links become
+available when the reviewed commits are pushed.
+
+Each example's credits describe its inputs and preview. To make website delivery
+copies from the bundled renders, follow [preview reproduction](../development/documentation.md#reproduce-gallery-previews);
+it uses this checkout and does not fetch a separate documentation branch.
 
 If you don't use Nix, follow the
 [source-build installation instructions](../getting-started/installation.md#build-from-source--development)
@@ -106,6 +111,6 @@ and 30 fps with Vestra's high quality tier; the website previews are downscaled
 copies.
 
 The required media and fonts are committed with the examples, so rendering
-needs no asset download after setup. See the
-[asset credits](../assets/gallery/README.md#sources-and-licenses) for provenance
-and license information.
+needs no asset download after setup. Source, license and modification details
+are beside each example under **Credits**, with reproduction details in its
+linked README.

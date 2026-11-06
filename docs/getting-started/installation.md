@@ -51,10 +51,12 @@ Vestra supports CPython 3.11–3.14. Published wheels cover Linux x86_64
 and aarch64 (glibc 2.28+), macOS Intel and Apple Silicon, and Windows x64.
 The `ve` CLI is built separately from the Rust checkout.
 
+<a id="build-from-source--development"></a>
+
 ## Build from source / development
 
 This section is for contributors and platforms without a matching wheel.
-For contribution guidance, see [Contributing](../../CONTRIBUTING.md).
+For contribution guidance, see [Contributing](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md).
 
 A source build compiles the Rust engine and bundled FFmpeg libraries. It needs
 Rust, Python 3.11–3.14, uv, a C compiler, libclang, `make`, `git`, and NASM,

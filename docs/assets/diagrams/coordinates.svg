@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" role="img" aria-labelledby="title description">
+  <title id="title">Normalized canvas coordinates</title>
+  <desc id="description">The top-left is zero, zero. The centre is 0.5, 0.5. The bottom-right is one, one. X increases to the right and y increases downward.</desc>
+  <rect width="600" height="340" rx="12" fill="#f5f7fb"/>
+  <g font-family="system-ui, sans-serif" font-size="24" fill="#172c4b">
+    <rect x="104" y="65" width="392" height="220" fill="#e5ecf7" stroke="#526985" stroke-width="2"/>
+    <path d="M104 65H485M104 65V275" stroke="#315dcc" stroke-width="3"/>
+    <path d="m478 57 14 8-14 8M96 268l8 14 8-14" fill="none" stroke="#315dcc" stroke-width="3"/>
+    <text x="104" y="42">(0, 0)</text>
+    <text x="416" y="319">(1, 1)</text>
+    <circle cx="300" cy="175" r="6" fill="#d04b36"/>
+    <path d="M300 65V285M104 175H496" stroke="#526985" stroke-dasharray="5 6" opacity="0.55"/>
+    <text x="314" y="165">(0.5, 0.5)</text>
+    <text x="509" y="73">x</text>
+    <text x="78" y="305">y</text>
+  </g>
+</svg>

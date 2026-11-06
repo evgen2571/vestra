@@ -95,13 +95,13 @@ When changing these controls, update the
 [effects guide](../../guides/python/effects.md),
 [reference](../../reference/effects.md),
 [support matrix](../../reference/feature-support.md) and, for footage or
-other external assets, [license ledger](../../../examples/showcase/ASSETS.md).
+other external assets, [license ledger](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/ASSETS.md).
 
 
 ## Reproducible reference-inspired example
 
-Run [the synthetic portrait demonstration](../../../examples/showcase/stylized-effects/reference.py)
-as described in [its guide](../../../examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis).
+Run [the synthetic portrait demonstration](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/reference.py)
+as described in [its guide](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis).
 Bayer8 at one output pixel, full-resolution entering input, nonuniform stops,
 gamma .9 and radius-1 detail preserve fine cloth/hair bands, facial features
 and calm shadows with three authored palettes. No new artistic mode was needed.

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 270" role="img" aria-labelledby="title description">
+  <title id="title">The destination keyframe controls its incoming interval</title>
+  <desc id="description">Keyframes A, B and C are at zero, 0.8 and 1.6 seconds. Ease out on B controls the interval from A to B. Linear on C controls the interval from B to C.</desc>
+  <rect width="600" height="270" rx="12" fill="#f5f7fb"/>
+  <g font-family="system-ui, sans-serif" font-size="24" text-anchor="middle" fill="#172c4b">
+    <path d="M65 130H535" stroke="#526985" stroke-width="3"/>
+    <path d="M72 94H280M315 94H525" stroke="#315dcc" stroke-width="3"/>
+    <path d="m271 85 12 9-12 9M516 85l12 9-12 9" fill="none" stroke="#315dcc" stroke-width="3"/>
+    <text x="176" y="62">Ease out</text><text x="425" y="62">Linear</text>
+    <path d="M56 130l9-9 9 9-9 9ZM291 130l9-9 9 9-9 9ZM526 130l9-9 9 9-9 9Z" fill="#d04b36"/>
+    <text x="65" y="178">A · 0 s</text><text x="300" y="178">B · 0.8 s</text><text x="535" y="178">C · 1.6 s</text>
+    <text x="300" y="225" font-size="22" fill="#526985">Set on B</text><text x="535" y="225" font-size="22" fill="#526985">Set on C</text>
+  </g>
+</svg>

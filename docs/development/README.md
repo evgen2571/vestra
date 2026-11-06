@@ -1,13 +1,13 @@
 # Vestra development
 
-Start with the root [contribution guide](../../CONTRIBUTING.md) for setup and
+Start with the root [contribution guide](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md) for setup and
 pull request guidance. Use [Testing](testing.md) to choose checks for your change,
 and the [architecture overview](architecture/overview.md) to find your way
-around the codebase. Agents should also consult [AGENTS.md](../../AGENTS.md)
-and [PLANS.md](../../PLANS.md).
+around the codebase. Agents should also consult [AGENTS.md](https://github.com/evgen2571/vestra/blob/develop/AGENTS.md)
+and [PLANS.md](https://github.com/evgen2571/vestra/blob/develop/PLANS.md).
 
-The [Vestra skill index](../../.agents/skills/README.md) routes agent work to
-task-specific verification. GitHub [issue workflow](../agents/issue-tracker.md)
+The [Vestra skill index](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md) routes agent work to
+task-specific verification. GitHub [issue workflow](https://github.com/evgen2571/vestra/blob/develop/docs/agents/issue-tracker.md)
 owns specs and dependencies; implementation plans track work on a selected issue.
 
 ## Testing and performance
@@ -15,6 +15,7 @@ owns specs and dependencies; implementation plans track work on a selected issue
 - [Testing](testing.md)
 - [GPU validation](gpu-validation.md)
 - [Performance and benchmarking](performance.md)
+- [Historical Vestra/MoviePy benchmark investigation](../benchmarks/vestra-vs-moviepy.md)
 - [Media pipeline and concurrency](media-pipeline.md)
 - [Timeline domains and validation](architecture/project-to-plan.md#time-domains-and-frame-boundaries)
 
@@ -33,6 +34,7 @@ owns specs and dependencies; implementation plans track work on a selected issue
 ## Stylization references
 
 - [Detailed, palette-independent dithered look](stylization/dithered-palette-look.md)
+- [Stylization temporal diagnostics](stylization/temporal-diagnostics.md)
 
 ## Extension guides
 

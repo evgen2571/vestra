@@ -41,8 +41,8 @@ GIF preview directly on GitHub; the MP4 link opens the full video file for downl
 | Masks + groups | [Watch](compositing/render.mp4) | [8 seconds: photo cutouts, masks and grouped animation](compositing/README.md) |
 
 The hero, lookbook and original three showcases are 1280×720 at 30 fps; the quickstart is
-640×360 at 30 fps. All are rendered by Vestra itself. Only Audio + spectrum has an audio stream. Read [asset credits and licenses](ASSETS.md)
-before redistributing inputs or outputs; third-party assets are not MIT licensed.
+640×360 at 30 fps. All are rendered by Vestra itself. Only Audio + spectrum has an audio stream. Each example README records its input sources, licenses and modifications.
+Third-party inputs retain their own terms; the software license does not replace them.
 
 From a checkout with FFmpeg/ffprobe and the native package installed:
 
@@ -79,3 +79,39 @@ hero’s standalone project page). The media-edit GIF uses 400 px and 96 colours
 to keep the moving footage reasonably small. It shows seconds 3.5–7.5, with
 short fades at its ends; the linked MP4 is the complete
 fourteen-second edit. GIF previews intentionally omit audio.
+
+## Shared font
+
+All five larger scenes use `assets/Manrope.ttf`, Copyright 2018 The Manrope
+Project Authors (https://github.com/googlefonts/manrope). The unmodified variable
+font was renamed on disk. Its complete [SIL OFL 1.1](assets/Manrope-OFL.txt)
+accompanies the bundled file; retain that copyright notice and license when
+redistributing the font. Videos and posters display rendered text and do not
+redistribute the font file.
+
+The font comes from [Google Fonts revision b31870a](https://github.com/google/fonts/tree/b31870aff700ab7a1d74fa0c6887d95beb9e0037/ofl/manrope).
+To reproduce it from the repository root:
+
+```bash
+curl -fL https://raw.githubusercontent.com/google/fonts/b31870aff700ab7a1d74fa0c6887d95beb9e0037/ofl/manrope/Manrope%5Bwght%5D.ttf -o target/Manrope.ttf
+echo '3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6  target/Manrope.ttf' | sha256sum --check
+```
+
+The checked-in file has that same checksum. Keep the accompanying OFL copy
+with it rather than substituting an external link.
+
+## Prepare shared inputs
+
+The bundled inputs are sufficient to render offline. To regenerate footage and
+synthesized audio, run `just showcase-assets` from the repository root. It verifies
+the downloaded original by checksum, keeps the larger source under
+`target/showcase-sources/`, and replaces the three footage selections and audio
+under `assets/`. To regenerate only the synth, use
+`uv run python examples/showcase/prepare-assets.py --audio-only`.
+
+The [video edit](real-media-edit/README.md#footage-source) records footage terms,
+selection times and the original checksum. The [photo cutouts](compositing/README.md#photo-source)
+record the photograph and its preparation; the [audio visualizer](audio-visualizer/README.md#credits)
+records the original synth dedication. The preparation script fails on a missing
+or changed source, a checksum mismatch or an FFmpeg error. Encoding bytes can vary
+with FFmpeg versions.

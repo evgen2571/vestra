@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from vestra import Project
+from vestra import Point, Project
 from vestra.authoring import Quality
 from vestra.effects import Bloom
 from vestra.sources import (
@@ -16,14 +16,12 @@ from vestra.sources import (
     Spectrum2DGradient,
     Text,
 )
-from vestra import Point
 
 SHOWCASE = Path(__file__).resolve().parents[1]
 
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
-    width, _ = size
-    unit = width / 1280
+    unit = size[0] / 1280
     project = Project(
         size=size, fps=fps, duration=12, base_directory=SHOWCASE, quality=Quality.HIGH
     )
@@ -31,18 +29,23 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     project.audio.track("synth").add(
         "assets/synth.wav", trim_end=12, gain=0.85, fade_in=0.4, fade_out=1
     )
+
+    # Map this recording's RMS range to a gentle multiplier, then bound peaks.
     energy = (
         project.audio.signal.rms()
         .remap(input=(0, 0.18), output=(0.85, 1.08))
         .clamp(0.85, 1.08)
     )
+    # A fast attack follows beats; a slower release avoids jitter between them.
     energy = energy.envelope(0.03, 0.2)
+
     halo = project.root.add(
         Circle(radius=145 * unit, stroke="#71e5e0", stroke_width=2 * unit),
         duration=12,
     )
     halo.transform.position = (0.5, 0.5)
     halo.transform.scale.bind(energy, operation="multiply")
+
     particles = project.root.add(
         ParticleSystem(
             emitter=RectangleEmitter(center=Point(0.5, 0.5), size=Point(0.9, 0.7)),
@@ -60,6 +63,8 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         z=1,
     )
     particles.opacity.bind(energy, operation="multiply")
+
+    # Frequency bands have their own attack/release smoothing, separate from RMS.
     spectrum = project.root.add(
         Spectrum2D(
             band_count=48,
@@ -82,6 +87,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         z=2,
     )
     spectrum.effects.add(Bloom(threshold=0.65, radius=4 * unit, intensity=0.25))
+
     heading = project.root.add(
         Text(
             "Spectrum",
@@ -104,8 +110,8 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         z=3,
     )
     caption.transform.position = (0.5, 0.91)
-    # Fade the visual scene together, including Spectrum2D's adapter presentation.
-    for layer in project.root.layers[1:]:
+    # Fade every foreground layer together while the background stays opaque.
+    for layer in (halo, particles, spectrum, heading, caption):
         layer.opacity.keyframe(0, 0)
         layer.opacity.keyframe(0.6, 1)
         layer.opacity.keyframe(11, 1)

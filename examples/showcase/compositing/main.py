@@ -12,8 +12,8 @@ SHOWCASE = Path(__file__).resolve().parents[1]
 
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
-    width, _ = size
-    unit = width / 1280
+    # Keep pixel-sized masks and type proportional in the smoke render.
+    unit = size[0] / 1280
     project = Project(
         size=size, fps=fps, duration=8, base_directory=SHOWCASE, quality=Quality.HIGH
     )
@@ -31,32 +31,52 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
 
     label("Compositing", (0.5, 0.14), 42)
     label("One image · three masks · grouped animation", (0.5, 0.87), 25)
-    for index, x in enumerate((0.22, 0.5, 0.78)):
-        card = project.root.group(duration=8, z=index + 1)
-        photo = card.add(Image("assets/landscape.jpg", sizing="cover"), duration=8)
-        photo.effects.add(Saturation((0, 0.75, 1.2)[index]))
-        photo.transform.scale.keyframe(0, 1)
-        photo.transform.scale.keyframe(8, 1.3)
-        photo.transform.position = (0.46 + index * 0.04, 0.5)
-        if index == 0:
-            mask = Circle(radius=150 * unit, fill="#ffffff")
-        else:
-            mask = Rectangle(
+
+    # Each row defines a mask, colour treatment, image crop and card position.
+    cutouts = (
+        ("Circle", Circle(radius=150 * unit, fill="#ffffff"), 0.0, 0.46, 0.22),
+        (
+            "Rounded rectangle",
+            Rectangle(
                 width=300 * unit,
                 height=320 * unit,
                 fill="#ffffff",
-                corner_radius=(35 if index == 1 else 0) * unit,
-            )
+                corner_radius=35 * unit,
+            ),
+            0.75,
+            0.5,
+            0.5,
+        ),
+        (
+            "Rectangle",
+            Rectangle(width=300 * unit, height=320 * unit, fill="#ffffff"),
+            1.2,
+            0.54,
+            0.78,
+        ),
+    )
+    for index, (name, mask, saturation, image_x, card_x) in enumerate(cutouts):
+        card = project.root.group(duration=8, z=index + 1)
+        photo = card.add(Image("assets/landscape.jpg", sizing="cover"), duration=8)
+
+        photo.effects.add(Saturation(saturation))
+
+        # Zoom the image inside a fixed mask; moving the card moves both.
+        photo.transform.position = (image_x, 0.5)
+        photo.transform.scale.keyframe(0, 1)
+        photo.transform.scale.keyframe(8, 1.3)
         card.masks.add(mask)
-        card.transform.position.keyframe(0, (x, 0.58))
+
+        # Keyframe times are local to this eight-second card.
+        card.transform.position.keyframe(0, (card_x, 0.58))
         card.transform.position.keyframe(
-            1, (x, 0.48), interpolation=Interpolation.EASE_OUT
+            1, (card_x, 0.48), interpolation=Interpolation.EASE_OUT
         )
         card.transform.position.keyframe(
-            4, (x, 0.52), interpolation=Interpolation.EASE_IN_OUT
+            4, (card_x, 0.52), interpolation=Interpolation.EASE_IN_OUT
         )
         card.transform.position.keyframe(
-            8, (x, 0.48), interpolation=Interpolation.EASE_IN_OUT
+            8, (card_x, 0.48), interpolation=Interpolation.EASE_IN_OUT
         )
         card.transform.scale.keyframe(0, 0.8)
         card.transform.scale.keyframe(1, 1, interpolation=Interpolation.EASE_OUT)
@@ -64,7 +84,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         card.opacity.keyframe(0.6, 1)
         card.opacity.keyframe(7.4, 1)
         card.opacity.keyframe(8, 0)
-        label(("Circle", "Rounded rectangle", "Rectangle")[index], (x, 0.76), 24)
+        label(("Circle", "Rounded rectangle", "Rectangle")[index], (card_x, 0.76), 24)
     return project
 
 

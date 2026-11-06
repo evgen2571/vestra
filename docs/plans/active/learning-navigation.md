@@ -33,7 +33,7 @@ remote mutations or broad teaching rewrite.
 
 ## Milestones
 - [x] Transfer website with no custom logo in any new commit.
-- [ ] Clean example sources and relocate credits; commit reviewable source revision.
+- [x] Clean example sources and relocate input credits; commit reviewable source revision.
 - [ ] Organize navigation, update links and next steps, add focused regression checks.
 - [ ] Run source/docs/style/site gates and desktop/mobile browser inspection;
       review complete diff and commit final corrections.
@@ -62,3 +62,9 @@ the custom logo; existing branches remain intact.
 ## Completion / handoff
 Pending implementation and verification. Remove this completed plan before the
 final handoff; durable authoring decisions belong in the authoring guide.
+
+- Source cleanup: all five canonical projects at full and smoke settings match
+  the captured baseline (floats rounded to 12 decimal places). Native extension
+  reused from the develop checkout; engine/API code is unchanged. Media retained.
+- `just showcase-style` passed; Commons/Flickr/CC0 terms checked directly on
+  2026-11-06. Required license files and packaging includes remain unchanged.

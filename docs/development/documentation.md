@@ -32,6 +32,14 @@ just site-check   # Clean strict build, generated links/assets/anchors, checker 
 
 `just docs-build` builds only the site into `site/`. The output is disposable and untracked. The generated-site check also verifies the `/vestra/` repository path. It does not check external URLs or judge the technical accuracy of prose.
 
+The pinned Zensical 0.1.0 preview server does not answer HTTP byte-range
+requests. Chromium can therefore reset a seek in a silent MP4 to its beginning,
+even when the same file plays and seeks correctly on a range-capable server.
+For seek verification, serve the built `site/` directory with byte-range support
+(or download the MP4 and inspect it locally). Keep the native controls; this is
+a preview-server limitation, not a reason to replace the media player. The
+repository-path check still needs the site mounted at `/vestra/`.
+
 ## Choose the page type
 
 | Page type | Reader's question | A useful shape |

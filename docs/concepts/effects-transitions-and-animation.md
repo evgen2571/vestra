@@ -58,7 +58,11 @@ in over half a second, then hold it visible:
 ```python
 from vestra import Interpolation, Project, Rectangle
 
-project = Project(size=(320, 180), fps=30, duration=2)
+project = Project(
+    size=(320, 180),
+    fps=30,
+    duration=2,
+)
 layer = project.root.add(Rectangle(width=160, height=90, fill="#ffffff"))
 layer.opacity = 0
 layer.opacity.keyframe(0, 0)

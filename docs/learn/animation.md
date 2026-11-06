@@ -73,9 +73,7 @@ card.transform.position.keyframe(0, (0.25, 0.5))
 card.transform.position.keyframe(
     1.5, (0.75, 0.5), interpolation=Interpolation.EASE_IN_OUT
 )
-card.transform.position.keyframe(
-    3, (0.25, 0.5), interpolation=Interpolation.LINEAR
-)
+card.transform.position.keyframe(3, (0.25, 0.5), interpolation=Interpolation.LINEAR)
 ```
 
 The first interval eases in and out between 0 and 1.5 seconds. The second
@@ -232,7 +230,7 @@ types, accepted values and backend limits.
 The comparison is a three-second, silent CPU render at 960 × 540 and 30 fps;
 the poster is the frame at 1.3 seconds. Graphics and code are original MIT-licensed
 project work. Labels use Vestra's bundled DejaVu-derived font; its
-[complete notice](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/python/vestra/fonts/LICENSE.txt)
+[complete notice](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/python/vestra/fonts/LICENSE.txt)
 remains with the package. Rendered labels do not redistribute the font file.
 
 From the native contributor environment, `just docs-media` runs the downloadable

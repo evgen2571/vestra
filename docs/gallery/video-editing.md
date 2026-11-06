@@ -17,8 +17,8 @@ opening shot, and a footage credit appears at the end.
   <figcaption>Daytime, blue-hour and night views of the Shanghai skyline dissolve into each other with slow reframing. The title and its rule fade together, and the final shot fades out with a footage credit. The preview is silent.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/real-media-edit/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/real-media-edit/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/real-media-edit/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/real-media-edit/render.mp4)
 
 ## Reproduce the example
 
@@ -35,7 +35,7 @@ at a smaller size and lower frame rate.
 
 Three five-second footage selections and the Manrope font are included in the
 checkout. To reproduce the selections from the larger original video, use the
-[asset preparation instructions](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/README.md#prepare-shared-inputs).
+[asset preparation instructions](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/README.md#prepare-shared-inputs).
 That optional step downloads a checksum-verified 18 MiB original.
 
 ## Create a dissolve with overlapping layers
@@ -62,9 +62,9 @@ Trimmed, resized, reframed, colour-adjusted and edited with the original audio
 removed. The documentation preview is additionally downscaled and compressed.
 Attribution is retained as provenance; CC0 does not require it.
 
-The Manrope font is SIL OFL 1.1. Its [example README](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/real-media-edit/README.md#footage-source)
+The Manrope font is SIL OFL 1.1. Its [example README](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/real-media-edit/README.md#footage-source)
 records original source links, preparation, checksum and the accompanying font notice.
-[Earlier Location Kenya copies](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
+[Earlier Location Kenya copies](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
 retain their CC BY 3.0 attribution requirements.
 
 ## Preview details
@@ -72,7 +72,7 @@ retain their CC BY 3.0 attribution requirements.
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 6 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/84c042123474eaa5176585d72d5605b043a5a251/examples/showcase/real-media-edit/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/real-media-edit/README.md).
 The source render's SHA-256 is `16ac337002626f69e6797f9291ad6b3bea5967f4da32a81451a2a0ace52ff933`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

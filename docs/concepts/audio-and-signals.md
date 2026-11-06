@@ -16,11 +16,23 @@ can create RMS, peak, or frequency-band signals. Signal methods such as
 signal with additional transforms.
 
 A signal has no visible result by itself. Bind it to a bindable visual property
-or a component of a transform:
+or a component of a transform. This uses your own `assets/music.wav` with
+at least five seconds of audio:
 
 ```python
+from vestra import Circle, Project
+
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=5,
+)
+project.audio.track("music").add("assets/music.wav", trim_end=5)
+
+pulse = project.root.add(Circle(radius=120, fill="#38bdf8"))
 energy = project.audio.signal.band(80, 240)
-layer.opacity.bind(energy.clamp(0, 1), operation="replace")
+opacity = energy.clamp(0, 1)
+pulse.opacity.bind(opacity, operation="replace")
 ```
 
 During evaluation, Vestra analyzes the authored audio, samples the signal at

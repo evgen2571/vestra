@@ -54,7 +54,7 @@ a transition endpoint. `adapter-mediated` means the high-level Python API can
 provide that presentation, while the canonical source cannot carry it directly.
 
 
-Stylization release examples include [a generated moving portrait](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis)
+Stylization release examples include [a generated moving portrait](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis)
 with three palette-independent dither looks and zero-source-mix ASCII checks.
 Verification uses the actual adapters named above; native Windows D3D12/Vulkan
 is unverified. Optional new ASCII calibration, halftone shapes, sorting metrics

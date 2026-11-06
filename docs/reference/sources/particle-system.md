@@ -1,6 +1,6 @@
 # Particle system source
 
-```python
+```text title="API signature"
 ParticleSystem(definition=None, *, emitter=PointEmitter(), rate=0.0, bursts=(), seed=0,
                lifetime=1.0, lifetime_range=None, size=1.0, size_range=None,
                colour="#ffffff", opacity=1.0, initial_velocity=Point(0, 0),

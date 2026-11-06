@@ -1,15 +1,15 @@
 # Render and prepare from Python
 
-For a normal render, use the high-level one-shot method:
+With a `project` built using the [first render tutorial](../../learn/first-render.md),
+use the high-level method to encode an MP4:
 
 ```python
 result = project.render(
     "output.mp4",
     backend="cpu",
     overwrite=True,
-    preview=False,
 )
-print(result.output_path, result.selected_backend)
+print(f"Saved {result.output_path} using {result.selected_backend}")
 ```
 
 Use `project.validate()` when you want a report without preparing a renderer.
@@ -21,13 +21,12 @@ The lower-level immutable route is exposed through `ProjectSnapshot` and
 `Editor`:
 
 ```python
-import vestra
+from vestra import BackendPreference, Editor, PrepareOptions
 
 snapshot = project.snapshot(output="output.mp4")
-editor = vestra.Editor()
-prepared = editor.prepare(
-    snapshot, vestra.PrepareOptions(backend=vestra.BackendPreference.CPU)
-)
+editor = Editor()
+options = PrepareOptions(backend=BackendPreference.CPU)
+prepared = editor.prepare(snapshot, options)
 frame = prepared.render_frame_seconds(0.5)
 ```
 

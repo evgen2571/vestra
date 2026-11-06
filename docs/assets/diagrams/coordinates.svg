@@ -1,17 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" role="img" aria-labelledby="title description">
-  <title id="title">Normalized canvas coordinates</title>
-  <desc id="description">The top-left is zero, zero. The centre is 0.5, 0.5. The bottom-right is one, one. X increases to the right and y increases downward.</desc>
-  <rect width="600" height="340" rx="12" fill="#f5f7fb"/>
-  <g font-family="system-ui, sans-serif" font-size="24" fill="#172c4b">
-    <rect x="104" y="65" width="392" height="220" fill="#e5ecf7" stroke="#526985" stroke-width="2"/>
-    <path d="M104 65H485M104 65V275" stroke="#315dcc" stroke-width="3"/>
-    <path d="m478 57 14 8-14 8M96 268l8 14 8-14" fill="none" stroke="#315dcc" stroke-width="3"/>
-    <text x="104" y="42">(0, 0)</text>
-    <text x="416" y="319">(1, 1)</text>
-    <circle cx="300" cy="175" r="6" fill="#d04b36"/>
-    <path d="M300 65V285M104 175H496" stroke="#526985" stroke-dasharray="5 6" opacity="0.55"/>
-    <text x="314" y="165">(0.5, 0.5)</text>
-    <text x="509" y="73">x</text>
-    <text x="78" y="305">y</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="310" viewBox="0 0 480 310" role="img" aria-labelledby="title desc">
+  <title id="title">Normalized coordinates of the containing canvas</title>
+  <desc id="desc">The top-left is 0, 0. The center is 0.5, 0.5. The bottom-right is 1, 1. X increases rightward and y downward.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; --stripe:#466c8c; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; --stripe:#4b6e8d; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .small { font-size:21px; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--shape); stroke:var(--edge); stroke-width:2; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+    .point { fill:var(--ink); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="310" rx="10" fill="var(--bg)"/>
+  <rect x="45" y="54" width="390" height="219.375" class="panel"/>
+  <path d="M240 54v219.375M45 163.688h390" class="guide"/>
+  <path d="M45 54h382" class="arrow"/>
+  <path d="M45 54v211" class="arrow"/>
+  <text x="45" y="35" class="small">(0, 0)</text>
+  <text x="449" y="62" class="small">x</text>
+  <text x="19" y="283" class="small">y</text>
+  <path d="M233 163.688h14m-7-7v14" class="line" style="stroke:var(--ink);stroke-width:2.5"/>
+  <text x="253" y="150" class="small">(0.5, 0.5)</text>
+  <text x="435" y="300" class="small" text-anchor="end">(1, 1)</text>
 </svg>

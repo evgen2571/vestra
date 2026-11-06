@@ -1,14 +1,37 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 270" role="img" aria-labelledby="title description">
-  <title id="title">Interpolation for keyframe intervals</title>
-  <desc id="description">Keyframes A, B and C are at zero, 1.5 and three seconds. Ease in/out on B controls the interval from A to B. Linear on C controls the interval from B to C.</desc>
-  <rect width="660" height="270" rx="12" fill="#f5f7fb"/>
-  <g font-family="system-ui, sans-serif" font-size="22" text-anchor="middle" fill="#101c24">
-    <path d="M65 130H595" stroke="#5d7065" stroke-width="3"/>
-    <path d="M80 94H300M345 94H565" stroke="#3a7351" stroke-width="3"/>
-    <path d="m291 85 12 9-12 9M556 85l12 9-12 9" fill="none" stroke="#3a7351" stroke-width="3"/>
-    <text x="196" y="62">Ease in/out</text><text x="463" y="62">Linear</text>
-    <path d="M65 130l9-9 9 9-9 9ZM321 130l9-9 9 9-9 9ZM577 130l9-9 9 9-9 9Z" fill="#3a7351"/>
-    <text x="74" y="178">A · 0 s</text><text x="330" y="178">B · 1.5 s</text><text x="586" y="178">C · 3 s</text>
-    <text x="330" y="225" font-size="19" fill="#445d50">Set on B</text><text x="586" y="225" font-size="19" fill="#445d50">Set on C</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270" role="img" aria-labelledby="title desc">
+  <title id="title">The arrival key chooses interval interpolation</title>
+  <desc id="desc">Keyframes A, B and C occur at zero, 1.5 and three seconds. Ease in/out stored on B controls A to B. Linear stored on C controls B to C.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; --stripe:#466c8c; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; --stripe:#4b6e8d; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .small { font-size:21px; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--shape); stroke:var(--edge); stroke-width:2; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+    .point { fill:var(--ink); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="270" rx="10" fill="var(--bg)"/>
+  <text x="142" y="44" class="small" text-anchor="middle">B: Ease in/out</text>
+  <text x="338" y="44" class="small" text-anchor="middle">C: Linear</text>
+  <path d="M56 78h168" class="arrow"/>
+  <path d="M252 78h168" class="arrow"/>
+  <path d="M45 129h390" class="line"/>
+  <g fill="var(--shape)" stroke="var(--edge)" stroke-width="2">
+    <path d="m45 119 10 10-10 10-10-10Z"/>
+    <path d="m240 119 10 10-10 10-10-10Z"/>
+    <path d="m435 119 10 10-10 10-10-10Z"/>
   </g>
+  <text x="55" y="181" class="small" text-anchor="middle">A · 0 s</text>
+  <text x="240" y="181" class="small" text-anchor="middle">B · 1.5 s</text>
+  <text x="422" y="181" class="small" text-anchor="middle">C · 3 s</text>
+  <text x="240" y="242" class="small muted" text-anchor="middle">The arrival key controls its interval.</text>
 </svg>

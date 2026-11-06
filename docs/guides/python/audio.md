@@ -92,8 +92,9 @@ playback-speed effect. See [audio contracts](../../reference/audio.md#crossfades
 ## Try an example with no external recording
 
 The [audio response program](../../assets/examples/audio_response.py) generates
-its own pulse recording and renders it with visible measurements. Run
+its own bass-and-melody phrase and renders silent videos with a waveform,
+playhead and measured response curves. Run
 `python audio_response.py`; it replaces `audio-pulses.wav` and three short
 MP4s in the current directory. The
-[audio-reactivity guide](signals-and-audio-reactivity.md) contains its complete
-included source and audible results.
+[audio-reactivity guide](signals-and-audio-reactivity.md) explains the results
+and links the complete source.

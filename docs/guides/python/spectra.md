@@ -6,14 +6,16 @@ description: Draw the same prepared audio frequency bands in linear and radial S
 
 Use `Spectrum2D` when you want to draw a distribution of frequencies rather
 than drive one property with a scalar level. This comparison gives both layouts
-the same recording, 16 bands, frequency range, sensitivity and smoothing.
+the same generated phrase, 16 logarithmic bands, frequency range, sensitivity
+and smoothing. The preview is silent; the waveform and moving marker show the
+input timing.
 
 <figure>
-  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-spectra.webp" width="640" height="360" aria-label="Audible synthesized pulses create matching frequency-band changes in a linear spectrum on the left and a radial spectrum on the right.">
+  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-spectra.webp" width="640" height="440" aria-label="Silent spectrum comparison: a waveform marks input beats while matching frequency bands grow upward in a linear chart and outward in a radial chart.">
     <source src="../../assets/renders/audio-spectra.mp4" type="video/mp4">
     <a href="../../assets/renders/audio-spectra.mp4">Download the spectrum comparison</a>.
   </video>
-  <figcaption>The low tone recurs in every pulse while the higher tone changes. The same frequency groups extend upward on the left and outward on the right.</figcaption>
+  <figcaption>A low bass tone repeats while the melody rises. Lower bands begin at the left of the linear chart and at twelve o’clock in the radial chart, proceeding clockwise. Matching band colours identify frequency, not loudness; bar length shows the response.</figcaption>
 </figure>
 
 Unlike a shape's scale binding, the spectrum requests master frequency analysis
@@ -24,30 +26,36 @@ from a clip to either kind of visual.
 ## Place a linear spectrum
 
 This starts a new project with your own `assets/music.wav`, containing at
-least three seconds of audio:
+least four seconds of audio:
 
 ```python
 from vestra import Project, Spectrum2D
-from vestra.sources import Spectrum2DLinearLayout, Spectrum2DRadialLayout
+from vestra.sources import (
+    Spectrum2DGradient,
+    Spectrum2DLinearLayout,
+    Spectrum2DRadialLayout,
+)
 
-project = Project(size=(640, 360), fps=30, duration=3, background="#101c24")
-project.audio.track("music").add("assets/music.wav", trim_end=3)
+project = Project(size=(640, 440), fps=30, duration=4, background="#101c27")
+project.audio.track("music").add("assets/music.wav", trim_end=4)
+project.output_audio = False
 
 linear_source = Spectrum2D(
     band_count=16,
     min_hz=80,
     max_hz=2400,
-    sensitivity=350,
+    sensitivity=250,
     attack_seconds=0.01,
     release_seconds=0.18,
-    x=0.06,
-    y=0.28,
-    width=0.42,
-    height=0.50,
+    x=0.05,
+    y=0.44,
+    width=0.475,
+    height=0.40,
     layout=Spectrum2DLinearLayout(anchor="bottom", band_mapping="forward"),
-    colour="#9edbc7",
-    bar_gap_ratio=0.25,
-    min_bar_height_ratio=0.01,
+    colour="#91e2ca",
+    gradient=Spectrum2DGradient("#91e2ca", "#bdb4ff", "across_bands"),
+    bar_gap_ratio=0.24,
+    min_bar_height_ratio=0.015,
 )
 project.root.add(linear_source)
 ```
@@ -70,24 +78,25 @@ radial_source = Spectrum2D(
     band_count=16,
     min_hz=80,
     max_hz=2400,
-    sensitivity=350,
+    sensitivity=250,
     attack_seconds=0.01,
     release_seconds=0.18,
-    x=0.61,
-    y=0.28,
-    width=0.28,
-    height=0.50,
-    layout=Spectrum2DRadialLayout(inner_radius_ratio=0.45),
-    colour="#9edbc7",
-    bar_gap_ratio=0.25,
-    min_bar_height_ratio=0.01,
+    x=0.59,
+    y=0.41,
+    width=0.36,
+    height=0.52,
+    layout=Spectrum2DRadialLayout(inner_radius_ratio=0.44),
+    colour="#91e2ca",
+    gradient=Spectrum2DGradient("#91e2ca", "#bdb4ff", "across_bands"),
+    bar_gap_ratio=0.24,
+    min_bar_height_ratio=0.015,
 )
 project.root.add(radial_source)
 project.render("spectra.mp4", backend="cpu", overwrite=True)
 ```
 
 The radial rectangle is approximately square in output pixels, despite its
-unequal normalized width and height. `inner_radius_ratio=0.45` leaves an empty
+unequal normalized width and height. `inner_radius_ratio=0.44` leaves an empty
 centre; the default outward direction extends bars from that inner radius.
 Set `start_angle_degrees` and `sweep_angle_degrees` for an arc, or choose
 `direction="inward"` or `"both"` for a different growth direction.
@@ -98,7 +107,7 @@ Set `start_angle_degrees` and `sweep_angle_degrees` for an arc, or choose
 | --- | --- |
 | Frequency range | Focus on bass or treble, or widen it to show more of the mix. `max_hz` must fit prepared audio Nyquist. |
 | `band_count` | More bands show finer frequency divisions but narrower bars; the current maximum is 48. |
-| `sensitivity` | Increase it when bars barely move; lower it when many bars stay at full height. The example's 350 is tuned to these sparse generated tones. |
+| `sensitivity` | Increase it when bars barely move; lower it when many bars stay at full height. The example's 250 is tuned to the generated phrase. |
 | Attack / release | Short attack follows onsets; longer release keeps bars legible between pulses. These are separate from scalar-signal `envelope`. |
 | `min_bar_height_ratio` | Keep inactive bands visible as a baseline, or use zero to hide silent bars. |
 | Layout and gaps | Change readability and geometry without changing the input recording. |
@@ -109,16 +118,16 @@ sparse tone recording suit mastered music. The
 [Spectrum2D reference](../../reference/sources/spectrum2d.md) lists defaults,
 limits, gradients and presets.
 
-## Reproduce this comparison
+## Complete example
 
 [Download audio_response.py](../../assets/examples/audio_response.py) and run
-`python audio_response.py`. It generates its own three-second WAV and renders
-this comparison as `audio-spectra.mp4`, plus the two
-[scalar response studies](signals-and-audio-reactivity.md). Running it again
-replaces those outputs.
+`python audio_response.py`. It creates a four-second bass-and-melody WAV and
+replaces `audio-spectra.mp4`, plus the two
+[scalar response studies](signals-and-audio-reactivity.md). The clips stay in
+the project for analysis, while `output_audio = False` makes the videos silent.
+Change that flag to publish sound with the same visuals.
 
-All preview frames came from actual CPU renders. WGPU source dispatch exists,
-but full visual parity for Spectrum2D is not verified; these previews provide
-no additional WGPU evidence. Provenance, poster times, original checksums and
-preview regeneration are recorded in the
-[shared program credits](signals-and-audio-reactivity.md#credits-and-reproduction).
+The preview is an actual CPU render. WGPU source dispatch exists, but full
+visual parity for Spectrum2D is not verified. See
+[preview reproduction](../../development/documentation.md#reproduce-visual-learning-studies)
+for contributor checks and regeneration.

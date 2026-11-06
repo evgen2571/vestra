@@ -20,12 +20,12 @@ def load_example(name):
     return module
 
 
-def test_generated_pulses_have_silence_and_five_audible_onsets(tmp_path):
+def test_generated_phrase_has_silence_and_five_distinct_onsets(tmp_path):
     example = load_example("audio_response")
     path = tmp_path / "pulses.wav"
     example.write_pulses(path)
     with wave.open(str(path), "rb") as recording:
-        assert recording.getparams()[:4] == (1, 2, 48_000, 144_000)
+        assert recording.getparams()[:4] == (1, 2, 48_000, 192_000)
         samples = array("h", recording.readframes(recording.getnframes()))
     if sys.byteorder != "little":
         samples.byteswap()
@@ -44,7 +44,7 @@ def test_audio_studies_validate_and_keep_analysis_when_muted(tmp_path):
     for study in ("bounded", "smoothing", "spectra"):
         project = example.build_project(path, study)
         assert project.validate().is_valid
-        project.output_audio = False
+        assert project.output_audio is False
         snapshot = project.snapshot().to_dict()
         assert snapshot["output"]["audio"] is False
         assert len(snapshot["audio"]["tracks"][0]["clips"]) == 1
@@ -87,24 +87,134 @@ def test_documented_transition_fit_and_conflict_failures():
     }
 
 
-def test_smoothed_circle_has_a_reduced_onset_and_a_visible_release(tmp_path):
+@pytest.mark.parametrize("study", ("bounded", "smoothing", "spectra"))
+def test_silent_output_preserves_actual_analysis_frames(tmp_path, study):
     example = load_example("audio_response")
     path = tmp_path / "pulses.wav"
     example.write_pulses(path)
-    prepared = example.build_project(path, "smoothing").prepare(backend="cpu")
+    project = example.build_project(path, study)
+    silent = project.prepare(backend="cpu")
+    project.output_audio = True
+    audible = project.prepare(backend="cpu")
+    for time in (0, 0.4, 0.8, 2.8, 3.96):
+        assert (
+            silent.render_frame_seconds(time).to_bytes()
+            == audible.render_frame_seconds(time).to_bytes()
+        )
 
-    def circle_areas(time):
+
+def test_measured_response_curves_show_attack_release_and_match_rendered_lines(
+    tmp_path,
+):
+    example = load_example("audio_response")
+    path = tmp_path / "pulses.wav"
+    example.write_pulses(path)
+    raw, fast, slow = example.sample_responses(path)
+    assert len(raw) == example.FPS * example.DURATION
+    onset = 11
+    release = 24
+    assert raw[onset] > fast[onset] > slow[onset]
+    assert fast[release] > raw[release]
+    assert slow[release] > raw[release]
+    assert raw[release] < 0.001
+
+    project = example.build_project(path, "smoothing")
+    for layer in project.root.layers:
+        if layer.id.startswith("dot-") or layer.id.endswith("playhead"):
+            layer.visible = False
+    pixels = project.prepare(backend="cpu").render_frame_seconds(0).to_bytes()
+    for values, top, colour in zip(
+        (raw, fast, slow), (160, 244, 328), (example.RAW, example.FAST, example.SLOW)
+    ):
+        expected = bytes.fromhex(colour[1:])
+        for index in (11, 12, 18, 24, 36, 42):
+            x = round(
+                example.LEFT
+                + index
+                / (example.FPS * example.DURATION)
+                * (example.RIGHT - example.LEFT)
+            )
+            y = round(top + 44 * (1 - values[index]))
+            nearby = [
+                pixels[(row * 640 + column) * 4 : (row * 640 + column) * 4 + 3]
+                for row in range(y - 2, y + 3)
+                for column in range(x - 2, x + 3)
+            ]
+            assert any(
+                max(abs(a - b) for a, b in zip(pixel, expected)) <= 18
+                for pixel in nearby
+            ), (index, top, x, y)
+
+
+def test_measured_curve_values_match_the_bound_circle_size(tmp_path):
+    example = load_example("audio_response")
+    path = tmp_path / "pulses.wav"
+    example.write_pulses(path)
+    fast = example.sample_responses(path)[1]
+    prepared = example.build_project(path, "bounded").prepare(backend="cpu")
+    for index in (0, 12, 24, 36, 84, 119):
+        pixels = prepared.render_frame_number(index).to_bytes()
+        filled = [
+            x
+            for x in range(80, 270)
+            if pixels[(218 * 640 + x) * 4 : (218 * 640 + x) * 4 + 3]
+            == bytes.fromhex(example.FAST[1:])
+        ]
+        radius = (max(filled) - min(filled) + 1) / 2
+        assert radius == pytest.approx(62 * (0.75 + 0.55 * fast[index]), abs=1.5)
+
+
+def test_spectrum_layouts_render_the_same_band_values(tmp_path):
+    import math
+
+    example = load_example("audio_response")
+    path = tmp_path / "pulses.wav"
+    example.write_pulses(path)
+    project = example.build_project(path, "spectra")
+    sources = [
+        layer.source
+        for layer in project.root.layers
+        if layer.id.startswith("spectrum-")
+    ]
+    for field in (
+        "band_count",
+        "min_hz",
+        "max_hz",
+        "sensitivity",
+        "attack_seconds",
+        "release_seconds",
+        "gradient",
+        "min_bar_height_ratio",
+    ):
+        assert getattr(sources[0], field) == getattr(sources[1], field)
+    prepared = project.prepare(backend="cpu")
+
+    def is_bar(pixels, x, y):
+        return min(pixels[(y * 640 + x) * 4 : (y * 640 + x) * 4 + 3]) > 80
+
+    distributions = []
+    for time in (0.4, 2.8):
         pixels = prepared.render_frame_seconds(time).to_bytes()
-        areas = [0, 0, 0]
-        for offset in range(0, len(pixels), 4):
-            red, green, blue = pixels[offset : offset + 3]
-            if 100 < red < 200 and 180 < green < 245 and 150 < blue < 230:
-                x = (offset // 4) % 640
-                areas[min(x // 213, 2)] += 1
-        return areas
-
-    _, fast_onset, slow_onset = circle_areas(0.3)
-    raw_release, fast_release, slow_release = circle_areas(0.55)
-    assert fast_onset > slow_onset
-    assert fast_release > raw_release
-    assert slow_release > raw_release
+        amplitudes = []
+        for band in range(16):
+            x = round(32 + (band + 0.5) * 304 / 16)
+            linear = sum(is_bar(pixels, x, y) for y in range(195, 369)) / 174
+            angle = (band + 0.5) * math.tau / 16
+            radii = [
+                radius
+                for radius in range(51, 115)
+                if is_bar(
+                    pixels,
+                    round(493 + math.sin(angle) * radius),
+                    round(294 - math.cos(angle) * radius),
+                )
+            ]
+            radial = (max(radii, default=50) + 0.5 - 50.6) / 64.4
+            assert linear == pytest.approx(radial, abs=0.04), (time, band)
+            amplitudes.append(linear)
+        distributions.append(amplitudes)
+    assert (
+        distributions[0][1] > 0.5 and distributions[1][1] > 0.5
+    )  # The recurring bass.
+    assert distributions[0][4] > distributions[1][4] + 0.2
+    assert distributions[1][11] > distributions[0][11] + 0.2

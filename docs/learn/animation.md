@@ -138,7 +138,7 @@ curves with similarly named keywords.
     All four controls must be finite; x controls must be between 0 and 1.
     Y controls can go outside that range, which can overshoot the endpoint
     values. Keep the result valid for the property you are animating. See the
-    [interpolation reference](../concepts/effects-transitions-and-animation.md#interpolation)
+    [interpolation reference](../reference/animation.md)
     for the canonical JSON form and validation rules.
 
 [Download the runnable comparison](../assets/examples/keyframes.py), then run
@@ -202,7 +202,7 @@ keeping the project duration at three seconds.
   Validation alone does not check media files or FFmpeg.
 
 For the low-level forms, see
-[the animation reference](../concepts/effects-transitions-and-animation.md#interpolation)
+[the animation reference](../reference/animation.md)
 and [the project format](../reference/project-format.md). For a practical next
 step, explore [effects](../guides/python/effects.md) or find a project in the
 [examples gallery](../gallery/index.md).

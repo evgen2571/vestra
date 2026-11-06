@@ -79,7 +79,7 @@ self-contained visual source with `alpha` or `luma` coverage. See the
 
 Track objects contain a required `base_value` and optional `keyframes`. A
 keyframe has `time`, `value`, and `interpolation`; time is local seconds.
-See [interpolation](../concepts/effects-transitions-and-animation.md#interpolation)
+See [interpolation](animation.md)
 for named modes, `cubic_bezier` objects and segment semantics. Scalar properties
 extend scalar tracks with ordered `modifiers`.
 

@@ -1,109 +1,99 @@
 # Effects, transitions, animation, flashes, and presets
 
-These features act at different levels of the project. Keeping the levels
-separate makes complex edits easier to reason about.
+A property value, a processing operation and a timeline relationship solve
+different problems. Choose the one that owns the change you want to make.
 
-| Feature | What it changes |
-| --- | --- |
-| Animation | A property value over time |
-| Effect | The appearance or processing of one layer or the project output |
-| Transition | How two sibling layers exchange presentation over an interval |
-| Flash | A short root-owned colour overlay |
-| Preset | Reusable cinematic intent applied to an eligible layer |
+| Feature | What it changes | Continue with |
+| --- | --- | --- |
+| Animation | A property over layer-local time | [Keyframes](../learn/animation.md) |
+| Effect | The appearance of a layer or composed output | [Attach an effect](../guides/python/effects.md) |
+| Transition | Presentation of two sibling layers over an interval | [Transition comparisons](../guides/python/transitions-flashes-and-presets.md) |
+| Flash | A short root-owned color overlay | [Flashes](../reference/presets-and-flashes.md) |
+| Preset | Reusable cinematic intent on one eligible image layer | [Preset contracts](../reference/presets-and-flashes.md) |
 
-Animation is the time-varying input. For example, keyframes can change opacity,
-position, scale, rotation, or an effect parameter. An effect consumes those
-values while processing a layer or output. A transition owns presentation
-channels for its outgoing and incoming endpoints, so its animation is relative
-to transition progress rather than a general layer property track.
+Animation can drive an effect parameter: a blur still runs in the same processing
+stage as its radius changes. A transition owns presentation channels on its
+outgoing and incoming endpoints, driven by normalized progress. Manually
+keyframing a layer does not create that two-layer relationship.
 
-Transitions belong to a composition and connect two layers in that same
-composition. Composition layers can be endpoints, and a child composition can
-have its own transitions between its children. A transition does not move
-layers into a new composition.
+## Processing stages
 
-Flashes are root overlays with their own start, duration, opacity, and fades.
-They are useful for a beat or burst that should sit over the rendered project.
-Presets are reusable values for supported image layers. A layer can have one
-cinematic preset at a time. Presets do not replace ordinary transforms or
-effects.
+![Schematic pipeline: source sizing and crop, Motion Tile, layer transform, ordinary effects, owned masks, track matte, then opacity and blend; project effects follow the root composite.](../assets/diagrams/effect-pipeline.svg)
 
-Before the first keyframe, a track evaluates to its base value. Between
-keyframes it interpolates, and after the final keyframe it holds that final
-value. The high-level API lowers all of these descriptors into the canonical
-project before rendering. Their authored ownership stays distinct even when
-the final frame combines them.
+This is a schematic of ownership and order, not a rendered image. Read downward:
+a layer's masks see its effected presentation, then a track matte supplies
+coverage, then opacity and blend place it into its parent. A group first
+composes its children; its placed result then passes through the same layer
+pipeline. Project post-effects process the complete root result.
+
+Effects retain attachment order **within their stage**. Motion Tile is the only
+pre-transform effect, so it fills a virtual source region before moving or
+rotating that source. Other effects process the transformed image. A larger
+Motion Tile region does not make the canvas larger.
+
+A useful consequence: layer blur does not blur the background behind a title.
+To blur the final title and background together, use a project post-effect. To
+blur only a composed card, apply the effect to that card's group layer.
+
+## Order changes the result
+
+The two actual CPU renders below use the same procedural source, palette and
+settings. Only attachment order changes.
+
+<div class="gallery-grid" markdown>
+
+<figure markdown>
+![Blur radius 5 followed by ordered dither scale 2: soft content becomes crisp discrete palette dots.](../assets/renders/effect-order.webp)
+<figcaption>GaussianBlur(radius=5) → OrderedDither(scale=2). Look at the crisp pattern across the softened circle edge.</figcaption>
+</figure>
+
+<figure markdown>
+![Ordered dither scale 2 followed by blur radius 5: the dots soften into intermediate colors.](../assets/renders/effect-order-reverse.webp)
+<figcaption>OrderedDither(scale=2) → GaussianBlur(radius=5). The pattern itself is blurred, so output no longer contains only palette colors.</figcaption>
+</figure>
+
+</div>
+
+Download [the controlled source](../assets/examples/effects_catalog.py), then run
+these alternatives in an empty output directory:
+
+```bash
+python effects_catalog.py --effect order --still
+python effects_catalog.py --effect order --reverse --still
+```
+
+Both write WebP images and replace their named output on a rerun. The
+[effect catalog](../guides/python/effect-catalog.md) compares individual effects
+before combining them.
+
+## Ownership and clocks
+
+Effects attach by copy. Keep `layer.effects.add(...)`'s returned handle to edit
+that placement. An untimed child effect uses its child layer's local time; an effect on
+the parent group uses that group's layer-local time. Global effect tracks use
+the project span. A CameraShake with a delayed `active_interval` uses time since
+that effect interval began for its parameter tracks. Periodic CRT/palette colors loop their procedural component;
+they do not loop source video or audio.
+
+Transitions belong to the immediate composition shared by their two endpoints.
+A nested composition can own transitions between its children; the parent can
+also transition that entire composition layer. The placement's start and duration
+use the owning composition's clock, while definition channels use progress 0..1.
+See [timeline and time](timeline-and-time.md) and the
+[transition guide](../guides/python/transitions-flashes-and-presets.md) for the
+relationship between placement, overlap and progress.
 
 ## Interpolation
 
-Interpolation controls the segment **ending at** a keyframe. Put the easing
-on the destination keyframe, not the starting one. The first keyframe takes
-effect at its time; there is no interpolation from the base value to it.
-Times must be non-negative and strictly increasing. Layer tracks use
-layer-local seconds; timed effects use effect-local seconds. Transition
-channels instead use normalized progress from 0 to 1.
+The authoritative [animation explanation](../learn/animation.md) covers base
+values, destination-keyframe easing, holds, cubic Bézier curves and overshoot.
+Layer tracks use layer-local seconds; timed effects use effect-local seconds;
+transition channels use normalized progress. The first keyframe takes effect
+at its time without interpolating from the base value. Before it the base value
+applies; after the last keyframe its value holds. Keep resulting values within
+the parameter's supported range.
 
-| Python `Interpolation` member | JSON value | Behavior between keyframes |
-| --- | --- | --- |
-| `LINEAR` | `"linear"` | Constant rate; the Python keyframe default. |
-| `HOLD` | `"hold"` | Keep the preceding value, then jump at the destination time. |
-| `EASE_IN` | `"ease_in"` | Start slowly and accelerate (`t²`). |
-| `EASE_OUT` | `"ease_out"` | Start quickly and decelerate (`1 − (1 − t)²`). |
-| `EASE_IN_OUT` | `"ease_in_out"` | Smooth start and finish (`t²(3 − 2t)`). |
-
-Here `t` is progress through the segment, from 0 to 1. Scalar values and each
-component of point/crop values use the same curve. For example, fade a rectangle
-in over half a second, then hold it visible:
-
-```python
-from vestra import Interpolation, Project, Rectangle
-
-project = Project(
-    size=(320, 180),
-    fps=30,
-    duration=2,
-)
-layer = project.root.add(Rectangle(width=160, height=90, fill="#ffffff"))
-layer.opacity = 0
-layer.opacity.keyframe(0, 0)
-layer.opacity.keyframe(0.5, 1, interpolation=Interpolation.EASE_OUT)
-```
-
-The equivalent JSON clip `opacity` field is:
-
-```json
-{
-  "base_value": 0,
-  "keyframes": [
-    {"time": 0, "value": 0, "interpolation": "linear"},
-    {"time": 0.5, "value": 1, "interpolation": "ease_out"}
-  ]
-}
-```
-
-For a custom timing curve, pass `CubicBezier(x1, y1, x2, y2)` instead of an
-enum member:
-
-```python
-from vestra import CubicBezier
-
-layer.transform.position.keyframe(0, (0.25, 0.5))
-layer.transform.position.keyframe(
-    1, (0.75, 0.5), interpolation=CubicBezier(0.42, 0, 0.58, 1)
-)
-```
-
-Its destination JSON keyframe is:
-
-```json
-{
-  "time": 1,
-  "value": {"x": 0.75, "y": 0.5},
-  "interpolation": {"type": "cubic_bezier", "x1": 0.42, "y1": 0, "x2": 0.58, "y2": 1}
-}
-```
-
-All four controls must be finite; `x1` and `x2` must be in `[0, 1]`.
-Y controls outside that interval can overshoot, so keep the animated result
-within the property's supported range. In Python, property keyframes accept
-`Interpolation` or `CubicBezier` values, rather than strings.
+Find exact scope, stage, alpha and timing rules in [effect contracts](../reference/effects.md),
+precise controls in [effect parameters](../reference/effect-parameters.md), and
+canonical JSON curves in [animation reference](../reference/animation.md), and
+implementation mathematics in [effect algorithms](../development/effect-algorithms.md).

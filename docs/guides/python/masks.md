@@ -16,7 +16,8 @@ For the coverage model, read [masks and mattes](../../concepts/masks-and-mattes.
 
 The lower examples show two circles combined with union and subtract. The
 [complete procedural comparison](../../assets/examples/concepts_masks.py)
-needs no image files; its source and reproduction command are below.
+needs no image files; its source and reproduction command are below. You can
+also [download its three-second MP4](../../assets/renders/concepts-masks.mp4).
 
 ## Start with a circular crop
 

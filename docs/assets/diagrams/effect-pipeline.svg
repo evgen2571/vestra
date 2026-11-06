@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 770" role="img" aria-labelledby="title desc">
+<title id="title">Layer processing and project output</title>
+<desc id="desc">A downward schematic of source sizing, Motion Tile, transform, ordinary effects, masks, matte and compositing, followed by project post effects.</desc>
+<rect width="440" height="770" rx="12" fill="#f6f6f6"/>
+<g font-family="sans-serif" font-size="18" fill="#292929" text-anchor="middle">
+<text x="220" y="32" font-weight="bold">One layer in its composition</text>
+<g fill="#fff" stroke="#777"><rect x="40" y="50" width="360" height="54" rx="7"/><rect x="40" y="132" width="360" height="54" rx="7"/><rect x="40" y="214" width="360" height="54" rx="7"/><rect x="40" y="296" width="360" height="54" rx="7"/><rect x="40" y="378" width="360" height="54" rx="7"/><rect x="40" y="460" width="360" height="54" rx="7"/><rect x="40" y="542" width="360" height="54" rx="7"/><rect x="40" y="670" width="360" height="64" rx="7"/></g>
+<text x="220" y="84">Source sizing / crop</text><text x="220" y="166">Pre-transform: Motion Tile</text><text x="220" y="248">Layer transform</text><text x="220" y="330">Post-transform: ordinary effects</text><text x="220" y="412">Owned masks</text><text x="220" y="494">Track matte coverage</text><text x="220" y="576">Opacity / blend into parent</text>
+<text x="220" y="638" font-weight="bold">After all root layers compose</text><text x="220" y="709">Project post-effects → final frame</text>
+<g font-size="24"><text x="220" y="125">↓</text><text x="220" y="207">↓</text><text x="220" y="289">↓</text><text x="220" y="371">↓</text><text x="220" y="453">↓</text><text x="220" y="535">↓</text><text x="220" y="664">↓</text></g>
+</g></svg>

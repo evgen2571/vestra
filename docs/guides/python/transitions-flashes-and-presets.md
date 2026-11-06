@@ -105,8 +105,8 @@ corner has a different path from scaling around the centre.
 </figure>
 
 This uses `BlurCrossfade(radius=16)`, a pixel-radius Gaussian blur with opacity
-channels. `ZoomBlurTransition` is a separate radial streak treatment; its
-`radius` has different semantics. Use the
+channels. `ZoomBlurTransition` uses zoom-directed samples rather than a Gaussian kernel.
+Both radius controls use output pixels; equal values need not look equally soft. Use the
 [transition reference](../../reference/transitions.md) for the full constructor
 catalog rather than transferring radius values between blur families.
 

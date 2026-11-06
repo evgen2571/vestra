@@ -17,6 +17,10 @@ have to rediscover. Link to the source documentation instead of copying it.
   [.agents/skills/README.md](.agents/skills/README.md). Claude Code discovers
   the same skills through `.claude/skills/`.
 
+- For documentation content, examples, media, navigation or styling, follow
+  [documentation authoring](docs/development/documentation.md). Site preview is
+  independent of the native engine; use `just docs-serve` and `just site-check`.
+
 ## Task routing
 
 | Task | Read first |

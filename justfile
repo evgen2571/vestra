@@ -158,3 +158,20 @@ showcase:
 # Replace committed videos/posters and the README GIF with fresh full renders.
 showcase-refresh:
     uv run python scripts/render-showcases.py --preview --update-results
+
+# Preview documentation with live reload; no Rust engine or Vestra install needed.
+docs-serve *args:
+    uv run --no-project --with-requirements docs/requirements.txt zensical serve "$@"
+
+# Build the documentation website without compiling Vestra.
+docs-build:
+    uv run --no-project --with-requirements docs/requirements.txt zensical build --clean --strict
+
+# Check generated links, anchors and media at the GitHub Pages repository path.
+site-check: docs-build
+    uv run --no-project python scripts/check-site.py
+    uv run --no-project --with pytest python -m pytest tests/test_site_links.py tests/test_documentation_examples.py -q
+
+# Reproduce documentation previews from the checkout (requires python-sync + FFmpeg).
+docs-media:
+    uv run --no-sync python scripts/render-docs-media.py

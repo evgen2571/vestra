@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from vestra import Interpolation, Project
+from vestra.authoring import Quality
 from vestra.effects import Saturation, Vignette
 from vestra.sources import Rectangle, Text, Video
 
@@ -15,7 +16,12 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     width, _ = size
     unit = width / 1280
     project = Project(
-        size=size, fps=fps, duration=14, base_directory=SHOWCASE, output_audio=False
+        size=size,
+        fps=fps,
+        duration=14,
+        base_directory=SHOWCASE,
+        quality=Quality.HIGH,
+        output_audio=False,
     )
     shots = []
     for number, start in enumerate((0, 4.5, 9), 1):
@@ -54,7 +60,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     rule.transform.position = (0.5, 0.57)
     credit = project.root.add(
         Text(
-            "Footage: Location Kenya · CC BY 3.0",
+            "Footage: Yigang Yu · CC0",
             font=FONT,
             font_size=20 * unit,
             fill="#f0ece4",

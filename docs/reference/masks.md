@@ -48,8 +48,8 @@ asset in the project's `assets` array:
 
 Omitted mask fields default to `operation: "intersect"`, `invert: false`,
 `strength: 1`, `feather: 0`, and a centered identity transform. See the complete
-[geometric](../../examples/projects/geometric-masks.json) and
-[image](../../examples/projects/image-masks.json) examples for other inputs.
+[geometric](https://github.com/evgen2571/vestra/blob/develop/examples/projects/geometric-masks.json) and
+[image](https://github.com/evgen2571/vestra/blob/develop/examples/projects/image-masks.json) examples for other inputs.
 
 Masks consume coverage produced by owned sources. The supported geometric
 inputs are `Rectangle`, `Ellipse`, `Circle`, `Polygon`, and `Line`; Line masks
@@ -102,7 +102,7 @@ The consumer clip's optional `matte` field has this canonical representation:
 
 `source_layer` is the ID of a sibling clip, `mode` is required (`alpha` or
 `luma`), and `invert` defaults to `false`. Omit `matte` for no relationship.
-See the [complete JSON example](../../examples/projects/track-matte.json).
+See the [complete JSON example](https://github.com/evgen2571/vestra/blob/develop/examples/projects/track-matte.json).
 
 A Track Matte references existing timeline content; it does not own a new
 source. The two relationships are intentionally distinct:

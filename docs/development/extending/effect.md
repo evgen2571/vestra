@@ -2,9 +2,9 @@
 
 Define an effect once, keep its semantic decisions in its own Rust module, and
 register a kernel only when existing operations cannot implement it. Start with
-[Vignette](../../../crates/vestra-core/src/effects/vignette.rs),
-[Glow](../../../crates/vestra-core/src/effects/glow.rs), or
-[Camera Shake](../../../crates/vestra-core/src/effects/camera_shake.rs).
+[Vignette](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effects/vignette.rs),
+[Glow](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effects/glow.rs), or
+[Camera Shake](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effects/camera_shake.rs).
 
 Read the [effect pipeline](../architecture/effect-pipeline.md) before changing
 resources. The [effect reference](../../reference/effects.md) owns coordinate,
@@ -34,7 +34,7 @@ are additional; specialized resources can require more implementation files.
 
 ## Declare fields and parameters
 
-Edit [catalog_entries.rs](../../../crates/vestra-core/src/effect_definition/catalog_entries.rs).
+Edit [catalog_entries.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effect_definition/catalog_entries.rs).
 Each entry owns the Rust variant, semantic module, canonical JSON `id`, class,
 scope, stage, temporal policy, conservative pass estimate and original-retention
 policy. It also contains:
@@ -92,7 +92,7 @@ fail compilation. These checks run during ordinary builds, without a generator.
 The lists derive visitors, target metadata and ordinary normalization/remapping;
 descriptor completeness and semantic compatibility are additionally tested.
 
-[field_types.rs](../../../crates/vestra-core/src/effect_definition/field_types.rs)
+[field_types.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effect_definition/field_types.rs)
 explicitly classifies supported Rust types. Qualified scalar/track paths and
 aliases resolve to the same classification. New types require a deliberate
 classification there; there is no blanket rule treating every `Track<T>` as a
@@ -164,13 +164,13 @@ Glow-like effect needs no artificial kernel. ASCII has analysis/resolve passes
 and a prepared atlas with its own lifetime and shared shader fragments.
 
 For genuinely new work, add typed evaluated fields to `EffectOperation` in
-[plan/effect_passes/mod.rs](../../../crates/vestra-core/src/plan/effect_passes/mod.rs).
+[plan/effect_passes/mod.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/plan/effect_passes/mod.rs).
 Keep this IR backend-neutral. Conservative topology must include operations
 reachable on any active frame, including when a sampled frame is an identity.
 
 ## Register a kernel and CPU behavior
 
-Add one row in [render-common/kernel.rs](../../../crates/vestra-render-common/src/kernel.rs):
+Add one row in [render-common/kernel.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-common/src/kernel.rs):
 
 ```rust
 Vignette = 7 => [Vignette],
@@ -181,7 +181,7 @@ mapping. Preserve existing order/bits. Append a new kernel with an unused bit
 below 64; bits are independent of enum discriminants. Gaussian demonstrates
 mapping several operations to one kernel.
 
-In [CPU effects](../../../crates/vestra-render-cpu/src/cpu/effects.rs), add the
+In [CPU effects](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-cpu/src/cpu/effects.rs), add the
 algorithm and one `cpu_effect_kernels!` row binding explicit support to typed
 dispatch. Reuse source/secondary/target surfaces, prepared atlases and pools.
 A dedicated algorithm module additionally needs its ordinary Rust declaration.
@@ -195,8 +195,8 @@ An ordinary new WGPU kernel has three maintained locations:
 
 1. The WGSL algorithm under `crates/vestra-render-wgpu/src/shaders/effects/`.
 2. An explicit `effect_parameters!` record and operation packing in
-   [parameters/effects.rs](../../../crates/vestra-render-wgpu/src/wgpu/parameters/effects.rs).
-3. One [registry.rs](../../../crates/vestra-render-wgpu/src/wgpu/registry.rs) row
+   [parameters/effects.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-wgpu/src/wgpu/parameters/effects.rs).
+3. One [registry.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-wgpu/src/wgpu/registry.rs) row
    declaring support, parameter type, exact shader label and ordered static
    source fragments.
 

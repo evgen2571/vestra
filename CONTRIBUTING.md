@@ -21,6 +21,10 @@ For example, a report about a missing video frame should include the smallest
 composition that shows it, the render command and the affected timestamp.
 Remove personal paths and sensitive information from logs before sharing them.
 
+For documentation-only changes, use the [documentation authoring guide](docs/development/documentation.md).
+`just docs-serve` previews the site without compiling the Rust engine;
+`just site-check` builds it and validates generated links and assets.
+
 ## 2. Set up a checkout
 
 Fork the repository on GitHub, clone your fork and create a branch for the change:

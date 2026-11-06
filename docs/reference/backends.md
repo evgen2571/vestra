@@ -45,7 +45,7 @@ adapters through `AdapterDeviceType` values. `CPU` identifies a CPU adapter;
 `adapter_name`, `graphics_backend`, `driver_name` and `driver_info` as well.
 For example, llvmpipe and Lavapipe are software implementations. Performance
 claims should name the adapter, graphics API and driver. See the
-[native declarations](../../python/vestra/_native.pyi) for Python `AdapterInfo` fields.
+[native declarations](https://github.com/evgen2571/vestra/blob/develop/python/vestra/_native.pyi) for Python `AdapterInfo` fields.
 
 ## Parity and coverage
 

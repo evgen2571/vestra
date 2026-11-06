@@ -1,0 +1,71 @@
+[project]
+site_name = "Vestra"
+site_description = "Compose video with Python. Learn Vestra through real renders, readable examples and practical animation projects."
+site_url = "https://evgen2571.github.io/vestra/"
+repo_url = "https://github.com/evgen2571/vestra"
+repo_name = "evgen2571/vestra"
+edit_uri = "edit/develop/docs/"
+docs_dir = "docs"
+site_dir = "site"
+extra_css = ["assets/stylesheets/site.css"]
+exclude_docs = """
+/plans/
+/agents/
+requirements.txt
+"""
+nav = [
+  { "Home" = "index.md" },
+  { "Learn" = [
+    { "Installation" = "learn/installation.md" },
+    { "First render" = "learn/first-render.md" },
+    { "First animation" = "learn/first-animation.md" },
+    { "Animation & keyframes" = "learn/animation.md" },
+  ] },
+  { "Examples" = "gallery/index.md" },
+  { "Reference" = "reference/index.md" },
+  { "Contributing" = "development/documentation.md" },
+]
+
+[project.theme]
+custom_dir = "overrides"
+language = "en"
+variant = "modern"
+font = false
+features = [
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.footer",
+  "content.code.copy",
+  "content.tabs.link",
+  "search.highlight",
+  "search.suggest",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+md_in_html = {}
+pymdownx.details = {}
+pymdownx.highlight = { anchor_linenums = true, line_spans = "__span", pygments_lang_class = true }
+pymdownx.inlinehilite = {}
+pymdownx.snippets = { base_path = ["."], check_paths = true }
+pymdownx.superfences = {}
+pymdownx.tabbed = { alternate_style = true }
+toc = { permalink = true }

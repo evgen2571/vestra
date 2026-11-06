@@ -34,7 +34,7 @@ validates every canonical JSON example with the CLI. Running
 per category into a temporary directory. Use `just examples --all` to render
 every example, or `just examples --output-dir DIR` to keep rendered artifacts.
 Canonical validation and showcase smoke rendering also run in the Python CI job.
-Full-resolution rendering remains an explicit maintainer workflow. See the [examples index](../../examples/README.md) for
+Full-resolution rendering remains an explicit maintainer workflow. See the [examples index](https://github.com/evgen2571/vestra/blob/develop/examples/README.md) for
 the category map and media-dependent example.
 
 For a fast edit loop, use `cargo test -p CRATE TEST_FILTER`, `cargo test -p vestra-cli --test cli_validation`, or `just python-test python-tests/TEST.py`. `just test` forwards Cargo/test arguments, such as `just test TEST_FILTER -- --nocapture`. Native Python work uses `just python-sync`, then `just python-test`; the test recipe syncs dependencies itself, imports the extension, and runs compileall after pytest. Build the extension/package through the repository's documented Nix/uv workflow, not a separate hand-maintained environment.
@@ -90,7 +90,7 @@ just python-test python-tests/test_effect_generation_compatibility.py
 The latter compares imports, signatures, inheritance, serialization, validation
 timing and JSON behavior with frozen pre-generation fixtures. It explicitly
 preserves the Ascii schema/parser mismatch. See the
-[fixture instructions](../../python-tests/fixtures/effects/README.md) to repeat
+[fixture instructions](https://github.com/evgen2571/vestra/blob/develop/python-tests/fixtures/effects/README.md) to repeat
 the same comparisons against the exact baseline revision. Do not refresh the
 expected values from generated output to make a regression pass.
 
@@ -139,7 +139,7 @@ Neither smoke timings nor test timings are a performance baseline. Use the
 [canonical suite](performance.md) for measurements.
 
 The task-specific local workflows are indexed in
-[Vestra skills](../../.agents/skills/README.md); their visual tools also have
+[Vestra skills](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md); their visual tools also have
 four isolated self-tests. `just docs-check` checks public Markdown file targets,
 not skill metadata, links under `.agents/` or Markdown anchors. Validate those
 explicitly when changing skills, and execute the existing tool self-tests.

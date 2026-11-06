@@ -22,7 +22,7 @@ uv run --no-project --with 'Pillow>=10,<13' python \
   scripts/stylization-diagnostics.py
 ```
 
-The diagnostic command reuses the [visual-regression skill](../../../.agents/skills/visual-regression/SKILL.md)
+The diagnostic command reuses the [visual-regression skill](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/visual-regression/SKILL.md)
 comparison and contact-sheet tools. It writes `target/stylization/diagnostics/`
 with per-timestamp CPU/WGPU difference PNGs, per-backend adjacent-frame
 difference PNGs, two-column chronological contact sheets and `report.json`.

@@ -51,7 +51,7 @@ Use a fresh output directory when repeating a direct suite. Hardware commands
 require a verified eligible adapter; CPU runs can be collected separately.
 Toolchain, driver and host differences can change the results even at the same
 revision. For current-checkout measurements and native setup, follow
-[benchmark collection](../../benchmarks/COLLECTING.md); keep new results separate
+[benchmark collection](https://github.com/evgen2571/vestra/blob/develop/benchmarks/COLLECTING.md); keep new results separate
 from these historical tables.
 
 The historical collector archive was `target/benchmark-results/full-collection/vestra-bench-linux-20261031T130534Z-180e48c2.zip`. The direct suite executable hashes were recorded in each `suite.json` provenance and the collector diagnostics.

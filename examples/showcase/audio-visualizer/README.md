@@ -5,7 +5,7 @@
 ![Animated preview of the Vestra render](preview.gif)
 
 A twelve-second audio spectrum example with a master-audio RMS signal,
-smoothed reactive geometry, seeded particles and modest bloom. Spectrum2D uses
+smoothed reactive geometry, seeded particles and neon bloom. Spectrum2D uses
 prepared audio frequency analysis; the halo and particle opacity use scalar signals.
 
 From the checkout after `uv sync --locked --extra dev`:
@@ -19,5 +19,6 @@ Pass `--smoke` for the full timeline at 320×180 and 6 fps, or `--output PATH`.
 The original synth bed is generated using Python's standard library; no download
 is required. [ASSETS](../ASSETS.md) records its CC0 dedication and the font license.
 
-The centered linear layout mirrors each bar above and below the baseline.
-The heading sits above the graphics and the caption below the mirrored bars.
+The radial layout wraps 48 bands around a reactive halo, with a cyan-to-coral
+gradient across the bands. The centred spectrum label and purple particle field
+form a complete music-visualizer composition.

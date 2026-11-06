@@ -122,4 +122,4 @@ independently of those budgets. See [validation limits](../../reference/project-
 Minimum duration, automatic child-group inference, fill-to-end intent and
 selected-range video output are not established APIs. For timing changes,
 reuse the [timeline/media regression seams](../testing.md#timeline-and-media-checks)
-and [contract-sync skill](../../../.agents/skills/api-contract-sync/SKILL.md).
+and [contract-sync skill](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/api-contract-sync/SKILL.md).

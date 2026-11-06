@@ -12,10 +12,8 @@ import urllib.request
 import wave
 
 ROOT = Path(__file__).resolve().parent
-CITY_URL = (
-    "https://upload.wikimedia.org/wikipedia/commons/d/d7/City_timelapse_video.webm"
-)
-CITY_SHA256 = "42ebfa7a64b4538497dd08891b1aa11f20545940948f06473a0e77a6d917a450"
+CITY_URL = "https://upload.wikimedia.org/wikipedia/commons/9/91/Shanghai_Bund%2C_Lujiazui_Skyline_Timelapse.webm"
+CITY_SHA256 = "6e506bc88f6912a931d29bd02464606a39402b5203726fbdd66facb35ddc698f"
 
 
 def download(url: str, digest: str, target: Path) -> None:
@@ -77,18 +75,16 @@ def main() -> None:
         help="generate audio without downloading footage",
     )
     args = parser.parse_args()
-    print(
-        "Original synth audio: CC0. Footage: City timelapse video / Location Kenya / CC BY 3.0."
-    )
+    print("Original synth audio: CC0. Footage: Shanghai Bund / Yigang Yu / CC0 1.0.")
     print(
         "Read examples/showcase/ASSETS.md for source, license and redistribution requirements."
     )
     write_audio(ROOT / "assets/synth.wav")
     if args.audio_only:
         return
-    source = ROOT.parents[1] / "target/showcase-sources/city.webm"
+    source = ROOT.parents[1] / "target/showcase-sources/shanghai.webm"
     download(CITY_URL, CITY_SHA256, source)
-    for number, start in enumerate((3, 34, 59), 1):
+    for number, start in enumerate((3, 15, 27), 1):
         destination = ROOT / f"assets/city-{number}.mp4"
         subprocess.run(
             [
@@ -103,7 +99,7 @@ def main() -> None:
                 "5",
                 "-an",
                 "-vf",
-                "setpts=PTS-STARTPTS,scale=1280:720,fps=30",
+                "setpts=PTS-STARTPTS,scale=1280:720:flags=lanczos,fps=30",
                 "-map_metadata",
                 "-1",
                 "-c:v",

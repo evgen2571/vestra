@@ -34,7 +34,7 @@ validates every canonical JSON example with the CLI. Running
 per category into a temporary directory. Use `just examples --all` to render
 every example, or `just examples --output-dir DIR` to keep rendered artifacts.
 Canonical validation and showcase smoke rendering also run in the Python CI job.
-Full-resolution rendering remains an explicit maintainer workflow. See the [examples index](https://github.com/evgen2571/vestra/blob/develop/examples/README.md) for
+Full-resolution rendering remains an explicit maintainer workflow. See the [examples index](https://github.com/evgen2571/vestra/blob/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/examples/README.md) for
 the category map and media-dependent example.
 
 For a fast edit loop, use `cargo test -p CRATE TEST_FILTER`, `cargo test -p vestra-cli --test cli_validation`, or `just python-test python-tests/TEST.py`. `just test` forwards Cargo/test arguments, such as `just test TEST_FILTER -- --nocapture`. Native Python work uses `just python-sync`, then `just python-test`; the test recipe syncs dependencies itself, imports the extension, and runs compileall after pytest. Build the extension/package through the repository's documented Nix/uv workflow, not a separate hand-maintained environment.

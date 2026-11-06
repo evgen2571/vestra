@@ -388,6 +388,6 @@ in [DejaVuSans.txt](https://github.com/evgen2571/vestra/blob/develop/licenses/De
 Enums, glyph strings/font and palette cardinality are discrete configurations.
 Animate `amount` or `source_mix` for useful continuous transitions; no implicit
 crossfade of incompatible font or character configurations is promised.
-See the [ASCII JSON example](https://github.com/evgen2571/vestra/blob/develop/examples/effects/ascii.json),
-[pseudo-ASCII example](https://github.com/evgen2571/vestra/blob/develop/examples/effects/pseudo-ascii.json), and
-[looping showcase](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/README.md).
+See the [ASCII JSON example](https://github.com/evgen2571/vestra/blob/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/examples/effects/ascii.json),
+[pseudo-ASCII example](https://github.com/evgen2571/vestra/blob/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/examples/effects/pseudo-ascii.json), and
+[looping showcase](https://github.com/evgen2571/vestra/blob/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/examples/showcase/stylized-effects/README.md).

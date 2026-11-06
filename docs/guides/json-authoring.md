@@ -157,7 +157,7 @@ objects like the opacity example. Effect types use snake-case names in JSON.
 Effects run in their declared order within their rendering stage; consult the
 [effects reference](../reference/effects.md) for parameters and placement rules.
 For coverage and cutouts, see the [masks reference](../reference/masks.md) and
-[geometric mask example](https://github.com/evgen2571/vestra/blob/develop/examples/projects/geometric-masks.json).
+[geometric mask example](https://github.com/evgen2571/vestra/blob/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/examples/projects/geometric-masks.json).
 
 ## Transition between two clips
 
@@ -216,7 +216,7 @@ The endpoints are IDs of clips in the same composition. The transition must fit
 inside both clips. Its placement uses composition seconds, while its animation
 uses normalized `progress` from 0 to 1. JSON stores the transition's channels
 explicitly; it does not use Python constructor names such as `Crossfade`.
-See the [transition examples](https://github.com/evgen2571/vestra/tree/develop/examples/transitions) for more
+See the [transition examples](https://github.com/evgen2571/vestra/tree/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/examples/transitions) for more
 complete projects.
 
 ## Use media assets
@@ -361,7 +361,7 @@ validation results readable by other tools. For render failures, see
 
 ## Further examples
 
-Browse the [reference examples](https://github.com/evgen2571/vestra/blob/develop/examples/README.md) for complete JSON
+Browse the [reference examples](https://github.com/evgen2571/vestra/blob/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/examples/README.md) for complete JSON
 projects demonstrating sources, effects, masks, transitions and audio. Use the
 [project-format reference](../reference/project-format.md) for field definitions
 and the [CLI rendering guide](cli/rendering.md) for command options.

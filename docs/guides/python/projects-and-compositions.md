@@ -4,11 +4,14 @@ A project defines the video size, frame rate and duration. Its root composition
 holds the visual layers that appear in the video.
 
 ```python
-import vestra
+from vestra import Project
 from vestra.sources import Color, Rectangle
 
-
-project = vestra.Project(size=(1280, 720), fps=30, duration=5)
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=5,
+)
 project.root.add(Color("#111827"), duration=5, id="background")
 
 # Show a blue panel from second 1 until second 3.
@@ -33,14 +36,14 @@ group also transforms its children:
 ```python
 card = project.root.group(start=1, duration=3, z=2, id="card")
 
-card.child.add(
+card.add(
     Rectangle(width=500, height=220, fill="#f9fafb"),
     duration=3,
     id="card-background",
 )
 
 # A coloured stripe appears a little after the card itself.
-card.child.add(
+card.add(
     Rectangle(width=360, height=12, fill="#2563eb"),
     start=0.25,
     duration=2,

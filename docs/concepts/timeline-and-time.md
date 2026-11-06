@@ -15,7 +15,14 @@ start. `playback_rate` changes how quickly source time advances. These are
 separate from the layer's placement time:
 
 ```python
-layer = project.root.add(
+from vestra import Project, Video
+
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=6,
+)
+excerpt = project.root.add(
     Video("clip.mp4"),
     start=2.0,
     duration=4.0,

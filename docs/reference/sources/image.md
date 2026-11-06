@@ -1,6 +1,6 @@
 # Image source
 
-```python
+```text title="API signature"
 Image(path: str | PathLike[str], *, sizing: Sizing | Literal["original", "fit", "cover"] | None = None,
       crop: Crop | CropProperty | None = None)
 ```

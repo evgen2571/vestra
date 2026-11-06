@@ -1,23 +1,32 @@
 # Add audio
 
 Create a track on the project's audio timeline, then place path-based clips on
-that track.
+that track. This example uses a ten-second excerpt from your own
+`assets/music.wav`, which must contain at least fourteen seconds of audio.
 
 ```python
-track = project.audio.track("music")
-clip = track.add(
+from vestra import Project
+
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=10,
+)
+music = project.audio.track("music", gain=0.9)
+soundtrack = music.add(
     "assets/music.wav",
-    start=0,
-    # Trim positions refer to the source file, giving a ten-second excerpt.
     trim_start=4,
     trim_end=14,
     gain=0.8,
     fade_in=0.25,
     fade_out=0.5,
 )
-track.gain = 0.9
-project.output_audio = True
 ```
+
+The excerpt starts at source second four and ends at source second fourteen.
+It plays at the beginning of the project. Gain `0.8` lowers the clip before the
+track gain of `0.9`; the quarter-second fade in and half-second fade out belong
+to the selected excerpt. Audio is included automatically when a project has clips.
 
 Clip, track, and master audio effects have different scopes. For example,
 `PlaybackSpeed` is clip-scoped, while `BassBoost` can be used on a clip, track,
@@ -26,7 +35,7 @@ or master stack:
 ```python
 from vestra import BassBoost, PlaybackSpeed
 
-clip.effects.add(PlaybackSpeed(1.05))
+soundtrack.effects.add(PlaybackSpeed(1.05))
 project.audio.effects.add(BassBoost(gain_db=3.0, frequency_hz=120.0))
 ```
 

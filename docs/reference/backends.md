@@ -26,9 +26,9 @@ Python passes `"auto"`/`"cpu"`/`"wgpu"` or `BackendPreference` to `render()`,
 
 ```python
 result = project.render("out.mp4", backend="auto")
-print(result.selected_backend.value)    # "cpu" or "wgpu"
-print(result.adapter)                    # adapter name/type/backend, or None
-print(result.fallback)                   # BackendFallback when WGPU was skipped
+print(result.selected_backend.value)  # "cpu" or "wgpu"
+print(result.adapter)  # adapter name/type/backend, or None
+print(result.fallback)  # BackendFallback when WGPU was skipped
 ```
 
 `VESTRA_WGPU_BACKEND` restricts which graphics APIs wgpu considers (for

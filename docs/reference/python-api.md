@@ -4,7 +4,7 @@
 
 ## High-level authoring
 
-```python
+```text title="API signature"
 Project(*, size: tuple[int, int], fps: int | tuple[int, int] | FrameRate,
         duration: float | None = None, background="#000000", quality=Quality.BALANCED,
         base_directory=".", name=None, metadata=None, output_audio=None, output_path=None,
@@ -58,7 +58,7 @@ An individual placement override replaces only that property's animation and
 bindings. `transform=` replaces all defaults and is exclusive with individual
 keywords. See [precedence and validation](../guides/python/sources-and-layers.md).
 
-```python
+```text title="API signature"
 project.snapshot(*, output=None) -> ProjectSnapshot
 project.validate() -> ValidationReport
 project.prepare(*, backend="auto") -> PreparedProject
@@ -79,9 +79,8 @@ replace the built-in terminal renderer with a callback.
 
 Layers expose an ordered mask collection:
 
-```python
-mask = layer.masks.add(source, operation=MaskOperation.INTERSECT,
-                       id=None, feather=12, mode=None)
+```text title="Mask collection operations"
+layer.masks.add(source, *, operation=MaskOperation.INTERSECT, id=None, feather=0, mode=None)
 layer.masks.items
 layer.masks.remove(mask_or_id)
 layer.masks.clear()
@@ -158,8 +157,20 @@ importing Vestra and ordinary rendering do not install a global subscriber:
 import vestra
 
 vestra.configure_logging(level="info")
-vestra.configure_logging(level="debug", format="json", output="file",
-                         file="vestra.log")
+```
+
+For JSON logs in a file, choose this configuration instead. Initialize logging
+once per process:
+
+```python
+import vestra
+
+vestra.configure_logging(
+    level="debug",
+    format="json",
+    output="file",
+    file="vestra.log",
+)
 ```
 
 `level` accepts `error`, `warn`, `info`, `debug`, and `trace`. `format` is

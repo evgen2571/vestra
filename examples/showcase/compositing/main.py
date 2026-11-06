@@ -84,7 +84,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         card.opacity.keyframe(0.6, 1)
         card.opacity.keyframe(7.4, 1)
         card.opacity.keyframe(8, 0)
-        label(("Circle", "Rounded rectangle", "Rectangle")[index], (card_x, 0.76), 24)
+        label(name, (card_x, 0.76), 24)
     return project
 
 

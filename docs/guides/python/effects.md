@@ -97,7 +97,7 @@ Compare it with `nearest_rgb` on the same footage and palette using the showcase
 
 An explicit `period` loops procedural palette phase; the source clip and audio
 continue on their normal timelines. See the [effect reference](../../reference/effects.md)
-for exact ranges and the [palette example](../../../examples/python/high-level/13_palette_dither.py)
+for exact ranges and the [palette example](https://github.com/evgen2571/vestra/blob/develop/examples/python/high-level/13_palette_dither.py)
 for an asset-free recipe.
 
 Halftone, sorting and CRT can be attached to video layers, groups or the global
@@ -124,7 +124,7 @@ CRT grain and jitter evolve continuously, so evaluating frames out of order
 preserves their animation. A procedural CRT period does not loop footage/audio.
 Modes, colors and integer block sizes are discrete configuration choices;
 animate intensity to introduce a look smoothly. See the
-[synthetic looping showcase](../../../examples/showcase/stylized-effects/README.md)
+[synthetic looping showcase](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/README.md)
 and the [effect reference](../../reference/effects.md) for parameter bounds.
 
 For cinematic ASCII, choose dark-to-light characters, output-pixel cell sizes
@@ -225,7 +225,7 @@ active. Its default zero amount preserves existing output.
 
 
 For a complete fine-detail dither video and ASCII readability comparison, run
-[the generated portrait example](../../../examples/showcase/stylized-effects/reference.py).
-Its [guide](../../../examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis)
+[the generated portrait example](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/reference.py).
+Its [guide](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis)
 explains editable tone/detail/filter settings, three arbitrary palettes and the
 expected darkness of source-colored ASCII with zero source mixing.

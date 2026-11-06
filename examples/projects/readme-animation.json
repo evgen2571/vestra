@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "output": {
+    "path": "json-example.mp4", "width": 640, "height": 360,
+    "frame_rate": "30/1", "background": "#101c24",
+    "quality": "balanced", "audio": false,
+    "duration_mode": "explicit", "duration": 3
+  },
+  "assets": [],
+  "visual": {
+    "clips": [{
+      "id": "card", "start": 0, "duration": 3, "layer": 0,
+      "source": {
+        "type": "shape", "fill": "#b8e3bc",
+        "geometry": {"type": "rectangle", "width": 180, "height": 140, "corner_radius": 16}
+      },
+      "opacity": {"base_value": 1},
+      "transform": {
+        "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+        "scale": {"base_value": {"x": 1, "y": 1}},
+        "position": {
+          "base_value": {"x": 0.25, "y": 0.5},
+          "keyframes": [
+            {"time": 0, "value": {"x": 0.25, "y": 0.5}, "interpolation": "linear"},
+            {"time": 1.5, "value": {"x": 0.75, "y": 0.5}, "interpolation": "ease_in_out"},
+            {"time": 3, "value": {"x": 0.25, "y": 0.5}, "interpolation": "ease_in_out"}
+          ]
+        }
+      }
+    }]
+  }
+}

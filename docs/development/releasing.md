@@ -67,7 +67,7 @@ requires every artifact build and smoke test to succeed.
 ## Bundled-library source and licenses
 
 The MIT license covers Vestra software; wheels also contain statically linked
-LGPL FFmpeg libraries. The [third-party notices](../../THIRD_PARTY_NOTICES.md)
+LGPL FFmpeg libraries. The [third-party notices](https://github.com/evgen2571/vestra/blob/develop/THIRD_PARTY_NOTICES.md)
 and LGPL text are included in wheel/sdist metadata. Each wheel job runs
 `scripts/archive-ffmpeg-source.py` against the exact build checkout. Its ZIP
 contains tracked source files with applied changes, a diff, upstream revision,

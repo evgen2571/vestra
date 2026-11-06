@@ -118,7 +118,7 @@ include `position`, `anchor` and `scale`. Rotation is optional.
 
 Transforms apply to images, video, shapes, text and groups. A `solid_color`
 source fills the canvas and cannot have a transform. Spectrum and particle
-sources have their own layout fields. See the [source reference](../reference/README.md#source-reference)
+sources have their own layout fields. See the [source reference](../reference/catalog.md#source-reference)
 for each source's syntax.
 
 ## Animate a property
@@ -157,7 +157,7 @@ objects like the opacity example. Effect types use snake-case names in JSON.
 Effects run in their declared order within their rendering stage; consult the
 [effects reference](../reference/effects.md) for parameters and placement rules.
 For coverage and cutouts, see the [masks reference](../reference/masks.md) and
-[geometric mask example](../../examples/projects/geometric-masks.json).
+[geometric mask example](https://github.com/evgen2571/vestra/blob/develop/examples/projects/geometric-masks.json).
 
 ## Transition between two clips
 
@@ -216,7 +216,7 @@ The endpoints are IDs of clips in the same composition. The transition must fit
 inside both clips. Its placement uses composition seconds, while its animation
 uses normalized `progress` from 0 to 1. JSON stores the transition's channels
 explicitly; it does not use Python constructor names such as `Crossfade`.
-See the [transition examples](../../examples/transitions/) for more
+See the [transition examples](https://github.com/evgen2571/vestra/tree/develop/examples/transitions) for more
 complete projects.
 
 ## Use media assets
@@ -338,7 +338,7 @@ relationships, media, FFmpeg, the configured output path and Auto backend
 readiness. Unlike Python's semantic-only `project.validate()` or
 `Editor.validate(snapshot)`, this is a render-readiness preflight. It has no
 `--overwrite` option; render's `--overwrite` does not change validation.
-The [JSON Schema](../../schemas/project.schema.json)
+The [JSON Schema](https://github.com/evgen2571/vestra/blob/develop/schemas/project.schema.json)
 can also provide field completion and structural checks in editors that support
 JSON schemas. Schema validation alone does not check asset files or all timeline
 relationships.
@@ -361,7 +361,7 @@ validation results readable by other tools. For render failures, see
 
 ## Further examples
 
-Browse the [reference examples](../../examples/README.md) for complete JSON
+Browse the [reference examples](https://github.com/evgen2571/vestra/blob/develop/examples/README.md) for complete JSON
 projects demonstrating sources, effects, masks, transitions and audio. Use the
 [project-format reference](../reference/project-format.md) for field definitions
 and the [CLI rendering guide](cli/rendering.md) for command options.

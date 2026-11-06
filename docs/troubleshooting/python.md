@@ -109,7 +109,7 @@ uv run python -c "import vestra; print(vestra.__file__)"
 An `_native` import failure can mean the extension was built for a different
 interpreter or cannot load its native dependencies. For FFmpeg build errors,
 see [FFmpeg troubleshooting](ffmpeg.md). Follow
-[Contributing](../../CONTRIBUTING.md) and [Testing](../development/testing.md)
+[Contributing](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md) and [Testing](../development/testing.md)
 for environment setup and checks.
 
 When changing the Python bindings, keep the compiled extension and its type

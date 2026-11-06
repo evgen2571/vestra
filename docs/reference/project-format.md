@@ -1,7 +1,7 @@
 # Project format
 
 This is the canonical schema-v1 JSON format. The checked-in [JSON
-Schema](../../schemas/project.schema.json) defines the complete structural
+Schema](https://github.com/evgen2571/vestra/blob/develop/schemas/project.schema.json) defines the complete structural
 shape. Rust semantic validation adds current engine invariants, and preflight
 checks assets, media, tools, output paths, and requested backends. Objects
 reject unknown fields. Parsing with `Project.from_json` or `from_value` does

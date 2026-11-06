@@ -10,7 +10,7 @@ Do not compare llvmpipe/Lavapipe results with hardware GPU numbers or call them 
 
 ## Measure and compare
 
-Capture a [local baseline](../../benchmarks/README.md) with raw
+Capture a [local baseline](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md) with raw
 samples and environment metadata before comparing optimizations. Personal
 machine captures are not portable performance targets.
 
@@ -137,7 +137,7 @@ WGPU results cannot substitute for it.
 
 ## Focused palette and dither workloads
 
-The [focused stylization suite](../../benchmarks/README.md) isolates moving
+The [focused stylization suite](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md) isolates moving
 video with no effect, Palette Map, and Ordered Dither. Run
 `python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-before`
 for 1920×1080 at 30 fps, 90 frames, one warmup and three samples per workload.

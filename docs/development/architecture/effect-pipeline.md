@@ -190,4 +190,4 @@ and performance/resource limits. Distinguish software adapter correctness
 from hardware validation. Use [Testing](../testing.md),
 [GPU validation](../gpu-validation.md), [Performance](../performance.md) and
 [effect reference](../../reference/effects.md). Document licenses as in
-[showcase assets](../../../examples/showcase/ASSETS.md).
+[the asset credit convention](../documentation.md#asset-credits).

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 620" role="img" aria-labelledby="title desc">
+<title id="title">Audio playback and visual analysis share the master mix</title>
+<desc id="desc">Audio clips pass through clip, track and master processing. The master mix feeds output audio and prepared analysis independently. Analysis feeds a scalar signal transformed and bound to a property, or the frequency bands drawn by a Spectrum2D source.</desc>
+<rect width="480" height="620" rx="12" fill="#f5f7f5"/>
+<g font-family="system-ui,sans-serif" font-size="21" fill="#172b32" text-anchor="middle">
+<rect x="20" y="20" width="440" height="100" rx="8" fill="#d7e8e0"/>
+<text x="240" y="51">Clips → clip effects → track effects</text>
+<text x="240" y="86" font-size="19">Trim • placement • gain • fades</text>
+<path d="M240 120v29m-7-8 7 8 7-8" fill="none" stroke="#45645e" stroke-width="3"/>
+<rect x="95" y="155" width="290" height="60" rx="8" fill="#b9d8c9"/><text x="240" y="192">Master effects and mix</text>
+<path d="M150 215v30H120v30m-7-8 7 8 7-8M330 215v30h20v30m-7-8 7 8 7-8" fill="none" stroke="#45645e" stroke-width="3"/>
+<rect x="20" y="282" width="200" height="88" rx="8" fill="#e2e7ef"/><text x="120" y="316">Output audio</text><text x="120" y="348" font-size="18">May be disabled</text>
+<rect x="240" y="282" width="220" height="88" rx="8" fill="#e2e7ef"/><text x="350" y="316">Prepared analysis</text><text x="350" y="348" font-size="18">Uses project time</text>
+<path d="M350 370v27H120v26m-7-8 7 8 7-8M350 397v26m-7-8 7 8 7-8" fill="none" stroke="#45645e" stroke-width="3"/>
+<rect x="20" y="430" width="200" height="165" rx="8" fill="#d7e8e0"/><text x="120" y="465">RMS / peak / band</text><text x="120" y="505">↓ transforms</text><text x="120" y="534">+ binding</text><text x="120" y="574">Visual property</text>
+<rect x="240" y="430" width="220" height="165" rx="8" fill="#d7e8e0"/><text x="350" y="465">Frequency bands</text><text x="350" y="505">↓ layout</text><text x="350" y="534">+ smoothing</text><text x="350" y="574">Spectrum2D source</text>
+</g></svg>

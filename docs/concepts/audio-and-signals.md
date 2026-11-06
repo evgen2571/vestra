@@ -1,47 +1,81 @@
+---
+description: How audio clips, the master mix, prepared analysis, scalar bindings and spectrum sources relate.
+---
+
 # Audio and signals
 
-Audio playback and audio-derived control data are related, but they are not
-the same thing.
+An audio clip supplies sound. A signal supplies a number that can control a
+visual property. A spectrum source draws many frequency bands. The last two
+read analysis of the project's mixed master audio; neither creates sound by
+itself.
 
-The high-level project owns an `AudioTimeline`. It contains tracks, and tracks
-contain path-based audio clips. A clip's `start` is on the project timeline;
-`trim_start` and `trim_end` address source-media positions; fades are clip
-durations; and gain-automation keyframes are clip-local. Clips have gain,
-fades, optional gain automation, and clip-scoped effects. Tracks and the master
-timeline can have their own gain and effects too.
+![Clips pass through track and master processing. The master mix feeds output audio independently from prepared analysis, which supplies scalar property bindings and Spectrum2D sources.](../assets/diagrams/audio-analysis.svg)
 
-An audio signal is a scalar description of analysis data. `project.audio.signal`
-can create RMS, peak, or frequency-band signals. Signal methods such as
-`gain`, `remap`, `clamp`, `envelope`, and `response_curve` build a new immutable
-signal with additional transforms.
+The branches matter when editing. Removing a visual binding leaves playback
+intact. Disabling audio in the render output can make a silent visualizer while
+retaining the clips needed for analysis. Removing those clips removes the
+analysis input too. A valid input that contains silence is different from
+having no usable audio input.
 
-A signal has no visible result by itself. Bind it to a bindable visual property
-or a component of a transform. This uses your own `assets/music.wav` with
-at least five seconds of audio:
+## Clips describe what plays and when
 
-```python
-from vestra import Circle, Project
+The project owns an audio timeline. Its tracks hold path-based audio clips.
+A clip's `start` places it in **project seconds**; `trim_start` and `trim_end`
+select positions in the source file. Clip fades are durations within that
+excerpt, and gain-automation keys use clip-local time. Clip, track and master
+effect stacks run at their respective scopes before master analysis.
 
-project = Project(
-    size=(1280, 720),
-    fps=30,
-    duration=5,
-)
-project.audio.track("music").add("assets/music.wav", trim_end=5)
+For example, placing an excerpt from source seconds 4–7 at project second 1
+plays it over project seconds 1–4, before any duration-changing playback-speed
+effect. A visual layer's start does not move that audio clip.
 
-pulse = project.root.add(Circle(radius=120, fill="#38bdf8"))
-energy = project.audio.signal.band(80, 240)
-opacity = energy.clamp(0, 1)
-pulse.opacity.bind(opacity, operation="replace")
-```
+See [add audio](../guides/python/audio.md) for authoring and
+[the audio reference](../reference/audio.md) for exact time domains and effects.
 
-During evaluation, Vestra analyzes the authored audio, samples the signal at
-the current project time, applies its transforms, and combines the value with
-the bound property's base value according to the binding operation. The audio
-clip still plays independently. Removing the binding leaves playback intact;
-removing the audio removes the signal's source data.
+## Signals control properties
 
-Keep signal ranges in mind. Use remapping, clamping, and smoothing before
-binding a signal to a sensitive property. Audio analysis is part of preparation
-for a render, so a project that uses audio reactivity must have usable audio
-inputs even when its visual output is the main goal.
+`project.audio.signal.rms()`, `.peak()` and `.band(min_hz, max_hz)` each describe
+one measurement of the master audio. They are immutable: `remap`, `clamp`,
+`envelope` and the other transforms return a new signal in the order called.
+A property binding samples that transformed signal at project time and
+combines it with the property's current value.
+
+| Binding operation | Result |
+| --- | --- |
+| `replace` | Use the signal value. |
+| `add` | Add the signal to the base or animated property value. |
+| `multiply` | Multiply the base or animated property value by the signal. |
+
+Use a signal when you want a circle to pulse, an effect to strengthen, or a
+position component to move with the recording. Choose a range appropriate to
+that property. A useful scale multiplier might be `0.75`–`1.30`; an opacity
+requires `0`–`1`. Remapping does **not** clamp values outside its input range.
+The [audio-reactivity guide](../guides/python/signals-and-audio-reactivity.md)
+shows bounded values and an audible smoothing comparison.
+
+## Spectra draw a distribution
+
+`Spectrum2D` is visual content added as a source. It draws a range of frequency
+bands using its own sensitivity, attack/release and layout settings. It does
+not take a `ScalarSignal` binding as its input: it requests prepared master
+frequency analysis directly. Use it to show which frequencies are present,
+rather than only how loud the recording is overall.
+
+The [spectrum guide](../guides/python/spectra.md) compares linear and radial
+layouts using the same recording and band settings. Scalar `envelope(...)`
+does not change the spectrum's smoothing; use the source's
+`attack_seconds` and `release_seconds`.
+
+## Preparation is part of the result
+
+Vestra resolves audio files, mixes the authored timeline, and prepares the
+requested analysis before frames use it. Keep source files available even for
+a silent visualizer. Audio measurements use project time, including when a
+bound layer is inside a child composition; they are not restarted by that
+layer's local clock.
+
+The examples here were rendered on CPU. Spectrum2D has CPU support and WGPU
+dispatch, but full WGPU visual parity is not verified. See
+[feature support](../reference/feature-support.md),
+[signals](../reference/signals.md) and
+[the rendering lifecycle](rendering-lifecycle.md) for the detailed contracts.

@@ -383,11 +383,11 @@ font assets across clip/global effects, transition presentations and owned
 mask Group child effects. Canonical transition `font` fields use Font asset
 IDs; missing or wrong-kind assets report the effect's `/font` validation path.
 The bundled font's complete notice is
-in [DejaVuSans.txt](../../licenses/DejaVuSans.txt).
+in [DejaVuSans.txt](https://github.com/evgen2571/vestra/blob/develop/licenses/DejaVuSans.txt).
 
 Enums, glyph strings/font and palette cardinality are discrete configurations.
 Animate `amount` or `source_mix` for useful continuous transitions; no implicit
 crossfade of incompatible font or character configurations is promised.
-See the [ASCII JSON example](../../examples/effects/ascii.json),
-[pseudo-ASCII example](../../examples/effects/pseudo-ascii.json), and
-[looping showcase](../../examples/showcase/stylized-effects/README.md).
+See the [ASCII JSON example](https://github.com/evgen2571/vestra/blob/develop/examples/effects/ascii.json),
+[pseudo-ASCII example](https://github.com/evgen2571/vestra/blob/develop/examples/effects/pseudo-ascii.json), and
+[looping showcase](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/README.md).

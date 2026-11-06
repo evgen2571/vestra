@@ -1,0 +1,2 @@
+# Kept independent of pyproject.toml: Markdown previews never build Vestra.
+zensical==0.1.0

@@ -47,7 +47,7 @@ Clipping rejects off-screen translations before integer narrowing, and byte
 spans are checked before copying. Static source opacity is prepared once per worker;
 video opacity currently scans the returned RGBA on each presentation, including
 repeated frames and ineligible layers. Decoder providers do not supply a reusable
-opacity proof. The focused [row-copy benchmarks](../../../benchmarks/README.md)
+opacity proof. The focused [row-copy benchmarks](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md)
 separate that scan cost from compositing and one-shot encoded rendering.
 SDK copy-hit/byte and generic-blend counters describe the current operation;
 reusing a prepared project does not include work from previous operations.

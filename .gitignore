@@ -74,3 +74,12 @@ target/
 # Reviewed showcase assets and rendered results are distributed with the examples.
 !examples/showcase/assets/city-*.mp4
 !examples/showcase/*/render.mp4
+
+# Documentation build and local browser QA.
+/site/
+/.cache/
+/.playwright-cli/
+
+# Reviewed compact previews used by the documentation website.
+!docs/assets/gallery/*.mp4
+!docs/assets/renders/*.mp4

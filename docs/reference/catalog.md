@@ -39,5 +39,5 @@ with the [user guides](../index.md#learn-vestra).
 - [The rendering lifecycle](../concepts/rendering-lifecycle.md)
 - [Timeline and time](../concepts/timeline-and-time.md)
 
-[Project schema v1](../../schemas/project.schema.json) is the canonical
+[Project schema v1](https://github.com/evgen2571/vestra/blob/develop/schemas/project.schema.json) is the canonical
 machine-readable contract.

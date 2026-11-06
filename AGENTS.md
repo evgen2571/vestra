@@ -17,6 +17,10 @@ have to rediscover. Link to the source documentation instead of copying it.
   [.agents/skills/README.md](.agents/skills/README.md). Claude Code discovers
   the same skills through `.claude/skills/`.
 
+- For documentation content, examples, media, navigation or styling, follow
+  [documentation authoring](docs/development/documentation.md). Site preview is
+  independent of the native engine; use `just docs-serve` and `just site-check`.
+
 ## Task routing
 
 | Task | Read first |
@@ -47,8 +51,8 @@ have to rediscover. Link to the source documentation instead of copying it.
   support as public contracts. Do not silently broaden support claims.
 - Reuse existing utilities and fixtures. Avoid unrelated rewrites. If behavior
   changes, update the appropriate guide, reference or support matrix. Preserve
-  licenses for third-party shaders, assets and fonts; use
-  [showcase assets](examples/showcase/ASSETS.md) as the provenance pattern.
+  licenses for third-party shaders, assets and fonts; follow the
+  [asset credit convention](docs/development/documentation.md#asset-credits).
 
 ## Commands and evidence
 

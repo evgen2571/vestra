@@ -1,5 +1,9 @@
 # Spectrum2D source
 
+For an audible linear/radial comparison and tuning guidance, see
+[draw an audio spectrum](../../guides/python/spectra.md). Its input is prepared
+master frequency analysis, separate from scalar signal bindings.
+
 ```text title="API signature"
 Spectrum2D(*, preset=None, band_count=None, min_hz=None, max_hz=None,
            sensitivity=None, attack_seconds=None, release_seconds=None,
@@ -23,7 +27,8 @@ Spectrum2D(*, preset=None, band_count=None, min_hz=None, max_hz=None,
 
 Linear anchors are `bottom`, `top` or `center`; linear mappings are `forward`, `reverse` or `center_out`. Radial layout requires `0 <= inner_radius_ratio < 1`, `0 < sweep_angle_degrees <= 360`, direction `outward`/`inward`/`both`, and radial mapping `forward`/`reverse`.
 
-Spectrum2D lowers to `spectrum2d` and requires prepared master-audio analysis. It is not a direct transform or transition endpoint. CPU has dedicated support; WGPU source dispatch exists, but full visual parity is not verified.
+Spectrum2D lowers to `spectrum2d` and requires prepared master-audio analysis. It is not a direct canonical transform or transition endpoint; the high-level
+Python layer supplies presentation through an adapter. CPU has dedicated support; WGPU source dispatch exists, but full visual parity is not verified.
 
 Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
 which are copied into each placement and can be individually overridden by `add()`.

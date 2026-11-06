@@ -25,12 +25,10 @@ Output: `examples/output/readme-demo.mp4`, 1280×720, 30 fps, 10 seconds, CPU, n
 Use `--smoke` for the same timeline at 320×180 and 6 fps, or `--output PATH`.
 `just showcase-refresh` regenerates committed videos, posters and animated previews.
 
-The root README uses a
-[GitHub-hosted video attachment](https://github.com/user-attachments/assets/9e7044ba-c4d5-49fc-a0aa-254eb1649b59)
-so it plays inline. When replacing the hero, attach the new render to the existing PR with
-`gh pr comment --attach examples/showcase/readme-demo/render.mp4` (gh 2.99+) or
-use GitHub’s Markdown editor, then replace the bare attachment URL in the README. Update the render checksum below too; changing the repository MP4 alone does not
-update the attachment.
+The root README displays `preview.gif` and links to the complete repository MP4.
+When the scene changes, refresh the render, poster and GIF together, inspect the
+result and update the render checksum below. The source layout and comments can
+be cleaned up without regenerating an unchanged scene.
 
 <details>
 <summary>Published hero checksums (SHA-256)</summary>

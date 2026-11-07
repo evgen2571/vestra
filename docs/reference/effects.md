@@ -55,8 +55,11 @@ transform; it does not expand the composition canvas or allocate a larger source
 frame. `mirror_edges=True` alternates mirrored tiles. Alpha is sampled with RGB;
 transparent source pixels remain transparent. See [sampling and seam rules](../development/effect-algorithms.md).
 
-The current renderer displaces center-anchored virtual bounds; see the
-[isolated reproduction and origin-anchor workaround](../development/documentation.md#motion-tile-anchor-limitation).
+Expanding the virtual region preserves the sized/cropped source's layer anchor
+and sampling phase. `tile_center` distributes the added extent: `(0, 0)` extends
+right/down, `(0.5, 0.5)` equally on both sides, and `(1, 1)` left/up. It does not
+move the original source pattern. See the
+[anchor coverage example](../development/documentation.md#motion-tile-anchor-coverage).
 
 ## Radial Blur
 

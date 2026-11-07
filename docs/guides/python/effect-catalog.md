@@ -502,10 +502,9 @@ MotionTile(
 
 [Parameters](../../reference/effect-parameters.md#motiontile-motion_tile)
 
-This comparison uses `anchor=(0, 0)` on both images. The current renderer shifts
-center-anchored virtual bounds; simply increasing the extent can leave the
-right and bottom uncovered. The [isolated reproduction](../../development/documentation.md#motion-tile-anchor-limitation)
-records that engine issue. No engine behavior was changed for this example.
+This comparison uses `anchor=(0, 0)` on both images to place their top-left
+explicitly. Motion Tile also preserves placement with centered or other anchors;
+see the [anchor coverage example](../../development/documentation.md#motion-tile-anchor-coverage).
 
 </div>
 

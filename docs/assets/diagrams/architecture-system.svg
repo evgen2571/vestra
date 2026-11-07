@@ -32,7 +32,9 @@
   <text x="240" y="279" text-anchor="middle">vestra · Editor</text>
   <text x="240" y="307" text-anchor="middle">coordinates native work</text>
   <path d="M50 320v280" class="line"/>
-  <path d="M50 400h46M50 500h46M50 600h46" class="arrow"/>
+  <path d="M50 400h46" class="arrow"/>
+  <path d="M50 500h46" class="arrow"/>
+  <path d="M50 600h46" class="arrow"/>
   <rect x="100" y="360" width="360" height="80" rx="6" class="panel"/>
   <text x="280" y="391" text-anchor="middle">vestra-core</text>
   <text x="280" y="421" text-anchor="middle">model → plan → evaluation</text>

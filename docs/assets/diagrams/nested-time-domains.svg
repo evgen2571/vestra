@@ -44,6 +44,8 @@
   <path d="M210 112h216" class="line"/>
   <circle cx="210" cy="112" r="4" fill="var(--ink)"/>
   <circle cx="426" cy="112" r="5" fill="var(--bg)" stroke="var(--ink)" stroke-width="2"/>
-  <path d="M282 119v24M282 189v24M282 259v24" class="arrow"/>
+  <path d="M282 119v24" class="arrow"/>
+  <path d="M282 189v24" class="arrow"/>
+  <path d="M282 259v24" class="arrow"/>
   <text x="20" y="382" class="muted">○ Child end excluded at project 6 s</text>
 </svg>

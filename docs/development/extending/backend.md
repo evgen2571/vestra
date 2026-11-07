@@ -49,4 +49,5 @@ isolation checks and update public selection/reference documentation; use
 The change is ready when demonstrated semantics and the support matrix agree.
 State missing coverage as `unsupported`, `partially supported` or
 `not fully verified` as appropriate. Compilation alone does not establish parity;
-keep CPU, software-device and hardware-device evidence separate where applicable.
+use [GPU validation](../gpu-validation.md#understand-the-test-evidence) for
+adapter evidence and rendered-output inspection.

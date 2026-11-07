@@ -4,27 +4,38 @@ Use this page for theme, URL, browser-verification and hosting changes. To edit
 content or preview it locally, start with [Documentation authoring](documentation.md).
 To rebuild rendered assets, use [Reproduce documentation media](documentation-media.md).
 
-The site builds from committed assets without the native engine. A local build
-and browser review establish site behavior; publication requires a separate,
-authorized maintainer workflow.
+The site builds from committed assets without the native engine. Use the
+[verification procedure](#verify-the-built-site) before submitting a change;
+[publication](#publish-only-after-review) is a maintainer task after review.
 
 ## Keep the site maintainable
 
 ### Configuration and theme
 
-`zensical.toml` owns navigation, search, syntax highlighting, and theme settings. `docs/assets/stylesheets/site.css` adds Vestra's layout and color choices. The `overrides/partials/source.html` template keeps the repository link while avoiding GitHub statistics requests; no custom JavaScript is needed. Prefer Zensical's native components, semantic HTML, and Markdown over custom scripts. The palette uses neutral grays: soft paper in light mode and charcoal in dark mode; the renders carry the visual personality. Links and controls use a contrasting hover surface and short movement, with keyboard focus and reduced-motion support. System fonts avoid a remote font request and keep the site usable offline after loading its assets.
+| File | Owns |
+| --- | --- |
+| `zensical.toml` | Navigation, search, syntax highlighting and theme settings |
+| `docs/assets/stylesheets/site.css` | Layout, colors, focus styles and reduced-motion support |
+| `overrides/partials/source.html` | Repository link without GitHub statistics requests |
+
+Prefer Zensical's native components, semantic HTML and Markdown. Keep the neutral
+light/dark surfaces, visible keyboard focus and reduced-motion behavior. System
+fonts avoid remote font requests and work offline after site assets load.
 
 ### Identity and keyboard navigation
 
-The identity is text only. `overrides/partials/logo.html` suppresses the theme
-logo, and CSS removes its empty header/drawer links. `overrides/main.html`
-overrides the pinned theme's `site_meta` block to retain description, canonical
-and previous/next metadata while setting an empty `data:,` browser icon. Merely
-deleting logo/favicon configuration would restore theme defaults. Recheck these
-overrides and browser requests when upgrading Zensical. The mobile sidebar also
-uses `:focus-within` to reveal links when reached by keyboard; Zensical 0.1.0
-otherwise leaves focus on offscreen drawer links. Removing the asset from
-this branch does not purge earlier commits, caches, forks or clones.
+The identity is text only. Preserve these overrides when upgrading Zensical,
+and recheck browser requests and keyboard navigation:
+
+- `overrides/partials/logo.html` suppresses the theme logo; CSS removes its
+  empty header/drawer links.
+- `overrides/main.html` replaces the theme's `site_meta` block, retaining
+  description, canonical and previous/next metadata with an empty `data:,`
+  browser icon. Deleting logo/favicon configuration restores theme defaults.
+- The mobile sidebar uses `:focus-within` to reveal keyboard-focused links.
+  Zensical 0.1.0 otherwise leaves focus on offscreen drawer links.
+- Keep `navigation.sections` disabled with Zensical 0.1.0: it makes section
+  labels unfocusable even where the mobile view uses them as collapsible controls.
 
 ### Links and generated paths
 
@@ -71,10 +82,20 @@ repository-path check still needs the site mounted at `/vestra/`.
 
 ## Publish only after review
 
-The Documentation workflow builds and validates changes on pull requests and pushes to `develop`. It deploys only when a maintainer manually runs it on `develop` with **deploy** enabled. Merely merging this configuration does not publish a site.
+The [Documentation workflow](https://github.com/evgen2571/vestra/blob/develop/.github/workflows/docs.yml)
+builds and validates matching pull requests and pushes to `develop`. Deployment
+requires a manual run on `develop` with **deploy** enabled.
 
-GitHub only offers `workflow_dispatch` once this workflow exists on the default branch (currently `main`). A maintainer must arrange that activation through the normal reviewed repository workflow; this branch does not change it.
+After review, a maintainer must:
 
-After approval, a maintainer must configure the repository's Pages source as **GitHub Actions** and allow the `github-pages` environment to deploy from `develop`. Then run the Documentation workflow on `develop` with deploy enabled. No personal access token or `gh-pages` branch is needed. The configured URL is `https://evgen2571.github.io/vestra/`; changing the repository path requires updating `site_url` and rerunning link and browser checks.
+1. Ensure the workflow exists on the repository's default branch (currently
+   `main`), which GitHub requires to offer `workflow_dispatch`.
+2. Set the repository's Pages source to **GitHub Actions** and allow the
+   `github-pages` environment to deploy from `develop`.
+3. Run **Documentation** on `develop` with **deploy** enabled, then inspect the
+   published site at `https://evgen2571.github.io/vestra/`.
 
-The workflow configuration can be reviewed locally; a successful Pages deployment requires an authorized run on GitHub. Preserve that distinction in completion reports.
+No personal access token or `gh-pages` branch is needed. A repository-path change
+requires updating `site_url` and rerunning link and browser checks. Local checks
+verify the built site; report deployment only after a successful authorized
+GitHub run.

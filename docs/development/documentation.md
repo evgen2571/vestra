@@ -136,16 +136,19 @@ poster times and original-render checksums on the relevant gallery page.
 <span id="reproduce-visual-learning-studies"></span>
 <span id="reproduce-gallery-previews"></span>
 
-For scene or delivery-asset changes, use [Reproduce documentation media](documentation-media.md):
-[tutorial previews](documentation-media.md#reproduce-tutorial-previews),
-[visual learning studies](documentation-media.md#reproduce-visual-learning-studies),
-or [gallery previews](documentation-media.md#reproduce-gallery-previews). It records
-native dependencies, commands, output locations, provenance and inspection criteria.
+Use [Reproduce documentation media](documentation-media.md) for commands,
+native dependencies, provenance and inspection criteria:
+
+| Change | Procedure |
+| --- | --- |
+| Introductory animation | [Tutorial previews](documentation-media.md#reproduce-tutorial-previews) |
+| Effect, audio, transition or group studies | [Visual learning studies](documentation-media.md#reproduce-visual-learning-studies) |
+| Showcase delivery assets | [Gallery previews](documentation-media.md#reproduce-gallery-previews) |
 
 <span id="motion-tile-anchor-coverage"></span>
 
-The Motion Tile regression example now lives with the
-[effect's anchor contract](../reference/effects.md#motion-tile-anchor-coverage).
+For Motion Tile examples, check the
+[anchor coverage contract](../reference/effects.md#motion-tile-anchor-coverage).
 
 <span id="keep-the-site-maintainable"></span>
 <span id="publish-only-after-review"></span>

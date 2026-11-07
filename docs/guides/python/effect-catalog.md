@@ -504,7 +504,7 @@ MotionTile(
 
 This comparison uses `anchor=(0, 0)` on both images to place their top-left
 explicitly. Motion Tile also preserves placement with centered or other anchors;
-see the [anchor coverage example](../../development/documentation.md#motion-tile-anchor-coverage).
+see the [anchor coverage example](../../reference/effects.md#motion-tile-anchor-coverage).
 
 </div>
 

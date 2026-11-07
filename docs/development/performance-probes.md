@@ -26,15 +26,16 @@ suite schema.
 
 ## Local-canvas allocation probe
 
-Discover an adapter with [GPU validation](gpu-validation.md) first. Set
-`VESTRA_WGPU_BACKEND` to that API and `VESTRA_REQUIRE_WGPU=1` so unavailable
-WGPU cannot silently skip the probe. For hardware measurements, first establish
+Discover an adapter with [GPU validation](gpu-validation.md) first. Replace
+`vulkan` below with that API; `VESTRA_REQUIRE_WGPU=1` makes unavailable WGPU
+fail rather than silently skip the probe. For hardware measurements, establish
 an integrated/discrete classification through the validation procedure and retain
 the actual probe adapter output. The availability flag alone does not establish
 hardware execution. Run one case per process:
 
 ```bash
 mkdir -p target/benchmark-results/group-canvases
+VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_WGPU=1 \
 VESTRA_GROUP_BENCH_CASE=mixed \
 VESTRA_GROUP_BENCH_REPORT=target/benchmark-results/group-canvases/mixed.json \
 cargo test --release -p vestra-render-wgpu --lib --features adapter-tests \

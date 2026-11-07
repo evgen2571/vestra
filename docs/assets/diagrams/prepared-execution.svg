@@ -28,7 +28,8 @@
   <rect x="20" y="205" width="440" height="55" rx="6" class="shape"/>
   <text x="240" y="240" text-anchor="middle">PreparedProject · reusable</text>
   <path d="M240 260v22M125 282h230" class="line"/>
-  <path d="M125 282v24M355 282v24" class="arrow"/>
+  <path d="M125 282v24" class="arrow"/>
+  <path d="M355 282v24" class="arrow"/>
   <rect x="20" y="310" width="210" height="80" rx="6" class="panel"/>
   <text x="125" y="342" text-anchor="middle">Frame request</text>
   <text x="125" y="372" text-anchor="middle">RGBA pixels</text>

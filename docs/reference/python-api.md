@@ -23,7 +23,7 @@ Project(*, size: tuple[int, int], fps: int | tuple[int, int] | FrameRate,
 | `output_path` | Optional default for snapshots; rendering takes an explicit output. |
 
 `project.root` is the top-level `Composition`. Source constructors are documented
-on the [source pages](sources/image.md); `list_system_fonts() -> list[str]` lists
+on the [source pages](catalog.md#source-types); `list_system_fonts() -> list[str]` lists
 installed families without a project. See [Text](sources/text.md) for font selection.
 
 ```text title="Layer placement signature"

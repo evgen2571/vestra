@@ -22,7 +22,7 @@ presentation; the canonical source cannot carry it directly.
 | Nested composition | `Group` or `CompositionLayer` → `group` | direct | supported | supported |
 | Local group canvas | `Group(size=(width, height))` → optional group `size` | clipped local canvas; unsized inherits parent | supported | supported |
 
-See the [source references](sources/image.md) and
+See the [source references](catalog.md#source-types) and
 [nested compositions](nested-compositions.md) for exact construction and timing.
 
 ## Masks and track mattes
@@ -53,11 +53,11 @@ All supported forms below use schema-v1 `masks` or `matte` fields. See
 | Feature | CPU | WGPU |
 | --- | --- | --- |
 | Visual effects catalog | Supported | Not fully verified per effect. |
-| Motion Tile | Supported | Hardware GL/D3D12 evidence; software adapters are not hardware evidence. |
+| Motion Tile | Supported | Supported; hardware evidence below. |
 | Directional Blur, Radial Blur, Chromatic Aberration | Supported | Supported. |
-| Palette mapping, ordered dithering | Supported | Software Vulkan and hardware GL/D3D12 NVIDIA; details below. |
-| ASCII / pseudo-ASCII | Supported | Software Vulkan and hardware GL/D3D12 NVIDIA; details below. |
-| Halftone, bounded pixel sorting, CRT styling | Supported | Software Vulkan and hardware GL/D3D12 NVIDIA; details below. |
+| Palette mapping, ordered dithering | Supported | Supported on the adapters listed below. |
+| ASCII / pseudo-ASCII | Supported | Supported on the adapters listed below. |
+| Halftone, bounded pixel sorting, CRT styling | Supported | Supported on the adapters listed below. |
 | Transitions | Supported | Not fully verified visually. |
 | Audio clips | Shared media execution; renderer status does not apply. | Shared media execution; renderer status does not apply. |
 
@@ -92,6 +92,7 @@ establish parity.
 
 | Feature | Focused CPU evidence | WGPU evidence |
 | --- | --- | --- |
+| Motion Tile | supported | supported on hardware WGPU via GL/D3D12; software adapters are not hardware evidence |
 | Palette mapping | supported; literal tone/filter/alpha and legacy regressions | verified on software Vulkan and hardware GL/D3D12 NVIDIA; exact focused frame parity, 1080p/4K resource checks |
 | Ordered dithering | supported; literal tone/filter/alpha and legacy regressions | verified on software Vulkan and hardware GL/D3D12 NVIDIA; exact focused frame parity, 1080p/4K resource checks |
 | ASCII / pseudo-ASCII | supported by focused alpha/partial/tiny-cell tests | verified on software Vulkan and hardware GL/D3D12 NVIDIA for random-access periodic colors and tonal threshold fixtures |

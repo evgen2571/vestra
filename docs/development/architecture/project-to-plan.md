@@ -1,125 +1,133 @@
 # Project to plan
 
-The canonical project is portable JSON, not a render-ready scene. `vestra-core::project` deserializes its schema-v1 model and semantic validation checks IDs, timelines, output constraints, effect scopes, transition endpoints, signals and other relationships without reading assets. The SDK preflight layer then resolves relative paths against the project base directory, probes media, computes media-dependent duration facts, checks the operation target, and passes those facts to compilation.
+Core turns a portable canonical project into a renderer-independent plan, then
+evaluates that plan at each frame time. File access and media-dependent facts
+enter through SDK preflight, so project semantics stay independent of the
+machine that renders them.
 
-```text
-canonical Project
-  -> semantic ValidationReport
-  -> SDK preflight and resolved media facts
-  -> PlanCompileInput / compiled plan
-  -> evaluated frame plan at time t
-  -> backend frame work
-```
+## Validate, compile and evaluate
 
-Compilation exists so cross-clip work happens once. It turns the validated visual hierarchy, audio timeline, descriptor-backed effects, transitions, tracks and warnings into renderer-independent plan data. It normalizes timeline authority, frame count and asset references before a renderer can see them. `ValidatedProject::plan_compile_input` is the SDK boundary that carries resolved paths, audio/video duration and dimensions into the core compiler; core itself does not touch files or media tools.
+1. **Deserialize and validate.** `vestra-core::project` defines the schema-v1
+   model. Semantic validation checks IDs, timelines, effects, transitions,
+   signals and output constraints without reading assets.
+2. **Resolve the environment.** SDK preflight resolves project-relative paths,
+   probes media, resolves duration and checks the requested operation.
+   `ValidatedProject::plan_compile_input` supplies these facts through
+   `PlanCompileInput`; core never opens the supplied paths.
+3. **Compile once.** Core lowers the hierarchy, tracks, effects, transitions
+   and audio timeline into plan data with resolved asset references and frame
+   count. Planning diagnostics retain canonical JSON pointers.
+4. **Evaluate per frame.** Core uses checked frame time, active intervals,
+   keyframes, signals and transition progress to produce evaluated sources and
+   presentation channels. CPU and WGPU consume this work with the same meaning.
 
-Evaluation remains time-dependent. For each frame it uses the checked frame time, active intervals, keyframes, signal values and transition progress to produce evaluated layers and source work. Renderers receive those evaluated sources and presentation channels, not public source objects. This matters for nested compositions: a group has its own local timeline, compilation preserves that ownership, and evaluation recurses into it instead of flattening away its timing rules.
+Nested groups retain their composition-local timelines. Evaluation recurses
+into the active child composition rather than flattening its timing into root
+placements. It also resolves inherited or explicit local canvas extents and
+normalized positions. Renderers use those extents for precomposition, sizing,
+masks and effects; a sized group can exceed the output before parent scaling.
+See [group spatial semantics](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
 
-Compiled groups retain an optional local canvas size. Evaluation resolves
-inheritance and produces each composition's raster extent, converting fractional
-normalized positions and group anchors in core. Renderers consume these extents
-for isolation, source sizing, masks and effect work. Sized groups use their local
-canvas even when larger than the output; output-space coordinate conversion alone
-would clip content before parent scaling. See [group spatial semantics](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
-
-Transitions lower to generic outgoing/incoming presentation channels. Effects lower through the descriptor/catalog representation and retain ordered attachment scope. Both mechanisms stay in core planning/evaluation so CPU and WGPU apply the same meaning. Planning diagnostics retain canonical JSON pointers; preflight diagnostics add the environment or media fact that failed.
-
-## Core source ownership
-
-Paths below are relative to `crates/vestra-core/src/`. Public types remain
-available through the existing `project`, `plan` and descriptor exports;
-private child modules organize their implementations.
-
-| Responsibility | Location |
-| --- | --- |
-| Authored hierarchy and presentation | `project/model/visual.rs` |
-| Authored particle and spectrum sources | `project/model/particles.rs`, `project/model/spectrum2d.rs` |
-| Ordered semantic validation | `validation.rs`, `validation/visual.rs`, `validation/effects.rs` |
-| Visual source, transform and mask/matte rules | `validation/visual/` |
-| Effect attachment and shared property rules | `validation/effects/` |
-| Authoritative effect representations/associations and local semantics | `effect_definition/catalog_entries.rs`, `effects/<effect>.rs` |
-| Compilation coordination and source/resource tables | `plan/compiler/mod.rs`, `plan/compiler/assets.rs` |
-| Matte identities and temporal dependencies | `plan/compiler/mattes.rs` |
-| Compiled plan/layers and compiled effects | `plan/model/mod.rs`, `plan/model/effects.rs` |
-| Particle models, compilation and random-access evaluation | `plan/particles/` |
-| Audio planning, time conversions, sizing and track lowering | `plan/audio.rs`, `plan/time.rs`, `plan/sizing.rs`, `plan/tracks.rs` |
-| Active-layer schedules and raw interval events | `plan/schedule/` |
-
-The root `plan_audio`, `plan_time`, `plan_sizing`, `plan_tracks` and
-`plan_schedule` paths are compatibility aliases. Raw interval events retain
-their index-based representation; active-layer schedules use `ScheduledItem`.
-Validation's hierarchy walk controls diagnostic order, including nested error
-rebasing and the composition-wide matte checks after all clips. Extracted rule
-modules append to the same diagnostic list in that order.
-
-Particle compilation builds immutable models and lifetime curves. Evaluation
-derives identities, motion and appearance from local time and explicit seeds;
-it keeps no frame-order state. Tests live beside the owning implementation,
-while `plan/tests.rs` exercises compilation and evaluation together.
+Transitions become generic outgoing/incoming presentation channels. Effects
+retain ordered attachment scope through descriptor-backed compilation and
+evaluation; the [effect pipeline](effect-pipeline.md) details that boundary.
 
 ## Time domains and frame boundaries
 
-The [authoring timeline guide](../../concepts/timeline-and-time.md) describes
-placement. Identify the domain of each value before comparing it:
+Identify the domain of each value before comparing it:
 
 | Domain | Meaning |
 | --- | --- |
 | Project | Root visual placement, audio placement and global post-effect time |
 | Composition-local | Child placement and sibling transition time inside a group |
-| Clip-local | Time since a placement begins; local tracks/effect activity follow their owner contract |
-| Source-media | Video `source_start + local_time * playback_rate`; audio trims/effects follow their own duration contract |
+| Clip-local | Time since a placement begins; tracks and effect activity follow their owner contract |
+| Source-media | Video `source_start + local_time × playback_rate`; audio trims/effects follow their own duration contract |
 | Frame | Output frame index and the rational rate mapping it to presentation time |
 
-Nested child starts remain local; parent placement does not rewrite their
-authored values. Execution clips children to the containing active interval.
-Authored clip end, effective output end and source-media EOF are different
-boundaries. A transition must fit both endpoint lifetimes in its owning
-composition; it does not independently extend the output.
+For example, a five-second group starts at project second `2`. Its child video starts at
+composition second `1`, plays for `3` seconds and samples from source second
+`10` at half speed:
 
-Core timeline helpers use checked integer rational calculations after converting
-authored seconds to nanoseconds. Activity is half-open, `[start, end)`, and frame
-count rounds up. `frame_time_nanos` floors evaluation time to nanoseconds;
-`frame_start_duration` rounds the public frame timestamp up so mapping it with
-`frame_at_duration` selects that frame. Preserve these operation-specific
-rounding rules. Accumulating floating-point frame steps, rounding FPS to 30,
-or replacing an overflow error with clamping changes boundary behavior.
+<figure class="diagram" markdown="span">
+![Project seconds 3, 4, 5 and the excluded child end 6 align with composition seconds 1, 2, 3, 4; clip-local seconds 0, 1, 2, 3; and source seconds 10, 10.5, 11, 11.5.](../../assets/diagrams/nested-time-domains.svg)
+<figcaption>At project second 4, subtract the group start and child start: the video is one second old and samples source second 10.5.</figcaption>
+</figure>
+
+Child starts remain authored in their composition's clock. The parent active
+interval clips child execution; authored clip end, output end and source-media
+EOF remain separate boundaries. A sibling transition must fit both endpoints
+in its owning composition and does not independently extend output. The
+[authoring timeline guide](../../concepts/timeline-and-time.md) covers placement.
+
+### Preserve each rounding rule
+
+Core converts authored non-negative seconds to the nearest nanosecond, then
+uses checked integer rational calculations. Activity is half-open: `[start, end)`.
+
+| Operation | Rule |
+| --- | --- |
+| `frame_count` | Round up to include a final partial frame interval. |
+| `frame_time_nanos` | Floor the rational frame time to nanoseconds for evaluation. |
+| `frame_at_duration` | Floor a timestamp's rational frame position to select a frame. |
+| `frame_start_duration` | Round up to the earliest nanosecond that maps back to the requested frame. |
+
+For frame `1` at `30/1` fps, evaluation uses `33,333,333` ns; the public frame
+timestamp is `33,333,334` ns so `frame_at_duration` returns frame `1`.
+Accumulating floating-point frame steps, rounding rational FPS to an integer,
+or clamping arithmetic overflow changes boundary behavior. Surface overflow
+errors instead.
 
 ## Duration resolution and validation authority
 
-The canonical model currently supports `automatic` and `explicit` duration:
+The canonical model supports `automatic` and `explicit` duration:
 
-- Automatic preflight uses the maximum root clip/flash end and resolved audio
-  end. Authored muted/zero-gain audio still contributes structurally, even when
-  output audio is disabled. Empty automatic content has no positive duration.
-- Explicit duration fixes the output span. Later content is clipped with
-  `VESTRA-DURATION-TRUNCATED`; shorter content can leave a background/silent tail.
-- A group placement has an authored duration; child content does not currently
-  infer it. In high-level Python, omitted non-video durations inherit the whole
-  containing explicit span, including when start is nonzero. This is not a
-  persistent fill-to-end constraint. Video omission can use intrinsic media.
+| Mode | Output span |
+| --- | --- |
+| Automatic | Maximum root clip/flash end and resolved audio end. Muted or zero-gain audio still contributes, even when output audio is disabled. Empty content is rejected. |
+| Explicit | The authored output duration. Later content is clipped with `VESTRA-DURATION-TRUNCATED`; shorter content leaves a background/silent tail. |
 
-Pure validation checks canonical data without I/O. SDK preflight probes media,
-resolves duration, checks source availability and reapplies final timeline
-limits. CLI `ve validate` includes its validation preflight target, whereas
-SDK `Editor.validate` is pure; compare the same canonical input at both seams.
-Inspection/preparation reports contain resolved facts, not merely authoring intent.
+A group placement has an authored duration; children do not infer it. In
+high-level Python, an omitted non-video duration inherits the **whole**
+containing explicit span, even with a nonzero start. This value is resolved when
+added, rather than maintained as a fill-to-end constraint. Video omission can
+use intrinsic media duration. See [duration examples](../../concepts/timeline-and-time.md#duration-is-not-an-end-timestamp).
 
-Global-effect keyframes use the explicit output span, or the automatic
-visual/flash/audio span. Pure validation checks authored timing without I/O;
-when an audio end depends on media probing, it defers the upper bound while
-still checking track structure and values. Preflight rechecks global effects
-against the final resolved project duration before preparation.
+Pure validation checks authored data without I/O. Preflight probes media,
+checks source availability and reapplies timeline limits against the final
+resolved duration. CLI `ve validate` includes its validation preflight target;
+SDK `Editor.validate` is pure. Compare the same canonical input at both seams.
+Inspection and preparation reports record resolved facts.
 
-Timeline duration and frame budgets apply to the explicit output span, including
-any background/silent tail, rather than content clipped beyond that span. In
-automatic mode, pure validation budgets the visual/flash span; preflight
-rechecks the final span including media-resolved audio. Authored timing remains
-validated even when content is clipped. Defaults impose no arbitrary frame or
-duration budget; caller-selected finite budgets still apply. Checked arithmetic
-and the prepared project's `u64` nanosecond duration bound remain enforced
-independently of those budgets. See [validation limits](../../reference/project-format.md#validation-layers).
+Global-effect keyframes use the explicit output span or the automatic
+visual/flash/audio span. If an audio end needs media probing, pure validation
+defers that upper bound while still checking track structure and values.
+Preflight rechecks global effects against the final duration.
 
-Minimum duration, automatic child-group inference, fill-to-end intent and
-selected-range video output are not established APIs. For timing changes,
-reuse the [timeline/media regression seams](../testing.md#timeline-and-media-checks)
+Duration and frame budgets apply to the explicit output span, including tails,
+rather than content clipped beyond it. In automatic mode, pure validation
+budgets the visual/flash span and preflight rechecks it with media-resolved
+audio. Authored timing remains validated even when clipped. Defaults impose no
+arbitrary frame or duration budget; caller-selected finite budgets still apply.
+Checked arithmetic and the prepared project's `u64` nanosecond duration bound
+apply independently. See [validation limits](../../reference/project-format.md#validation-layers).
+
+For timing changes, reuse the [timeline/media regression seams](../testing.md#timeline-and-media-checks)
 and [contract-sync skill](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/api-contract-sync/SKILL.md).
+
+## Core source ownership
+
+Paths are relative to `crates/vestra-core/src/`. Start with the owning facade,
+then its implementation modules:
+
+| Responsibility | Location |
+| --- | --- |
+| Authored hierarchy, sources and presentation | `project/model/` |
+| Semantic rules and diagnostic order | `validation.rs`, `validation/` |
+| Effect declarations and effect-local semantics | `effect_definition/catalog_entries.rs`, `effects/<effect>.rs` |
+| Compilation and resource tables | `plan/compiler/` |
+| Compiled plan and frame-time evaluation | `plan/model/`, `plan/evaluation/` |
+| Audio, time, sizing, tracks and active intervals | `plan/audio.rs`, `plan/time.rs`, `plan/sizing.rs`, `plan/tracks.rs`, `plan/schedule/` |
+| Seeded particle compilation and random-access evaluation | `plan/particles/` |
+
+Tests beside the owning modules cover local behavior; `plan/tests.rs` exercises
+compilation and evaluation together.

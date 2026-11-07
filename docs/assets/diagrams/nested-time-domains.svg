@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="410" viewBox="0 0 480 410" role="img" aria-labelledby="title desc">
+  <title id="title">Four aligned clocks inside a group</title>
+  <desc id="desc">A five-second group starts at project second 2. Its child video starts at composition second 1 with duration 3 seconds, source start 10 seconds and playback rate 0.5. Project seconds 3, 4, 5 and the excluded child end 6 align with composition seconds 1, 2, 3, 4; clip-local seconds 0, 1, 2, 3; and video source seconds 10, 10.5, 11, 11.5. The highlighted column at project second 4 samples video second 10.5.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--panel); stroke:var(--edge); stroke-width:2.5; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="410" rx="10" fill="var(--bg)"/>
+  <text x="20" y="34">Nested clocks (seconds)</text>
+  <rect x="258" y="59" width="48" height="280" fill="var(--panel)"/>
+  <path d="M210 65v274M282 65v274M354 65v274M426 65v274" class="guide"/>
+  <text x="20" y="97">Project</text>
+  <text x="20" y="167">Composition</text>
+  <text x="20" y="237">Clip local</text>
+  <text x="20" y="307">Video source</text>
+  <text x="210" y="97" text-anchor="middle">3</text>
+  <text x="282" y="97" text-anchor="middle">4</text>
+  <text x="354" y="97" text-anchor="middle">5</text>
+  <text x="426" y="97" text-anchor="middle">6</text>
+  <text x="210" y="167" text-anchor="middle">1</text>
+  <text x="282" y="167" text-anchor="middle">2</text>
+  <text x="354" y="167" text-anchor="middle">3</text>
+  <text x="426" y="167" text-anchor="middle">4</text>
+  <text x="210" y="237" text-anchor="middle">0</text>
+  <text x="282" y="237" text-anchor="middle">1</text>
+  <text x="354" y="237" text-anchor="middle">2</text>
+  <text x="426" y="237" text-anchor="middle">3</text>
+  <text x="210" y="307" text-anchor="middle">10</text>
+  <text x="282" y="307" text-anchor="middle">10.5</text>
+  <text x="354" y="307" text-anchor="middle">11</text>
+  <text x="426" y="307" text-anchor="middle">11.5</text>
+  <path d="M210 112h216" class="line"/>
+  <circle cx="210" cy="112" r="4" fill="var(--ink)"/>
+  <circle cx="426" cy="112" r="5" fill="var(--bg)" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M282 119v24M282 189v24M282 259v24" class="arrow"/>
+  <text x="20" y="382" class="muted">○ Child end excluded at project 6 s</text>
+</svg>

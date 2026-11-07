@@ -1,319 +1,152 @@
 # Performance
 
-Start with a local baseline and a matched candidate on the same machine.
-Use the canonical suite below for end-to-end comparisons, then choose a focused
-probe when you need to explain a stage or resource cost. Smoke timings establish
-execution only.
+Compare a local baseline and candidate on the same machine, then use a focused
+probe to explain a stage or resource cost. Smoke timings prove execution only.
+For an existing regression, [choose a focused investigation](#choose-a-focused-investigation).
 
 ## Measure and compare
 
-Capture a [local baseline](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md) with raw
-samples and environment metadata before comparing optimizations. Personal
-machine captures are not portable performance targets.
-
-Run from the repository root with Python 3.11+, Cargo, Git, and FFmpeg on PATH.
-The Rust build also needs the native tools for bundled FFmpeg documented in the build guide. No Python packages are required by
-the benchmark script.
+Run from the repository root with Python 3.11+, Cargo, Git, FFmpeg and the
+native build tools from the [contributor setup](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md).
+`nix develop` supplies Just and those tools. The recipes use
+`uv run --no-project`; the benchmark script needs no additional Python packages.
 
 ```bash
 just benchmark-smoke target/benchmark-results/smoke
 just benchmark target/benchmark-results/before
-# Make one optimization, then measure with the same machine and settings.
+# Make one optimization, then use the same machine and settings.
 just benchmark target/benchmark-results/after
 just benchmark-compare target/benchmark-results/before/suite.json target/benchmark-results/after/suite.json
 ```
 
-These recipes run the existing benchmark script through `uv run --no-project`.
-Enter `nix develop` to get Just and the native tools. Use
-`just benchmark OUTPUT hardware-wgpu` for a canonical hardware suite. The script
-remains directly callable when additional options such as `--executable` are
-needed.
+For hardware, first [discover and verify the adapter](gpu-validation.md), then
+use `just benchmark OUTPUT hardware-wgpu` with a separate baseline. Every
+sample must select an integrated or discrete adapter; CPU fallback, software
+WGPU and unknown classes fail the hardware suite.
 
-Use a new output directory for each run. The runner builds the existing
-`animation_effects` release benchmark and executes scenarios serially. Each
-directory contains per-scenario logs and raw JSON records. It writes `suite.json`
-only after every scenario succeeds and the source fingerprint remains unchanged.
-An interrupted or failed run retains its diagnostic files but has no completed
-suite. `--executable /absolute/path` skips building and records that the caller
-supplied the executable; the caller must ensure it matches the current sources.
+1. **Capture a complete baseline.** Use a new output directory for each run.
+   The runner builds the `animation_effects` release benchmark and executes
+   scenarios serially. Per-scenario logs and raw JSON remain available if a
+   run fails. `suite.json` appears only after all scenarios succeed and the
+   source fingerprint remains unchanged.
+2. **Measure a matched candidate.** Keep the suite, worker count, feature set,
+   toolchain, FFmpeg build, power mode, thermal conditions, background load and
+   environment controls consistent. Do not edit sources during a suite.
+3. **Inspect the comparison and raw samples.** The comparison rejects changed
+   workload identities, suite definitions, environments, frame counts, timing
+   scopes and actual backend/adapter selections. It accepts scenario files or
+   whole suites; `--json` returns the same deltas for automation.
+4. **Confirm the result.** A negative timing delta is faster. Five samples
+   describe one run, not statistical significance; repeat paired runs when
+   differences are small or ranges overlap. Keep a change only when its intended
+   stage improves repeatably, resource costs are acceptable and correctness
+   checks pass, including actual rendered pixels.
 
-The versioned definition in `benchmarks/suites.json` fixes the scenario order,
-resolution, warmups, and sample count. Smoke uses 128×72, no warmup, and one
-sample to check execution. Canonical uses 1280×720, one warmup, and five samples.
-Both cover video decode, three concurrent moving-video layers, effects,
-geometric masks, track mattes, nested groups, seeded particles with bloom,
-blend modes, and the twelve-second production edit.
+The versioned definition in `benchmarks/suites.json` fixes scenario order and
+settings:
 
-The production edit uses deterministic synthetic moving footage in a three-shot
-timeline with overlapping dissolves, saturation correction, animated grouped
-titles, and a twelve-second audio bed. It exercises editorial operations without
-requiring downloaded footage. It does not model the decode cost of every camera
-codec. Media generation and hashing happen outside measured render intervals.
-FFV1 and WAV fixtures use bit-exact output; particle fixtures use explicit seeds.
+| Suite | Resolution | Warmups / samples | Purpose |
+| --- | --- | --- | --- |
+| `smoke` | 128×72 | 0 / 1 | Execution check |
+| `canonical` | 1280×720 | 1 / 5 | End-to-end baseline |
 
-Comparison accepts individual scenario files or complete suites. It checks
-workload content identities, suite definitions, environment, frame counts,
-timing scope, and actual backend/adapter before reporting median timing and
-resource deltas. `--json` emits the same deltas for automation. A negative timing
-delta is faster. Resource counters need interpretation: more cache hits may be
-good, while more retained bytes may be an unwanted tradeoff. A zero baseline
-reports an absolute delta with no percentage.
+Both cover decode, concurrent moving-video layers, effects, masks/mattes, nested
+groups, seeded particles with bloom, blend modes and a twelve-second production
+edit. The edit uses deterministic synthetic footage, dissolves, correction,
+animated grouped titles and audio; it does not represent every camera codec.
+Media generation and hashing are outside measured intervals. FFV1/WAV fixtures
+use bit-exact output and particles use explicit seeds.
 
-Read the raw samples as well as the median. Five samples describe this run;
-they do not establish statistical significance. Repeat baseline and candidate
-runs when differences are small or ranges overlap. Use the same power mode,
-thermal conditions, background load, toolchain, FFmpeg build, feature set, and
-environment controls. Keep an optimization only when the intended stage improves
-repeatably, resource tradeoffs are acceptable, and correctness checks still pass.
-Otherwise revert the optimization and retain the reports as evidence.
+The script is also [directly callable](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md).
+`--executable /absolute/path` skips building and records a caller-supplied
+executable; the caller must ensure it matches the sources. Keep raw local
+reports for review, without committing personal machine captures as portable
+targets. A changed workload or environment needs a new named baseline.
 
 ## Measurement scope
 
-Measure a named stage, not an undifferentiated "render time". Vestra reports preparation timing for semantic validation, preflight, plan compilation, decode, audio analysis and backend initialization. Render timing then separates track evaluation, frame rendering, encoder writes/finalization, output publication, and WGPU upload/encode/submission/readback work where applicable.
+Every canonical measured sample creates an editor and prepares the project
+again. Its wall interval includes project loading, rendering, encoding and
+publication. Warmup often warms OS page caches; these runs are neither
+disk-cold nor prepared-project measurements.
 
-For every result record the revision, command, scene/project, output size/frame rate/quality, frame count, CPU/OS, FFmpeg build, requested renderer preference, actual selected renderer, graphics backend, adapter name and classification. Record whether assets and renderer resources were cold or already prepared. A `PreparedProject` may make later frame/video operations much cheaper than a one-shot render, and that is expected rather than a comparable baseline.
+Record these details for every measurement:
 
-Use separate measurements for planning/preparation, CPU frame rendering, hardware WGPU frame rendering, software WGPU fallback, audio execution, video decode, encoding and end-to-end render. Encoder, muxer and publication time can dominate a short scene; do not call that a renderer regression without a frame-only comparison. Likewise, a media decode change needs a controlled decoder workload.
+| Record | Required context |
+| --- | --- |
+| Workload | Revision, command, scene/project, dimensions, frame rate, quality and frame count |
+| Environment | CPU/OS, toolchain, FFmpeg build, features, worker count and environment controls |
+| Backend | Requested preference, actual renderer, graphics API, adapter name and classification |
+| Resource state | Cold or reused assets/renderer; one-shot, prepared-frame or prepared-video operation |
 
-Do not compare llvmpipe/Lavapipe results with hardware GPU numbers or call them GPU performance. First run [GPU validation](gpu-validation.md) and capture the actual adapter. Keep hardware and software adapter results separate.
+Measure the stage that changed. Reports separate validation/preflight,
+compilation, decode, audio analysis and backend initialization from evaluation,
+frame rendering, encoder writes/finalization and publication. WGPU also reports
+upload, command encoding/submission, readback waits and row repacking. A short
+encoded render can be dominated by the encoder; use a frame-only comparison
+before attributing that difference to the renderer.
 
-Every measured sample constructs a new editor and prepares the project again.
-The wall interval includes project loading and the end-to-end render, including
-encoding and publication. OS page caches are uncontrolled and often warm after
-the warmup. This is not a disk-cold measurement or a prepared-project measurement.
-Raw records retain every serialized `RenderResult`, including stage timings,
-resource counters, warnings, and actual backend selection. Millisecond stage
-timings may be zero for short work; concurrent frame work can exceed wall time.
-Resource bytes are engine counters and estimates, not process RSS measurements.
+Raw records retain every serialized `RenderResult`, including warnings, stage
+timings, resource counters and actual backend. Short stages may round to zero
+milliseconds. Concurrent frame work and [frame-write overlap](media-pipeline.md)
+mean summed stage times need not equal wall time. Progress is disabled in
+benchmarks; tracing and profilers belong in separate runs because they change
+timings.
 
-### Isolate preparation, effects or random access
-
-Use these existing release-mode CPU tests when an end-to-end difference needs
-stage isolation. They need the native contributor environment and the same
-workload/toolchain controls as the canonical suite:
-
-```bash
-VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --features cpu preparation_matrix -- --nocapture
-VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --features cpu effect_scaling_matrix -- --nocapture
-VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --features cpu random_access_matrix -- --nocapture
-```
-
-Outputs are `target/benchmark-results/render-preparation.json`,
-`render-effect-scaling.json` and `render-random-access.json`, respectively.
-These gated tests retain their own prepared/null-sink measurement format. They complement the end-to-end suite;
-their timings must not be compared directly with its one-shot wall times.
-
-Progress is disabled in benchmarks. Live terminal progress continues to report
-smoothed FPS and ETA, with elapsed time on completion. Detailed tracing and
-external profilers remain opt-in; collect profiles in separate runs because
-instrumentation can change timings.
+Keep CPU, software WGPU and hardware WGPU results separate; follow
+[GPU validation](gpu-validation.md) for the required evidence. Compare repeated
+`PreparedProject` operations separately from one-shot renders because reuse
+intentionally avoids preparation.
 
 ## Choose a focused investigation
 
-| Question | Procedure | Prerequisites and output |
+<span id="isolate-preparation-effects-or-random-access"></span>
+<span id="hardware-wgpu"></span>
+<span id="local-canvas-allocation-probe"></span>
+<span id="focused-palette-and-dither-workloads"></span>
+<span id="cache-working-set-and-native-worker-diagnostics"></span>
+<span id="native-worker-sweep"></span>
+
+| Question | Procedure | Output / scope |
 | --- | --- | --- |
-| Is hardware frame work or readback expensive? | [Hardware WGPU](#hardware-wgpu) | Proven hardware adapter; suite JSON or local-canvas probe JSON with frame/readback timings |
-| What does palette/dither add to moving video? | [Focused stylization](#focused-palette-and-dither-workloads) | Native build/FFmpeg; matched no-effect, palette and dither records |
-| Is memory growing or allocation work repeated? | [Allocation and sustained profiling](#allocation-and-sustained-render-profiling) | External profiler/process sampler; named memory metric and time series alongside engine counters |
-| Does a cache budget change cost or pixels? | [Cache working-set diagnostics](#cache-working-set-and-native-worker-diagnostics) | Existing generated SDK fixtures; timing JSON, partition traces or cache-disabled pixel comparisons |
-| How do native decoder workers scale? | [Native worker sweep](#native-worker-sweep) | External FFmpeg reference fixtures; separate oracle and timing output |
+| Which preparation stage, effect or random access changed? | [CPU stage probes](performance-probes.md#isolate-preparation-effects-or-random-access) | Prepared/null-sink SDK records |
+| Is hardware frame work or readback expensive? | [Local-canvas WGPU probe](performance-probes.md#local-canvas-allocation-probe) | Prepared-backend latency, staged throughput and texture bytes |
+| What does palette/dither add to moving video? | [Focused stylization suites](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md) | Matched no-effect, palette and dither end-to-end records |
+| Is memory growing or allocation work repeated? | [Sustained profiling](performance-probes.md#allocation-and-sustained-render-profiling) | External process time series alongside engine counters |
+| Does a cache budget change cost or pixels? | [Cache working sets](performance-probes.md#cache-working-set-and-native-worker-diagnostics) | Timing JSON, partition traces or cache-disabled pixel comparisons |
+| How do native decoder workers scale? | [Native worker sweep](performance-probes.md#native-worker-sweep) | External FFmpeg references; separate oracle and timing runs |
 
-## Hardware WGPU
+The three-workload `stylization-1080p` suite uses the same generated full-frame
+`testsrc2` video for no effect, Palette Map and Ordered Dither: 1920×1080,
+30 fps, 90 frames, one warmup and three samples. Use `stylization-smoke` to
+check execution. Other effect/control suites and their exact workloads live in
+the linked benchmark reference. Report 4K correctness separately from versioned
+1080p measurements.
 
-For allocation and sustained-load investigations, use the
-[profiling procedure](#allocation-and-sustained-render-profiling) below.
+## Interpret resource changes
 
-After the platform preflight in [GPU validation](gpu-validation.md), run:
+<span id="allocation-and-sustained-render-profiling"></span>
 
-```bash
-python scripts/benchmark.py run --suite canonical --backend hardware-wgpu --output target/benchmark-results/hardware-before
-```
+Engine byte counters describe named storage and estimates, **not process RSS or
+device-resident memory**. Cache hits and copies do not cover every allocation.
+Fewer allocations may retain more memory; more cache hits do not prove a speedup.
+A zero baseline gives an absolute delta with no percentage.
 
-### Local-canvas allocation probe
+Use [CPU accounting](architecture/cpu-renderer.md#memory-accounting) to interpret
+retained capacity, per-owner peaks and worker estimates. The
+[profiling procedure](performance-probes.md#allocation-and-sustained-render-profiling)
+explains external process-tree sampling, sustained runs and missing metrics.
+Worker count trades throughput against scratch and decoder resources, so keep
+it matched when comparing both speed and memory.
 
-For local-canvas allocation investigations, the existing WGPU resource tests also
-provide an ignored prepared-backend probe:
+<span id="cpu-renderer-efficiency"></span>
+<span id="scratch-and-sparse-convolution"></span>
+<span id="measure-cost-and-resource-tradeoffs"></span>
 
-```bash
-mkdir -p target/benchmark-results/group-canvases
-VESTRA_GROUP_BENCH_CASE=mixed \
-VESTRA_GROUP_BENCH_REPORT=target/benchmark-results/group-canvases/mixed.json \
-cargo test --release -p vestra-render-wgpu --lib --features adapter-tests \
-  gpu_sized_group_allocation_benchmark -- --ignored --nocapture --test-threads=1
-```
-
-Cases are `legacy`, `card`, `wide`, `mixed` and `nested`, at 1280×720. One warmup
-preparation precedes five samples. Reports separate backend preparation,
-sequential frame latency including readback, and 240-frame staged throughput at
-depth three. Frames are evaluated before measurement. The probe checks expected
-pixels and stable working-texture allocation counts across both frame loops.
-Working bytes describe created texture payloads; measure resident/process GPU
-memory externally. Run timing comparisons separately from memory profiling and
-alternate frozen before/after executables to reduce order and clock effects.
-
-The runner requires an actual WGPU result with an integrated or discrete adapter
-for every measured sample. CPU fallback, software WGPU, and unknown adapter
-classes fail the suite. CPU and hardware runs have separate baselines. If
-hardware is unavailable, keep that validation explicitly outstanding; software
-WGPU results cannot substitute for it.
-
-## Focused palette and dither workloads
-
-The [focused stylization suite](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md) isolates moving
-video with no effect, Palette Map, and Ordered Dither. Run
-`python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-before`
-for 1920×1080 at 30 fps, 90 frames, one warmup and three samples per workload.
-Use `--suite stylization-smoke` for execution checks and
-`--backend hardware-wgpu` for a separately verified hardware baseline.
-All three scenarios generate identical full-frame `testsrc2` video without
-additional graphics or audio. Generation is excluded from measured intervals.
-
-The focused suite uses the existing record schema, stage/resource counters,
-source-stability gate, and comparison compatibility checks. Canonical and
-smoke suites continue to use their original ten scenarios. Suite-local
-scenario selection is recorded explicitly in `suite.json`; comparisons reject
-changed scenario sets, dimensions, or sample/warmup counts. A 4K correctness
-check can override dimensions when running the same benchmark directly, but
-must be reported separately from the versioned 1080p measurements.
-
-## Allocation and sustained-render profiling
-
-Use the existing opt-in `VESTRA_CPU_PROFILE` hot-path timings and an external
-allocation/CPU profiler to locate work, rather than inferring it from cache hits.
-Record the profiling tool, version, invocation and overhead separately from
-uninstrumented paired measurements. Engine allocation/copy counters cover named
-operations, not every allocator call. Distinguish allocation churn from retained
-capacity and peaks; fewer allocations can retain more memory.
-
-For process-memory measurements, include the renderer and owned FFmpeg child
-processes, name the platform metric (for example RSS/high-water RSS), sampling
-interval and collection method, and state whether peaks are simultaneous or
-per-process maxima. GPU working-set counters are estimates, not device-resident
-memory measurements. The benchmark runner currently records engine counters;
-process-memory captures need external tooling and must not be presented as a
-built-in report field. Missing measurements are unavailable, not zero.
-
-Separate preparation/evaluation/command encoding, shader/device work, upload,
-readback and row repacking before calling a workload GPU-bound. Include decoder
-seeks/conversions, encoder backpressure/finalization and disk/publication in
-end-to-end investigations. Existing frame-write overlap means summed stage
-times need not equal wall time; see [media concurrency](media-pipeline.md).
-
-For sustained rendering, sample early, steady and late intervals and repeated
-prepare/render/abort cycles. Track throughput alongside process memory, file
-handles, decoder contexts, worker scratch, cache reservations and in-flight
-buffers. Streamed master PCM avoids retaining the whole waveform, but prepared
-signal/analysis data can still scale with duration; growth is not automatically
-a leak. Choose workloads within the checked arithmetic and resource budgets
-described in [validation layers](../reference/project-format.md#validation-layers).
-Report actual duration/frame count and output bytes: short smoke runs prove
-execution, not multi-hour stability or large-file behavior. Changes involving
-encoded output also need [media verification](media-pipeline.md#verify-encoded-output).
-
-## Cache working-set and native worker diagnostics
-
-The ignored SDK `static_cache_threshold_benchmark` reuses the existing mixed-layer
-fixtures and null-sink runner. Run it in release mode with a fresh output path:
-
-```bash
-mkdir -p target/benchmark-results/cache-diagnostic
-VESTRA_CACHE_BENCH_OUTPUT=target/benchmark-results/cache-diagnostic/result.json \
-VESTRA_CACHE_BENCH_WORKLOAD=mixed-layers-10 VESTRA_CACHE_BENCH_MIB=256 \
-VESTRA_CACHE_BENCH_MODE=timing cargo test --release --locked -p vestra \
-  --no-default-features --features cpu static_cache_threshold_benchmark \
-  -- --ignored --nocapture --test-threads=1
-```
-
-Compare 256 and 320 MiB in repeated blocks. Timing mode emits one warmup and
-five independently prepared sequences, each with cold/warm/warm-2 operations.
-The operations within one sequence reuse prepared state. `partitions` mode
-separately captures actual per-worker budgets; `pixels` compares every RGBA byte
-through the SDK frame loop with a cache-disabled reference. Keep both diagnostic
-modes outside performance/resource controls. Supported controls are mixed8,
-mixed10, mixed25, mixed50 (`mixed-layers-N`) and `static-image`, all at 720p/30
-frames. Dynamic controls require the same eight automatic workers; the static
-control uses one. The configured cache default and replacement policy are unchanged.
-
-### Native worker sweep
-
-The CPU crate also has ignored `native_workers_1`, `native_workers_2`,
-`native_workers_4` and `native_workers_8` tests. These use a test-only native
-FFmpeg owner-thread adapter and the existing private fixed-worker constructor.
-They add no production worker-count setting. Supply `VESTRA_NATIVE_BENCH_INPUTS`
-with five video-only, source-sized scene JSON files (`single-video`, `video-heavy`,
-`holds`, `trimmed`, `divergent-clocks`) and `manifest.json`. The manifest maps asset
-IDs to source paths, full external packed-RGBA reference files, integer PTS lists,
-time-base numerator/denominator and source origin. Generate references using full
-external FFmpeg decoding with bilinear conversion and passthrough frame timing;
-use ffprobe's actual presentation timestamps rather than nominal FPS.
-
-Select a fresh `VESTRA_NATIVE_BENCH_OUTPUT`, `VESTRA_NATIVE_BENCH_CASE`,
-`VESTRA_NATIVE_BENCH_SINK=null|encoded` and `VESTRA_NATIVE_BENCH_MODE=oracle|timing`,
-then run the chosen ignored test in release mode, for example:
-
-```bash
-# Set the five VESTRA_NATIVE_BENCH_* variables described above first.
-cargo test --release --locked -p vestra-render-cpu native_workers_1 \
-  -- --ignored --nocapture --test-threads=1
-```
-
-These fixtures are 1280×720, 30/1 and one second. Oracle mode checks pixels/PTS and captures per-session
-requests, receives, seeks, conversions and waits; timing mode disables those
-additional diagnostics and emits one warmup plus five fresh-backend samples.
-Run null controls before matched encoded controls, repeat the worker sweep, and
-record process resources separately. Worker count changes cursor count and
-per-worker cache partitions together. These internal controls do not measure
-public SDK end-to-end throughput or justify a new scheduling policy by themselves.
-
-## CPU renderer efficiency
-
-Compilation normalizes constant tracks and identity effects and fuses compatible
-colour operations. Exact identity matters: nearby transforms still resample,
-and opacity near one is not opaque. An opaque Normal source at opacity exactly
-one can be composed directly. A full-size group with an identity inverse
-transform and no motion tiling can avoid bilinear resampling.
-
-Static visual plans render once and reuse pixels. Automatic CPU construction
-uses one worker for a fully static visual plan, avoiding unused worker pools.
-Dynamic plans retain the CPU and frame-memory limits. Direct backend callers
-must use the reported backend capacity rather than assume a worker count.
-
-Complete static layers and groups can be cached subject to their budgets and
-all inputs that affect the result. Masks participate in static/dynamic
-classification. Animated or signal-driven properties must invalidate static
-reuse. Shared decoded images and prepared text/shape resources avoid repeated
-I/O and preparation; dynamically transformed images can still resample per frame.
-
-### Scratch and sparse convolution
-
-Effect scratch and depth-indexed composition surfaces are reused across frames.
-Every returned RGBA image owns its pixels. Isolated group/matte rendering must
-clear shared scratch after child composition before applying group presentation,
-so a child effect cannot contaminate the group's coverage.
-
-Gaussian passes precompute byte-to-unit normalization and restrict pixel work
-to nonzero-alpha bounds expanded by finite kernel support. Sampling and clamping
-stay in original canvas coordinates. When work covers less than the canvas,
-reused output must be cleared. A nontransparent corner bypasses the bounds scan.
-Fully transparent input can avoid convolution.
-
-Sparse glow/bloom can benefit, but scanning an almost full-frame bound adds
-cost without much saved work. Full-frame scratch dimensions remain unchanged.
-These mechanisms do not imply generic subtree culling or copy-free rendering.
-
-### Measure cost and resource tradeoffs
-
-Use the benchmark methodology above with release builds, paired runs, raw
-samples and identical workloads. Separate preparation, evaluation,
-renderer-only work, decode, encoding and publication. A prepared/null-sink
-measurement is not comparable with a one-shot encoded render.
-
-Worker count trades throughput against scratch memory and decoder resources.
-Cache-hit and copy counters cover engine operations, not every allocation or
-process RSS. Validate actual pixel output and cache-disabled references before
-keeping an optimization; a counter change alone does not prove a speedup.
-
-Focused manual benchmarks live alongside renderer/SDK tests. Canonical suites
-cover effects, masks/mattes, nested groups, particles, blending, concurrent
-video and an editorial workload. Keep local raw reports for review, but do not
-commit personal machine captures as portable performance targets.
+Existing work avoidance includes constant/identity normalization, exact-transform
+sampling paths and static-layer reuse. [CPU fast paths](architecture/cpu-renderer.md#fast-paths-and-operation-metrics)
+describe eligibility and operation counters, including
+[sparse convolution](architecture/cpu-renderer.md#sparse-convolution). These
+optimizations preserve owned output frames,
+ordering, masks and cache invalidation. Validate pixels and cache-disabled
+references before accepting a speedup; a counter change alone is insufficient.

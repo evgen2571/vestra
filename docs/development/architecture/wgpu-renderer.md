@@ -14,15 +14,14 @@ Frame evaluation still happens outside the backend. For each evaluated frame, th
 
 ### Canvas extents and mask precision
 
-Sized groups retain the existing scratch-target count. The two root canvases and
-readback use output dimensions. Shared layer/effect scratch and group targets use
-the componentwise maximum of output and local canvas extents; each operation
-carries its logical extent for dispatch, source sizing, clipping and sampling.
+The two root canvases and readback use output dimensions. Shared layer/effect
+scratch and group targets use the componentwise maximum of output and local
+canvas extents. Each operation carries its logical extent for dispatch, source
+sizing, clipping and sampling.
 Resource estimates and adapter limits account for those actual allocations.
-Orthogonal aspect ratios can still amplify shared scratch memory. Extent-aware
-pooling would require additional prepared target/binding sets and lifetime
-tracking; the current pool favors fixed preparation-time ownership and reuse.
-Group resource budgets constrain logical canvases, not total device memory.
+Orthogonal aspect ratios can amplify shared scratch memory because the pool
+uses fixed preparation-time targets. Group resource budgets constrain logical
+canvases, not total device memory.
 
 Owned group-mask recursion preserves both the consumer pixels and accumulated
 coverage in the existing reserved composition slots. In local canvas contexts,
@@ -34,23 +33,16 @@ accumulated byte-rounding error without allocating another target.
 
 Accumulated coverage between masks remains byte-valued. Repeated faint masks at
 12 or 64 stages can differ from CPU float coverage by three channel levels;
-ordinary mask parity checks retain their two-level tolerance. This rounding difference
-does not imply lost coverage state. Widening that state or packing extra precision
-would complicate the channel layout and compatibility path without a demonstrated
-benefit for ordinary mask stacks.
+ordinary mask parity checks retain their two-level tolerance. This is a
+precision limit of the retained coverage state.
 
 ## Resource ownership and reuse
 
-Root instances are process-owned and shared by backend selection. This preserves
-WSL/Mesa GL's EGL instance lifetime; each prepared renderer still owns its device,
-queue and resources. WGPU 23.0.1 includes the upstream
-[device/queue identity correction](https://github.com/gfx-rs/wgpu/commit/8c7c5c4974717414d49ffbd19e91a337f2db7861),
-first released in WGPU 23.0.0. WGPU 22.1.0 derived a queue's public identity from
-its device even though their registry lifetimes can differ. The complete fix
-also decouples submission-index polling from device identity; changing only the
-returned queue handle would leave readback waits affected. The adjacent release
-keeps the same default graphics backends and requires only explicit optional
-pipeline entry points in Vestra, with matching Naga 23 shader validation.
+Root instances are process-owned and shared by backend selection to preserve
+WSL/Mesa GL's EGL lifetime. Each prepared renderer owns its device, queue and
+resources. Keep device, queue and submission identities distinct when managing
+completion; see the upstream [identity correction](https://github.com/gfx-rs/wgpu/commit/8c7c5c4974717414d49ffbd19e91a337f2db7861)
+and [lifecycle verification](../gpu-validation.md#stress-resource-lifetimes).
 
 The backend has bounded in-flight work. `VESTRA_WGPU_IN_FLIGHT` controls the implementation pipeline depth only when valid; it is not a semantic setting. Texture pools, source caches, staging buffers, pending static layers and readback slots are retained across a prepared operation. Release them only when their GPU completion token makes them safe to reuse. This is why a `PreparedProject` owns one backend instance and is not freely concurrent.
 
@@ -75,7 +67,7 @@ The internal frame path has these owners, all inside
 The private `FramePlanBuilder` owns the operation/layer vectors and shared
 parameter/value counters. Recursive calls retain explicit canvas and logical
 value transitions. Effect expansion and validation consume the same operation
-and texture definitions; this remains a fixed-slot planner.
+and texture definitions in a fixed-slot planner.
 
 ## Caching and capability policy
 
@@ -86,10 +78,9 @@ pipelines stay in WGPU, alongside private planning/resource tests. Cross-backend
 parity tests live in the facade and use public submission/completion contracts.
 
 Bind groups remain owned by the backend's frame slots. Most are prepared once;
-bindings for static cached textures are still created on demand during command
-encoding. Keeping that timing preserves the existing allocation and metric
-scopes. Topology, requirements, pipelines, texture pools and readback retain
-their separate resource responsibilities.
+bindings for static cached textures are created on demand during command
+encoding and counted in that scope. Topology, requirements, pipelines, texture
+pools and readback have separate resource responsibilities.
 
 Shader labels and ordered static WGSL fragments derive from `registry.rs`;
 `pipeline.rs` prepares supported kernels in common inventory order. Unsupported

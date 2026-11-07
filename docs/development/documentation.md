@@ -195,13 +195,11 @@ uvx --from 'ruff>=0.12,<0.13' ruff check docs/assets/examples scripts/render-doc
 uvx --from 'ruff>=0.12,<0.13' ruff format --check docs/assets/examples scripts/render-docs-media.py
 ```
 
-### Motion Tile anchor limitation
+### Motion Tile anchor coverage
 
-The reviewed chart's uncovered regions reproduce with an opaque rectangle,
-so they are not source alpha or a browser background. On CPU, a 640×360
-rectangle at scale 0.7 and centered position/anchor covers `(96,54)`–`(544,306)`
-at 100%. At both 200% and 400%, it expands left/up but still stops at
-`(544,306)`, leaving 27.75% of the canvas uncovered:
+A 640×360 opaque rectangle at scale 0.7 and centered position/anchor covers
+`(96,54)`–`(544,306)` at 100% (exclusive right/bottom bounds). With a centered
+tile center, both 200% and 400% cover the entire canvas:
 
 ```python
 from vestra import Project, Rectangle
@@ -213,14 +211,15 @@ layer.effects.add(MotionTile(output_width_percent=400, output_height_percent=400
 project.render("tile-centered.mp4", backend="cpu", overwrite=True)
 ```
 
-`resolve_raster_geometry_with_motion_tile` expands dimensions and shifts the
-logical origin negative, while its affine anchor calculation uses the expanded
-dimensions without that shifted origin. This displaces centered virtual bounds.
-The geometry is shared with WGPU, but this reproduction was verified on CPU.
-The engine issue remains unresolved by this documentation branch.
+The layer anchor uses the original sized/cropped dimensions. Expansion changes
+only virtual sampling bounds; it preserves the source pattern's placement and
+phase. `tile_center` controls which sides receive the added extent. This fixes
+[#103](https://github.com/evgen2571/vestra/issues/103), where the affine anchor
+incorrectly used expanded dimensions and left 27.75% uncovered even at 400%.
 
-The catalog uses `anchor=(0,0)` and places the nominal image's top-left explicitly
-on **both** baseline and treatment. Its outlined original bounds then remain
+The catalog keeps `anchor=(0,0)` and places the nominal image's top-left explicitly
+on **both** baseline and treatment. This remains valid without a workaround.
+Its outlined original bounds remain
 fixed while a 300% mirrored region supplies edge pixels. Tests sample multiple
 times and reject uncovered pixels in the treated viewport. The outline itself
 is a separate transformed rectangle and is never tiled.

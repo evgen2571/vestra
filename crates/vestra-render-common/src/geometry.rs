@@ -326,12 +326,13 @@ pub fn resolve_raster_geometry_with_motion_tile(
         );
     let raster_effective_width = effective_width * raster_scale_x;
     let raster_effective_height = effective_height * raster_scale_y;
+    // Virtual sampling bounds must not move the sized/cropped source's layer anchor.
     let forward = ForwardAffine::for_transform(
         transform,
         canvas_width,
         canvas_height,
-        effective_width,
-        effective_height,
+        base_effective_width,
+        base_effective_height,
         anchor_origin_x,
         anchor_origin_y,
     );
@@ -339,8 +340,8 @@ pub fn resolve_raster_geometry_with_motion_tile(
         transform,
         canvas_width,
         canvas_height,
-        effective_width,
-        effective_height,
+        base_effective_width,
+        base_effective_height,
         anchor_origin_x,
         anchor_origin_y,
     );

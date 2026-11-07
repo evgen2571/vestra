@@ -75,12 +75,43 @@ def many_parameters():
 
 class EffectGenerationTests(unittest.TestCase):
     def test_reference_escapes_pipe_in_python_default(self):
-        text = generator.render_reference(metadata()["effects"])
+        data = metadata()
+        data["effects"][0]["parameters"][0]["default"] = "a|b"
+        text = generator.render_reference(data["effects"])
         row = next(
             line for line in text.splitlines() if line.startswith("| `edge_characters`")
         )
         self.assertIn(r"a\|b", row)
-        self.assertEqual(len(re.split(r"(?<!\\)\|", row)), 9)
+        self.assertEqual(len(re.split(r"(?<!\\)\|", row)), 6)
+        canonical = next(
+            line
+            for line in text.splitlines()
+            if line.startswith("    | `edge_characters`")
+        )
+        self.assertIn(r"a\|b", canonical)
+        self.assertEqual(len(re.split(r"(?<!\\)\|", canonical)), 5)
+
+    def test_reference_separates_authoring_from_exact_json_metadata(self):
+        data = metadata()
+        effect = data["effects"][0]
+        parameter = effect["parameters"][0]
+        parameter.update(
+            name="amount",
+            kind="scalar_property",
+            minimum=0,
+            maximum=1,
+            required=False,
+            default=0.5,
+        )
+        effect["python"]["defaults"] = {"amount": 1}
+        effect["units"] = [["amount", "factor"]]
+        text = generator.render_reference(data["effects"])
+        self.assertIn("## Example (`example`)", text)
+        self.assertIn("| `amount` | `1` | [0, 1]; factor | keyframes + signals |", text)
+        self.assertIn('??? info "Canonical JSON and planner metadata"', text)
+        self.assertIn("| `amount` | `scalar_property` | optional; `0.5` |", text)
+        self.assertIn("Catalog retention: `false`", text)
+        self.assertIn("temporal policy: `from_properties`", text)
 
     def test_generated_constructor_mapping_is_readable(self):
         data = many_parameters()

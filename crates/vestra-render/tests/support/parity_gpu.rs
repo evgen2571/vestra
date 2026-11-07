@@ -159,10 +159,11 @@ fn render_project_parity(
 
 #[test]
 fn gpu_motion_tile_preserves_matched_anchor_coverage_at_every_extent() {
-    for anchor in [0.0, 0.25, 0.5, 0.75, 1.0] {
-        for extent in [100.0, 200.0, 400.0] {
-            let position = 0.15 + 0.7 * anchor;
-            let project = serde_json::from_value(json!({
+    for mirror_edges in [false, true] {
+        for anchor in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            for extent in [100.0, 200.0, 400.0] {
+                let position = 0.15 + 0.7 * anchor;
+                let project = serde_json::from_value(json!({
                 "schema_version": 1,
                 "output": {
                     "path": "motion-tile-anchor.mp4", "width": 640, "height": 360,
@@ -187,24 +188,25 @@ fn gpu_motion_tile_preserves_matched_anchor_coverage_at_every_extent() {
                         "output_width_percent": {"base_value": extent},
                         "output_height_percent": {"base_value": extent},
                         "tile_center": {"base_value": {"x": 0.5, "y": 0.5}},
-                        "mirror_edges": true
+                        "mirror_edges": mirror_edges
                     }]
                 }], "transitions": [], "flashes": [], "post_effects": []}
             })).expect("Motion Tile anchor reproduction parses");
-            let Some(output) = render_project_parity(project, 0, 0) else {
-                return;
-            };
-            for (x, y, pixel) in output.enumerate_pixels() {
-                let expected =
-                    if extent > 100.0 || ((96..544).contains(&x) && (54..306).contains(&y)) {
-                        image::Rgba([147, 203, 181, 255])
-                    } else {
-                        image::Rgba([255, 0, 255, 255])
-                    };
-                assert_eq!(
-                    *pixel, expected,
-                    "anchor={anchor}, extent={extent}, ({x},{y})"
-                );
+                let Some(output) = render_project_parity(project, 0, 0) else {
+                    return;
+                };
+                for (x, y, pixel) in output.enumerate_pixels() {
+                    let expected =
+                        if extent > 100.0 || ((96..544).contains(&x) && (54..306).contains(&y)) {
+                            image::Rgba([147, 203, 181, 255])
+                        } else {
+                            image::Rgba([255, 0, 255, 255])
+                        };
+                    assert_eq!(
+                        *pixel, expected,
+                        "anchor={anchor}, extent={extent}, mirror={mirror_edges}, ({x},{y})"
+                    );
+                }
             }
         }
     }
@@ -271,6 +273,27 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
                 "transform": transform((0.52, 0.5), (0.9, 0.9), -9.0)
             }
         ]),
+        "group-tile" => json!([
+            {
+                "id": "group", "source": {"type": "group", "clips": [
+                    {
+                        "id": "left", "source": {"type": "shape", "geometry": {
+                            "type": "rectangle", "width": 16.0, "height": 32.0
+                        }, "fill": "#ff0000"}, "layer": 0,
+                        "transform": transform((0.25, 0.5), (1.0, 1.0), 0.0),
+                        "start": 0.0, "duration": 1.0, "opacity": {"base_value": 1.0}
+                    },
+                    {
+                        "id": "right", "source": {"type": "shape", "geometry": {
+                            "type": "rectangle", "width": 16.0, "height": 32.0
+                        }, "fill": "#0000ff"}, "layer": 1,
+                        "transform": transform((0.75, 0.5), (1.0, 1.0), 0.0),
+                        "start": 0.0, "duration": 1.0, "opacity": {"base_value": 1.0}
+                    }
+                ]}, "layer": 0, "effects": [tile],
+                "transform": transform((0.5, 0.5), (0.7, 0.7), 0.0)
+            }
+        ]),
         "cross-stage" => json!([
             {
                 "id": "consumer", "source": image, "layer": 0,
@@ -315,13 +338,24 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
 
 #[test]
 fn gpu_motion_tile_matches_cpu_through_masks_mattes_groups_and_cross_stage_order() {
-    for variant in ["owned-mask", "track-matte", "group", "cross-stage"] {
+    for variant in [
+        "owned-mask",
+        "track-matte",
+        "group",
+        "group-tile",
+        "cross-stage",
+    ] {
         let output = render_project_parity(motion_tile_parity_project(variant), 0, 3);
         if let Some(output) = output {
             assert!(
                 output.pixels().any(|pixel| pixel[3] > 0),
                 "{variant} MotionTile parity case should produce visible pixels"
             );
+            if variant == "group-tile" {
+                assert!(output.pixels().all(|pixel| pixel[3] == 255));
+                assert_eq!(*output.get_pixel(12, 16), image::Rgba([255, 0, 0, 255]));
+                assert_eq!(*output.get_pixel(20, 16), image::Rgba([0, 0, 255, 255]));
+            }
         }
     }
 }

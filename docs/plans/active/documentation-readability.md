@@ -54,8 +54,10 @@ Status `pending` means not yet reviewed. Each owner must return per-page outcome
 | `docs/development/architecture/python-bindings.md` | contributor worker | pending |
 | `docs/development/architecture/render-pipeline.md` | contributor worker | pending |
 | `docs/development/architecture/wgpu-renderer.md` | contributor worker | pending |
-| `docs/development/documentation.md` | coordinator | pending |
-| `docs/development/effect-algorithms.md` | coordinator | pending |
+| `docs/development/documentation-media.md` | coordinator | added: extracted reproduction recipes and provenance unchanged |
+| `docs/development/documentation-site.md` | coordinator | added: extracted site maintenance, browser verification and authorized publication procedures |
+| `docs/development/documentation.md` | coordinator | improved: editing/writing/checking focus; reference conventions and compatible links to specialist workflows |
+| `docs/development/effect-algorithms.md` | coordinator | improved: palette/CRT/ASCII subsections and reused processing diagram; numerical contracts retained |
 | `docs/development/extending/backend.md` | contributor worker | pending |
 | `docs/development/extending/effect.md` | contributor worker | pending |
 | `docs/development/extending/source.md` | contributor worker | pending |
@@ -70,14 +72,14 @@ Status `pending` means not yet reviewed. Each owner must return per-page outcome
 | `docs/reference/animation.md` | reference worker | pending |
 | `docs/reference/audio.md` | reference worker | pending |
 | `docs/reference/backends.md` | reference worker | pending |
-| `docs/reference/catalog.md` | coordinator | pending |
+| `docs/reference/catalog.md` | coordinator | improved: complete grouped topic list with descriptions; old anchors retained |
 | `docs/reference/cli.md` | reference worker | pending |
 | `docs/reference/diagnostics.md` | reference worker | pending |
-| `docs/reference/effect-parameters.md` | coordinator | pending |
+| `docs/reference/effect-parameters.md` | coordinator | improved via generator: four-column authoring tables and expandable exact JSON/planner metadata; all effect anchors retained |
 | `docs/reference/effects.md` | reference worker | pending |
 | `docs/reference/environment-variables.md` | reference worker | pending |
 | `docs/reference/feature-support.md` | reference worker | pending |
-| `docs/reference/index.md` | coordinator | pending |
+| `docs/reference/index.md` | coordinator | improved: task-to-guide/reference route and links to exact animation/effect parameters |
 | `docs/reference/masks.md` | reference worker | pending |
 | `docs/reference/nested-compositions.md` | reference worker | pending |
 | `docs/reference/presets-and-flashes.md` | reference worker | pending |
@@ -93,6 +95,8 @@ Status `pending` means not yet reviewed. Each owner must return per-page outcome
 | `docs/reference/sources/text.md` | coordinator | improved: labelled signatures, parameter/font tables, error stages and canonical fields |
 | `docs/reference/sources/video.md` | reference worker | pending |
 | `docs/reference/transitions.md` | reference worker | pending |
+
+2026-11-07: coordinator specialist work: generation freshness zero changes; six metadata-exporter tests and 20 generator tests passed. Generator layout tests first failed against the old layout, then passed; escaping checked in authoring and canonical tables. Ruff check/format passed after formatting. Site/catalog regression first demonstrated missing Animation/Effect parameters; now passes. `just docs-check`: 751 links, zero missing; `just site-check`: 14,962 references, zero errors; ten tests passed. A strict-build failure exposed a legacy catalog anchor and was fixed with a compatibility span (no checks weakened).
 
 ## Completion / handoff
 In progress. Final handoff must record branch, worktree, baseline/final revisions, batch outcomes, retained pages, actual checks, unavailable checks, and no push/PR/deployment.

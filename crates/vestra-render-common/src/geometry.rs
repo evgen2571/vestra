@@ -471,7 +471,10 @@ pub fn visible_bounds(
 
 #[cfg(test)]
 mod tests {
-    use super::{IntrinsicSize, resolve_raster_geometry, visible_bounds};
+    use super::{
+        IntrinsicSize, MotionTileParameters, resolve_raster_geometry,
+        resolve_raster_geometry_with_motion_tile, visible_bounds,
+    };
     use vestra_core::plan::CompiledSizing;
 
     use crate::{
@@ -561,6 +564,210 @@ mod tests {
             anchor,
             scale,
             rotation_radians,
+        }
+    }
+
+    #[test]
+    fn motion_tile_equivalent_anchors_preserve_source_placement_and_expand_both_edges() {
+        for (anchor, position) in [
+            (0.0, 0.15),
+            (0.25, 0.325),
+            (0.5, 0.5),
+            (0.75, 0.675),
+            (1.0, 0.85),
+        ] {
+            for (factor, left, top, right, bottom) in [
+                (1.0, 96.0, 54.0, 544.0, 306.0),
+                (2.0, -128.0, -72.0, 768.0, 432.0),
+                (4.0, -576.0, -324.0, 1216.0, 684.0),
+            ] {
+                let geometry = resolve_raster_geometry_with_motion_tile(
+                    IntrinsicSize::new(640, 360),
+                    Crop {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                    false,
+                    &CompiledSizing::Original,
+                    Transform2D {
+                        position: Point {
+                            x: position,
+                            y: position,
+                        },
+                        anchor: Point {
+                            x: anchor,
+                            y: anchor,
+                        },
+                        scale: Point { x: 0.7, y: 0.7 },
+                        rotation_radians: 0.0,
+                    },
+                    640,
+                    360,
+                    Some(MotionTileParameters {
+                        width_factor: factor,
+                        height_factor: factor,
+                        center_x: 0.5,
+                        center_y: 0.5,
+                        mirror_edges: false,
+                    }),
+                );
+                for (actual, expected) in geometry.transformed_corners.iter().zip([
+                    Point { x: left, y: top },
+                    Point { x: right, y: top },
+                    Point { x: left, y: bottom },
+                    Point {
+                        x: right,
+                        y: bottom,
+                    },
+                ]) {
+                    assert!(
+                        (actual.x - expected.x).abs() < 1e-9,
+                        "{anchor}, {factor}: {actual:?} != {expected:?}"
+                    );
+                    assert!(
+                        (actual.y - expected.y).abs() < 1e-9,
+                        "{anchor}, {factor}: {actual:?} != {expected:?}"
+                    );
+                }
+                let source_top_left = geometry.inverse.map(96.0, 54.0);
+                assert!(source_top_left.x.abs() < 1e-9, "{anchor}, {factor}");
+                assert!(source_top_left.y.abs() < 1e-9, "{anchor}, {factor}");
+            }
+        }
+    }
+
+    #[test]
+    fn motion_tile_preserves_sized_cropped_logical_anchor_with_rotated_raster_offsets() {
+        // Hand-derived bounds after a quarter turn, scale (-0.5, 1.5), and
+        // expansion (2, 3) around tile center (0.25, 0.75).
+        let cases = [
+            (
+                CompiledSizing::Original,
+                false,
+                [240.5, 465.5, 265.0, 385.0],
+                [13.0, 33.0],
+            ),
+            (
+                CompiledSizing::Original,
+                true,
+                [285.5, 510.5, 270.0, 390.0],
+                [23.0, 63.0],
+            ),
+            (
+                CompiledSizing::Scale(2.0),
+                false,
+                [173.0, 623.0, 167.5, 407.5],
+                [28.0, 63.0],
+            ),
+            (
+                CompiledSizing::Scale(2.0),
+                true,
+                [263.0, 713.0, 177.5, 417.5],
+                [48.0, 123.0],
+            ),
+            (
+                CompiledSizing::Stretch {
+                    width: 160,
+                    height: 120,
+                },
+                false,
+                [105.5, 780.5, 102.5, 422.5],
+                [38.0, 93.0],
+            ),
+            (
+                CompiledSizing::Stretch {
+                    width: 160,
+                    height: 120,
+                },
+                true,
+                [274.25, 611.75, 214.5, 406.5],
+                [38.0, 93.0],
+            ),
+            (
+                CompiledSizing::Fit,
+                false,
+                [-592.0, 2408.0, -937.5, 662.5],
+                [198.0, 403.0],
+            ),
+            (
+                CompiledSizing::Fit,
+                true,
+                [139.25, 1826.75, -331.25, 568.75],
+                [185.5, 453.0],
+            ),
+            (
+                CompiledSizing::Cover,
+                false,
+                [-704.5, 2670.5, -1100.0, 700.0],
+                [223.0, 453.0],
+            ),
+            (
+                CompiledSizing::Cover,
+                true,
+                [128.0, 1928.0, -377.5, 582.5],
+                [198.0, 483.0],
+            ),
+        ];
+        for (sizing, cacheable_crop, [left, right, top, bottom], [anchor_x, anchor_y]) in cases {
+            for mirror_edges in [false, true] {
+                let geometry = resolve_raster_geometry_with_motion_tile(
+                    IntrinsicSize::with_logical_bounds_and_anchor(
+                        200, 100, 100.0, 80.0, -7.0, 11.0, -2.0, 3.0,
+                    ),
+                    Crop {
+                        x: 0.1,
+                        y: 0.25,
+                        width: 0.6,
+                        height: 0.5,
+                    },
+                    cacheable_crop,
+                    &sizing,
+                    Transform2D {
+                        position: Point { x: 0.4, y: 0.6 },
+                        anchor: Point { x: 0.25, y: 0.75 },
+                        scale: Point { x: -0.5, y: 1.5 },
+                        rotation_radians: std::f64::consts::FRAC_PI_2,
+                    },
+                    800,
+                    600,
+                    Some(MotionTileParameters {
+                        width_factor: 2.0,
+                        height_factor: 3.0,
+                        center_x: 0.25,
+                        center_y: 0.75,
+                        mirror_edges,
+                    }),
+                );
+                for (actual, expected) in geometry.transformed_corners.iter().zip([
+                    Point {
+                        x: right,
+                        y: bottom,
+                    },
+                    Point { x: right, y: top },
+                    Point { x: left, y: bottom },
+                    Point { x: left, y: top },
+                ]) {
+                    assert!(
+                        (actual.x - expected.x).abs() < 1e-9,
+                        "{sizing:?}, cached={cacheable_crop}: {actual:?} != {expected:?}"
+                    );
+                    assert!(
+                        (actual.y - expected.y).abs() < 1e-9,
+                        "{sizing:?}, cached={cacheable_crop}: {actual:?} != {expected:?}"
+                    );
+                }
+                let anchor = geometry.inverse.map(320.0, 360.0);
+                assert!(
+                    (anchor.x - anchor_x).abs() < 1e-9,
+                    "{sizing:?}, cached={cacheable_crop}"
+                );
+                assert!(
+                    (anchor.y - anchor_y).abs() < 1e-9,
+                    "{sizing:?}, cached={cacheable_crop}"
+                );
+            }
         }
     }
 

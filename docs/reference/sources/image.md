@@ -19,7 +19,7 @@ copied into each placement and individually overridable by `add()`.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `path` | Required | Non-empty `str` or `PathLike[str]` naming an image file. |
-| `sizing` | `None` | Optional sizing override; without one, the containing composition's default applies. |
+| `sizing` | `None` | Optional sizing override; omission uses original intrinsic dimensions. |
 | `crop` | `None` | Optional `Crop` or mutable `CropProperty`; omission leaves the full source region. |
 
 `Sizing` is immutable and exact:

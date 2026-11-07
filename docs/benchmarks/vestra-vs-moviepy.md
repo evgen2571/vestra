@@ -9,6 +9,11 @@ under `target/benchmark-results/`; they are not included in a clean checkout.
 Ratios below are wall-time ratios (candidate / MoviePy CPU for matched workloads;
 hardware WGPU / CPU for Vestra-only pairs), so values below 1.00x are faster.
 
+For a new measurement, start with [current performance methodology](../development/performance.md)
+and the maintained [collection guide](https://github.com/evgen2571/vestra/blob/develop/benchmarks/COLLECTING.md).
+The commands below reproduce the historical revision; the tables remain a dated
+record and are not updated with new-checkout results.
+
 ## Environment and fairness
 
 - Host: AMD Ryzen 5 3600 (12 logical CPUs), 16 GiB RAM, Linux 6.18.59 x86_64, all CPUs 0–11 available.
@@ -195,6 +200,10 @@ The sustained test rendered the same 640x360/30 fps two-placement timeline for o
 All three gated internal benchmark tests (`preparation_matrix`, `effect_scaling_matrix`, `random_access_matrix`) passed. The effect-scaling run is a focused CPU control, not a MoviePy comparison.
 
 ## Historical weaknesses and optimization priorities
+
+These were proposed follow-ups from the 2026-10-31 capture. They do not establish
+that a change is still needed, has been implemented, or will improve the current
+revision. Reproduce the relevant workload before choosing one.
 
 | Rank | Measured weakness | Evidence | Impact | Effort | Confidence | Concrete next step |
 |---:|---|---|---|---|---|---|

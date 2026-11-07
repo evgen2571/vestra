@@ -18,6 +18,8 @@ attributes. CLI human output formats them for people. CLI JSON results and
 reports serialize diagnostics, errors, and warnings where the command has
 them.
 
+## Video timing locations
+
 Video source-span preflight failures use `VESTRA-VIDEO-TIMING` and name the
 owning clip in the message. Their pointer follows the canonical clip tree,
 including every nested group's `/source/clips/{index}`. For example,
@@ -27,9 +29,13 @@ Owned video masks point to `/masks/{index}/input/source` under their owning clip
 Children of owned Group masks continue through `/input/source/clips/{index}`,
 including any further nested groups or masks.
 
+## Diagnostics, logs and progress
+
 Tracing/logging is operational observability. `RenderEvent` progress describes
 operation state. Diagnostics and errors are structured, actionable failures;
 JSON progress is not a diagnostics stream and does not carry warnings.
+
+## Code stability
 
 Codes are part of the current diagnostic contract, but the project does not
 promise that every code is an eternal catalog. Treat codes as identifiers and

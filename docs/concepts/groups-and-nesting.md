@@ -21,11 +21,12 @@ it. Its graphics are original and use the bundled font.
 
 A group has its own canvas. Its children use positions relative to that canvas;
 the group's placement uses positions relative to its parent. The root canvas
-matches the project's output size; root pixels are the final output's coordinates.
+matches the project's output size. Within either canvas, `(0, 0)` is the
+top-left and `(1, 1)` is the bottom-right.
 
 <figure class="diagram" markdown="span">
-![The blue group starts at root pixel 160, 90. The gold child's center is at group pixel 80, 90. Adding these offsets gives the same center at root pixel 240, 180.](../assets/diagrams/groups-local-canvas.svg)
-<figcaption>The child's center is measured from the group's top-left. Add that offset to express the same point in root pixels; the group is unscaled and unrotated.</figcaption>
+![The blue group's position 0.5, 0.5 centers it in the root. The gold child's position 0.25, 0.5 places it a quarter of the way across the group and halfway down. Callouts mark their center anchors.](../assets/diagrams/groups-local-canvas.svg)
+<figcaption><code>position</code> uses the parent canvas: root for the group, group for the child.</figcaption>
 </figure>
 
 This new example matches the diagram. The small rectangle fades in after its
@@ -75,14 +76,13 @@ placed_panel = project.root.add(
 )
 ```
 
-The default anchor is the center. The 320 × 180 panel is centered at root pixel
-`(320, 180)`, so its top-left is `(160, 90)`. The marker's anchor is at local pixel
-`(0.25 × 320, 0.5 × 180) = (80, 90)`. Adding the panel's top-left puts that anchor
-at root pixel **(240, 180)**, or normalized root position **(0.375, 0.5)**.
+The default anchor is the center. The panel's `position=(0.5, 0.5)` centers it
+in the root. The marker's `position=(0.25, 0.5)` places its center a quarter of
+the way across the panel and halfway down. These values use different canvases;
+the marker's position is not measured against the root.
 
-That addition works here because the panel has no rotation and scale is one.
-Scaling or rotating the panel transforms the completed local result, including
-child positions and sizes. It does not rewrite the children's local coordinates.
+Moving, scaling or rotating `placed_panel` transforms the completed group.
+The marker keeps its local `position=(0.25, 0.5)` and follows that transform.
 See [coordinates and anchors](coordinates-and-anchors.md) for placement rules.
 
 `size` sets the local canvas; it does not stretch child geometry. The marker is

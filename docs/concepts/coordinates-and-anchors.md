@@ -77,7 +77,7 @@ transform to present that content.
 A child's normalized position uses its group's local canvas. The group's own
 placement uses the parent's canvas, and its transform acts on the completed
 children. Follow the [root and group coordinate diagram](groups-and-nesting.md#compose-locally-then-transform-the-result)
-for one worked conversion from local to root pixels.
+to see the normalized positions used by a group and its child.
 
 Continue with [groups and nesting](groups-and-nesting.md) for local bounds and
 clipping, or use the [source guide](../guides/python/sources-and-layers.md) to

@@ -96,7 +96,8 @@ hardware, and state whether your results used a hardware or software adapter.
 
 ## 4. Check the finished change
 
-Before opening a pull request, format your changes and run the contributor checks:
+For native code changes, format your work and run the contributor checks
+before opening a pull request:
 
 ```bash
 just fmt

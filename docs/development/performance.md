@@ -1,12 +1,9 @@
 # Performance
 
-Measure a named stage, not an undifferentiated "render time". Vestra reports preparation timing for semantic validation, preflight, plan compilation, decode, audio analysis and backend initialization. Render timing then separates track evaluation, frame rendering, encoder writes/finalization, output publication, and WGPU upload/encode/submission/readback work where applicable.
-
-For every result record the revision, command, scene/project, output size/frame rate/quality, frame count, CPU/OS, FFmpeg build, requested renderer preference, actual selected renderer, graphics backend, adapter name and classification. Record whether assets and renderer resources were cold or already prepared. A `PreparedProject` may make later frame/video operations much cheaper than a one-shot render, and that is expected rather than a comparable baseline.
-
-Use separate measurements for planning/preparation, CPU frame rendering, hardware WGPU frame rendering, software WGPU fallback, audio execution, video decode, encoding and end-to-end render. Encoder, muxer and publication time can dominate a short scene; do not call that a renderer regression without a frame-only comparison. Likewise, a media decode change needs a controlled decoder workload.
-
-Do not compare llvmpipe/Lavapipe results with hardware GPU numbers or call them GPU performance. First run [GPU validation](gpu-validation.md) and capture the actual adapter. Keep hardware and software adapter results separate.
+Start with a local baseline and a matched candidate on the same machine.
+Use the canonical suite below for end-to-end comparisons, then choose a focused
+probe when you need to explain a stage or resource cost. Smoke timings establish
+execution only.
 
 ## Measure and compare
 
@@ -72,6 +69,14 @@ Otherwise revert the optimization and retain the reports as evidence.
 
 ## Measurement scope
 
+Measure a named stage, not an undifferentiated "render time". Vestra reports preparation timing for semantic validation, preflight, plan compilation, decode, audio analysis and backend initialization. Render timing then separates track evaluation, frame rendering, encoder writes/finalization, output publication, and WGPU upload/encode/submission/readback work where applicable.
+
+For every result record the revision, command, scene/project, output size/frame rate/quality, frame count, CPU/OS, FFmpeg build, requested renderer preference, actual selected renderer, graphics backend, adapter name and classification. Record whether assets and renderer resources were cold or already prepared. A `PreparedProject` may make later frame/video operations much cheaper than a one-shot render, and that is expected rather than a comparable baseline.
+
+Use separate measurements for planning/preparation, CPU frame rendering, hardware WGPU frame rendering, software WGPU fallback, audio execution, video decode, encoding and end-to-end render. Encoder, muxer and publication time can dominate a short scene; do not call that a renderer regression without a frame-only comparison. Likewise, a media decode change needs a controlled decoder workload.
+
+Do not compare llvmpipe/Lavapipe results with hardware GPU numbers or call them GPU performance. First run [GPU validation](gpu-validation.md) and capture the actual adapter. Keep hardware and software adapter results separate.
+
 Every measured sample constructs a new editor and prepares the project again.
 The wall interval includes project loading and the end-to-end render, including
 encoding and publication. OS page caches are uncontrolled and often warm after
@@ -81,7 +86,11 @@ resource counters, warnings, and actual backend selection. Millisecond stage
 timings may be zero for short work; concurrent frame work can exceed wall time.
 Resource bytes are engine counters and estimates, not process RSS measurements.
 
-Keep the existing internal benchmarks for stage isolation:
+### Isolate preparation, effects or random access
+
+Use these existing release-mode CPU tests when an end-to-end difference needs
+stage isolation. They need the native contributor environment and the same
+workload/toolchain controls as the canonical suite:
 
 ```bash
 VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --features cpu preparation_matrix -- --nocapture
@@ -89,14 +98,25 @@ VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --fea
 VESTRA_RENDER_BENCH=1 cargo test --release -p vestra --no-default-features --features cpu random_access_matrix -- --nocapture
 ```
 
-These gated tests write under `target/benchmark-results` and retain their own
-prepared/null-sink measurement format. They complement the end-to-end suite;
+Outputs are `target/benchmark-results/render-preparation.json`,
+`render-effect-scaling.json` and `render-random-access.json`, respectively.
+These gated tests retain their own prepared/null-sink measurement format. They complement the end-to-end suite;
 their timings must not be compared directly with its one-shot wall times.
 
 Progress is disabled in benchmarks. Live terminal progress continues to report
 smoothed FPS and ETA, with elapsed time on completion. Detailed tracing and
 external profilers remain opt-in; collect profiles in separate runs because
 instrumentation can change timings.
+
+## Choose a focused investigation
+
+| Question | Procedure | Prerequisites and output |
+| --- | --- | --- |
+| Is hardware frame work or readback expensive? | [Hardware WGPU](#hardware-wgpu) | Proven hardware adapter; suite JSON or local-canvas probe JSON with frame/readback timings |
+| What does palette/dither add to moving video? | [Focused stylization](#focused-palette-and-dither-workloads) | Native build/FFmpeg; matched no-effect, palette and dither records |
+| Is memory growing or allocation work repeated? | [Allocation and sustained profiling](#allocation-and-sustained-render-profiling) | External profiler/process sampler; named memory metric and time series alongside engine counters |
+| Does a cache budget change cost or pixels? | [Cache working-set diagnostics](#cache-working-set-and-native-worker-diagnostics) | Existing generated SDK fixtures; timing JSON, partition traces or cache-disabled pixel comparisons |
+| How do native decoder workers scale? | [Native worker sweep](#native-worker-sweep) | External FFmpeg reference fixtures; separate oracle and timing output |
 
 ## Hardware WGPU
 
@@ -108,6 +128,8 @@ After the platform preflight in [GPU validation](gpu-validation.md), run:
 ```bash
 python scripts/benchmark.py run --suite canonical --backend hardware-wgpu --output target/benchmark-results/hardware-before
 ```
+
+### Local-canvas allocation probe
 
 For local-canvas allocation investigations, the existing WGPU resource tests also
 provide an ignored prepared-backend probe:
@@ -212,6 +234,8 @@ mixed10, mixed25, mixed50 (`mixed-layers-N`) and `static-image`, all at 720p/30
 frames. Dynamic controls require the same eight automatic workers; the static
 control uses one. The configured cache default and replacement policy are unchanged.
 
+### Native worker sweep
+
 The CPU crate also has ignored `native_workers_1`, `native_workers_2`,
 `native_workers_4` and `native_workers_8` tests. These use a test-only native
 FFmpeg owner-thread adapter and the existing private fixed-worker constructor.
@@ -225,15 +249,21 @@ use ffprobe's actual presentation timestamps rather than nominal FPS.
 
 Select a fresh `VESTRA_NATIVE_BENCH_OUTPUT`, `VESTRA_NATIVE_BENCH_CASE`,
 `VESTRA_NATIVE_BENCH_SINK=null|encoded` and `VESTRA_NATIVE_BENCH_MODE=oracle|timing`,
-then run the chosen ignored test in release mode. These fixtures are 1280×720,
-30/1 and one second. Oracle mode checks pixels/PTS and captures per-session
+then run the chosen ignored test in release mode, for example:
+
+```bash
+# Set the five VESTRA_NATIVE_BENCH_* variables described above first.
+cargo test --release --locked -p vestra-render-cpu native_workers_1 \
+  -- --ignored --nocapture --test-threads=1
+```
+
+These fixtures are 1280×720, 30/1 and one second. Oracle mode checks pixels/PTS and captures per-session
 requests, receives, seeks, conversions and waits; timing mode disables those
 additional diagnostics and emits one warmup plus five fresh-backend samples.
 Run null controls before matched encoded controls, repeat the worker sweep, and
 record process resources separately. Worker count changes cursor count and
 per-worker cache partitions together. These internal controls do not measure
 public SDK end-to-end throughput or justify a new scheduling policy by themselves.
-
 
 ## CPU renderer efficiency
 

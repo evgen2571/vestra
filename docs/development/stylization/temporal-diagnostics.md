@@ -10,7 +10,10 @@ WGPU-private resource-limit companions in `vestra-render-wgpu` write
 `resources.json` for their corresponding cases in the same artifact tree.
 Resource estimates are separate from facade pixel-parity artifacts.
 
-Run the focused tests with an actual adapter, selecting the API discovered by
+## Run current diagnostic fixtures
+
+Run from the repository root in the native contributor environment with an
+actual adapter, selecting the API discovered by
 [GPU validation](../gpu-validation.md). GL requires serialized tests:
 
 ```bash
@@ -28,8 +31,9 @@ with per-timestamp CPU/WGPU difference PNGs, per-backend adjacent-frame
 difference PNGs, two-column chronological contact sheets and `report.json`.
 Use repeated `--fixture gl/NAME` to inspect selected hardware fixtures, or
 `--frames target/stylization/frames/gl --fixture NAME`. Requested-API directories
-keep software and hardware runs separate; actual adapter identity remains in
-`adapter.json`. `--frames` and
+identify the requested API; actual adapter identity remains in `adapter.json`. Archive each run before another run with the same API
+can overwrite its artifacts, and keep software and hardware evidence separate.
+`--frames` and
 `--output` accept alternative artifact directories. No runtime dependency is
 added to Vestra. Test harness discovery with:
 
@@ -37,6 +41,8 @@ added to Vestra. Test harness discovery with:
 uv run --no-project python -m unittest discover \
   -s tests -p test_stylization_diagnostics.py -v
 ```
+
+## Interpret temporal differences
 
 The fixtures distinguish intended motion from unwanted frame-state changes:
 
@@ -74,6 +80,8 @@ Always compare CPU and WGPU motion separately, inspect threshold and seam
 frames, and record the actual adapter. A GPU passing the static control does
 not establish temporal quality for unrelated footage or every effect.
 
+## Check full-resolution pixels and resources
+
 Run full-resolution correctness separately:
 
 ```bash
@@ -102,9 +110,12 @@ comparison, including RGB values in pixels whose alpha rounds to zero.
 
 ## Advanced-control visual acceptance matrix
 
-The branch is frozen for release under the active plan's 2026-10-10 decision.
-Unfinished optional customization is deferred; this matrix preserves historical
-evidence and distinguishes it from current release checks.
+This matrix records the release-freeze decision of **2026-10-10** and the
+acceptance evidence captured then. Its “Verified” and “Inspected” statuses are
+historical observations, not results from running today's checkout. Rows marked deferred record proposed follow-up work, not a current completion
+promise or confirmation that a control is implemented or verified. Use the procedures above and current
+[effect reference](../../reference/effects.md) / [support matrix](../../reference/feature-support.md)
+for a new change.
 
 | Control or mode | Fixture / rendered evidence | Status |
 | --- | --- | --- |
@@ -117,14 +128,14 @@ evidence and distinguishes it from current release checks.
 | Channel-count quantization | `gpu_stylization_channel_levels_preserve_detail_and_match_cpu_exactly`: 2/4/8/256 levels, map/Bayer8/blue noise, exact GL/Vulkan parity and 256-level identity; explicit 1080p/4K extrema test | Inspected source/2/4/8 contact sheet; broader motion/mask acceptance pending |
 | Perceptual quantization | Q10 Oklab: literal lightness/rounded-tie/partial-alpha cases; source/metric contact sheet; three-palette figure/highlight checks; exact GL/Vulkan parity and explicit 1080p/4K checks | Inspected contact sheet and moving-preview sample; broader motion/stack/mask acceptance pending |
 | Uneven palette stops and interpolation spaces | Nonuniform literal ramp/blue-noise coverage, three-palette scene contrast and periodic out-of-order GL/Vulkan parity | Stops and Oklab ramps/animated preview inspected; broader motion/mask acceptance pending |
-| Tone, local detail and independent analysis resolution | `gpu_stylization_input_analysis*`: literal filters, alpha, border cells, animated scales, tone/detail, exact GL/Vulkan parity and 1080p/4K resources; generated portrait demonstration | Implemented; final gates tracked in plan |
+| Tone, local detail and independent analysis resolution | `gpu_stylization_input_analysis*`: literal filters, alpha, border cells, animated scales, tone/detail, exact GL/Vulkan parity and 1080p/4K resources; generated portrait demonstration | Implemented at capture; final gates were tracked in the historical plan |
 | ASCII readability | Generated portrait FFV1 with zero source mixing, mono/source/palette colors and random-access frames; custom font regression fixtures | Existing controls checked; optional calibration/geometry deferred |
 | Halftone circle/ellipse/line and screen response | Grayscale, edges, channel angles and printed appearance required | Deferred |
 | Bounded sorting measures/run/region controls | Both directions, stable ties, threshold transitions and masks required | Deferred |
 | CRT mask/scanline/bleed controls | Distinct 1080p masks, alpha-safe geometry and procedural loops required | Deferred |
 | Expanded look catalog | Existing editable recipes and periodic footage/music showcase retained | Optional catalog expansion deferred |
 
-To reproduce the three-palette pattern comparison, run the fine-dither test
+To recapture the three-palette pattern comparison on the current checkout, run the fine-dither test
 above with strict WGPU and create a two-column sheet from
 `{monochrome,ember,ocean}-{bayer8,blue_noise}/cpu-0.png`. Artifacts are under
 `target/stylization/frames/<requested-api>/`. Inspect native frames as well as

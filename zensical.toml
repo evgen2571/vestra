@@ -114,13 +114,21 @@ nav = [
   ] },
   { "Contributing" = [
     { "Contributing to Vestra" = "development/README.md" },
-    { "Documentation authoring" = "development/documentation.md" },
-    { "Testing and performance" = [
+    { "Write documentation" = [
+      { "Documentation authoring" = "development/documentation.md" },
+      { "Reproduce media" = "development/documentation-media.md" },
+      { "Maintain the site" = "development/documentation-site.md" },
+    ] },
+    { "Test and measure" = [
       { "Testing" = "development/testing.md" },
       { "GPU validation" = "development/gpu-validation.md" },
       { "Performance" = "development/performance.md" },
-      { "Media pipeline" = "development/media-pipeline.md" },
-      { "Historical benchmark investigation" = "benchmarks/vestra-vs-moviepy.md" },
+    ] },
+    { "Extend Vestra" = [
+      { "Add a source" = "development/extending/source.md" },
+      { "Add an effect" = "development/extending/effect.md" },
+      { "Add a transition" = "development/extending/transition.md" },
+      { "Add a backend" = "development/extending/backend.md" },
     ] },
     { "Architecture" = [
       { "Overview" = "development/architecture/overview.md" },
@@ -128,21 +136,19 @@ nav = [
       { "Project to plan" = "development/architecture/project-to-plan.md" },
       { "Render pipeline" = "development/architecture/render-pipeline.md" },
       { "Effect pipeline" = "development/architecture/effect-pipeline.md" },
-      { "Effect algorithms" = "development/effect-algorithms.md" },
       { "CPU renderer" = "development/architecture/cpu-renderer.md" },
       { "WGPU renderer" = "development/architecture/wgpu-renderer.md" },
       { "Media I/O" = "development/architecture/media-io.md" },
       { "Python bindings" = "development/architecture/python-bindings.md" },
     ] },
-    { "Extending Vestra" = [
-      { "Add a source" = "development/extending/source.md" },
-      { "Add an effect" = "development/extending/effect.md" },
-      { "Add a transition" = "development/extending/transition.md" },
-      { "Add a backend" = "development/extending/backend.md" },
-    ] },
-    { "Stylization" = [
+    { "Specialist references" = [
+      { "Effect tests" = "development/effect-testing.md" },
+      { "Effect algorithms" = "development/effect-algorithms.md" },
+      { "Media pipeline and concurrency" = "development/media-pipeline.md" },
+      { "Performance probes" = "development/performance-probes.md" },
       { "Dithered palette look" = "development/stylization/dithered-palette-look.md" },
       { "Temporal diagnostics" = "development/stylization/temporal-diagnostics.md" },
+      { "Historical benchmark investigation" = "benchmarks/vestra-vs-moviepy.md" },
     ] },
     { "Releasing" = "development/releasing.md" },
   ] },
@@ -155,7 +161,6 @@ variant = "modern"
 font = false
 features = [
   "navigation.tabs",
-  "navigation.sections",
   "navigation.top",
   "navigation.footer",
   "content.code.copy",

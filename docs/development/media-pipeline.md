@@ -1,7 +1,11 @@
 # Media pipeline and concurrency
 
 Vestra separates project meaning, pixels, and media I/O. The SDK coordinates
-these owners; CPU and WGPU consume the same compiled timeline.
+these owners; CPU and WGPU consume the same compiled timeline. Use the
+[frame-selection sections](#video-frame-selection) for decoder/cache changes,
+[ordered frames](#ordered-frames-and-encoder-overlap) for scheduling changes,
+and [encoded-output verification](#verify-encoded-output) when checking a
+published file. The [media I/O map](architecture/media-io.md) locates the modules.
 
 ```text
 media source → probe/decode → frame selection/cache
@@ -159,13 +163,19 @@ and benchmark workloads. Fix source dimensions, rational frame rate, seeds and
 audio placement; use lossless input where exact source pixels matter. Avoid
 downloaded footage or new fixture generators when existing helpers cover the case.
 
-Probe the published target, not just the encoder's temporary file. For example:
+### Probe the published file
+
+After rendering a deterministic test project, probe the published target, not
+just the encoder's temporary file. Substitute its path in this command (requires
+`ffprobe` on `PATH`):
 
 ```bash
 ffprobe -v error -select_streams v:0 -count_frames \
   -show_entries stream=codec_name,pix_fmt,width,height,r_frame_rate,avg_frame_rate,time_base,start_time,duration,nb_read_frames \
   -of json target/media-check/output.mp4
 ```
+
+### Check frame boundaries and AV alignment
 
 Compare decoded frame count with the resolved plan, not just `nb_frames` or
 rounded container duration. Inspect `-show_frames`/`-show_packets` timestamps
@@ -180,6 +190,8 @@ internal x264 preset. Hardware WGPU rendering does not imply hardware decode,
 hardware encoding or direct GPU-to-encoder transfer. Record actual renderer,
 adapter and encoder separately. Selected-range video, resumability and alternate
 output codecs remain proposals rather than established test targets.
+
+### Exercise duration, size and failure boundaries
 
 For long-duration/large-file tests, state actual timeline length, frame count,
 encoded bytes, disk budget and timestamp coverage. There is no default two-hour

@@ -1,5 +1,13 @@
 # Releasing the Python package
 
+Use this maintainer procedure to build reviewable artifacts before publication.
+A manual workflow run builds and tests; a published GitHub release also attaches
+artifacts and can publish to PyPI after the protected-environment approval.
+Start with the [checklist](#maintainer-release-checklist), then inspect the
+[corresponding source and licenses](#bundled-library-source-and-licenses).
+
+## Version and artifact contract
+
 The workspace version in `Cargo.toml` is the release version for every Rust
 crate. Maturin reads the Python package version from `vestra-python` through
 `pyproject.toml`'s dynamic version setting. Project JSON and RenderEvent both
@@ -23,6 +31,8 @@ archive response file generation.
 Source builds need Rust, a C toolchain, `make`,
 `git`, and NASM. Runtime encoding still needs the `ffmpeg` executable on
 `PATH`; media inspection uses `ffprobe`.
+
+## Publication controls
 
 For PyPI Trusted Publishing, register the GitHub owner `evgen2571`, repository
 `vestra`, workflow `release.yml`, and environment `pypi` in the PyPI project
@@ -55,6 +65,8 @@ artifact builds. The sdist smoke environment installs Maturin 1.14.1 explicitly
 and builds without isolation so this verification uses the same build backend
 as the wheel jobs. Windows checks native command exit codes at every install
 and smoke boundary.
+
+## Artifact attachment and publication order
 
 On a published release, tested `*.whl` and `*.tar.gz` distributions are also
 attached to the GitHub release, together with the corresponding FFmpeg source

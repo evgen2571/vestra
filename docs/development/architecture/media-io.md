@@ -4,7 +4,11 @@
 
 The crate uses `ffmpeg-next` for native FFmpeg format and software-scaling work. It also has operational checks for `ffmpeg` and `ffprobe` executables where a workflow needs them. Those are separate dependencies. The native dependency builds bundled FFmpeg libraries from source; wheel users do not need the C/Rust build toolchain. A source build can fail when its compiler, NASM or source fetch is unavailable, while a runtime operation can fail when an executable or codec is unavailable.
 
+## From paths to prepared media
+
 Preflight resolves the project-relative asset paths once, probes relevant media, and records dimensions/durations for plan compilation. Preparation decodes static resources, creates video decoder sessions and produces master-audio analysis when visuals need it. During rendering, the SDK supplies rendered frames to the frame sink while the audio graph produces the audio execution output. The media layer, not a renderer, owns muxing and encoded-output lifetime.
+
+## Frame writes and publication
 
 `FrameSink::write_frame(frame_number, rgba)` borrows an RGBA byte slice for one
 write. The SDK retains the renderer's owned frame and supplies its number/bytes;

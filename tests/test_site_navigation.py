@@ -57,6 +57,21 @@ def test_public_pages_have_navigation_context() -> None:
     assert len(navigated) == len(set(navigated)), "Each page needs one sidebar context"
 
 
+def test_reference_catalog_links_every_reference_topic() -> None:
+    reference = ROOT / "docs/reference"
+    topics = {
+        str(path.relative_to(reference))
+        for path in reference.rglob("*.md")
+        if path.name not in {"index.md", "catalog.md"}
+    }
+    linked = set(
+        re.findall(
+            r"\]\(([^)#]+\.md)(?:#[^)]*)?\)", (reference / "catalog.md").read_text()
+        )
+    )
+    assert topics <= linked, topics - linked
+
+
 def test_gallery_links_and_setup_use_the_cleaned_checkout() -> None:
     gallery = ROOT / "docs/gallery"
     index = (gallery / "index.md").read_text()

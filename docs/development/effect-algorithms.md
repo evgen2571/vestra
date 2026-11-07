@@ -11,12 +11,11 @@ rounding and resource costs; they are not prerequisites for attaching an effect.
 
 ## Stages and Motion Tile sampling
 
+### Effect order and time domains
+
 Layer presentation uses two intrinsic effect stages:
 
-```text
-source sizing/crop → pre-transform effects → layer transform
-→ post-transform effects → owned masks → Track Matte → opacity/blend
-```
+![Layer processing: sizing and crop, Motion Tile, transform, ordinary effects, owned masks, track matte, opacity and blend; project effects follow root composition.](../assets/diagrams/effect-pipeline.svg)
 
 Motion Tile is the only pre-transform effect. Other effects execute after the
 layer transform in declaration order. The public effect list remains one
@@ -32,6 +31,8 @@ The authored order is still the public order. For example, a canonical list
 `[MotionTile, DirectionalBlur, ChromaticAberration]` samples the virtual tiles,
 applies the layer transform, then runs Directional Blur followed by Chromatic
 Aberration. Masks and track mattes consume that presented result.
+
+### Virtual bounds, seams and alpha
 
 Numbers must be finite. Stack order is execution order within each intrinsic
 stage. Motion Tile is valid only on a clip layer, only one Motion Tile may
@@ -53,6 +54,13 @@ color values are canonical `#RRGGBB`/`#RRGGBBAA`.
 
 
 ## Palette mapping and dithering
+
+The input path is **detail → tone → analysis → quantization**. Final `amount`
+blends against the retained original. The subsections follow that path and then
+specify matching modes, fixed-point rules and animation. Neutral controls skip
+their optional work; a larger analysis cell does not imply a smaller texture.
+
+### Tonal stops and quantization
 
 By default, tonal palette modes map encoded RGB luminance to uniformly spaced stops.
 For those modes author colors from dark to light; the palette is not sorted automatically.
@@ -80,6 +88,8 @@ again. It chooses the upper color when the existing threshold is at least
 preserves the local tonal fraction spatially. Endpoints retain authored bytes;
 source alpha remains unchanged.
 
+### RGB and Oklab interpolation
+
 `PaletteInterpolation.RGB` (`interpolation="rgb"`, the default) retains encoded
 RGB interpolation and the original phase arithmetic. `PaletteInterpolation.OKLAB`
 (`"oklab"`) interpolates in the same deterministic Q10 Oklab space used for
@@ -103,6 +113,8 @@ neighbor colors return authored bytes directly. Phase fractions round to
 Source alpha and blend amount retain their existing semantics. Integer conversion
 can introduce small rounding steps; interpolation adds no passes or textures.
 
+### Exposure and gamma
+
 `input_exposure` (default `0`, −8 to 8 stops) and `input_gamma` (default `1`,
 strictly positive through 8) adjust the signal entering either palette effect.
 Both use ordinary bindable scalar properties with local effect time and the same
@@ -118,6 +130,8 @@ input. Amount zero remains identity; neutral exposure/gamma retain the legacy
 single pass and do not require retained-source resources. An animated or bound
 tone property conservatively prepares resources for its active frames. Tone
 preparation is opt-in and adds a full-resolution pass and retained image storage.
+
+### Detail enhancement and pass costs
 
 `input_detail` (default `0`, range 0–4) applies unsharp detail enhancement before
 tone response and quantization. `input_detail_radius` (default `1`, range 0–16)
@@ -138,6 +152,8 @@ Active detail adds three full-resolution passes: four including quantization,
 or five with active tone. These controls are opt-in; animated/bound properties
 conservatively reserve their resources.
 
+### Input analysis cells
+
 `input_scale` (default `1`, range 1–256 output pixels) is bindable and rounds
 to an integer square-cell span. It controls analysis independently of dither
 threshold `scale`. The lattice is anchored at output `(0,0)`; partial right/bottom
@@ -155,6 +171,8 @@ pixel RGB/alpha, independently of analysis-cell alpha.
 Active analysis adds one pass using a sparse cell representative in an existing
 full-resolution temporary surface. A coarser lattice does not reduce physical
 texture storage. Animated/bound scale conservatively reserves analysis resources.
+
+### Tonal modes and threshold patterns
 
 `PaletteMode.GRADIENT` interpolates adjacent palette stops and
 `PaletteMode.NEAREST` chooses the nearest tonal stop. `PaletteMode.RAINBOW`
@@ -176,6 +194,8 @@ pattern resources or reads frames back to the CPU. The tile can be reproduced
 with `uv run --no-project python scripts/generate-blue-noise.py`; the generator
 checks threshold coverage and low-frequency suppression at five tone cutoffs.
 `strength=0` gives ordinary nearest-stop quantization.
+
+### RGB and hue matching
 
 `PaletteMode.NEAREST_RGB` (`nearest_rgb`) selects the authored color with the
 smallest squared distance in encoded RGB byte space. `PaletteMode.NEAREST_HUE`
@@ -200,6 +220,8 @@ chooses the nearest entry; increasing strength blends the pair spatially.
 Palette Map always chooses the nearest entry. Source alpha and transparent
 pixels retain the same policy as the legacy modes.
 
+### Fixed-point Oklab matching
+
 `PaletteMode.NEAREST_OKLAB` (`nearest_oklab`) matches an arbitrary authored
 palette by squared Euclidean distance in a deterministic integer approximation
 of [Oklab](https://bottosson.github.io/posts/oklab/). Encoded RGB input is interpreted
@@ -223,6 +245,8 @@ overflow. This is a documented fixed-point approximation, not a full-precision
 color-management conversion. Reproduce its shared Rust/WGSL constants with
 `uv run --no-project python scripts/generate-oklab.py`.
 
+### Per-channel quantization
+
 `PaletteMode.RGB_CHANNELS` (`rgb_channels`) quantizes encoded R, G and B
 independently to `levels=4` uniformly spaced values per channel. `levels` is a
 static integer from 2 through 256; it is ignored by the other modes. Palette,
@@ -239,6 +263,8 @@ probability chooses the upper index; otherwise it chooses the lower. The final
 channel byte is `round_half_up(255*index/n)`. All three channels share the same
 spatial rank. This preserves average channel tone at full dither strength and
 provides ordinary nearest-channel quantization at zero strength.
+
+### Phase, periods and animation
 
 `phase` rotates colors smoothly in cycles without moving the spatial pattern.
 When `period` is supplied, core adds `local_time / period` to the authored phase
@@ -298,6 +324,9 @@ without a GPU readback or whole-frame staging allocation.
 (0.01–1 of canvas height), `phase=0` (finite cycles), `period=None`
 (optional positive finite seconds), and `seed=0` (unsigned 64-bit integer).
 All numeric controls except mask spacing, period and seed are bindable.
+
+### Sampling, alpha and procedural time
+
 Inverse-curvature sampling is alpha-aware. CPU and WGPU use shared Q15
 normalized coordinates and curvature, then a 1/256-pixel sampling lattice.
 Zero curvature preserves exact pixel centers; jitter coefficients are prepared
@@ -310,6 +339,8 @@ frame counter. `period` repeats the procedural component, independently of the
 source, audio or other animation. Modulo phase evaluation supports negative or
 large finite phases without shader overflow. Intensity blends in premultiplied
 space. Scanlines, masks and grain never create source alpha.
+
+### Attachment and editable recipes
 
 These effects support layers, groups and global post effects, with authored
 order preserved. Static enum/color/integer settings change discretely; animate
@@ -334,6 +365,8 @@ authoring supplies them. Compatibility tests assert both the schema's acceptance
 of each omission and the parser's corresponding missing-field error; generation
 does not reconcile this mismatch.
 
+### Controls and canonical JSON
+
 | Control | Python default | Contract |
 | --- | --- | --- |
 | `characters` | `" .:-=+*#%@"` | 1–256 independent Unicode scalars, authored dark-to-light order; duplicates retain intentional density weighting. `CHARACTER_SETS` provides `standard`, `dense` and `blocks` strings. |
@@ -349,6 +382,8 @@ does not reconcile this mismatch.
 | `edge_threshold`, `edge_strength` | `.15`, `1` | Bindable 0..1 and 0..4; strength saturates final coverage. |
 | `source_mix`, `amount` | `0`, `1` | Bindable 0..1; mix original and styled output in premultiplied space. Either `amount=0` or `source_mix=1` preserves the input. |
 | `phase`, `period` | `0`, `None` | Bindable finite phase in cycles; optional static positive finite period in owner-local seconds. Palette/rainbow motion repeats deterministically. |
+
+### Cell coordinates and coverage
 
 Cell dimensions evaluate to whole pixels, rounded to the nearest integer
 before either renderer runs. Keyframes and signals therefore resize the grid
@@ -373,6 +408,8 @@ area-filtered horizontal/vertical luminance gradients, deterministic four-way
 orientation bins and a smooth threshold band. Coverage stays antialiased;
 source pixels and other intentionally crisp effects remain unchanged.
 
+### Glyph preparation and resources
+
 Glyphs are prepared once in fixed 32×48 tiles on 16 columns, with a common
 baseline, and shared by CPU/WGPU. A five-level area-filtered coverage pyramid
 reaches 2×3 tiles so small cells retain fine strokes. The largest atlas (256
@@ -382,6 +419,8 @@ byte limits; WGPU validates atlas dimensions against the adapter before upload.
 Cell-size/keyframe animation reuses these resources without font rebuilds or
 GPU readbacks. Two packed RGBA8 cell metadata texels use an existing temporary
 surface; resolve samples the retained original and prepared atlas.
+
+### Font scope and failures
 
 Fonts use their first face, independent scalars, and no system fallback,
 ligatures, grapheme, bidirectional or contextual shaping. Missing/control or
@@ -394,6 +433,8 @@ mask Group child effects. Canonical transition `font` fields use Font asset
 IDs; missing or wrong-kind assets report the effect's `/font` validation path.
 The bundled font's complete notice is
 in [DejaVuSans.txt](https://github.com/evgen2571/vestra/blob/develop/licenses/DejaVuSans.txt).
+
+### Configuration changes and examples
 
 Enums, glyph strings/font and palette cardinality are discrete configurations.
 Animate `amount` or `source_mix` for useful continuous transitions; no implicit

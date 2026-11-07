@@ -1,21 +1,65 @@
 # Video source
 
-```text title="API signature"
+`Video` draws decoded frames from a file. Construct the source with sizing and
+crop, then choose its source offset, playback rate and timeline span when placing
+it. See [sources and layers](../../guides/python/sources-and-layers.md) for placement examples.
+
+## Source construction
+
+```text title="Source signature (presentation keywords omitted)"
 Video(path: str | PathLike[str], *, sizing: Sizing | Literal["original", "fit", "cover"] | None = None,
       crop: Crop | CropProperty | None = None)
 ```
 
-`path` must be a non-empty text path. `sizing` and `crop` have the exact [Image](image.md) contract, including `Sizing.scale`/`Sizing.stretch` and normalized `Crop`. The high-level constructor does not accept source trim or playback rate: those belong to the layer placement.
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `path` | Required | Non-empty `str` or `PathLike[str]` naming a video file. |
+| `sizing` | `None` | Original intrinsic dimensions; an override uses the [Image sizing contract](image.md#parameters-and-sizing), including `Sizing.scale` and `Sizing.stretch`. |
+| `crop` | `None` | Full source region; an override uses [normalized source coordinates](image.md#crop-coordinates). |
 
-```text title="API signature"
+The constructor also accepts [presentation transform defaults](../../guides/python/sources-and-layers.md),
+copied into each placement and individually overridable by `add()`.
+Source trim and playback rate belong to placement, not the constructor.
+
+## Placement and time domains
+
+```text title="Placement timing signature (presentation keywords omitted)"
 composition.add(video, *, start=0, duration=None, source_start=0.0,
                 playback_rate=1.0, z=0, visible=True, opacity=1.0,
                 id=None, name=None, blend_mode=BlendMode.NORMAL)
 ```
 
-`start` and `duration` are project or owning-composition local seconds. `source_start` is source-media seconds and may be zero; `playback_rate` is a finite positive multiplier. If `duration=None`, a `Video` layer probes the file immediately to derive the available media duration after `source_start`, divided by playback rate. Provide `duration` to avoid that authoring-time probe. Canonical video clips carry this placement timing; coded duration and dimensions remain media facts gathered by preflight/preparation.
+| Parameter | Default | Units and constraints |
+| --- | --- | --- |
+| `start` | `0` | Non-negative seconds on the owning composition's timeline. |
+| `duration` | `None` | Positive owning-composition seconds; omission derives the usable media span. |
+| `source_start` | `0.0` | Non-negative source-media seconds. |
+| `playback_rate` | `1.0` | Finite positive multiplier on source time. |
 
-Video is a direct transform and transition endpoint. CPU and WGPU consume decoded frames after media preparation. A valid path can still fail preflight for unsupported/corrupt media, missing tools or an unavailable decoder.
+When `duration=None`, `add()` **probes the file immediately** and derives
+`(media_duration - source_start) / playback_rate`. The source offset must precede
+the media end. Supply an explicit duration to avoid this authoring-time probe;
+it does not bypass later media validation.
 
-Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
-which are copied into each placement and can be individually overridden by `add()`.
+Layers own placement timing, transforms, animation, effects and transitions.
+Video is a direct transform and transition endpoint on CPU and WGPU after media
+preparation. See [timeline and time](../../concepts/timeline-and-time.md) for nested clocks.
+
+## Paths, preparation and errors
+
+| Stage | Failure |
+| --- | --- |
+| Construction | Invalid/empty path, invalid sizing or invalid crop type. Crop bounds follow the [Image validation rules](image.md#validation-and-errors). |
+| Placement with omitted duration | Probe failure or an offset at/after the media end. |
+| Semantic validation | Invalid placement timing or canonical source/asset relationships. |
+| Preflight/preparation | Missing, corrupt or unsupported media, unavailable tools/decoder, or a source span beyond the available video. |
+
+Relative paths resolve against the project's base directory. Coded duration and
+intrinsic dimensions are media facts gathered by probing/preparation, rather than
+values stored in the source object. CPU and WGPU consume the prepared decoded frames.
+
+## Canonical JSON
+
+The `video` source contains an `asset` reference. The surrounding clip carries
+`start`, `duration`, optional `source_start`/`playback_rate`, sizing, crop and
+presentation. See [project format](../project-format.md) for asset and clip fields.

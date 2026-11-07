@@ -59,7 +59,36 @@ Expanding the virtual region preserves the sized/cropped source's layer anchor
 and sampling phase. `tile_center` distributes the added extent: `(0, 0)` extends
 right/down, `(0.5, 0.5)` equally on both sides, and `(1, 1)` left/up. It does not
 move the original source pattern. See the
-[anchor coverage example](../development/documentation.md#motion-tile-anchor-coverage).
+[anchor coverage example](#motion-tile-anchor-coverage).
+
+### Anchor coverage { #motion-tile-anchor-coverage }
+
+A 640×360 opaque rectangle at scale 0.7 and centered position/anchor covers
+`(96,54)`–`(544,306)` at 100% (exclusive right/bottom bounds). With a centered
+tile center, both 200% and 400% cover the entire canvas:
+
+```python
+from vestra import Project, Rectangle
+from vestra.effects import MotionTile
+
+project = Project(size=(640, 360), fps=30, duration=1, background="#ff00ff")
+layer = project.root.add(Rectangle(width=640, height=360, fill="#93cbb5"), scale=0.7)
+layer.effects.add(MotionTile(output_width_percent=400, output_height_percent=400))
+project.render("tile-centered.mp4", backend="cpu", overwrite=True)
+```
+
+The layer anchor uses the original sized/cropped dimensions. Expansion changes
+only virtual sampling bounds; it preserves the source pattern's placement and
+phase. `tile_center` controls which sides receive the added extent. This fixes
+[#103](https://github.com/evgen2571/vestra/issues/103), where the affine anchor
+incorrectly used expanded dimensions and left 27.75% uncovered even at 400%.
+
+The catalog keeps `anchor=(0,0)` and places the nominal image's top-left explicitly
+on **both** baseline and treatment. This remains valid without a workaround.
+Its outlined original bounds remain
+fixed while a 300% mirrored region supplies edge pixels. Tests sample multiple
+times and reject uncovered pixels in the treated viewport. The outline itself
+is a separate transformed rectangle and is never tiled.
 
 ## Radial Blur
 

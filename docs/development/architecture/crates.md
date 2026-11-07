@@ -1,52 +1,56 @@
 # Crate ownership
 
-The workspace has eleven crates. Dependencies point toward the canonical model,
-with `vestra` as the public orchestration layer used by the CLI and Python
-extension. `vestra-observability` owns application-boundary subscriber setup;
-`vestra-progress` owns the frontend-neutral lifecycle and native terminal
-presentation.
+Choose a crate by the rule or resource you need to change. The workspace has
+eleven crates; Python authoring code lives separately under `python/vestra/`.
 
-```text
-vestra-cli ──> vestra <── vestra-python
-                  ├──> vestra-core
-                  ├──> vestra-progress ──> vestra-core
-                  ├──> vestra-media ──> vestra-core
-                  └──> vestra-render ──> vestra-core
-                           ├──> vestra-render-common ──> vestra-core
-                           ├──> vestra-render-cpu ──> vestra-render-common, vestra-core
-                           └──> vestra-render-wgpu ──> vestra-render-common, vestra-core
-```
+| Crate | Change it for |
+| --- | --- |
+| `vestra-core` | Canonical project data, validation, timing, compilation/evaluation and effect descriptors. |
+| `vestra-render-common` | Shared backend contracts, completed frames, prepared visual assets, geometry and numerical utilities. |
+| `vestra-render-cpu` | CPU frame execution, compositing, effects, workers and backend caches. |
+| `vestra-render-wgpu` | GPU frame execution, shaders, pipelines, device resources and readback. |
+| `vestra-render` | Backend selection/fallback, renderer exports and cross-backend integration tests. |
+| `vestra-media` | Probing/decoding, audio execution, frame sinks, encoding and output publication. |
+| `vestra` | Public Rust SDK, preflight, preparation, render orchestration, results and errors. |
+| `vestra-progress` | Typed render lifecycle events, progress policy and shared terminal presentation. |
+| `vestra-observability` | Application tracing setup, filtering, human/JSON logs and coordinated stderr/file output. |
+| `vestra-python` | PyO3 conversion of Python requests, frames, reports, events and errors to/from the SDK. |
+| `vestra-cli` | `ve` argument parsing, SDK requests and command-line result presentation. |
 
-CLI and Python also depend on `vestra-observability`, which uses
-`vestra-progress`. Renderer implementation dependencies are selected by the
-facade's `cpu` and `wgpu` features; both are enabled by default.
+## Dependency direction
 
-| Crate | Owns | May depend on |
-| --- | --- | --- |
-| `vestra-core` | Canonical project structures, semantic validation, timeline/plan compilation and evaluation, descriptors. | Serialization and small data utilities only. |
-| `vestra-render-common` | `RenderBackend` lifecycle, completed frames, shared immutable prepared assets, geometry, kernel identifiers/requirements and shared numerical utilities. | `vestra-core`. |
-| `vestra-render-cpu` | CPU execution, workers, compositing, effects, mutable caches, profiling and CPU capability validation. | Common and core. |
-| `vestra-render-wgpu` | GPU execution, shaders, pipelines, resources, readback and WGPU capability validation. | Common and core. |
-| `vestra-render` | Public renderer facade, selection/fallback, compatibility reexports and cross-backend integration tests. | Common, core and feature-selected CPU/WGPU implementations. |
-| `vestra-media` | FFmpeg-native probing/decoding, audio analysis and graph execution, frame sinks, encoder finalization and output publication. | `vestra-core`; no renderer crate. |
-| `vestra` | Public SDK project wrapper, validation/preflight, preparation, render orchestration, results, events and errors. | Core, render and media. |
-| `vestra-progress` | Typed RenderEvent v1 lifecycle, progress modes, and shared native terminal presentation. | `vestra-core`. |
-| `vestra-observability` | Application-boundary tracing subscriber, EnvFilter/RUST_LOG policy, human/JSON formatting, and stderr/file output coordinated with progress. | `vestra-progress`. |
-| `vestra-python` | PyO3 classes and conversion between Python and the Rust SDK, including explicit observability configuration. | `vestra`, `vestra-observability`. |
-| `vestra-cli` | Clap parsing and report/result presentation; adapts CLI verbosity/progress choices to shared crates. | `vestra`, `vestra-observability`, `vestra-progress`. |
+In this compact view, **A → B means A directly depends on B** in its production
+Cargo dependencies. It does not describe runtime order; test-only dependencies
+are omitted. All names below are workspace crates.
 
-This direction is an ownership rule, not merely an import preference. Core cannot acquire a WGPU device, read a file, or invoke FFmpeg. Renderer code consumes compiled/evaluated semantics instead of applying JSON defaults or timeline rules again. Media code owns process/native-media details, including the gap between a finalized temporary file and an atomically published destination. CLI and bindings call `Editor`; they do not recreate validation or rendering flow.
+| A | → B |
+| --- | --- |
+| `vestra-cli`, `vestra-python` | `vestra`, `vestra-observability` |
+| `vestra` | `vestra-core`, `vestra-render`, `vestra-media`, `vestra-progress` |
+| `vestra-render` | `vestra-core`, `vestra-render-common`, optional CPU/WGPU implementations |
+| `vestra-render-cpu`, `vestra-render-wgpu` | `vestra-core`, `vestra-render-common` |
+| `vestra-render-common`, `vestra-media`, `vestra-progress` | `vestra-core` |
+| `vestra-observability` | `vestra-progress` |
+| `vestra-core` | No workspace crates |
 
-When a change seems to need an import in the opposite direction, first look for
-the data the inner layer consumes. Media's `FrameSink::write_frame` accepts a
-frame number and borrowed RGBA bytes. The SDK bridges the renderer's owned
-`CompletedFrame` to that sink, retaining ordering, cancellation and frame lifetime.
-Media and renderers do not import one another, and CPU/WGPU implementations do
-not depend on their sibling or the facade, including in development dependencies.
+The renderer facade's `cpu` and `wgpu` features select its implementations;
+both are enabled by default. Frontends configure logging through observability
+and use the shared progress policy rather than implementing their own lifecycle.
 
-Common stores shared prepared pixels behind `Arc` and exposes borrowed resource
-accessors. Backend-specific execution and capability policy stay in the respective
-implementation. Hidden public bridges exist for sibling workspace crates;
-`doc(hidden)` controls documentation, not Rust visibility. Gaussian float weights
-are retained in every configuration with the same bounded thread-local cache;
-there is no feature-dependent kernel layout.
+## Cross a boundary with data
+
+Core cannot acquire a device, read an asset or invoke FFmpeg. Renderers consume
+compiled/evaluated semantics rather than applying project defaults or timeline
+rules again. CPU and WGPU implementations do not depend on each other or on
+the facade.
+
+Renderers and media also remain independent. Media's
+`FrameSink::write_frame(frame_number, rgba)` accepts a number and borrowed bytes.
+The SDK retains the renderer's `CompletedFrame` until the write finishes,
+including any scoped writer. A change that seems to require a reverse dependency
+usually belongs in this coordinating layer or in the data passed across the
+boundary.
+
+Follow the [render pipeline](render-pipeline.md) for frame lifetime and output
+completion, or [project to plan](project-to-plan.md) for core's validation and
+evaluation boundaries.

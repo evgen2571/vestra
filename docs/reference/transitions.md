@@ -23,6 +23,8 @@ seconds**; `duration` is finite and positive. The whole transition interval must
 fit inside both visible endpoint lifetimes. A layer cannot participate in
 concurrent transitions in one composition; intervals may touch at a boundary.
 
+### Endpoint sources and nested ownership
+
 Image, video, shape, text and group clips are direct canonical endpoints.
 High-level Python adapts `Color`/`SolidColor`, `Spectrum2D` and particle layers
 when presentation or a transition requires it. A raw canonical `solid_color`,

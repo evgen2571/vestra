@@ -32,13 +32,7 @@ just site-check   # Clean strict build, generated links/assets/anchors, checker 
 
 `just docs-build` builds only the site into `site/`. The output is disposable and untracked. The generated-site check also verifies the `/vestra/` repository path. It does not check external URLs or judge the technical accuracy of prose.
 
-The pinned Zensical 0.1.0 preview server does not answer HTTP byte-range
-requests. Chromium can therefore reset a seek in a silent MP4 to its beginning,
-even when the same file plays and seeks correctly on a range-capable server.
-For seek verification, serve the built `site/` directory with byte-range support
-(or download the MP4 and inspect it locally). Keep the native controls; this is
-a preview-server limitation, not a reason to replace the media player. The
-repository-path check still needs the site mounted at `/vestra/`.
+For media seek checks, see the [preview-server playback limitation](documentation-site.md#preview-server-playback-limitation).
 
 ## Choose the page type
 
@@ -50,6 +44,19 @@ repository-path check still needs the site mounted at `/vestra/`.
 | Reference | “What exactly is accepted or returned?” | Give signatures, units, defaults, constraints, errors, and support limits. |
 
 Keep API inventories in reference pages. Link to them when a learner needs more detail. **Learn** contains the introductory sequence, **Guides** organizes tasks by topic, **Concepts** explains the model, and **Reference** gives exact contracts. Put pages in the appropriate navigation section in `zensical.toml`; retain a useful sidebar context on individual gallery pages. When extending a page, reconsider its order and purpose; split or rewrite it if the new material would bury the main task.
+
+### Write reference pages for lookup
+
+Start with what the API does and when to use it. Label signatures as inventories,
+then group parameters by purpose with defaults, units and restrictions. Separate
+construction, placement, snapshot validation and preparation when errors occur
+at different stages. Distinguish Python conveniences from canonical JSON and
+schema/parser behavior.
+
+The [Text](../reference/sources/text.md) and [Image](../reference/sources/image.md)
+references show this structure at different sizes. Use only sections that help
+the reader; keep focused examples here and link complete tasks to guides. When
+renaming headings, preserve useful incoming anchors and check their generated URLs.
 
 ## Use descriptive developer-facing language
 
@@ -123,168 +130,29 @@ Prefer original, deterministic scenes and bundled fonts. Keep originals and QA
 frames in `target/`; commit compact previews actually used by the site. Record
 poster times and original-render checksums on the relevant gallery page.
 
-## Reproduce tutorial previews
+## Media and site workflows
 
-To regenerate the introductory media with the current source checkout:
+<span id="reproduce-tutorial-previews"></span>
+<span id="reproduce-visual-learning-studies"></span>
+<span id="reproduce-gallery-previews"></span>
 
-```bash
-# Requires the native contributor environment and FFmpeg, unlike site preview.
-just python-sync
-just docs-media
-```
+Use [Reproduce documentation media](documentation-media.md) for commands,
+native dependencies, provenance and inspection criteria:
 
-The renderer runs all three downloadable examples on CPU, probes the original MP4s, and refreshes the web assets. Inspect the new output before committing it. Gallery previews can be rebuilt from the checkout as described below. Encoding bytes may differ with FFmpeg versions.
+| Change | Procedure |
+| --- | --- |
+| Introductory animation | [Tutorial previews](documentation-media.md#reproduce-tutorial-previews) |
+| Effect, audio, transition or group studies | [Visual learning studies](documentation-media.md#reproduce-visual-learning-studies) |
+| Showcase delivery assets | [Gallery previews](documentation-media.md#reproduce-gallery-previews) |
 
-## Reproduce visual learning studies
+<span id="motion-tile-anchor-coverage"></span>
 
-Learner pages link runnable examples and explain what to notice. Keep encoding,
-poster choices, checksums and regeneration records here and in
-[learning-media.json](../assets/renders/learning-media.json).
+For Motion Tile examples, check the
+[anchor coverage contract](../reference/effects.md#motion-tile-anchor-coverage).
 
-From the native contributor environment:
+<span id="keep-the-site-maintainable"></span>
+<span id="publish-only-after-review"></span>
 
-```bash
-just python-sync
-just docs-media --learning
-```
-
-| Program in `docs/assets/examples/` | Media | Size and duration | Poster |
-| --- | --- | --- | --- |
-| `effects_catalog.py` | Source/treatment stills; four synchronized temporal comparisons | 640×520 stills and motion; 3 s for motion | 0.7 s |
-| `audio_response.py` | Bounded response, smoothing curves, linear/radial spectra | 640×560, 4 s | 1.2 s |
-| `transition_comparisons.py` | Crossfade, push, zoom, Gaussian blur | 640×360, 3 s | 1.5 s |
-| `group_placements.py` | One source placed twice, with independent transforms and opacity | 640×360 still | 0.7 s |
-| `concepts_masks.py` | Alpha/luma, union/subtract coverage | 640×480, 3 s static | 0.5 s |
-
-Audio studies reserve a lower band for native controls at mobile widths.
-Effect comparisons use the same 640×520 framing for stills and videos, with
-no encoded control footer or divider; native controls overlay the lower edge
-while visible. Video and image cards share the responsive two-column grid.
-
-All learning previews are CPU renders with **no audio streams**. The audio
-program still generates a 48 kHz mono PCM16 phrase for analysis: five recurring
-bass notes with ascending melody notes. Waveform highlights and playheads expose
-timing without sound. Curve samples come from actual prepared signal-bound
-markers; the animated markers use the same bindings. Regression checks compare
-frames with output audio enabled/disabled and check the plot against those values.
-
-The catalog uses a cropped copy of the existing CC0 landscape, original bright
-lettering and a moving striped object. [learning-inputs.txt](../assets/examples/learning-inputs.txt)
-records attribution and the exact crop command. Keep this record beside the
-photograph and downloadable code. Bundled-font notices remain with Vestra;
-no font files are redistributed by these previews.
-
-The renderer stores original MP4s under ignored `target/docs-media/`, exports
-compact H.264/yuv420p delivery copies with fast-start metadata and WebP posters,
-and probes dimensions, decoded frame counts, timestamps and absence of audio.
-The manifest records source-program/input hashes, original video checksums,
-backend, dimensions, duration and poster settings. Encoding bytes may vary with
-FFmpeg versions; these previews were encoded with FFmpeg 8.1.3. The original introductory previews retain their source settings
-in the script's `EXAMPLES` table and regenerate with `just docs-media`.
-
-Inspect beginning/middle/end frames and each comparison at its displayed size.
-Compare matching times and parameters; do not accept a subtle or empty result
-merely because it encoded. Check manual light/dark switching and mobile diagram
-labels as well as file validity. Keep diagnostic frames in `target/` and commit
-only delivery assets used by pages.
-
-```bash
-uv run pytest python-tests/test_documentation_examples.py python-tests/test_visual_learning_effects.py python-tests/test_documentation_audio_transitions.py
-uv run pytest tests/test_docs_media.py
-uvx --from 'ruff>=0.12,<0.13' ruff check docs/assets/examples scripts/render-docs-media.py
-uvx --from 'ruff>=0.12,<0.13' ruff format --check docs/assets/examples scripts/render-docs-media.py
-```
-
-### Motion Tile anchor coverage
-
-A 640×360 opaque rectangle at scale 0.7 and centered position/anchor covers
-`(96,54)`–`(544,306)` at 100% (exclusive right/bottom bounds). With a centered
-tile center, both 200% and 400% cover the entire canvas:
-
-```python
-from vestra import Project, Rectangle
-from vestra.effects import MotionTile
-
-project = Project(size=(640, 360), fps=30, duration=1, background="#ff00ff")
-layer = project.root.add(Rectangle(width=640, height=360, fill="#93cbb5"), scale=0.7)
-layer.effects.add(MotionTile(output_width_percent=400, output_height_percent=400))
-project.render("tile-centered.mp4", backend="cpu", overwrite=True)
-```
-
-The layer anchor uses the original sized/cropped dimensions. Expansion changes
-only virtual sampling bounds; it preserves the source pattern's placement and
-phase. `tile_center` controls which sides receive the added extent. This fixes
-[#103](https://github.com/evgen2571/vestra/issues/103), where the affine anchor
-incorrectly used expanded dimensions and left 27.75% uncovered even at 400%.
-
-The catalog keeps `anchor=(0,0)` and places the nominal image's top-left explicitly
-on **both** baseline and treatment. This remains valid without a workaround.
-Its outlined original bounds remain
-fixed while a 300% mirrored region supplies edge pixels. Tests sample multiple
-times and reject uncovered pixels in the treated viewport. The outline itself
-is a separate transformed rectangle and is never tiled.
-
-## Reproduce gallery previews
-
-The site uses committed previews, so building it needs no engine, render or network
-asset download. From the repository root, with FFmpeg installed, this Bash loop
-transcodes the original renders already bundled beside the cleaned sources:
-
-```bash
-for example in \
-  "readme-demo motion-design 1.7" \
-  "compositing compositing 2" \
-  "audio-visualizer audio-reactive 3" \
-  "real-media-edit video-editing 6" \
-  "lookbook visual-effects 2.5"
-do
-  read -r source name poster_time <<< "$example"
-  input="examples/showcase/$source/render.mp4"
-  output="docs/assets/gallery/$name"
-  audio=(-an)
-  if [ "$name" = "audio-reactive" ]; then
-    audio=(-c:a aac -b:a 80k)
-  fi
-  ffmpeg -y -i "$input" -vf scale=640:-2:flags=lanczos \
-    -c:v libx264 -preset slow -crf 27 -pix_fmt yuv420p \
-    "${audio[@]}" -map_metadata -1 -movflags +faststart "$output.mp4"
-  ffmpeg -y -ss "$poster_time" -i "$input" -frames:v 1 \
-    -vf scale=640:-2:flags=lanczos -c:v libwebp -quality 86 \
-    -map_metadata -1 "$output.webp"
-done
-```
-
-This replaces the delivery copies. The existing previews were encoded with FFmpeg
-8.1.3; encoding bytes can vary between versions. Their original-render checksums
-are recorded beside the examples. To change the scenes, render their Python
-sources first, inspect the output and update the source/render/preview revision
-together. Naming, formatting and comment-only source cleanup does not require
-re-encoding unchanged scenes. No separate documentation branch is needed.
-
-## Keep the site maintainable
-
-`zensical.toml` owns navigation, search, syntax highlighting, and theme settings. `docs/assets/stylesheets/site.css` adds Vestra's layout and color choices. The `overrides/partials/source.html` template keeps the repository link while avoiding GitHub statistics requests; no custom JavaScript is needed. Prefer Zensical's native components, semantic HTML, and Markdown over custom scripts. The palette uses neutral grays: soft paper in light mode and charcoal in dark mode; the renders carry the visual personality. Links and controls use a contrasting hover surface and short movement, with keyboard focus and reduced-motion support. System fonts avoid a remote font request and keep the site usable offline after loading its assets.
-
-The identity is text only. `overrides/partials/logo.html` suppresses the theme
-logo, and CSS removes its empty header/drawer links. `overrides/main.html`
-overrides the pinned theme's `site_meta` block to retain description, canonical
-and previous/next metadata while setting an empty `data:,` browser icon. Merely
-deleting logo/favicon configuration would restore theme defaults. Recheck these
-overrides and browser requests when upgrading Zensical. The mobile sidebar also
-uses `:focus-within` to reveal links when reached by keyboard; Zensical 0.1.0
-otherwise leaves focus on offscreen drawer links. Removing the asset from
-this branch does not purge earlier commits, caches, forks or clones.
-
-Use relative Markdown file links for other documentation pages. Zensical 0.1.0 rebases raw HTML `src` and `href` paths from the Markdown source directory, just like Markdown links. It leaves `poster` paths unchanged. On `learn/first-animation.md`, use `src="../assets/renders/first-animation.mp4"` but `poster="../../assets/renders/first-animation.webp"` for the generated `learn/first-animation/` URL. The generated-site checker covers both paths; recheck this behavior when upgrading Zensical. Never hardcode a domain or `/assets/` in an internal link. Files outside `docs/` should link to their explicit GitHub source URL. Pin an imported example to its source commit when the version differs from `develop`, and record that provenance beside the example. `README.md` and `index.md` map to the same output location, so do not place both in one directory. Check older incoming heading anchors when renaming a section.
-
-Preview desktop and mobile widths. Check navigation, code overflow, light and dark themes, keyboard focus, media controls, and search. Keep body text readable; shorten a passage by removing repetition, not by removing necessary reasoning. There are no diagram or word-count quotas.
-
-## Publish only after review
-
-The Documentation workflow builds and validates changes on pull requests and pushes to `develop`. It deploys only when a maintainer manually runs it on `develop` with **deploy** enabled. Merely merging this configuration does not publish a site.
-
-GitHub only offers `workflow_dispatch` once this workflow exists on the default branch (currently `main`). A maintainer must arrange that activation through the normal reviewed repository workflow; this branch does not change it.
-
-After approval, a maintainer must configure the repository's Pages source as **GitHub Actions** and allow the `github-pages` environment to deploy from `develop`. Then run the Documentation workflow on `develop` with deploy enabled. No personal access token or `gh-pages` branch is needed. The configured URL is `https://evgen2571.github.io/vestra/`; changing the repository path requires updating `site_url` and rerunning link and browser checks.
-
-The workflow configuration can be reviewed locally; a successful Pages deployment requires an authorized run on GitHub. Preserve that distinction in completion reports.
+For theme overrides, URL behavior and hosting, use [Site maintenance](documentation-site.md).
+Its [publication procedure](documentation-site.md#publish-only-after-review) is a
+maintainer task after review; previewing or building the site does not deploy it.

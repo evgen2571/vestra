@@ -2,50 +2,44 @@
 
 # Contributing to Vestra
 
-Start with the root [contribution guide](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md) for setup and
-pull request guidance. Use [Testing](testing.md) to choose checks for your change,
-and the [architecture overview](architecture/overview.md) to find your way
-around the codebase. For site content and previews, use
-[Documentation authoring](documentation.md). Agents should also consult [AGENTS.md](https://github.com/evgen2571/vestra/blob/develop/AGENTS.md)
-and [PLANS.md](https://github.com/evgen2571/vestra/blob/develop/PLANS.md).
+Use the [contribution guide](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md)
+to set up a checkout and prepare a pull request against `develop`. Then choose
+the route that matches your change.
 
-The [Vestra skill index](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md) routes agent work to
-task-specific verification. GitHub [issue workflow](https://github.com/evgen2571/vestra/blob/develop/docs/agents/issue-tracker.md)
-owns specs and dependencies; implementation plans track work on a selected issue.
+<span id="testing-and-performance"></span>
+<span id="architecture"></span>
+<span id="release-procedures"></span>
 
-## Testing and performance
+## Choose a task
 
-- [Testing](testing.md)
-- [GPU validation](gpu-validation.md)
-- [Performance and benchmarking](performance.md)
-- [Historical Vestra/MoviePy benchmark investigation](../benchmarks/vestra-vs-moviepy.md)
-- [Media pipeline and concurrency](media-pipeline.md)
-- [Timeline domains and validation](architecture/project-to-plan.md#time-domains-and-frame-boundaries)
+| I want to… | Start here | Check the result |
+| --- | --- | --- |
+| Improve documentation or examples | [Documentation authoring](documentation.md); no native build needed for site edits | `just docs-check`, `just site-check` and browser inspection; execute changed examples. |
+| Fix a bug | [Architecture overview](architecture/overview.md), then [crate ownership](architecture/crates.md) | Reproduce it with a focused test; use the [check chooser](testing.md#choose-checks-for-your-change). |
+| Add a source, effect, transition or backend | Choose an [extension guide](#extension-guides) below | Verify affected contracts and backends with [Testing](testing.md). |
+| Investigate rendering | [Render pipeline](architecture/render-pipeline.md) and [GPU validation](gpu-validation.md) | Inspect frames and report the actual backend and adapter. |
+| Measure or improve speed | [Performance](performance.md) | Compare matched workloads with recorded measurement conditions. |
+| Prepare a release | [Release procedures](releasing.md) | Complete the maintainer checklist, including installed-wheel and license checks. |
 
-## Architecture
-
-- [Architecture overview](architecture/overview.md)
-- [Effect pipeline and resource constraints](architecture/effect-pipeline.md)
-- [Crate ownership](architecture/crates.md)
-- [Project to plan](architecture/project-to-plan.md)
-- [Render pipeline](architecture/render-pipeline.md)
-- [CPU renderer](architecture/cpu-renderer.md)
-- [WGPU renderer](architecture/wgpu-renderer.md)
-- [Media I/O](architecture/media-io.md)
-- [Python binding architecture](architecture/python-bindings.md)
-
-## Stylization references
-
-- [Detailed, palette-independent dithered look](stylization/dithered-palette-look.md)
-- [Stylization temporal diagnostics](stylization/temporal-diagnostics.md)
+For a larger feature or public API change, discuss the approach in an issue first.
 
 ## Extension guides
 
-- [Add a source](extending/source.md)
-- [Add an effect](extending/effect.md)
-- [Add a transition](extending/transition.md)
-- [Add a backend](extending/backend.md)
+| Add… | Follow this route |
+| --- | --- |
+| A source | [Add a source](extending/source.md): model, preparation and backend rendering |
+| An effect | [Add a visual effect](extending/effect.md): contract, semantics, passes and kernels |
+| A transition | [Add a transition](extending/transition.md): timing, tracks and lowering |
+| A backend | [Add a backend](extending/backend.md): lifecycle, capabilities and selection |
 
-## Release procedures
+<span id="stylization-references"></span>
 
-- [Releasing the Python package](releasing.md)
+For palette/dither work, use the [quality checklist](stylization/dithered-palette-look.md)
+and [temporal diagnostics](stylization/temporal-diagnostics.md).
+
+<span id="working-with-coding-agents"></span>
+
+Coding agents start with [AGENTS.md](https://github.com/evgen2571/vestra/blob/develop/AGENTS.md).
+[Repository skills](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md)
+route specialist verification; [PLANS.md](https://github.com/evgen2571/vestra/blob/develop/PLANS.md)
+describes substantial-work plans.

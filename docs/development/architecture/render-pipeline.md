@@ -1,26 +1,64 @@
 # Render pipeline
 
-`Editor` is the runtime coordinator. `Editor::prepare` and one-shot `Editor::render` both start with semantic validation, then choose a preflight target. Preparation checks the requested backend and resources. A one-shot render also checks the destination and overwrite policy. If preflight has errors, `Editor` returns its diagnostics before resource preparation begins.
+`Editor` prepares a project once so callers can inspect individual frames or
+render several videos from the same runtime state. One-shot `Editor::render`
+uses the same preparation coordinator, then runs the video path.
 
-```text
-ProjectSnapshot / Project
-  -> validate
-  -> preflight for preparation or render
-  -> compile plan, decode assets, analyze audio, initialize renderer
-  -> PreparedProject
-  -> frame loop + audio graph + frame sink
-  -> encoder finalization
-  -> output publication
-  -> RenderResult
-```
+<figure class="diagram" markdown="span">
+![Validation, preflight and resource preparation produce a reusable PreparedProject. Individual-frame requests return RGBA pixels. Video requests render frames and audio, finalize the encoder, publish the file and return RenderResult.](../../assets/diagrams/prepared-execution.svg)
+<figcaption>Repeat either operation from prepared state. Only the video path encodes and publishes output.</figcaption>
+</figure>
 
-`PreparedProject` owns the coordinated prepared state and its stable `PreparationReport`: compiled plan, decoded/prepared resources, selected renderer, adapter data, warnings and preparation timings. It can render individual frames or accept a `PreparedVideoRenderRequest` without repeating preparation. It is deliberately a runtime object rather than a serializable project. The Python wrapper protects one prepared state with a mutex, so concurrent use reports `PreparedProjectBusyError` instead of racing its backend resources.
+## Prepared state and frame ownership
 
-The frame loop evaluates plan work at each timeline frame, submits it to the selected backend, borrows each owned frame's RGBA output for the media sink write, and emits `RenderEvent` values for callers. Renderer and media remain independent; the SDK owns the frame until any scoped writer has joined. `CancellationToken` is cooperative. The loop checks it across the operation and a cancellation observed before publication cannot yield a successful result.
+Preparation starts with semantic validation and operation-specific preflight.
+`Editor::prepare` checks the backend and input resources without checking an
+output destination or requiring an encoder. One-shot rendering also checks the
+destination, overwrite policy and encoder availability. Preflight errors return
+as diagnostics before resource preparation begins.
 
-Within each layer, presentation ordering is source sizing/crop or child
-precomposition, pre-transform Motion Tile, final transform, post-transform
-effects, ordered mask coverage, track matte, final opacity, and blend/composite. Group masks therefore apply to the completed group result, while
-child masks remain part of their child layers.
+`PreparedProject` retains the compiled plan, prepared resources, selected backend
+and a stable `PreparationReport` with adapter data, warnings and preparation
+timings. Keep source files available and unchanged: video decodes on demand,
+and audio reopens for each encoded video even when visual analysis is already
+prepared. The [Python rendering guide](../../guides/python/rendering-and-preparation.md#prepare-once-for-several-frames)
+shows reuse across frames and outputs.
 
-Media work has three distinct terminal boundaries: writing frames to the encoder, finalizing its temporary output, and publishing that output to the requested path. `RenderFailureContext` identifies the failed stage and may retain both temporary and destination paths. `RenderResult` and reports record requested and selected backend, fallback, adapter metadata, timings and performance counters. Treat the reported backend as the actual result, not the requested preference.
+Each frame evaluates the plan at its checked timeline time and submits work to
+the selected backend. For video, the SDK borrows the owned frame's RGBA bytes
+for the media sink write and retains the frame until any scoped writer joins.
+The video operation also executes audio and emits `RenderEvent` values.
+
+Rust rendering requires exclusive mutable access to prepared state. The Python
+wrapper guards it with a mutex and reports `PreparedProjectBusyError` on
+concurrent use. `CancellationToken` is cooperative; cancellation observed before
+publication cannot yield a successful result.
+
+## Layer presentation order
+
+Each layer passes through these stages in order:
+
+1. Source sizing/crop or child precomposition.
+2. Pre-transform Motion Tile, then the final transform.
+3. Post-transform effects, ordered mask coverage and track matte.
+4. Final opacity and blend/composite.
+
+Group masks apply to the completed group result; child masks remain part of
+their child layers. The [effect pipeline](effect-pipeline.md#ordering-and-spaces)
+explains effect stages and coordinate spaces.
+
+## Completion, failure and reporting
+
+Writing frames, finalizing the temporary encoder output and publishing the
+destination are separate failure boundaries. A successful frame loop does not
+establish that the file is ready. `RenderResult` and the terminal `completed`
+event follow successful publication.
+
+`RenderFailureContext` identifies the failed stage and may retain temporary and
+destination paths. Reports record requested and selected backend, fallback,
+adapter metadata, timings and performance counters. Use the selected backend
+as evidence of what ran.
+
+Use [media verification](../media-pipeline.md#verify-encoded-output) to check
+encoded output and [render lifecycle](../../concepts/rendering-lifecycle.md)
+for the public event and cancellation contract.

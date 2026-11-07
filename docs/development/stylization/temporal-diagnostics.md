@@ -10,7 +10,10 @@ WGPU-private resource-limit companions in `vestra-render-wgpu` write
 `resources.json` for their corresponding cases in the same artifact tree.
 Resource estimates are separate from facade pixel-parity artifacts.
 
-Run the focused tests with an actual adapter, selecting the API discovered by
+## Run current diagnostic fixtures
+
+Run from the repository root in the native contributor environment with an
+actual adapter, selecting the API discovered by
 [GPU validation](../gpu-validation.md). GL requires serialized tests:
 
 ```bash
@@ -26,17 +29,21 @@ The diagnostic command reuses the [visual-regression skill](https://github.com/e
 comparison and contact-sheet tools. It writes `target/stylization/diagnostics/`
 with per-timestamp CPU/WGPU difference PNGs, per-backend adjacent-frame
 difference PNGs, two-column chronological contact sheets and `report.json`.
-Use repeated `--fixture gl/NAME` to inspect selected hardware fixtures, or
-`--frames target/stylization/frames/gl --fixture NAME`. Requested-API directories
-keep software and hardware runs separate; actual adapter identity remains in
-`adapter.json`. `--frames` and
-`--output` accept alternative artifact directories. No runtime dependency is
-added to Vestra. Test harness discovery with:
+Use repeated `--fixture gl/NAME` to select fixtures, or
+`--frames target/stylization/frames/gl --fixture NAME`. `--frames` and `--output`
+accept alternative artifact directories. Requested-API directories identify the
+requested API; actual identity is in `adapter.json`. Archive each run before
+another run with the same API overwrites it. Follow [GPU validation](../gpu-validation.md)
+for separate software and hardware evidence.
+
+To check the diagnostic script itself:
 
 ```bash
 uv run --no-project python -m unittest discover \
   -s tests -p test_stylization_diagnostics.py -v
 ```
+
+## Interpret temporal differences
 
 The fixtures distinguish intended motion from unwanted frame-state changes:
 
@@ -74,6 +81,8 @@ Always compare CPU and WGPU motion separately, inspect threshold and seam
 frames, and record the actual adapter. A GPU passing the static control does
 not establish temporal quality for unrelated footage or every effect.
 
+## Check full-resolution pixels and resources
+
 Run full-resolution correctness separately:
 
 ```bash
@@ -87,9 +96,10 @@ VESTRA_WGPU_BACKEND=gl VESTRA_REQUIRE_WGPU=1 cargo test \
   -- --ignored --test-threads=1 --nocapture
 ```
 
-The facade test renders every new family at 1920×1080 and 3840×2160 and compares
-actual CPU/WGPU output. The WGPU companions retain the resource-limit checks for
-nonuniform stops, Oklab interpolation, input tone and input detail, recording
+The facade fixture renders ASCII, halftone, sorting and CRT at 1920×1080 and
+3840×2160 and compares actual CPU/WGPU output. The WGPU companions retain
+resource-limit checks for nonuniform stops, Oklab interpolation, input tone and
+input detail, recording
 persistent, working, effect, parameter and readback byte estimates. Estimates
 exclude driver metadata and device texture padding. These are correctness/resource
 checks; PNG saving and debug builds make their elapsed time unsuitable as a
@@ -100,32 +110,32 @@ To isolate CRT curvature at sub-byte transparent border coverage, run
 ignored-test flags. This reuses the full-resolution fixtures and raw RGBA
 comparison, including RGB values in pixels whose alpha rounds to zero.
 
-## Advanced-control visual acceptance matrix
+## Compare three palettes
 
-The branch is frozen for release under the active plan's 2026-10-10 decision.
-Unfinished optional customization is deferred; this matrix preserves historical
-evidence and distinguishes it from current release checks.
+To regenerate the fine-pattern comparison, run this separate fixture with the
+same adapter requirements as above:
 
-| Control or mode | Fixture / rendered evidence | Status |
-| --- | --- | --- |
-| Bayer8 vs blue noise, three palettes | `gpu_stylization_fine_dither_preserves_scene_detail_with_three_distinct_palettes`: same gradient/texture/silhouette/line source; all stops visible; identical indices across palette hues; exact hardware parity | Inspected contact sheet |
-| Blue-noise seeds, arbitrary time | `gpu_stylization_blue_noise_is_seeded_spatial_and_preserves_palette_detail`: seeds 0, 37, unsigned maximum; out-of-order revisit; visible highlights; exact hardware and software parity | Verified |
-| Blue-noise tone coverage and alpha | CPU tile test: five grayscale levels, partial alpha and hidden transparent RGB | Verified; composed alpha/mask coverage still to extend |
-| Pattern resolution | `gpu_stylization_1080p_and_4k_match_cpu_with_fine_patterns`: both patterns, CPU and hardware, exact output; saved resource estimates | Verified |
-| Blue-noise moving footage and animated palette | Generated FFV1 showcase, ember CPU/ocean hardware short videos; periodic public showcase tests | Inspected sample frames; full temporal motion review pending |
-| RGB/hue quantization | `gpu_stylization_chromatic_quantization_preserves_palette_colors_and_source_detail`: source/legacy/RGB/hue contact sheet; exact hardware GL and software Vulkan parity; dark-red literal distinguishes metrics | Inspected contact sheet and ember video sample; broader moving/mask acceptance pending |
-| Channel-count quantization | `gpu_stylization_channel_levels_preserve_detail_and_match_cpu_exactly`: 2/4/8/256 levels, map/Bayer8/blue noise, exact GL/Vulkan parity and 256-level identity; explicit 1080p/4K extrema test | Inspected source/2/4/8 contact sheet; broader motion/mask acceptance pending |
-| Perceptual quantization | Q10 Oklab: literal lightness/rounded-tie/partial-alpha cases; source/metric contact sheet; three-palette figure/highlight checks; exact GL/Vulkan parity and explicit 1080p/4K checks | Inspected contact sheet and moving-preview sample; broader motion/stack/mask acceptance pending |
-| Uneven palette stops and interpolation spaces | Nonuniform literal ramp/blue-noise coverage, three-palette scene contrast and periodic out-of-order GL/Vulkan parity | Stops and Oklab ramps/animated preview inspected; broader motion/mask acceptance pending |
-| Tone, local detail and independent analysis resolution | `gpu_stylization_input_analysis*`: literal filters, alpha, border cells, animated scales, tone/detail, exact GL/Vulkan parity and 1080p/4K resources; generated portrait demonstration | Implemented; final gates tracked in plan |
-| ASCII readability | Generated portrait FFV1 with zero source mixing, mono/source/palette colors and random-access frames; custom font regression fixtures | Existing controls checked; optional calibration/geometry deferred |
-| Halftone circle/ellipse/line and screen response | Grayscale, edges, channel angles and printed appearance required | Deferred |
-| Bounded sorting measures/run/region controls | Both directions, stable ties, threshold transitions and masks required | Deferred |
-| CRT mask/scanline/bleed controls | Distinct 1080p masks, alpha-safe geometry and procedural loops required | Deferred |
-| Expanded look catalog | Existing editable recipes and periodic footage/music showcase retained | Optional catalog expansion deferred |
+```bash
+VESTRA_WGPU_BACKEND=gl VESTRA_REQUIRE_WGPU=1 cargo test \
+  -p vestra-render --test parity --all-features \
+  gpu_stylization_fine_dither_preserves_scene_detail_with_three_distinct_palettes \
+  -- --test-threads=1 --nocapture
+```
 
-To reproduce the three-palette pattern comparison, run the fine-dither test
-above with strict WGPU and create a two-column sheet from
-`{monochrome,ember,ocean}-{bayer8,blue_noise}/cpu-0.png`. Artifacts are under
+Create a two-column sheet from
+`{monochrome,ember,ocean}-{bayer8,blue_noise}/cpu-0.png` under
 `target/stylization/frames/<requested-api>/`. Inspect native frames as well as
-thumbnails; dense one-pixel patterns can alias in a reduced contact sheet.
+thumbnails; dense one-pixel patterns can alias in a reduced contact sheet. Use
+the [dither regression checklist](dithered-palette-look.md#regression-checklist)
+for the visual criteria.
+
+<span id="advanced-control-visual-acceptance-matrix"></span>
+
+## Historical freeze evidence
+
+The [2026-10-10 release-freeze matrix](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/docs/development/stylization/temporal-diagnostics.md#advanced-control-visual-acceptance-matrix)
+retains the captured fixture names, visual observations and deferred controls.
+Its statuses describe that capture, not verification of today's checkout or a
+promise to implement the deferred controls. For a new change, use the current
+procedures above, [effect reference](../../reference/effects.md) and
+[support matrix](../../reference/feature-support.md).

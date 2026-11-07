@@ -122,4 +122,3 @@ are recorded beside the examples. To change the scenes, render their Python
 sources first, inspect the output and update the source/render/preview revision
 together. Naming, formatting and comment-only source cleanup does not require
 re-encoding unchanged scenes. No separate documentation branch is needed.
-

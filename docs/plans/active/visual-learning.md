@@ -179,3 +179,25 @@ Reader-first follow-up complete:
   themes. Inspected diagram and example screenshots, including the mobile code
   block; shortened a clipped comment. No document overflow, broken images or
   wrong diagram themes. Rendering semantics and engine/API behavior are unchanged.
+
+## Follow-up: authored positions in the group diagram
+Baseline: `637faca`, clean task branch. The pixel-offset diagram explains a
+calculation rather than the positions readers author. Replace it with only the
+actual normalized `position` values and their center anchors, remove the pixel
+arithmetic and dimension labels, and shorten the figure. Update its surrounding
+explanation and the incoming coordinate-page description. Keep code, geometry,
+time, media and public APIs unchanged. Verify the figure at mobile/desktop widths
+in both themes, current links/snippets, and the existing local-coordinate render.
+
+Normalized-position follow-up complete:
+- The figure labels only the authored group `(0.5, 0.5)` and child `(0.25, 0.5)`
+  positions, with callouts to their center anchors. Removed all pixel arithmetic,
+  dimensions and derived root coordinates. Reduced height from 390 to 312 pixels;
+  kept 22-pixel SVG text and adequate label padding at mobile width.
+- Rewrote the explanation around which parent canvas each `position` uses and
+  updated the incoming coordinate-page link description. Example code unchanged.
+- Strict site/link checks passed: 14,347 generated references, zero errors, nine
+  tests; 721 source links in 116 Markdown files, zero missing. Existing CPU
+  coordinate/time frame regression passed. Four browser layouts and screenshots
+  verified at 390/1440 widths in both manually selected themes. Video regeneration
+  and engine/GPU checks were unnecessary for this SVG/prose-only change.

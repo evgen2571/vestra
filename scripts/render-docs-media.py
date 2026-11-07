@@ -234,6 +234,7 @@ def render_learning():
         "concepts_masks",
         "transition_comparisons",
         "audio_response",
+        "group_placements",
     )
     manifest = {
         "program_sha256": {
@@ -268,6 +269,14 @@ def render_learning():
             "backend": "cpu",
             "web_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
         }
+    groups = runpy.run_path(str(ROOT / "docs/assets/examples/group_placements.py"))
+    image_path = ASSETS / "group-placements.webp"
+    effects["save_still"](groups["project"], image_path)
+    manifest["stills"]["group-placements"] = {
+        "seconds": 0.7,
+        "backend": "cpu",
+        "web_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
+    }
     for name in motion:
         original = OUTPUT / f"effect-{name}.mp4"
         result = effects["comparison_project"](name).render(
@@ -275,7 +284,7 @@ def render_learning():
         )
         assert result.selected_backend == "cpu"
         manifest[f"effect-{name}"] = web_video(
-            original, f"effect-{name}", (640, 640), 3, 0.7
+            original, f"effect-{name}", (640, 520), 3, 0.7
         )
     for module in ("concepts_masks", "transition_comparisons", "audio_response"):
         subprocess.run(

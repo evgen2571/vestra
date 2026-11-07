@@ -173,12 +173,7 @@ def make_project(name="original", *, reverse=False):
 
 
 def comparison_project(name, *, reverse=False):
-    # Reserve a lower band for native controls at mobile viewing widths.
-    height = (
-        640
-        if name in {"crt", "camera-shake", "motion-blur", "motion-tile"}
-        else SIZE[1]
-    )
+    height = SIZE[1]
     project = Project(
         size=(640, height),
         fps=30,
@@ -208,14 +203,6 @@ def comparison_project(name, *, reverse=False):
             Text(text, font_size=28, fill="#eff2eb"),
             anchor=(0, 0.5),
             position=(0.04, y / height),
-        )
-    if height > SIZE[1]:
-        project.root.add(
-            Rectangle(width=640, height=120, fill="#10191f"),
-            position=(0.5, 580 / height),
-        )
-        project.root.add(
-            Rectangle(width=640, height=1, fill="#32434d"), position=(0.5, 520 / height)
         )
     return project
 

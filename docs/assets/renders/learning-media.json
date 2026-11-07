@@ -1,9 +1,10 @@
 {
   "program_sha256": {
-    "effects_catalog": "3337fe6dd58aab4c56864be6f4bcbdbad993b1439b15fb2b6c0499c1c54d0776",
+    "effects_catalog": "0276541af2b07af143b624526b768e8e474aebf335feb71abca6e19cd8d82889",
     "concepts_masks": "b783bbd0a125e408a198641a0d5f9f9070fe6ffbbc474a17f35ce3bfab9a4ce7",
     "transition_comparisons": "3644d7aba1f1ac3ad387d0adb0e7c968ff53b7f0a0f7b161cf43bf87950b1a99",
-    "audio_response": "6d243e9f3230ce6879f5b679404e97909b137b14df28a9ccc561c8167c25b399"
+    "audio_response": "6d243e9f3230ce6879f5b679404e97909b137b14df28a9ccc561c8167c25b399",
+    "group_placements": "cf8e915c5c96cc086cd2ab1a30a6f4afa7071abfd4e16f34b64ad74e38fb7e06"
   },
   "input_sha256": {
     "landscape.jpg": "551efde1b9a96fdbeb1d7dc91af1aa0bd0e3ae035cd3ba15b38afcc5ca949b51",
@@ -119,63 +120,68 @@
       "seconds": 0.7,
       "backend": "cpu",
       "web_sha256": "d8be017144af93f4703dcd71c820d4dc9d4ccfc59558f12da6a7db1a57505978"
+    },
+    "group-placements": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "f3248c466c48cce1936c94f95471ff3f17711f1f88ee53bfe4b4b913393c014f"
     }
   },
   "effect-camera-shake": {
-    "source_sha256": "6a7c3a4a43197c9f3d42c1220eb679e07f6f9b58b41c45833fa2a04957f18d46",
+    "source_sha256": "d0323238c3bb45adc976d5db85b6ddb90548e3a6d716b2d407965a873502d81b",
     "poster_seconds": 0.7,
     "size": [
       640,
-      640
+      520
     ],
     "seconds": 3,
     "fps": 30,
     "backend": "cpu",
     "audio": false,
-    "web_sha256": "ccec748cd506d6fbb90ffdd160da3c20a9e6914ec85ada729fd1d9dd07ca6190",
-    "poster_sha256": "ec90f0256aee6ca5294412be616eebee20b09656ae94eb40595a0828f65b30fe"
+    "web_sha256": "688dd367f737252190140663ca1d32d06a1a3d3a89e2d28c76d05edb32d62759",
+    "poster_sha256": "de32ed84b76c2dbf1c8c6e022438e10d6967640db30b177e1dc7602f14ab21dc"
   },
   "effect-motion-blur": {
-    "source_sha256": "15bada94bcfeb9f3e7a0850876fc13aaf3b4eb22b530942eb93ee98677141b89",
+    "source_sha256": "a0872ddd24f6bbfcfe2606e8803a159b4f2fda90d1b572a10b02a8fb53213b68",
     "poster_seconds": 0.7,
     "size": [
       640,
-      640
+      520
     ],
     "seconds": 3,
     "fps": 30,
     "backend": "cpu",
     "audio": false,
-    "web_sha256": "ccd9bb7e80ef47565e725867afbb0046f3272e5d69565c302756f636db723b30",
-    "poster_sha256": "d07c4937b116a520484ed07d0aea651d02221884ae0def8289f60fae650125f8"
+    "web_sha256": "da51e35ea69995cd7927e74081342701899c1a487d54d1770e7b92e9d5a3ee2e",
+    "poster_sha256": "1bdd0bc96b2dba0c0fd7e74f428c931bc41663cdc1ec346bfe7cb0d878f4364a"
   },
   "effect-motion-tile": {
-    "source_sha256": "3529747e5b90504b5c836a4df0212287ea948fc134c031c72f9eba9e082240b9",
+    "source_sha256": "c85d48274e387b7bc1adbac2e95d5231cb8efc0c9310f8bedd4de896ed00f856",
     "poster_seconds": 0.7,
     "size": [
       640,
-      640
+      520
     ],
     "seconds": 3,
     "fps": 30,
     "backend": "cpu",
     "audio": false,
-    "web_sha256": "a2ec41ca587389b8857a1f0112a1d3774430d4c41bc3aa94a1ab42f83976d8d8",
-    "poster_sha256": "f8f7cf182721b36e0b69f50abdce267c3eb7a212faeb9676588fdfa0ad19d2c1"
+    "web_sha256": "98e54435cf86aafa412cee4420d2c51840a0dffc49a1e5d69762a3a479a4a8ef",
+    "poster_sha256": "23cd218dccdb368aed8e8e6856d041f5e38728c295084271390b52fb1a8e96cf"
   },
   "effect-crt": {
-    "source_sha256": "c73cbf4c749bfd799cec038af8781562c3f14f6b06341939213ea40aed4f2405",
+    "source_sha256": "966f46c5ca9f5ac21db8c9f0f84ee461b5df97a5a2d2b320705f45ec939c1521",
     "poster_seconds": 0.7,
     "size": [
       640,
-      640
+      520
     ],
     "seconds": 3,
     "fps": 30,
     "backend": "cpu",
     "audio": false,
-    "web_sha256": "47ffbd66d2ed313e276b2282eb2b94a66a3ce9291d8dfb24593359a1f77d2c24",
-    "poster_sha256": "90006602db18b5fb3f154f834bf065612543d83d2b010839fbf560c713cba06a"
+    "web_sha256": "936d8389d3979904a37089dc99655cd4c185681b007c4a37c2cf37bbf051d40a",
+    "poster_sha256": "9f8563a77765b3822f6a6e920f667d033caed7dea771b3bcd134fb6a2dd5aadc"
   },
   "transition-crossfade": {
     "source_sha256": "c5f9a05a15ae6ea0067664a6e29cbcd40bee435578456c1d7e103e78f60f53ff",

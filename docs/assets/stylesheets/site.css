@@ -252,13 +252,6 @@
 }
 [data-md-color-scheme="slate"] .md-typeset img[src*="/diagrams/"] { color-scheme: dark; }
 
-.gallery-card--comparison {
-  grid-column: 1 / -1;
-  width: 100%;
-  max-width: 640px;
-  justify-self: center;
-}
-
 .md-typeset figure.comparison { max-width: 640px; margin-inline: auto; }
 /* Keep media at its authored size while allowing it to shrink on mobile. */
 .md-typeset figure:has(video[width="640"]) { max-width: 640px; margin-inline: auto; }

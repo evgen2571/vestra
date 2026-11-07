@@ -76,7 +76,9 @@ def test_temporal_comparisons_show_both_rows_and_tile_fills_its_viewport():
         assert project.output_audio is False
         prepared = project.prepare(backend="cpu")
         for seconds in (0.2, 0.7, 1.4, 2.6):
-            pixels = prepared.render_frame_seconds(seconds).to_bytes()
+            frame = prepared.render_frame_seconds(seconds)
+            assert (frame.width, frame.height) == (640, 520)
+            pixels = frame.to_bytes()
             # Both rows retain the scene at matching timestamps, rather than a reel.
             top = pixels[40 * 640 * 4 : 260 * 640 * 4]
             bottom = pixels[300 * 640 * 4 : 520 * 640 * 4]

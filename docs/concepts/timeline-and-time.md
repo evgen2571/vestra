@@ -47,10 +47,11 @@ For interpolation and values before/after keyframes, use the authoritative
 
 ## Nested time
 
-A group at parent second `1` has child time zero there. A child with `start=0.5`
-begins at parent second `1.5`; its own animation time is zero at that point.
-Apply the same subtraction at each level of nesting. The group's active interval
-clips the children, even if a child has a longer authored duration.
+A group's children have a clock that starts at zero when the group appears.
+Subtract each placement's start to enter its local clock; keyframes then use
+that placement's own elapsed time. The [worked group example](groups-and-nesting.md#child-time-starts-with-the-group)
+aligns project, group and child time with an opacity animation. Its group lifetime
+clips the children even if they have longer authored durations.
 
 Transitions between child siblings use the child's composition clock. They do
 not use project timestamps. See [groups and nesting](groups-and-nesting.md) and

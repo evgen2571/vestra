@@ -150,13 +150,16 @@ just docs-media --learning
 
 | Program in `docs/assets/examples/` | Media | Size and duration | Poster |
 | --- | --- | --- | --- |
-| `effects_catalog.py` | Source/treatment stills; four synchronized temporal comparisons | 640×520 stills; 640×640, 3 s for motion | 0.7 s |
+| `effects_catalog.py` | Source/treatment stills; four synchronized temporal comparisons | 640×520 stills and motion; 3 s for motion | 0.7 s |
 | `audio_response.py` | Bounded response, smoothing curves, linear/radial spectra | 640×560, 4 s | 1.2 s |
 | `transition_comparisons.py` | Crossfade, push, zoom, Gaussian blur | 640×360, 3 s | 1.5 s |
+| `group_placements.py` | One source placed twice, with independent transforms and opacity | 640×360 still | 0.7 s |
 | `concepts_masks.py` | Alpha/luma, union/subtract coverage | 640×480, 3 s static | 0.5 s |
 
-Motion comparisons and audio studies reserve a lower band for native controls
-at mobile widths, so paused plots and labels stay readable.
+Audio studies reserve a lower band for native controls at mobile widths.
+Effect comparisons use the same 640×520 framing for stills and videos, with
+no encoded control footer or divider; native controls overlay the lower edge
+while visible. Video and image cards share the responsive two-column grid.
 
 All learning previews are CPU renders with **no audio streams**. The audio
 program still generates a 48 kHz mono PCM16 phrase for analysis: five recurring

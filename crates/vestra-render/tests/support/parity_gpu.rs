@@ -157,6 +157,59 @@ fn render_project_parity(
     Some(gpu_output)
 }
 
+#[test]
+fn gpu_motion_tile_preserves_matched_anchor_coverage_at_every_extent() {
+    for anchor in [0.0, 0.25, 0.5, 0.75, 1.0] {
+        for extent in [100.0, 200.0, 400.0] {
+            let position = 0.15 + 0.7 * anchor;
+            let project = serde_json::from_value(json!({
+                "schema_version": 1,
+                "output": {
+                    "path": "motion-tile-anchor.mp4", "width": 640, "height": 360,
+                    "frame_rate": "24/1", "background": "#ff00ff", "quality": "preview",
+                    "audio": false, "duration_mode": "explicit", "duration": 1.0
+                },
+                "assets": [],
+                "visual": {"clips": [{
+                    "id": "layer", "source": {
+                        "type": "shape", "geometry": {"type": "rectangle", "width": 640.0, "height": 360.0},
+                        "fill": "#93cbb5"
+                    },
+                    "start": 0.0, "duration": 1.0, "layer": 0,
+                    "opacity": {"base_value": 1.0},
+                    "transform": {
+                        "position": {"base_value": {"x": position, "y": position}},
+                        "anchor": {"base_value": {"x": anchor, "y": anchor}},
+                        "scale": {"base_value": {"x": 0.7, "y": 0.7}}
+                    },
+                    "effects": [{
+                        "id": "tile", "type": "motion_tile",
+                        "output_width_percent": {"base_value": extent},
+                        "output_height_percent": {"base_value": extent},
+                        "tile_center": {"base_value": {"x": 0.5, "y": 0.5}},
+                        "mirror_edges": true
+                    }]
+                }], "transitions": [], "flashes": [], "post_effects": []}
+            })).expect("Motion Tile anchor reproduction parses");
+            let Some(output) = render_project_parity(project, 0, 0) else {
+                return;
+            };
+            for (x, y, pixel) in output.enumerate_pixels() {
+                let expected =
+                    if extent > 100.0 || ((96..544).contains(&x) && (54..306).contains(&y)) {
+                        image::Rgba([147, 203, 181, 255])
+                    } else {
+                        image::Rgba([255, 0, 255, 255])
+                    };
+                assert_eq!(
+                    *pixel, expected,
+                    "anchor={anchor}, extent={extent}, ({x},{y})"
+                );
+            }
+        }
+    }
+}
+
 fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
     let tile = json!({
         "id": "tile", "type": "motion_tile",

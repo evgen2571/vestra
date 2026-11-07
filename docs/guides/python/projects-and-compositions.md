@@ -18,6 +18,7 @@ project = Project(
     fps=30,
     duration=5,
 )
+
 project.root.add(Color("#111827"), duration=5, id="background")
 
 # Show a blue panel from second 1 until second 3.
@@ -55,7 +56,14 @@ card.add(
     position=(0.5, 0.7),
 )
 
-card_layer = project.root.add(card, start=1, duration=3, z=2, id="card")
+card_layer = project.root.add(
+    card,
+    start=1,
+    duration=3,
+    z=2,
+    id="card",
+)
+
 card_layer.transform.rotation.keyframe(0, -5)
 card_layer.transform.rotation.keyframe(3, 5)
 ```

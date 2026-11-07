@@ -14,7 +14,13 @@ The file must contain at least fourteen seconds of audio:
 ```python
 from vestra import Project, Text
 
-project = Project(size=(640, 360), fps=30, duration=10, background="#101c24")
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=10,
+    background="#101c24",
+)
+
 project.root.add(Text("Soundtrack excerpt", font_size=32, fill="#eff4ec"))
 
 music = project.audio.track("music", gain=0.9)

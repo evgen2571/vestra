@@ -16,7 +16,12 @@ Consider a four-second video placement that starts at project second two:
 ```python
 from vestra import Project, Video
 
-project = Project(size=(1280, 720), fps=30, duration=6)
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=6,
+)
+
 excerpt = project.root.add(
     Video("clip.mp4"),
     start=2,

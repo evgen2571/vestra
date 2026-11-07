@@ -165,6 +165,7 @@ caption = project.root.add(
     duration=2,
     opacity=0,
 )
+
 caption.opacity.keyframe(0, 0)
 caption.opacity.keyframe(0.5, 1)
 ```

@@ -26,11 +26,17 @@ For example, place one rectangle source twice:
 ```python
 from vestra import Project, Rectangle
 
-project = Project(size=(640, 360), fps=30, duration=3)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=3,
+)
+
 panel = Rectangle(width=160, height=80, fill="#2563eb")
 
 left = project.root.add(panel, position=(0.25, 0.5), id="left")
 right = project.root.add(panel, position=(0.75, 0.5), id="right")
+
 right.opacity = 0.5
 ```
 

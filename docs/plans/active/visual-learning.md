@@ -150,3 +150,32 @@ Follow-up evidence:
   Ruff checks/formatting and project `fmt-check`/`lint-python` passed. CPU only; no engine/API changes or new rendering issue.
   Native video controls now overlay the lower edge while visible, without an
   encoded footer; audio study layout is unchanged.
+
+## Follow-up: reader-first examples
+Baseline: `979f8da`, clean task branch. The nested-coordinate diagram still
+required readers to decode repeated axes and normalized values. Replace it with
+named canvases, the visible child and one explicit pixel-offset addition. Keep
+geometry and timing unchanged. Review learning snippets and source programs for
+blank lines between operations and readable constructor arguments, rather than
+only formatting the reported snippet. Check semantic equivalence, snippets,
+links/media freshness and the diagram at mobile/desktop widths in both themes.
+No new media scenes, engine changes, worktrees or publishing actions.
+
+Reader-first follow-up complete:
+- Replaced repeated normalized axes with clearly named root/group/child artwork,
+  a colored local canvas, and the single pixel-offset addition. Diagram geometry
+  and code still describe the same unscaled, unrotated placement.
+- Reviewed learning snippets and all eight downloadable programs. Separated
+  setup, source/child construction, placement, animation and rendering; expanded
+  crowded argument lists. Kept the quickstart source and download byte-identical.
+- All 50 Python blocks in changed pages and all changed programs preserve their
+  parsed syntax trees. Only source-program hashes were refreshed; input, rendered
+  media, poster and original-render hashes remain unchanged. No re-encoding.
+- 43 focused native/snippet/media tests passed. Strict site check: 14,347 generated
+  references, zero errors, nine tests passed. Source links: 721 in 116 Markdown
+  files, zero missing. Changed-Python Ruff check/format and project formatting/lint
+  passed; `git diff --check` passed.
+- 76 browser layouts passed: 19 pages at 390/1440 px in both manually selected
+  themes. Inspected diagram and example screenshots, including the mobile code
+  block; shortened a clipped comment. No document overflow, broken images or
+  wrong diagram themes. Rendering semantics and engine/API behavior are unchanged.

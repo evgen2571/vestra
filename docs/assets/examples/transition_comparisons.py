@@ -62,10 +62,17 @@ def definitions() -> tuple[tuple[str, str, TransitionDefinition], ...]:
 
 def build_project(definition: TransitionDefinition, label: str) -> Project:
     project = Project(
-        size=(640, 360), fps=30, duration=3, background="#101c24", output_audio=False
+        size=(640, 360),
+        fps=30,
+        duration=3,
+        background="#101c24",
+        output_audio=False,
     )
+
     outgoing = project.root.group("outgoing scene", start=0, duration=2, z=0)
+
     incoming = project.root.group("incoming scene", start=1, duration=2, z=1)
+
     add_scene(outgoing, incoming=False)
     add_scene(incoming, incoming=True)
 

@@ -24,8 +24,8 @@ the group's placement uses positions relative to its parent. The root canvas
 matches the project's output size; root pixels are the final output's coordinates.
 
 <figure class="diagram" markdown="span">
-![A 640 by 360 root canvas contains a centered 320 by 180 group. Each canvas has its own top-left origin and right/down axes. A child at group position 0.25, 0.5 is at root position 0.375, 0.5, or root pixel 240, 180.](../assets/diagrams/groups-local-canvas.svg)
-<figcaption>The inner origin is root pixel (160, 90). Child positions start from that local origin, rather than the root's top-left.</figcaption>
+![The blue group starts at root pixel 160, 90. The gold child's center is at group pixel 80, 90. Adding these offsets gives the same center at root pixel 240, 180.](../assets/diagrams/groups-local-canvas.svg)
+<figcaption>The child's center is measured from the group's top-left. Add that offset to express the same point in root pixels; the group is unscaled and unrotated.</figcaption>
 </figure>
 
 This new example matches the diagram. The small rectangle fades in after its
@@ -35,21 +35,43 @@ panel appears:
 from vestra import Group, Project, Rectangle
 
 project = Project(
-    size=(640, 360), fps=30, duration=5, background="#101c27"
+    size=(640, 360),
+    fps=30,
+    duration=5,
+    background="#101c27",
 )
+
 panel = Group(size=(320, 180))
-panel.add(Rectangle(width=320, height=180, fill="#263e4b"))
+
+panel.add(
+    Rectangle(
+        width=320,
+        height=180,
+        fill="#263e4b",
+    )
+)
+
 marker = panel.add(
-    Rectangle(width=100, height=60, fill="#e9bd72"),
+    Rectangle(
+        width=100,
+        height=60,
+        fill="#e9bd72",
+    ),
     position=(0.25, 0.5),
     start=0.5,
     duration=2,
 )
+
+# Animate the child before placement.
+# Adding the group copies this state.
 marker.opacity.keyframe(0, 0)
 marker.opacity.keyframe(0.5, 1)
 
 placed_panel = project.root.add(
-    panel, position=(0.5, 0.5), start=1, duration=3
+    panel,
+    position=(0.5, 0.5),
+    start=1,
+    duration=3,
 )
 ```
 

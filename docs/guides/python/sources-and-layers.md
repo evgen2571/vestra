@@ -15,7 +15,12 @@ This complete setup needs no media files:
 ```python
 from vestra import Project, Rectangle
 
-project = Project(size=(1280, 720), fps=30, duration=5)
+project = Project(
+    size=(1280, 720),
+    fps=30,
+    duration=5,
+)
+
 panel = Rectangle(width=200, height=100, fill="#2563eb")
 
 left_panel = project.root.add(panel, position=(0.25, 0.5))

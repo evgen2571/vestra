@@ -10,9 +10,15 @@ from vestra import (
     Text,
 )
 
-project = Project(size=(640, 480), fps=30, duration=3, background="#171d22")
+project = Project(
+    size=(640, 480),
+    fps=30,
+    duration=3,
+    background="#171d22",
+)
 
 artwork = Group(size=(240, 140))
+
 for index, color in enumerate(("#6488d8", "#87b3c4", "#b5d0af", "#e8bd78", "#d78176")):
     artwork.add(
         Rectangle(width=48, height=140, fill=color),

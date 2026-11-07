@@ -14,10 +14,18 @@ For a tonal look, supply opaque colors from dark to light:
 from vestra import Image, Project
 from vestra.effects import OrderedDither
 
-project = Project(size=(640, 360), fps=30, duration=2)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+)
+
 photo = project.root.add(Image("assets/photo.png"))
+
 palette = ("#101b32", "#476b80", "#d6a46b", "#fff2cf")
-look = photo.effects.add(OrderedDither(palette=palette, matrix="bayer8", scale=1))
+look = photo.effects.add(
+    OrderedDither(palette=palette, matrix="bayer8", scale=1)
+)
 ```
 
 This example needs your own `assets/photo.png`. It continues through the
@@ -81,6 +89,7 @@ Use `stops` when a useful shadow color needs more tonal room:
 
 ```python
 look.stops = (0, 0.12, 0.6, 1)
+
 look.strength.keyframe(0, 0.25)
 look.strength.keyframe(1, 1)
 ```
@@ -101,6 +110,7 @@ interpolate. Continue the example:
 ```python
 look.amount.keyframe(0, 0)
 look.amount.keyframe(1, 1)
+
 project.render("palette.mp4", backend="cpu", overwrite=True)
 ```
 

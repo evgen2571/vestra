@@ -29,9 +29,16 @@ least three seconds of audio:
 ```python
 from vestra import Circle, Project
 
-project = Project(size=(640, 360), fps=30, duration=3)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=3,
+)
+
 project.audio.track("music").add("assets/music.wav", trim_end=3)
+
 pulse = project.root.add(Circle(radius=70, fill="#9edbc7"))
+
 energy = project.audio.signal.rms()
 ```
 
@@ -88,6 +95,7 @@ To finish the small project above:
 
 ```python
 project.output_audio = False
+
 project.render("audio-response.mp4", backend="cpu", overwrite=True)
 ```
 

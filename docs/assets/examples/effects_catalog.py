@@ -167,7 +167,13 @@ def add_study(parent, name, *, treated=True, reverse=False):
 
 
 def make_project(name="original", *, reverse=False):
-    project = Project(size=SCENE, fps=30, duration=DURATION, output_audio=False)
+    project = Project(
+        size=SCENE,
+        fps=30,
+        duration=DURATION,
+        output_audio=False,
+    )
+
     add_study(project.root, name, reverse=reverse)
     return project
 
@@ -181,6 +187,7 @@ def comparison_project(name, *, reverse=False):
         background="#1a242b",
         output_audio=False,
     )
+
     for treated, y in ((False, 150), (True, 410)):
         scene = Group(size=SCENE)
         add_study(

@@ -35,7 +35,12 @@ These snippets build a new project, then change its rectangle placement:
 ```python
 from vestra import Project, Rectangle
 
-project = Project(size=(640, 360), fps=30, duration=3)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=3,
+)
+
 panel = project.root.add(
     Rectangle(width=160, height=80, fill="#2563eb"),
     position=(0.25, 0.5),

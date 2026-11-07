@@ -8,7 +8,12 @@ procedural title, so no input files are needed.
 from vestra import Color, Project, Text
 from vestra.effects import GaussianBlur
 
-project = Project(size=(640, 360), fps=30, duration=2)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+)
+
 project.root.add(Color("#101b32"))
 title = project.root.add(Text("A changing focus", font_size=40))
 

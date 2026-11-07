@@ -13,17 +13,25 @@ This example requires your own `assets/photo.png`:
 from vestra import Image, Project
 from vestra.effects import Ascii, CHARACTER_SETS
 
-project = Project(size=(640, 360), fps=30, duration=2)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+)
+
 photo = project.root.add(Image("assets/photo.png"))
-letters = photo.effects.add(Ascii(
-    characters=CHARACTER_SETS["dense"],
-    cell_width=8,
-    cell_height=12,
-    mode="hybrid",
-    color_mode="source",
-    background="#00000000",
-    source_mix=0.15,
-))
+
+letters = photo.effects.add(
+    Ascii(
+        characters=CHARACTER_SETS["dense"],
+        cell_width=8,
+        cell_height=12,
+        mode="hybrid",
+        color_mode="source",
+        background="#00000000",
+        source_mix=0.15,
+    )
+)
 ```
 
 At 640×360, 8×12 cells create about 80 columns and 30 rows. Larger cells make
@@ -50,6 +58,7 @@ Continue the example to introduce the treatment smoothly:
 ```python
 letters.amount.keyframe(0, 0)
 letters.amount.keyframe(1, 1)
+
 project.render("ascii.mp4", backend="cpu", overwrite=True)
 ```
 

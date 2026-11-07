@@ -14,20 +14,32 @@ shrinks a card so the repeated region is visible:
 from vestra import Color, Group, Project, Rectangle, Text
 from vestra.effects import DirectionalBlur, MotionTile
 
-project = Project(size=(640, 360), fps=30, duration=2)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+)
+
 card = Group(size=(320, 180))
 card.add(Color("#101b32"))
 card.add(Rectangle(width=120, height=8, fill="#d6a46b"))
 card.add(Text("Repeated card", font_size=24), position=(0.5, 0.7))
+
 layer = project.root.add(card, anchor=(0, 0), position=(0.25, 0.25))
-layer.effects.add(MotionTile(
-    output_width_percent=400,
-    output_height_percent=400,
-    mirror_edges=True,
-))
+
+layer.effects.add(
+    MotionTile(
+        output_width_percent=400,
+        output_height_percent=400,
+        mirror_edges=True,
+    )
+)
+
 layer.transform.rotation.keyframe(0, -12)
 layer.transform.rotation.keyframe(2, 12)
+
 layer.effects.add(DirectionalBlur(radius=4, angle_degrees=25))
+
 project.render("tiled-card.mp4", backend="cpu", overwrite=True)
 ```
 
@@ -49,11 +61,18 @@ example's tiling and blur:
 from vestra import Color, Project, Text
 from vestra.effects.recipes import analog_monitor
 
-project = Project(size=(640, 360), fps=30, duration=2)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+)
+
 project.root.add(Color("#101b32"))
 project.root.add(Text("Signal monitor", font_size=42))
+
 for effect in analog_monitor(period=2):
     project.post_effects.add(effect)
+
 project.render("monitor.mp4", backend="cpu", overwrite=True)
 ```
 

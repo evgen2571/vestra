@@ -12,6 +12,7 @@ project = Project(
     fps=30,
     duration=5,
 )
+
 photo = project.root.add(Image("assets/photo.png"), opacity=0)
 
 photo.transform.position.keyframe(0, (0.35, 0.5))
@@ -56,6 +57,7 @@ project = Project(
     fps=30,
     duration=2,
 )
+
 card = project.root.add(Rectangle(width=160, height=90, fill="#ffffff"))
 
 template = GaussianBlur(radius=0)

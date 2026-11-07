@@ -55,8 +55,15 @@ def responses(project: Project):
 
 def sample_responses(audio_path: Path) -> tuple[list[float], ...]:
     """Read actual prepared signal values through subpixel marker positions."""
-    probe = Project(size=(12, 1024), fps=FPS, duration=DURATION, output_audio=False)
+    probe = Project(
+        size=(12, 1024),
+        fps=FPS,
+        duration=DURATION,
+        output_audio=False,
+    )
+
     probe.audio.track("input").add(audio_path, trim_end=DURATION)
+
     for index, signal in enumerate(responses(probe)):
         marker = probe.root.add(
             Rectangle(width=2, height=2, fill="#ffffff"),
@@ -191,9 +198,16 @@ def curve(project, values, signal, top, bottom, colour, name):
 def build_project(audio_path: Path, study: str) -> Project:
     if study not in ("bounded", "smoothing", "spectra"):
         raise ValueError(f"Unknown study: {study}")
-    project = Project(size=SIZE, fps=FPS, duration=DURATION, background="#101c27")
+    project = Project(
+        size=SIZE,
+        fps=FPS,
+        duration=DURATION,
+        background="#101c27",
+    )
+
     project.audio.track("analysis input").add(audio_path, trim_end=DURATION)
     project.output_audio = False
+
     # Reserve the lower 120px for native video controls at mobile widths.
     shape(
         project, Rectangle(width=640, height=120, fill="#0b141c"), 0, 440, anchor=(0, 0)
@@ -206,6 +220,7 @@ def build_project(audio_path: Path, study: str) -> Project:
         anchor=(0, 0.5),
         z=1,
     )
+
     raw, fast, slow = responses(project)
     waveform(project, audio_path)
 

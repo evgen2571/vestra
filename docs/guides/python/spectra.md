@@ -36,7 +36,13 @@ from vestra.sources import (
     Spectrum2DRadialLayout,
 )
 
-project = Project(size=(640, 440), fps=30, duration=4, background="#101c27")
+project = Project(
+    size=(640, 440),
+    fps=30,
+    duration=4,
+    background="#101c27",
+)
+
 project.audio.track("music").add("assets/music.wav", trim_end=4)
 project.output_audio = False
 
@@ -57,6 +63,7 @@ linear_source = Spectrum2D(
     bar_gap_ratio=0.24,
     min_bar_height_ratio=0.015,
 )
+
 project.root.add(linear_source)
 ```
 
@@ -91,7 +98,9 @@ radial_source = Spectrum2D(
     bar_gap_ratio=0.24,
     min_bar_height_ratio=0.015,
 )
+
 project.root.add(radial_source)
+
 project.render("spectra.mp4", backend="cpu", overwrite=True)
 ```
 

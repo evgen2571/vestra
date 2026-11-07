@@ -10,6 +10,7 @@ project = Project(
     duration=3,
     background="#101c24",
 )
+
 project.root.add(
     Text("Position interpolation", font_size=35, fill="#eff6f2"),
     position=(0.08, 0.13),

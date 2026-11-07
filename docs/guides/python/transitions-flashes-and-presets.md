@@ -15,19 +15,34 @@ This is a complete three-second project using two procedural shape layers:
 ```python
 from vestra import Crossfade, Project, Rectangle
 
-project = Project(size=(640, 360), fps=30, duration=3, background="#101c24")
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=3,
+    background="#101c24",
+)
+
 outgoing = project.root.add(
     Rectangle(width=640, height=360, fill="#193b43"),
     start=0,
     duration=2,
 )
+
 incoming = project.root.add(
     Rectangle(width=640, height=360, fill="#34324f"),
     start=1,
     duration=2,
     z=1,
 )
-project.root.transitions.add(outgoing, incoming, Crossfade(), start=1, duration=1)
+
+project.root.transitions.add(
+    outgoing,
+    incoming,
+    Crossfade(),
+    start=1,
+    duration=1,
+)
+
 project.render("crossfade.mp4", backend="cpu", overwrite=True)
 ```
 
@@ -170,7 +185,14 @@ or an overlap. This continues the first shape project:
 from vestra import Flash
 
 project.flashes.add(
-    Flash(start=1.5, duration=0.12, colour="#ffffff", opacity=0.7, fade_out=0.08, layer=10)
+    Flash(
+        start=1.5,
+        duration=0.12,
+        colour="#ffffff",
+        opacity=0.7,
+        fade_out=0.08,
+        layer=10,
+    )
 )
 ```
 
@@ -184,8 +206,14 @@ using your own `assets/one.png`:
 ```python
 from vestra import Image
 
-project = Project(size=(640, 360), fps=30, duration=6)
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=6,
+)
+
 photo = project.root.add(Image("assets/one.png"))
+
 photo.presets.apply_slow_drift(start=0.5, duration=4, intensity=0.6)
 ```
 

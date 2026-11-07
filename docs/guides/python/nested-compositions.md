@@ -46,7 +46,15 @@ fractional values are supported. The group's placement uses its parent's coordin
 
 ```python
 card = Group(size=(600, 300))
-card.add(Rectangle(width=100, height=80, fill="#2563eb", position=(0.25, 0.5)))
+
+card.add(
+    Rectangle(
+        width=100,
+        height=80,
+        fill="#2563eb",
+        position=(0.25, 0.5),
+    )
+)
 ```
 
 This new sized-group example is separate from the card above. The rectangle's
@@ -59,8 +67,11 @@ card: placement copies the children that exist at that moment.
 
 ```python
 badge = Group(size=(120, 60))
+
 badge.add(Circle(radius=12, fill="#ffffff", position=(0.5, 0.5)))
+
 card.add(badge, position=(0.75, 0.5))
+
 project.root.add(card, duration=5, position=(0.5, 0.5))
 ```
 
@@ -91,9 +102,18 @@ project = Project(
     fps=30,
     duration=5,
 )
+
 group = project.root.group(start=1, duration=3, z=2, id="scene")
+
 group.add(Color("#0f172a"), duration=3)
-badge = group.child.add(Color("#f97316"), start=0.5, duration=1.5, z=1)
+
+badge = group.child.add(
+    Color("#f97316"),
+    start=0.5,
+    duration=1.5,
+    z=1,
+)
+
 badge.transform.scale = 0.5
 ```
 
@@ -129,15 +149,21 @@ Default resource limits allow group canvases up to 8192 pixels per axis and
 ```python
 from vestra import Project, ResourceLimits
 
-limits = ResourceLimits(maximum_group_width=16_384, maximum_group_pixels=640 * 360)
+limits = ResourceLimits(
+    maximum_group_width=16_384,
+    maximum_group_pixels=640 * 360,
+)
+
 project = Project(
     size=(640, 360),
     fps=30,
     duration=2,
     resource_limits=limits,
 )
+
 strip = Group(size=(16_384, 2))
 strip.add(Rectangle(width=16_384, height=2, fill="#2563eb"))
+
 project.root.add(strip, scale=0.025)
 ```
 

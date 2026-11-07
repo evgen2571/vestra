@@ -23,14 +23,25 @@ evidence.
 
 ## Focused editing checks
 
-For a fast edit loop, use `cargo test -p CRATE TEST_FILTER`, `cargo test -p vestra-cli --test cli_validation`, or `just python-test python-tests/TEST.py`. `just test` forwards Cargo/test arguments, such as `just test TEST_FILTER -- --nocapture`. Native Python work uses `just python-sync`, then `just python-test`; the test recipe syncs dependencies itself, imports the extension, and runs compileall after pytest. Build the extension/package through the repository's documented Nix/uv workflow, not a separate hand-maintained environment.
+Run only the relevant crate or Python file while editing:
 
-After Rust-only changes, explicitly rebuild the editable native package before
-Python tests: ordinary uv synchronization can reuse a cached extension.
+```bash
+cargo test -p vestra-core TEST_FILTER
+cargo test -p vestra-cli --test cli_validation
+just python-test python-tests/TEST.py
+```
+
+`just test TEST_FILTER -- --nocapture` forwards arguments to the workspace Rust
+runner. `just python-test` syncs the editable package, imports the extension,
+runs pytest and then compileall. Use the repository's Nix/uv workflow for native
+Python work.
+
+**After Rust changes, rebuild the native extension explicitly.** Ordinary uv
+synchronization can reuse a cached extension:
 
 ```bash
 uv sync --locked --extra dev --reinstall-package vestra
-just python-test
+just python-test python-tests/TEST.py
 ```
 
 ## Pre-PR contributor gate
@@ -43,12 +54,18 @@ just python-sync
 just check
 ```
 
-`just check` delegates to `scripts/check.sh`. It runs `cargo fmt --all -- --check`, explicit rustfmt checks for included effect semantic sources, effect-generation freshness and generator tests, workspace `cargo check` and Clippy with all features, workspace Rust tests, `uv run python crates/vestra-cli/tests/schema_validation.py`, and a generated-schema comparison against `schemas/project.schema.json`. The shared `scripts/test-rust.sh` runner serializes Rust tests when `VESTRA_WGPU_BACKEND=gl` or WSL's default adapter path needs one EGL context.
+`just check` runs [scripts/check.sh](https://github.com/evgen2571/vestra/blob/develop/scripts/check.sh):
 
-This gate does not run the Python package suite, installed-wheel checks or
-strict software/hardware WGPU verification. Add the checks selected above.
-Documentation-only work can use `just docs-check` and `just site-check` without
-building the native engine.
+- Rust formatting, including the included effect semantic sources.
+- Effect-generation freshness and exporter/generator tests.
+- Workspace compilation, Clippy and Rust tests with all features.
+- Schema validation and generated-schema freshness.
+- Public Markdown file-link checks.
+
+It does **not** run Python package tests, Python lint, installed-wheel checks,
+`just site-check`, or strict software/hardware WGPU verification. Add the checks
+selected above. Documentation-only work uses `just docs-check` and
+`just site-check` without building the engine.
 
 ## Command reference
 
@@ -57,7 +74,7 @@ building the native engine.
 | `just fmt` / `just fmt-check` | Format Rust and the maintained Python surface, or check without writing |
 | `just lint` | Run workspace Clippy and Python lint |
 | `just test` | Run workspace Rust tests with the platform's thread policy |
-| `just python-test` | Sync/build the native package, run pytest, and compileall |
+| `just python-test` | Sync the native package, run pytest and compileall; explicitly rebuild after Rust edits |
 | `just schema-check` | Validate schema inputs and check generated-schema freshness |
 | `just gen-effects` / `just gen-effects-check` | Regenerate effect artifacts, or check freshness without writing |
 | `just effect-check` | Generation, core/common/CPU tests and adapter-independent WGPU library tests |
@@ -70,14 +87,14 @@ building the native engine.
 
 ### Canonical examples and showcase renders
 
-`just examples` delegates to `scripts/render-examples.sh --validate-only` and
-validates every canonical JSON example with the CLI. Running
-`./scripts/render-examples.sh` without flags also renders one CPU representative
-per category into a temporary directory. Use `just examples --all` to render
-every example, or `just examples --output-dir DIR` to keep rendered artifacts.
-Canonical validation and showcase smoke rendering also run in the Python CI job.
-Full-resolution rendering remains an explicit maintainer workflow. See the [examples index](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/README.md) for
-the category map and media-dependent example.
+`just examples` validates every canonical JSON example with the CLI. To render
+one CPU representative per category, run `./scripts/render-examples.sh` without
+flags; use `just examples --all` for all examples and `--output-dir DIR` to keep
+artifacts. See the [examples index](https://github.com/evgen2571/vestra/blob/develop/examples/README.md)
+for the category map and media-dependent example.
+
+`just showcase-smoke` renders full timelines at low resolution with offline
+fixtures. Full-resolution previews follow the [documentation media workflow](documentation-media.md).
 
 ## Backend feature isolation
 
@@ -94,72 +111,42 @@ cargo test -p vestra-render --no-default-features --features cpu,wgpu
 cargo test -p vestra-media
 ```
 
-Common tests cover shared contracts/preparation. CPU and WGPU packages contain
-their implementation-private tests; cross-backend parity suites live in facade
-integration tests and require both features. WGPU-only coverage includes planning,
-parameter, upload and resource-limit checks. The facade defaults to both backends;
-its no-backend build preserves contracts and unavailable-backend behavior. The
-adapter-list example requires the WGPU feature.
+Common tests cover shared contracts and preparation; implementation-private
+tests live in the CPU and WGPU crates. Facade parity tests require both features.
+The facade defaults to both backends; its no-backend build checks contracts and
+unavailable-backend behavior. The adapter-list example requires WGPU.
 
-Use `cargo tree -p PACKAGE --edges normal,build,dev` for actual package activation.
-CPU-only tests must select neither the WGPU implementation nor WGPU libraries;
-WGPU-only tests must select no CPU implementation. Media's graph contains no
-renderer crate, including common. For extraction/dependency changes, also collect
-compiler artifacts from an isolated `CARGO_TARGET_DIR` build: a full workspace
-build unifies features and cannot prove single-backend isolation.
+For dependency changes, verify normal, build and development dependencies with
+`cargo tree -p PACKAGE --edges normal,build,dev`:
+
+- CPU-only builds must select neither the WGPU implementation nor WGPU libraries.
+- WGPU-only builds must select no CPU implementation.
+- Media must select no renderer crate, including common.
+
+Also collect compiler artifacts in an isolated `CARGO_TARGET_DIR` build when
+changing crate boundaries or dependencies. A full workspace build unifies
+features and cannot prove single-backend isolation.
 
 ## Schema, CLI and effect compatibility
 
-Schema changes need both `ve generate-schema --output PATH` and the schema-validation test. CLI changes need current help and CLI integration tests. Rendering changes need CPU tests and source/effect-specific tests. Media tests need working native FFmpeg development libraries; runtime workflows may also need `ffmpeg`/`ffprobe` on `PATH`.
+Use `just schema-check` for schema validation and generated-schema freshness.
+CLI changes also need current help (`just cli-smoke`) and CLI integration tests.
+Public Python contract changes need the rebuilt extension and relevant typing,
+serialization and validation tests. Media tests require native FFmpeg development
+libraries; runtime workflows may also need `ffmpeg` and `ffprobe` on `PATH`.
 
-Effect generation checks require only the core metadata exporter and Python's
-standard library; they do not build renderers or the native Python extension.
-`just gen-effects-check` checks committed-artifact freshness and runs the core
-exporter and stdlib generator tests. To run the Python generator tests separately
-and then check the frozen public contracts:
-
-```bash
-uv run --no-project python -m unittest discover -s tests -p test_effect_generation.py
-just python-test python-tests/test_effect_generation_compatibility.py
-```
-
-The latter compares imports, signatures, inheritance, serialization, validation
-timing and JSON behavior with frozen pre-generation fixtures. It explicitly
-preserves the Ascii schema/parser mismatch. See the
-[fixture instructions](https://github.com/evgen2571/vestra/blob/develop/python-tests/fixtures/effects/README.md) to repeat
-the same comparisons against the exact baseline revision. Do not refresh the
-expected values from generated output to make a regression pass.
-
-Effect declarations and static semantic forwarding are described in
-[adding effects](extending/effect.md). Whole-catalog property tests compare typed
-visitors and compiled constraints with descriptors, exercise negative keyframe
-validation for scalar/plain/point tracks, and check declared active intervals.
-Frozen specimens additionally
-pin old serde/compile/evaluate/topology and transition/normalization behavior.
-Renderer tests pin old kernel order/private bits, shader labels/composed bytes
-and packed-value specimens. Registry-driven WGPU tests validate all registered
-records against WGSL, including named offsets, scalar types and typed uploads.
-These structural/specimen tests complement actual CPU/software/hardware frame
-tests; they do not establish exhaustive numerical correctness or hardware parity.
+For effects, start with `just effect-check` and the affected pixel tests. The
+[effect test reference](effect-testing.md) maps generator, frozen compatibility,
+structural and renderer fixtures to their owners and explains how to preserve
+independent expectations.
 
 ## Equipment-dependent WGPU verification
 
-`just effect-check` runs the WGPU library with `--no-default-features`. The
-crate's default `adapter-tests` feature includes tests that initialize a graphics
-instance, request a device, submit commands or read back pixels. Disabling it
-keeps registration, shader parsing/composition, parameter ABI/packing, resource
-calculations and pure planning tests, including tests with `gpu_` in their names.
-The test-only instance factory rejects initialization in this mode, so an
-accidental adapter request fails before graphics discovery. No Vulkan, EGL,
-software ICD or working adapter is required for the focused command.
-
-`just wgpu-software` and `just wgpu-hardware` explicitly enable `adapter-tests`
-and run the entire private WGPU library suite under strict adapter requirements,
-including readback callback validation and instance/queue lifetime tests.
-The facade's strict rendering/parity tests remain included. Ordinary
-`cargo test -p vestra-render-wgpu` retains adapter tests through default features;
-hardware validation still requires a proven hardware adapter. See
-[GPU validation](gpu-validation.md) for selecting and verifying the actual device.
+`just effect-check` includes adapter-free WGPU tests. Ordinary
+`cargo test -p vestra-render-wgpu` includes adapter tests by default.
+Run `just wgpu-software` or `just wgpu-hardware` for strict adapter verification;
+follow [GPU validation](gpu-validation.md) for device selection, test scope and
+what each result establishes.
 
 ## Benchmark-tool checks
 
@@ -205,49 +192,32 @@ roadmap acceptance criteria do not describe features already available.
 
 ## Rendered sequences and references
 
-Compare a short deterministic sequence before/at/after effect and transition
-boundaries, with nested offsets, masks/mattes and fractional FPS as relevant.
-Repeat timestamps in forward/backward order and fresh/prepared sessions to
-expose request-order state or cache invalidation. Retain per-frame metrics and
-contact sheets; a sequence average can hide a bad boundary frame.
+Renderer changes need actual frame inspection as well as structural tests.
+Use the [rendered-output procedure](gpu-validation.md#inspect-rendered-output)
+for boundary sequences, independent references, alpha and justified tolerances.
 
-Backend parity is one reference, not independent proof: also use expected
-literal pixels, a known fixture/reference or a cache-disabled path as suitable.
-Inspect transparent hidden RGB, alpha, semitransparent edges and composition
-over a visible backdrop. Justify tolerances for the operation and encoded/raw
-format rather than copying broad thresholds. Fix seeds/fonts/assets/time and
-investigate nondeterminism instead of widening tolerances. Keep CPU, strict
-software-WGPU and named hardware-WGPU evidence separate.
+<span id="agent-verification-tools"></span>
 
-## Agent verification tools
-
-The task-specific local workflows are indexed in
-[Vestra skills](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md); their visual tools also have
-four isolated self-tests. `just docs-check` checks public Markdown file targets,
-not skill metadata, links under `.agents/` or Markdown anchors. Validate those
-explicitly when changing skills, and execute the existing tool self-tests.
+Agent workflow and tool checks are documented in the
+[repository skill index](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md).
 
 ## CI coverage
 
-CI has four validation jobs followed by the required `CI Success` gate:
+The [CI workflow](https://github.com/evgen2571/vestra/blob/develop/.github/workflows/ci.yml)
+runs on pull requests, pushes to `main`, and manual dispatches:
 
-- Style runs `just style` in `nix develop .#ci` to check Rust formatting, the maintained Python format/lint surface, public documentation file links, showcase/script formatting and lint, and `just gen-effects-check`. The generation check compiles only the core exporter and runs stdlib generator tests. Rust and Python jobs start only after it passes.
-- Rust CPU checks normal/build/dev dependency activation, then tests common, CPU
-  and the CPU/no-backend facade in `nix develop .#ci`. Its Rust cache has a separate
-  CPU key; its dependency guard must select no WGPU package.
-- Rust Integration first checks and tests WGPU-only packages before workspace
-  feature unification, then runs `just lint-rust` and `just wgpu-software` in
-  `nix develop .#wgpu-software`. The verification script runs workspace tests once,
-  followed by strict WGPU-private and facade integration tests. Clippy replaces
-  separate compilation-check jobs. `just cli-smoke schema-freshness` checks CLI
-  help and generated-schema freshness in the same job.
-- Both Rust CI jobs disable debug symbols in Cargo's `dev` and `test` profiles to keep build artifacts within the hosted runner's disk budget. Debug assertions and the local development profiles remain unchanged.
-- Python runs `just python-test` and `just schema-validation` in `nix develop .#wgpu-software`, sharing the native extension build for pytest, schema validation, compileall,
-  canonical-example validation and showcase smoke rendering. Script regression tests
-  cover documentation links, asset checksum/cache behavior and benchmark comparison/recording. The software Vulkan shell makes WGPU tests strict and supplies the adapter they require. Pushes to main and manual runs additionally run `just wheel-smoke` in `nix develop .#ci` to build a wheel, install it in a clean environment, verify its import and typing marker, and render/probe a short AAC project. PRs defer this packaging check until main.
+| Job | Checks | When it runs |
+| --- | --- | --- |
+| Style | Rust/Python formatting, Python and showcase/script lint, public Markdown links, effect generation | Every run |
+| Rust CPU | Dependency isolation; common, CPU, CPU-only and no-backend facade tests | Native changes; after Style |
+| Rust Integration | WGPU-only isolation/tests, workspace Clippy/tests, strict software WGPU, CLI help and schema freshness | Native changes; after Style |
+| Python | Native package tests, schema validation, canonical examples, showcase smoke and script regressions | Native changes; after Style |
+| Installed wheel (Python job) | Build, clean install, import/typing and short AAC render/probe | Pushes to `main` and manual runs |
+| CI Success | Require successful checks; accept only the intended native-job skips | Every run |
 
-Rust dependencies/build artifacts, uv downloads, and Nix builds are cached. Rust cache keys use the actual Nix toolchain and flake inputs; Python also includes its dependency inputs. CPU and integration cache keys are separate. The independent CPU runner duplicates some cold core/preparation compilation, and explicit WGPU-only tests add work before integration. Job separation establishes isolation; it does not by itself reduce total CI resource use. Cold runs still need to populate the caches.
+Changes limited to Markdown, `docs/`, and `LICENSE` skip the native jobs. Any
+other path triggers them, including manifests, lockfiles, fixtures, scripts and
+workflows. Manual runs execute all checks. Failed or cancelled jobs fail the gate.
 
-Changes limited to Markdown, `docs/`, and `LICENSE` skip both Rust jobs and the Python job while Style and `CI Success` still run. All other paths (including manifests, locks, fixtures, scripts, and workflows) trigger all three native jobs. Manual runs always execute every check. The gate rejects failed/cancelled jobs and allows skips only when change detection explicitly excludes native validation.
-
-CI WGPU validation is explicitly software correctness. Hardware validation is separate: discover adapters, set a chosen `VESTRA_WGPU_BACKEND`, then run `scripts/verify-wgpu.sh --hardware` and report the actual adapter. See [GPU validation](gpu-validation.md).
+CI's WGPU evidence is [software correctness](gpu-validation.md#verify-software-safe-correctness).
+Hardware validation and visual inspection remain separate checks.

@@ -1,6 +1,20 @@
 # GPU validation
 
-WGPU execution is not hardware-GPU validation. A WGPU backend can select a software CPU adapter. Every hardware result must name the requested graphics API, actual graphics backend, adapter name and device classification reported by Vestra/WGPU.
+Choose the evidence you need before running a renderer check. WGPU can select a
+software CPU adapter; successful WGPU execution alone does not demonstrate
+hardware correctness. Frame inspection answers a further question: whether the
+rendered result looks and behaves as intended.
+
+| Evidence | What it establishes | What remains to check |
+| --- | --- | --- |
+| Adapter-free tests | Registration, shaders, parameter layout and planning agree without a device | Device execution and rendered pixels |
+| Strict software-safe WGPU run | Tests execute on an available adapter; software adapters are permitted | Proven hardware behavior and visual quality |
+| Strict hardware WGPU run | Tests execute on an integrated or discrete GPU for the selected graphics API | Other APIs/devices and visual quality |
+| Rendered-output inspection | Selected frames/sequences match independent expectations | Untested scenes, parameters and devices |
+
+Keep CPU, software-WGPU and hardware-WGPU results separate. Every hardware result
+must name the requested graphics API, actual graphics backend, adapter name and
+device classification reported by Vestra/WGPU.
 
 Run from the repository root in the pinned development environment or an
 equivalent native setup. The recipes delegate to `scripts/verify-wgpu.sh`.
@@ -46,26 +60,62 @@ renderer tests and the CLI render regression require both
 `VESTRA_REQUIRE_WGPU=1` and `VESTRA_REQUIRE_HARDWARE_WGPU=1`.
 
 Retain the discovery record and actual test adapter with results. If only
-software adapters are available, report hardware validation as blocked. A pass
-on one graphics API does not establish another API's compatibility.
+software adapters are available, report hardware validation as unverified and
+state the missing hardware adapter. A pass on one graphics API does not establish
+another API's compatibility.
 
 ## Understand the test evidence
 
-Both modes collect all private WGPU tests from
-`vestra-render-wgpu --lib --features adapter-tests` and
-cross-backend facade integration tests from `vestra-render --tests --all-features
-gpu_`. For focused development, run the relevant package with the same strict
-flags and selected API. Running only the facade library no longer collects the
-GPU implementation or integration parity suites.
+Both strict modes run the general workspace suite without strict WGPU flags,
+then require an adapter for these targeted suites:
 
-`just effect-check` instead disables the WGPU crate's default `adapter-tests`
-feature. It checks registration, shader structure, parameter ABI/packing, pure
-planning and resource calculations without initializing any graphics backend.
-It does not replace either strict adapter suite.
+- All private WGPU tests: `vestra-render-wgpu --lib --features adapter-tests`,
+  including device submission, readback callbacks, resource and lifecycle tests.
+- Cross-backend facade tests: `vestra-render --tests --all-features gpu_`,
+  including rendering/parity checks.
+- Hardware mode additionally runs the strict CLI encoded-frame render regression
+  with hardware required.
+
+For focused development, run the relevant suite with `VESTRA_REQUIRE_WGPU=1`,
+the selected `VESTRA_WGPU_BACKEND`, and `VESTRA_REQUIRE_HARDWARE_WGPU=1` when
+claiming hardware evidence. Running only the facade library does not collect
+implementation-private tests or facade integration/parity suites.
+
+`just effect-check` has a different purpose: it disables the WGPU crate's default
+`adapter-tests` feature. Registration, shader parsing/composition, parameter
+ABI/packing, pure planning and resource calculations still run, including tests
+whose names contain `gpu_`. A test-only guard rejects graphics initialization
+before discovery, so this command needs no Vulkan, EGL, software ICD or adapter.
+Ordinary `cargo test -p vestra-render-wgpu` retains adapter tests by default.
+Adapter-free tests do not replace either strict suite or output inspection.
+
+## Inspect rendered output
+
+A passing parity test can preserve the same mistake in both backends. Use
+expected literal pixels, a known fixture/reference or a cache-disabled path as
+an independent check, then inspect the actual frames:
+
+1. Render a short deterministic sequence before, at and after effect/transition
+   boundaries. Include nested offsets, masks/mattes and fractional FPS when the
+   change affects them.
+2. Repeat timestamps in forward/backward order and with fresh/prepared sessions
+   to expose request-order state or cache invalidation.
+3. Inspect transparent hidden RGB, alpha, semitransparent edges and composition
+   over a visible backdrop. Fix seeds, fonts, assets and time.
+4. Retain per-frame metrics and contact sheets; an average can hide a bad
+   boundary frame. Justify tolerances for the operation and raw/encoded format,
+   and investigate nondeterminism before changing thresholds.
+
+Record the selected backend and actual adapter alongside the output. Keep
+visual quality evidence alongside numerical comparisons. For encoded output,
+also [probe the published media and check sync and cleanup](media-pipeline.md#verify-encoded-output).
 
 ## Troubleshoot platform discovery and execution
 
-On some WSL installations, `vulkan` exposes llvmpipe while `gl`/GLES reaches NVIDIA through D3D12. That is an environment-specific result, not a universal rule. Start with `nvidia-smi`, `glxinfo -B` and `vulkaninfo --summary` when available, then trust adapter discovery. Set `VESTRA_WGPU_BACKEND=gl` when the discovered GL path exposes the required hardware.
+Start with `nvidia-smi`, `glxinfo -B` and `vulkaninfo --summary` when available,
+then use Vestra's adapter discovery. On some WSL installations, Vulkan exposes
+llvmpipe while GL/GLES reaches NVIDIA through D3D12; choose
+`VESTRA_WGPU_BACKEND=gl` only when discovery confirms that hardware path.
 
 GL rendering requires compute shaders and storage buffers; discovery of a desktop
 GL 3.3 adapter alone does not establish a usable Vestra renderer. WGPU 23 also
@@ -75,12 +125,13 @@ The shared root-instance lifetime and GL context restrictions remain required.
 Validate a compatible GL/GLES runtime on WSL separately from Vulkan; Vulkan
 results do not establish GL/WSL, DX12, Metal or browser runtime compatibility.
 
-llvmpipe and Lavapipe are useful software fallback/correctness adapters. They cannot support a hardware-performance or hardware-correctness claim. User selection details are in [Backends](../reference/backends.md).
+llvmpipe and Lavapipe are useful for software correctness and fallback checks.
+Use proven hardware for hardware correctness or performance claims. User
+selection details are in [Backends](../reference/backends.md).
 
-Software and hardware verification use normal Rust test parallelism after the
-WGPU 23 queue-identity correction. GL keeps one active context for WSL/Mesa
-compatibility and exercises the same ownership checks serially. The explicit
-concurrent lifecycle regression retains its own preparation/render/drop workers.
+GL verification runs tests serially because WSL/Mesa permits one active context.
+Other backends use normal Rust test parallelism. The explicit concurrent
+lifecycle regression retains its own preparation/render/drop workers.
 
 ## Stress resource lifetimes
 
@@ -94,7 +145,8 @@ VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_WGPU=1 \
 ```
 
 It requests 12 workers with 30 prepare/render/drop rounds each (GL uses one
-worker for context ownership), retaining returned frames across subsequent preparations and worker teardown. Add
+worker for context ownership). It retains returned frames across subsequent
+preparations and worker teardown. Add
 `VESTRA_REQUIRE_HARDWARE_WGPU=1` for hardware validation. The ordinary suite keeps
 a smaller concurrent regression and the deterministic retained-device/dropped-queue
 regression, including submission-index polling.

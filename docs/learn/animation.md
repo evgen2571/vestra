@@ -224,15 +224,4 @@ The **Guides** navigation contains task-oriented Python, JSON and CLI pages.
 Use **Concepts** to understand timing and evaluation, or **Reference** for source
 types, accepted values and backend limits.
 
-
-## Preview reproduction
-
-The comparison is a three-second, silent CPU render at 960 × 540 and 30 fps;
-the poster is the frame at 1.3 seconds. Graphics and code are original MIT-licensed
-project work. Labels use Vestra's bundled DejaVu-derived font; its
-[complete notice](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/python/vestra/fonts/LICENSE.txt)
-remains with the package. Rendered labels do not redistribute the font file.
-
-From the native contributor environment, `just docs-media` runs the downloadable
-programs, probes their full outputs under `target/docs-media/`, and refreshes the
-site copies. See [tutorial preview reproduction](../development/documentation.md#reproduce-tutorial-previews).
+<span id="preview-reproduction"></span>

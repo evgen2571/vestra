@@ -9,14 +9,14 @@ circular portrait crop, then add a soft reveal and a cutout one step at a time.
 Use your own `character.png` in the directory where you run the script.
 For the coverage model, read [masks and mattes](../../concepts/masks-and-mattes.md).
 
-<figure markdown="span">
+<figure class="comparison" markdown="span">
 ![Four CPU-rendered stripe patterns: alpha preserves the whole rectangle of opaque mask artwork; luma dims its dark background around a bright circle; union joins two circles; subtract removes a circle from a larger one.](../../assets/renders/concepts-masks.webp)
 <figcaption>Actual Vestra output. Alpha and luma use identical mask artwork: a white circle over an opaque dark gray background. Only luma uses that background's brightness as partial coverage.</figcaption>
 </figure>
 
 The lower examples show two circles combined with union and subtract. The
 [complete procedural comparison](../../assets/examples/concepts_masks.py)
-needs no image files; its source and reproduction command are below. You can
+needs no image files. You can
 also [download its three-second MP4](../../assets/renders/concepts-masks.mp4).
 
 ## Start with a circular crop
@@ -218,22 +218,11 @@ speed, independently of the owning layer's video offset and rate. For owned grou
 children and direct image/video sizing restrictions, see
 [mask source and timing reference](../../reference/masks.md#canonical-inputs).
 
-## Reproduce the comparison
+<span id="reproduce-the-comparison"></span>
 
-[Download concepts_masks.py](../../assets/examples/concepts_masks.py), then run
-`uv run python concepts_masks.py` using the same installation as the tutorials.
-It writes `concepts-masks.mp4`: three seconds of static, silent output at
-640 × 480 and 30 fps on CPU. Rerunning replaces that file. The preview above is
-its frame at 0.5 seconds. All graphics and code are original project work under
-MIT; labels use the bundled font and its packaged notice.
+## Complete example
 
-??? example "Complete comparison source"
-
-    ```python title="concepts_masks.py"
-    --8<-- "docs/assets/examples/concepts_masks.py"
-    ```
-
-Contributors regenerate the site still using the
-[documentation media workflow](../../development/documentation.md#reproduce-tutorial-previews).
-The comparison supplies the same original artwork to each placement, changing
-only masks. Use it to isolate coverage behavior before adding animation or media.
+[concepts_masks.py](../../assets/examples/concepts_masks.py) builds the four
+coverage cases without external images. Run `python concepts_masks.py` to write
+`concepts-masks.mp4`; rerunning replaces the file. The same artwork reaches each
+placement, so the comparison isolates coverage before adding animation.

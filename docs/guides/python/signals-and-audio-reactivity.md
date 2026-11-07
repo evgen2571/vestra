@@ -10,7 +10,7 @@ bass-and-melody phrase. The preview is silent: its waveform and moving marker
 show when the input changes. The audio clips remain in the project for analysis.
 
 <figure>
-  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-bounded.webp" width="640" height="440" aria-label="Silent study: a waveform marks five input beats. A mint circle grows between fixed minimum and maximum rings, and a moving marker follows the measured scale curve.">
+  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-bounded.webp" width="640" height="560" aria-label="Silent study: a waveform marks five input beats. A mint circle grows between fixed minimum and maximum rings, and a moving marker follows the measured scale curve.">
     <source src="../../assets/renders/audio-bounded.mp4" type="video/mp4">
     <a href="../../assets/renders/audio-bounded.mp4">Download the bounded response</a>.
   </video>
@@ -66,7 +66,7 @@ Keep the clamp while tuning.
 ## Compare attack and release
 
 <figure>
-  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-smoothing.webp" width="640" height="440" aria-label="Silent comparison: three measured response curves share one waveform and playhead. Raw RMS has sharp peaks, fast attack retains a tail, and slow attack reduces each short peak.">
+  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-smoothing.webp" width="640" height="560" aria-label="Silent comparison: three measured response curves share one waveform and playhead. Raw RMS has sharp peaks, fast attack retains a tail, and slow attack reduces each short peak.">
     <source src="../../assets/renders/audio-smoothing.mp4" type="video/mp4">
     <a href="../../assets/renders/audio-smoothing.mp4">Download the smoothing comparison</a>.
   </video>
@@ -96,6 +96,9 @@ This replaces `audio-response.mp4` with a silent video. Setting
 `True` publishes the same visuals with sound. See the
 [signals reference](../../reference/signals.md) for binding operations, frequency
 constraints and other transforms.
+
+<span id="run-the-audible-comparisons"></span>
+<span id="credits-and-reproduction"></span>
 
 ## Complete example
 

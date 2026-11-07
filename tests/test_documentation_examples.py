@@ -48,15 +48,22 @@ def test_learning_media_matches_maintained_sources_and_delivery_assets():
             hashlib.sha256((assets / f"{name}.webp").read_bytes()).hexdigest()
             == metadata["web_sha256"]
         ), name
+    for name, digest in manifest["input_sha256"].items():
+        assert (
+            hashlib.sha256(
+                (ROOT / f"docs/assets/examples/{name}").read_bytes()
+            ).hexdigest()
+            == digest
+        )
     videos = {
         name: data
         for name, data in manifest.items()
-        if name not in {"program_sha256", "stills"}
+        if name not in {"program_sha256", "input_sha256", "stills"}
     }
-    assert len(videos) == 14
+    assert len(videos) == 12
     for name, metadata in videos.items():
         assert metadata["backend"] == "cpu"
-        assert metadata["audio"] == name.startswith("audio-")
+        assert metadata["audio"] is False
         assert (
             hashlib.sha256((assets / f"{name}.mp4").read_bytes()).hexdigest()
             == metadata["web_sha256"]

@@ -27,7 +27,7 @@
   <path d="M390 84v20H130v128" class="arrow"/>
   <path d="M390 104h-40v128" class="arrow"/>
   <text x="240" y="165" class="small" text-anchor="middle">640 × 360</text>
-  <text x="240" y="195" class="small" text-anchor="middle">root canvas</text>
+  <text x="240" y="195" class="small" text-anchor="middle">Project · root composition</text>
   <rect x="75" y="232.25" width="110" height="55" class="shape"/>
   <rect x="295" y="232.25" width="110" height="55" class="shape" opacity="0.5"/>
   <text x="130" y="325" class="small" text-anchor="middle">(0.25, 0.5)</text>

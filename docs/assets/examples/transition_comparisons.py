@@ -21,17 +21,17 @@ def add_scene(scene: CompositionLayer, incoming: bool) -> None:
     scene.add(Rectangle(width=640, height=360, fill=background))
     scene.add(
         Text("B" if incoming else "A", font_size=108, fill=accent),
-        position=(0.25, 0.53),
+        position=(0.25, 0.40),
     )
     scene.add(
         Text("Incoming" if incoming else "Outgoing", font_size=24, fill="#f0f0e8"),
-        position=(0.25, 0.79),
+        position=(0.25, 0.62),
     )
-    scene.add(Circle(radius=64, stroke=accent, stroke_width=7), position=(0.70, 0.48))
+    scene.add(Circle(radius=64, stroke=accent, stroke_width=7), position=(0.70, 0.43))
     for index in range(5):
         scene.add(
             Rectangle(width=112, height=7, fill=accent),
-            position=(0.70, 0.31 + index * 0.085),
+            position=(0.70, 0.23 + index * 0.075),
             rotation=25 if incoming else -25,
         )
 
@@ -61,7 +61,9 @@ def definitions() -> tuple[tuple[str, str, TransitionDefinition], ...]:
 
 
 def build_project(definition: TransitionDefinition, label: str) -> Project:
-    project = Project(size=(640, 360), fps=30, duration=3, background="#101c24")
+    project = Project(
+        size=(640, 360), fps=30, duration=3, background="#101c24", output_audio=False
+    )
     outgoing = project.root.group("outgoing scene", start=0, duration=2, z=0)
     incoming = project.root.group("incoming scene", start=1, duration=2, z=1)
     add_scene(outgoing, incoming=False)

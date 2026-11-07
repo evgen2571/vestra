@@ -37,34 +37,19 @@ blur only a composed card, apply the effect to that card's group layer.
 
 ## Order changes the result
 
-The two actual CPU renders below use the same procedural source, palette and
+The two actual CPU renders below use the same photograph, palette and
 settings. Only attachment order changes.
 
-<div class="gallery-grid" markdown>
-
-<figure markdown>
-![Blur radius 5 followed by ordered dither scale 2: soft content becomes crisp discrete palette dots.](../assets/renders/effect-order.webp)
-<figcaption>GaussianBlur(radius=5) → OrderedDither(scale=2). Look at the crisp pattern across the softened circle edge.</figcaption>
+<figure class="comparison" markdown="span">
+![The same photograph processed in opposite orders: blur followed by dither produces crisp palette dots above; dither followed by blur softens those dots below.](../assets/renders/effect-order.webp)
+<figcaption>Top: blur → dither. Bottom: dither → blur. Notice whether the palette pattern itself stays crisp or gets softened.</figcaption>
 </figure>
 
-<figure markdown>
-![Ordered dither scale 2 followed by blur radius 5: the dots soften into intermediate colors.](../assets/renders/effect-order-reverse.webp)
-<figcaption>OrderedDither(scale=2) → GaussianBlur(radius=5). The pattern itself is blurred, so output no longer contains only palette colors.</figcaption>
-</figure>
-
-</div>
-
-Download [the controlled source](../assets/examples/effects_catalog.py), then run
-these alternatives in an empty output directory:
-
-```bash
-python effects_catalog.py --effect order --still
-python effects_catalog.py --effect order --reverse --still
-```
-
-Both write WebP images and replace their named output on a rerun. The
-[effect catalog](../guides/python/effect-catalog.md) compares individual effects
-before combining them.
+The source, radius, palette and dither scale stay fixed. Only attachment order
+changes. [Complete example](../assets/examples/effects_catalog.py): keep
+[landscape.jpg](../assets/examples/landscape.jpg) beside it and run
+`python effects_catalog.py --effect order --still` to replace `effect-order.webp`.
+The [catalog](../guides/python/effect-catalog.md) compares individual effects.
 
 ## Ownership and clocks
 

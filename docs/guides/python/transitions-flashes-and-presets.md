@@ -151,23 +151,15 @@ progress from 0 to 1; see the [reference](../../reference/transitions.md).
 conflicting placements before rendering. Validation of file-independent
 structure is separate from media preflight.
 
-## Run every comparison
+<span id="run-every-comparison"></span>
+<span id="credits-and-reproduction"></span>
 
-[Download transition_comparisons.py](../../assets/examples/transition_comparisons.py)
-and run:
+## Complete example
 
-```bash
-python transition_comparisons.py
-```
-
-It replaces `transition-crossfade.mp4`, `transition-push.mp4`,
-`transition-zoom.mp4` and `transition-blur.mp4` in the current directory. The
-complete source creates the two scenes, places them as parent-owned endpoints,
-and changes only the transition definition between renders:
-
-```python
---8<-- "docs/assets/examples/transition_comparisons.py"
-```
+[transition_comparisons.py](../../assets/examples/transition_comparisons.py)
+builds both scenes and runs the four definitions. Run
+`python transition_comparisons.py` to replace `transition-{crossfade,push,zoom,blur}.mp4`
+in the current directory. The graphics are original and use the bundled font.
 
 ## Flashes and image presets
 
@@ -199,32 +191,3 @@ photo.presets.apply_slow_drift(start=0.5, duration=4, intensity=0.6)
 
 See [presets and flashes](../../reference/presets-and-flashes.md) for their
 constraints; neither changes transition ownership.
-
-## Credits and reproduction
-
-These are original procedural graphics using Vestra's bundled default font,
-with no third-party media download. The previews came from CPU renders,
-640 × 360 at 30 fps for three seconds, silent H.264/yuv420p MP4 with fast-start
-metadata. Posters sample **1.5 s**. Full WGPU transition visual parity remains
-unverified; see [feature support](../../reference/feature-support.md).
-Original-render checksums are recorded below. Encoding bytes may differ across
-FFmpeg versions; these originals used FFmpeg **8.1.3**.
-
-| Original render | SHA-256 |
-| --- | --- |
-| `transition-crossfade.mp4` | `e4b2855bb696b3cbad79755bfc5a5e887f734cf7eaed3b0fcbb18f8c94840fed` |
-| `transition-push.mp4` | `a6c6900d01755e90e3a56f036754d0669d59ec1769222824a642d75495fcd168` |
-| `transition-zoom.mp4` | `550aedd527dfbd45089b46eef744766828def4119f5c0a1cba68009e9e1c623f` |
-| `transition-blur.mp4` | `0f8d5cc7045da7218e4d41a5ffc0486ee04700bc26d74ce9c5bc8b1dc688ae05` |
-
-From the repository root in the native contributor environment, regenerate the
-previews and posters with:
-
-```bash
-just python-sync
-python scripts/render-docs-media.py --learning
-```
-
-Original renders and inspection frames stay under `target/docs-media/`.
-The website build uses the committed delivery copies and does not run the
-engine or download media.

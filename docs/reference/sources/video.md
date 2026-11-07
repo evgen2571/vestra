@@ -14,7 +14,7 @@ Video(path: str | PathLike[str], *, sizing: Sizing | Literal["original", "fit", 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `path` | Required | Non-empty `str` or `PathLike[str]` naming a video file. |
-| `sizing` | `None` | Containing composition's default; an override uses the [Image sizing contract](image.md#parameters-and-sizing), including `Sizing.scale` and `Sizing.stretch`. |
+| `sizing` | `None` | Original intrinsic dimensions; an override uses the [Image sizing contract](image.md#parameters-and-sizing), including `Sizing.scale` and `Sizing.stretch`. |
 | `crop` | `None` | Full source region; an override uses [normalized source coordinates](image.md#crop-coordinates). |
 
 The constructor also accepts [presentation transform defaults](../../guides/python/sources-and-layers.md),

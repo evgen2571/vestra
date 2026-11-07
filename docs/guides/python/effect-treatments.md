@@ -46,8 +46,8 @@ project.render("tiled-card.mp4", backend="cpu", overwrite=True)
 Run this complete program with `python tiled_card.py`; it replaces
 `tiled-card.mp4` on a rerun. Notice mirrored repeats around the original card,
 then blur in the rotated output. Motion Tile samples a virtual source region;
-the 640×360 canvas stays the same size. The explicit origin anchor avoids the current
-[center-anchor limitation](../../development/documentation.md#motion-tile-anchor-limitation).
+the 640×360 canvas stays the same size. The explicit origin anchor places the
+card's top-left; expanding the region preserves that placement for any anchor.
 Its stage is intrinsically before transform,
 even if it is attached after an ordinary effect. Check
 [source restrictions](../../reference/effects.md#motion-tile) before attaching it.

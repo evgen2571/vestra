@@ -2,16 +2,22 @@
 
 # Contributing to Vestra
 
-Start with the root [contribution guide](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md) for setup and
-pull request guidance. Use [Testing](testing.md) to choose checks for your change,
-and the [architecture overview](architecture/overview.md) to find your way
-around the codebase. For site content and previews, use
-[Documentation authoring](documentation.md). Agents should also consult [AGENTS.md](https://github.com/evgen2571/vestra/blob/develop/AGENTS.md)
-and [PLANS.md](https://github.com/evgen2571/vestra/blob/develop/PLANS.md).
+Use the [contribution guide](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md)
+to set up a checkout and prepare a pull request against `develop`. Then choose
+the route that matches your change. Documentation preview needs no native engine build.
 
-The [Vestra skill index](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md) routes agent work to
-task-specific verification. GitHub [issue workflow](https://github.com/evgen2571/vestra/blob/develop/docs/agents/issue-tracker.md)
-owns specs and dependencies; implementation plans track work on a selected issue.
+## Choose a task
+
+| I want to… | Start here | Check the result |
+| --- | --- | --- |
+| Improve documentation or examples | [Documentation authoring](documentation.md) | `just docs-check` and `just site-check`; execute changed examples as described in the guide. |
+| Fix a bug | [Architecture overview](architecture/overview.md), then the owning crate | Reproduce it with a focused test; use the [check chooser](testing.md#choose-checks-for-your-change). |
+| Add a feature | [Extension guides](#extension-guides) and [project contracts](architecture/project-to-plan.md) | Test affected contracts, backends and public surfaces; see [Testing](testing.md). |
+| Investigate rendering or speed | [Render pipeline](architecture/render-pipeline.md), [GPU validation](gpu-validation.md), [Performance](performance.md) | Inspect actual frames and report the backend, adapter and measurement conditions. |
+| Prepare a release | [Release procedures](releasing.md) | Follow the maintainer checklist, including installed-wheel and license checks. |
+
+For a larger feature or public API change, discuss the approach in an issue first.
+The sections below map the implementation and specialist procedures.
 
 ## Testing and performance
 
@@ -26,6 +32,7 @@ owns specs and dependencies; implementation plans track work on a selected issue
 
 - [Architecture overview](architecture/overview.md)
 - [Effect pipeline and resource constraints](architecture/effect-pipeline.md)
+- [Effect algorithms and numerical contracts](effect-algorithms.md)
 - [Crate ownership](architecture/crates.md)
 - [Project to plan](architecture/project-to-plan.md)
 - [Render pipeline](architecture/render-pipeline.md)
@@ -49,3 +56,11 @@ owns specs and dependencies; implementation plans track work on a selected issue
 ## Release procedures
 
 - [Releasing the Python package](releasing.md)
+
+## Working with coding agents
+
+Agents should read [AGENTS.md](https://github.com/evgen2571/vestra/blob/develop/AGENTS.md)
+and use [PLANS.md](https://github.com/evgen2571/vestra/blob/develop/PLANS.md)
+for substantial work. The [Vestra skill index](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md)
+routes tasks to relevant verification workflows. The [issue workflow](https://github.com/evgen2571/vestra/blob/develop/docs/agents/issue-tracker.md)
+owns specs and dependencies; an execution plan tracks implementation of the selected scope.

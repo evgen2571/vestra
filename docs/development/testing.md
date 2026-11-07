@@ -1,10 +1,42 @@
 # Testing
 
-Enter `nix develop` and run `just` to list the available commands. Recipes use
-the active environment, so they also work in an equivalent native setup with
-Just, Rust, uv, and the required native dependencies installed.
+Enter `nix develop` and run `just` to list commands. Recipes also work in an
+equivalent native environment with Just, Rust, uv and the required native
+dependencies installed.
 
-Run focused tests while changing a contract, then use the repository check for the broader local gate:
+## Choose checks for your change
+
+Start with a focused check while editing. Before a pull request, run the broader
+checks for the surfaces you changed; equipment-dependent results are separate
+evidence.
+
+| Change | Focused editing check | Before a pull request / additional evidence |
+| --- | --- | --- |
+| Documentation or site | `just docs-check` | `just site-check` and browser inspection; see [Documentation authoring](documentation.md). |
+| Core model, timeline or validation | `cargo test -p vestra-core TEST_FILTER` | `just check`; schema and Python checks if public contracts changed. |
+| Python authoring or bindings | `just python-test python-tests/TEST.py` | `just python-test`; rebuild the native extension after Rust changes. |
+| CLI or canonical JSON | `cargo test -p vestra-cli --test cli_validation` | `just schema-check`, current CLI help and `just examples`, as applicable. |
+| Effects or rendering | Source/effect-specific CPU tests and `just effect-check` | Inspect frames; add [software/hardware WGPU evidence](gpu-validation.md) for affected paths. |
+| Media I/O | Focused media/SDK tests with native FFmpeg libraries | Probe encoded output and verify [sync, publication and cleanup](media-pipeline.md#verify-encoded-output). |
+| Performance | Benchmark-tool tests for tooling changes | Record and compare the [canonical suite](performance.md); smoke timings are not a baseline. |
+| Packaging | Focused package/API tests | `just wheel-smoke` verifies a built and installed wheel. |
+
+## Focused editing checks
+
+For a fast edit loop, use `cargo test -p CRATE TEST_FILTER`, `cargo test -p vestra-cli --test cli_validation`, or `just python-test python-tests/TEST.py`. `just test` forwards Cargo/test arguments, such as `just test TEST_FILTER -- --nocapture`. Native Python work uses `just python-sync`, then `just python-test`; the test recipe syncs dependencies itself, imports the extension, and runs compileall after pytest. Build the extension/package through the repository's documented Nix/uv workflow, not a separate hand-maintained environment.
+
+After Rust-only changes, explicitly rebuild the editable native package before
+Python tests: ordinary uv synchronization can reuse a cached extension.
+
+```bash
+uv sync --locked --extra dev --reinstall-package vestra
+just python-test
+```
+
+## Pre-PR contributor gate
+
+For native code changes, build the Python package as needed, then run the local
+contributor gate:
 
 ```bash
 just python-sync
@@ -12,6 +44,13 @@ just check
 ```
 
 `just check` delegates to `scripts/check.sh`. It runs `cargo fmt --all -- --check`, explicit rustfmt checks for included effect semantic sources, effect-generation freshness and generator tests, workspace `cargo check` and Clippy with all features, workspace Rust tests, `uv run python crates/vestra-cli/tests/schema_validation.py`, and a generated-schema comparison against `schemas/project.schema.json`. The shared `scripts/test-rust.sh` runner serializes Rust tests when `VESTRA_WGPU_BACKEND=gl` or WSL's default adapter path needs one EGL context.
+
+This gate does not run the Python package suite, installed-wheel checks or
+strict software/hardware WGPU verification. Add the checks selected above.
+Documentation-only work can use `just docs-check` and `just site-check` without
+building the native engine.
+
+## Command reference
 
 | Command | Purpose |
 | --- | --- |
@@ -24,9 +63,12 @@ just check
 | `just effect-check` | Generation, core/common/CPU tests and adapter-independent WGPU library tests |
 | `just wheel-smoke` | Build/install a wheel and verify its installed rendering contract |
 | `just examples` | Validate canonical examples |
-| `just docs-check` | Check relative file targets in public Markdown |
+| `just docs-check` | Check relative file targets in public Markdown; not heading anchors |
+| `just site-check` | Build the site and check generated links, anchors, media and snippet syntax |
 | `just showcase-smoke` | Render/probe full timelines at 320×180 / 6 fps with offline fixtures |
 | `just showcase` / `just showcase-refresh` | Render real bundled inputs; optionally update committed videos, posters and GIF |
+
+### Canonical examples and showcase renders
 
 `just examples` delegates to `scripts/render-examples.sh --validate-only` and
 validates every canonical JSON example with the CLI. Running
@@ -37,15 +79,7 @@ Canonical validation and showcase smoke rendering also run in the Python CI job.
 Full-resolution rendering remains an explicit maintainer workflow. See the [examples index](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/README.md) for
 the category map and media-dependent example.
 
-For a fast edit loop, use `cargo test -p CRATE TEST_FILTER`, `cargo test -p vestra-cli --test cli_validation`, or `just python-test python-tests/TEST.py`. `just test` forwards Cargo/test arguments, such as `just test TEST_FILTER -- --nocapture`. Native Python work uses `just python-sync`, then `just python-test`; the test recipe syncs dependencies itself, imports the extension, and runs compileall after pytest. Build the extension/package through the repository's documented Nix/uv workflow, not a separate hand-maintained environment.
-
-After Rust-only changes, explicitly rebuild the editable native package before
-Python tests: ordinary uv synchronization can reuse a cached extension.
-
-```bash
-uv sync --locked --extra dev --reinstall-package vestra
-just python-test
-```
+## Backend feature isolation
 
 Check renderer packages and facade feature selections independently:
 
@@ -73,6 +107,8 @@ WGPU-only tests must select no CPU implementation. Media's graph contains no
 renderer crate, including common. For extraction/dependency changes, also collect
 compiler artifacts from an isolated `CARGO_TARGET_DIR` build: a full workspace
 build unifies features and cannot prove single-backend isolation.
+
+## Schema, CLI and effect compatibility
 
 Schema changes need both `ve generate-schema --output PATH` and the schema-validation test. CLI changes need current help and CLI integration tests. Rendering changes need CPU tests and source/effect-specific tests. Media tests need working native FFmpeg development libraries; runtime workflows may also need `ffmpeg`/`ffprobe` on `PATH`.
 
@@ -106,6 +142,8 @@ records against WGSL, including named offsets, scalar types and typed uploads.
 These structural/specimen tests complement actual CPU/software/hardware frame
 tests; they do not establish exhaustive numerical correctness or hardware parity.
 
+## Equipment-dependent WGPU verification
+
 `just effect-check` runs the WGPU library with `--no-default-features`. The
 crate's default `adapter-tests` feature includes tests that initialize a graphics
 instance, request a device, submit commands or read back pixels. Disabling it
@@ -123,6 +161,8 @@ The facade's strict rendering/parity tests remain included. Ordinary
 hardware validation still requires a proven hardware adapter. See
 [GPU validation](gpu-validation.md) for selecting and verifying the actual device.
 
+## Benchmark-tool checks
+
 Benchmark tooling has focused tests independent of the Python extension:
 
 ```bash
@@ -137,12 +177,6 @@ deterministic asset generation, frame counts, and production audio. The smoke
 command builds the benchmark automatically and renders every suite workload.
 Neither smoke timings nor test timings are a performance baseline. Use the
 [canonical suite](performance.md) for measurements.
-
-The task-specific local workflows are indexed in
-[Vestra skills](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md); their visual tools also have
-four isolated self-tests. `just docs-check` checks public Markdown file targets,
-not skill metadata, links under `.agents/` or Markdown anchors. Validate those
-explicitly when changing skills, and execute the existing tool self-tests.
 
 ## Timeline and media checks
 
@@ -184,6 +218,14 @@ over a visible backdrop. Justify tolerances for the operation and encoded/raw
 format rather than copying broad thresholds. Fix seeds/fonts/assets/time and
 investigate nondeterminism instead of widening tolerances. Keep CPU, strict
 software-WGPU and named hardware-WGPU evidence separate.
+
+## Agent verification tools
+
+The task-specific local workflows are indexed in
+[Vestra skills](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md); their visual tools also have
+four isolated self-tests. `just docs-check` checks public Markdown file targets,
+not skill metadata, links under `.agents/` or Markdown anchors. Validate those
+explicitly when changing skills, and execute the existing tool self-tests.
 
 ## CI coverage
 

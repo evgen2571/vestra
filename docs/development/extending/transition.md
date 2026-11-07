@@ -1,9 +1,47 @@
 # Add a transition
 
-Transitions are composition-owned placements between sibling layers. A high-level definition in `python/vestra/transitions.py` lowers to the canonical transition definition and placement. The core compiler turns it into generic outgoing and incoming presentation channels. CPU and WGPU consume those channels; they should not own endpoint or local-timeline rules.
+Transitions are composition-owned placements between sibling layers. Most new
+looks can be defined in Python using existing generic presentation channels;
+they do not need a new canonical transition kind or a renderer branch. Follow
+[Crossfade and DirectionalPush](https://github.com/evgen2571/vestra/blob/develop/python/vestra/transitions.py)
+from their public definitions to their outgoing/incoming channel construction.
 
-Add a typed public definition with exact parameters and defaults. Use `Interpolation.EASE_IN_OUT` only where it is the actual default, and validate each unit such as degrees, pixels or normalized progress at the public/core boundary. Add canonical serialization, schema form and semantic validation for placement duration, endpoint ownership, fit/overlap and the definition's tracks/effects.
+## Find the owners
 
-Then extend compilation/evaluation so easing and normalized progress produce the intended presentation properties. A transition inside a group belongs to that group's child-local timeline, so cover nested compositions before calling it supported. Add CPU and WGPU consumption of every generated channel and transition effect.
+| Responsibility | Location |
+| --- | --- |
+| Public definitions, parameters and channel construction | `python/vestra/transitions.py` |
+| Placement authoring and lowering | `python/vestra/authoring/transitions.py`, `python/vestra/lowering.py` |
+| Canonical definitions/placements | `crates/vestra-core/src/project/model/transitions.rs` |
+| Endpoint, duration and overlap rules | `crates/vestra-core/src/validation/transitions.rs` |
+| Placement-time mapping and compiled channels | `crates/vestra-core/src/plan/compiler/transitions.rs` |
+| Channel/effect consumption | CPU and WGPU presentation paths; see [render pipeline](../architecture/render-pipeline.md) |
 
-Tests should cover definition defaults, invalid parameters, placement endpoints and timing, canonical JSON, a nested owner where supported, and both render paths. Update [Transitions](../../reference/transitions.md) with types, defaults, units and exceptions. Keep one ownership path for transition definitions and placements.
+## Implement in order
+
+1. Define exact public parameters and defaults. Validate units such as degrees,
+   pixels or normalized progress. Use `Interpolation.EASE_IN_OUT` only where
+   it is the actual default.
+2. Construct the generic outgoing/incoming channels and lower the definition
+   and placement. Reuse canonical serialization/schema when those channels
+   suffice. Extend the core contract only if a required channel is missing.
+3. For core changes, update serialization, schema and semantic rules for
+   placement duration, endpoint ownership, fit/overlap and tracks/effects.
+   Compilation/evaluation owns easing and normalized-progress mapping; CPU
+   and WGPU must not reinterpret endpoint or timeline rules.
+4. Cover every generated channel and effect on both render paths. A transition
+   inside a group uses that group's child-local timeline; test nested ownership
+   before claiming it supported.
+
+## Verify and document
+
+Test definition defaults, invalid parameters, canonical JSON, placement endpoints
+and timing, nested ownership where supported, and actual CPU/WGPU output. Reuse
+core tests beside the model/compiler and Python transition tests; choose commands
+from [Testing](../testing.md). Keep software and named hardware evidence separate
+as described in [GPU validation](../gpu-validation.md).
+
+Update [Transitions](../../reference/transitions.md) with types, defaults, units
+and exceptions. The change is ready when public lowering and core timing agree,
+both backends consume every claimed channel, and unsupported or unverified cases
+are explicit. Keep one ownership path for definitions and placements.

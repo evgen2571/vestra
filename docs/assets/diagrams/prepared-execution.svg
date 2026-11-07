@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="600" viewBox="0 0 480 600" role="img" aria-labelledby="title desc">
+  <title id="title">Reuse preparation for frames and videos</title>
+  <desc id="desc">Semantic validation and operation-specific preflight precede compilation, asset preparation, audio analysis and backend initialization. The resulting PreparedProject can be reused for individual frames, which return RGBA pixels, or for video operations, which render frames and audio. Only the video branch finalizes an encoder, publishes output and returns RenderResult.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--panel); stroke:var(--edge); stroke-width:2.5; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="600" rx="10" fill="var(--bg)"/>
+  <rect x="20" y="20" width="440" height="50" rx="6" class="panel"/>
+  <text x="240" y="52" text-anchor="middle">Validate + preflight</text>
+  <path d="M240 70v26" class="arrow"/>
+  <rect x="20" y="100" width="440" height="75" rx="6" class="panel"/>
+  <text x="240" y="130" text-anchor="middle">Compile + prepare</text>
+  <text x="240" y="160" text-anchor="middle">assets · audio analysis · backend</text>
+  <path d="M240 175v26" class="arrow"/>
+  <rect x="20" y="205" width="440" height="55" rx="6" class="shape"/>
+  <text x="240" y="240" text-anchor="middle">PreparedProject · reusable</text>
+  <path d="M240 260v22M125 282h230" class="line"/>
+  <path d="M125 282v24" class="arrow"/>
+  <path d="M355 282v24" class="arrow"/>
+  <rect x="20" y="310" width="210" height="80" rx="6" class="panel"/>
+  <text x="125" y="342" text-anchor="middle">Frame request</text>
+  <text x="125" y="372" text-anchor="middle">RGBA pixels</text>
+  <rect x="250" y="310" width="210" height="80" rx="6" class="panel"/>
+  <text x="355" y="342" text-anchor="middle">Video request</text>
+  <text x="355" y="372" text-anchor="middle">frames + audio</text>
+  <path d="M355 390v26" class="arrow"/>
+  <rect x="250" y="420" width="210" height="45" rx="6" class="panel"/>
+  <text x="355" y="450" text-anchor="middle">Finalize encoder</text>
+  <path d="M355 465v26" class="arrow"/>
+  <rect x="250" y="495" width="210" height="45" rx="6" class="panel"/>
+  <text x="355" y="525" text-anchor="middle">Publish output</text>
+  <path d="M355 540v23" class="arrow"/>
+  <text x="355" y="586" text-anchor="middle">RenderResult</text>
+</svg>

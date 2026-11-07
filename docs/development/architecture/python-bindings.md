@@ -10,7 +10,11 @@ high-level Python editing graph
   -> core + renderer + media
 ```
 
+## Native operations and prepared state
+
 `vestra-python` is a thin PyO3 boundary over `vestra`. It converts paths, enums, JSON-like mappings, diagnostics, reports, frames, events and errors. `ProjectSnapshot` is immutable and supports loading/serialization. `Editor` owns semantic validation, preflight, inspection, preparation and one-shot render. `PreparedProject` keeps prepared native resources and exposes frame and video methods.
+
+## Progress, logging and callback failures
 
 Tracing remains native and renderer-independent. Python does not configure a
 second logger or duplicate lifecycle records; native render spans and
@@ -34,6 +38,8 @@ If a Python callback raises, the binding requests native cancellation, preserves
 
 Native project/preparation/render errors become the documented Python exception hierarchy. Cooperative cancellation maps to `CancelledError`, a `RenderError`, rather than a result with partial success. Keep `.pyi`, PyO3 method signatures and package exports synchronized: users type against the stub, but behavior comes from the compiled extension.
 
+## Source lowering and font ownership
+
 High-level Text resolves its optional bundled font or installed family at the
 authoring/lowering boundary, retaining canonical Font asset IDs and file paths.
 Private PyO3 discovery uses fontdb, scans once per process, and returns an exact
@@ -48,3 +54,7 @@ canonical group clips as `CompositionLayer`. Child placements use ordinary
 source handlers, scoped deterministic IDs and the snapshot's shared asset
 registry. Source transform defaults are copied into placement transforms once;
 individual overrides replace only the selected property's animation/bindings.
+
+For a binding change, keep the native signature, `.pyi` and package exports
+in agreement and use [Testing](../testing.md) for focused Python checks. Public
+user-facing methods are listed in [Python API](../../reference/python-api.md).

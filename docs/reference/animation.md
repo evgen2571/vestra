@@ -4,12 +4,16 @@ description: Exact keyframe clocks, interpolation enums and canonical JSON timin
 
 # Animation tracks and interpolation
 
+## Keyframe clocks and segment rules
+
 Interpolation controls the segment **ending at** a keyframe. Put the easing
 on the destination keyframe, not the starting one. The first keyframe takes
 effect at its time; there is no interpolation from the base value to it.
 Times must be non-negative and strictly increasing. Layer tracks use
 layer-local seconds; timed effects use effect-local seconds. Transition
 channels instead use normalized progress from 0 to 1.
+
+## Named interpolation modes
 
 | Python `Interpolation` member | JSON value | Behavior between keyframes |
 | --- | --- | --- |
@@ -48,6 +52,8 @@ The equivalent JSON clip `opacity` field is:
   ]
 }
 ```
+
+## Custom cubic Bézier curves
 
 For a custom timing curve, pass `CubicBezier(x1, y1, x2, y2)` instead of an
 enum member:

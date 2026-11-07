@@ -3,12 +3,20 @@
 High-level Python supports reusable `Group` sources and owned `CompositionLayer`
 placements. Both lower to the canonical visual source with type `group`.
 
-`Composition.group(name=None, *, start=0, duration=None, z=0, visible=True,
-opacity=1, id=None, blend_mode=BlendMode.NORMAL)` creates a parent placement
-with a child composition. Child layer times are local to the child.
+## Placement and local time
+
+```text title="Owned composition placement signature"
+Composition.group(name=None, *, start=0, duration=None, z=0, visible=True,
+                  opacity=1, id=None, blend_mode=BlendMode.NORMAL)
+```
+
+This creates a parent placement with a child composition. Child layer times are
+local to the child.
 The group start and duration are local to the parent. Child transforms are
 evaluated in the child, then the parent placement applies its placement and
 transform.
+
+### Transition ownership
 
 Transitions connect layers owned by one composition. A child composition can
 therefore contain its own transitions. Current tests cover nested transition
@@ -24,12 +32,8 @@ remain backend and environment concerns.
 
 `Group(size=(600, 300))` establishes a 600 by 300 pixel local canvas.
 Canonical JSON represents this as `"size": {"width": 600, "height": 300}`.
-Both dimensions must be positive finite numbers whose rounded-up raster extents
-fit `u32`; the RGBA canvas byte length must also be addressable. Odd and fractional
-dimensions are allowed. The size is static and belongs to the source. Default
-resource budgets permit up to 8192 pixels per axis and 67,108,864 pixels per
-canvas; [configured limits](project-format.md#validation-layers) can permit larger
-canvases when the selected backend supports them.
+The size is static and belongs to the source; it is not a scale operation.
+Odd and fractional dimensions are allowed, subject to the resource limits below.
 
 Child positions are normalized against that canvas: `(0.25, 0.5)` means
 `(150, 150)` pixels. The group's own placement position uses its parent's canvas.
@@ -47,6 +51,8 @@ rectangle, font, image, or effect radius. Animated positions, anchors, scale and
 rotation use the same rules at each evaluated time; normalized positions may
 extend outside `[0, 1]`.
 
+## Clipping and fractional raster bounds
+
 Groups isolate and clip their content before parent presentation. A sized group
 clips at its own local canvas; an unsized group retains the inherited-canvas
 clipping behavior. There is no overflow-visible or optional clipping flag.
@@ -60,6 +66,8 @@ raster canvas rounded up to whole pixels. The rasterized edge follows that
 rounded extent; size does not request subpixel edge coverage. Group isolation,
 sampling and antialiasing otherwise follow ordinary raster sources.
 
+## Child sources, effects and masks
+
 Solid colors and procedural sources fill/use the local canvas. Image `fit` and
 `cover` sizing use that canvas; `original` retains intrinsic geometry. Child
 effects operate on child layers in the local canvas. Effects attached to the
@@ -71,10 +79,21 @@ A sized group used as an owned mask source keeps its own local canvas and anchor
 an unsized mask group inherits the owner's coordinate canvas. Child masks,
 ordered mask operations and sibling track mattes retain their existing rules.
 
+## Resource limits and validation
+
+Both size dimensions must be positive finite numbers whose rounded-up raster
+extents fit `u32`. RGBA canvas byte lengths must be addressable regardless of
+configured budgets. Defaults permit 8192 pixels per axis and 67,108,864 pixels
+per canvas. [Configured limits](project-format.md#validation-layers) can permit
+larger canvases when the selected backend supports them; raising a budget does
+not override CPU allocation or WGPU texture limits.
+
+Owned mask-source validation reports the actual `masks/.../input/source` JSON
+pointer, including invalid group sizes. Diagnostic codes and messages follow
+the same group-size contract as ordinary groups.
+
+## Compatibility
+
 Omitting `size` needs no migration: existing Python calls and canonical JSON
 retain their dimensions, appearance, local timing, duration and project FPS.
 See the [Python examples](../guides/python/nested-compositions.md).
-
-Owned mask-source validation now reports the actual `masks/.../input/source`
-JSON pointer, including invalid group sizes, rather than a synthetic clip-source
-pointer. Diagnostic codes and messages are unchanged.

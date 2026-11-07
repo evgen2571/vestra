@@ -1,19 +1,37 @@
 # Solid-color source
 
-`Color(value="#000000")` is the high-level class. `Color()` creates opaque black. `SolidColor` is the same class, kept as
-an alias. `value` is an authoring `Color` or a canonical `#RRGGBB` or
-`#RRGGBBAA` string. Alpha is part of the colour value when supplied. The
-serialized source is `{"type":"solid_color","colour":"#RRGGBB"}`.
+`Color` fills the layer surface with one color. Use it for backgrounds or solid
+panels. `SolidColor` is an alias for the same high-level class.
 
-Solid colour fills the layer surface. Output canvas size supplies its extent;
-the source has no intrinsic asset size, crop, source trim, or canonical
-`transform`. It is not a direct canonical transition endpoint.
+## API signature
 
-High-level Python layers may still use a transform or a transition with
-`Color`/`SolidColor`. Vestra applies that presentation through an adapter when
-it lowers the high-level project. Hand-authored canonical JSON must keep the
-`solid_color` clip itself free of `transform` and cannot name it directly in a
-transition placement.
+```text title="Source signature (presentation keywords omitted)"
+Color(value="#000000")
+SolidColor(value="#000000")
+```
 
-Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
-which are copied into each placement and can be individually overridden by `add()`.
+`value` accepts an authoring `Color` value or a `#RRGGBB` / `#RRGGBBAA` string.
+The default is opaque black; an eight-digit value includes alpha. Invalid colors
+fail during construction or assignment to `value`.
+
+## Extent and Python presentation
+
+The containing canvas supplies the source extent. There is no intrinsic asset
+size, crop, source trim or media preparation. Layers own timing, effects,
+opacity and blending.
+
+High-level Python layers can use transforms and transitions with this source.
+Vestra lowers that presentation through an adapter. The constructor accepts
+[presentation transform defaults](../../guides/python/sources-and-layers.md),
+copied into each placement and individually overridable by `add()`.
+
+## Canonical JSON restrictions
+
+The serialized source is `{"type":"solid_color","colour":"#RRGGBB"}`
+(or an eight-digit color). A canonical `solid_color` clip cannot carry a
+`transform` and cannot be named directly in a transition placement. Hand-authored
+JSON must respect those restrictions even though Python can adapt presentation.
+
+Solid-color rendering is supported on CPU and WGPU, including nested local
+canvases. See [project format](../project-format.md) and the
+[feature matrix](../feature-support.md) for the surrounding contracts.

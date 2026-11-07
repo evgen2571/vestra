@@ -3,18 +3,22 @@ title: Reference overview
 description: Find Vestra's Python API, guides, source types, effects, JSON format and rendering contracts.
 ---
 
-# Guides and reference
+<span id="guides-and-reference"></span>
 
-Use the task guides for practical examples and the references for signatures, parameters, and constraints. For an introduction, start with [your first render](../learn/first-render.md). The navigation separates task guides, concepts and exact reference contracts by topic. This overview pairs common tasks with their detailed references.
+# Reference overview
+
+Find a task below for a practical guide and its exact contract. For an introduction,
+start with [your first render](../learn/first-render.md). For a complete list of
+signatures, formats and feature topics, use the [full reference index](catalog.md).
 
 ## Work in Python
 
 | I want to… | Practical guide | Detailed reference |
 | --- | --- | --- |
 | Arrange layers and sources | [Sources and layers](../guides/python/sources-and-layers.md) | [Python API](python-api.md) |
-| Animate a property | [Animation and keyframes](../learn/animation.md) | [Animation API guide](../guides/python/animation.md) |
+| Animate a property | [Animation and keyframes](../guides/python/animation.md) | [Animation contracts](animation.md) |
 | Put layers in a group | [Nested compositions](../guides/python/nested-compositions.md) | [Composition contracts](nested-compositions.md) |
-| Apply visual effects | [Effects](../guides/python/effects.md) | [Effect catalog](effects.md) |
+| Apply visual effects | [Effects](../guides/python/effects.md) | [Effect contracts](effects.md), [parameters](effect-parameters.md) |
 | Reveal part of an image | [Masks](../guides/python/masks.md) | [Masks and mattes](masks.md) |
 | Connect two shots | [Transitions and presets](../guides/python/transitions-flashes-and-presets.md) | [Transitions](transitions.md), [presets and flashes](presets-and-flashes.md) |
 | Mix a soundtrack | [Audio](../guides/python/audio.md) | [Audio contracts](audio.md) |
@@ -47,4 +51,5 @@ Start with the failing part: [Python installation](../troubleshooting/python.md)
 
 ## Contribute
 
-Start with [Contributing to Vestra](../development/README.md) for general contribution and development guidance; [Documentation authoring](../development/documentation.md) covers this site. The [full reference index](catalog.md) remains available.
+Start with [Contributing to Vestra](../development/README.md) to choose a development
+task; [Documentation authoring](../development/documentation.md) covers this site.

@@ -14,6 +14,8 @@ verbosity flags provide the CLI's default filter when it is unset.
 | `generate-schema` | `--output PATH`, default `schemas/project.schema.json`. |
 | `version` | Prints the Vestra version. |
 
+## Results, diagnostics and logging
+
 `PROJECT` is a path. Human results are short summaries: `validate` names the
 valid project, `inspect` lists the resolved output, duration and contents, and
 `render` reports the output path, size, frame count, renderer and elapsed time.
@@ -36,6 +38,8 @@ has precedence over those flags and supports target-specific filters such as
 | `--progress auto\|terminal\|json\|none` | `auto`. JSON progress is JSONL. |
 | `--report PATH` | Unset. Writes a structured report on success or failure. |
 | `--render-backend auto\|cpu\|wgpu` | `auto`. |
+
+### Progress streams
 
 With JSON progress and human final results, progress is sent to stdout and the
 final result is sent to stderr to keep the streams separable. Auto selects

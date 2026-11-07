@@ -925,8 +925,14 @@ def render_reference(effects: list[dict[str, Any]]) -> str:
         "",
         f"<!-- {NOTICE} -->",
         "",
-        "Python defaults below are authoring conveniences. The JSON column reports schema",
-        "metadata; see [effects](effects.md) for parser behavior and legacy exceptions,",
+        "Use the page contents to jump to an effect. Each table lists Python defaults,",
+        "accepted ranges, units and animation support. Bounds apply when a value is supplied;",
+        "a dash means the catalog provides no range or unit. Coupled constraints and",
+        "source restrictions are described in [effects](effects.md).",
+        "",
+        "Expand **Canonical JSON and planner metadata** for exact kinds and schema defaults.",
+        "Python defaults are authoring conveniences, separate from JSON schema metadata.",
+        "See [effects](effects.md) for parser behavior and legacy exceptions,",
         "including the required Ascii enum fields that the schema marks optional.",
         "Pass counts are catalog estimates; actual topology can depend on parameters.",
         "",
@@ -937,12 +943,12 @@ def render_reference(effects: list[dict[str, Any]]) -> str:
             f"## {python['name']} (`{effect['id']}`)",
             "",
             f"Scope: `{effect['scope']}`; stage: `{effect['stage']}`; estimated passes: "
-            f"{effect['estimated_pass_count']}; catalog retention: `{str(effect['retains_original']).lower()}`; "
-            f"temporal policy: `{effect['temporal_policy']}`.",
+            f"{effect['estimated_pass_count']}.",
             "",
-            "| Parameter | Kind | Python default | JSON Schema requirement/default | Range | Units | Animation |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| Parameter | Python default | Range and units | Animation |",
+            "| --- | --- | --- | --- |",
         ]
+        canonical_rows = []
         authored = {arg.arg: default for arg, default in parameters(arguments(effect))}
         units = dict(effect["units"])
         for item in effect["parameters"]:
@@ -1001,17 +1007,33 @@ def render_reference(effects: list[dict[str, Any]]) -> str:
             }.get(kind, "static")
             cells = [
                 f"`{name}`",
-                f"`{kind}`",
                 python_default,
-                wire,
-                bounds,
-                units.get(name, "—"),
+                "; ".join(value for value in (bounds, units.get(name)) if value),
                 animation,
             ]
             lines.append(
                 "| " + " | ".join(cell.replace("|", r"\|") for cell in cells) + " |"
             )
-        lines.append("")
+            canonical_rows.append(
+                "    | "
+                + " | ".join(
+                    cell.replace("|", r"\|")
+                    for cell in (f"`{name}`", f"`{kind}`", wire)
+                )
+                + " |"
+            )
+        lines += [
+            "",
+            '??? info "Canonical JSON and planner metadata"',
+            "",
+            f"    Catalog retention: `{str(effect['retains_original']).lower()}`; "
+            f"temporal policy: `{effect['temporal_policy']}`.",
+            "",
+            "    | Parameter | Kind | JSON Schema requirement/default |",
+            "    | --- | --- | --- |",
+            *canonical_rows,
+            "",
+        ]
     return "\n".join(lines)
 
 

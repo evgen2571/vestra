@@ -4,10 +4,15 @@ description: Audio timeline time domains, effect scopes, output policy and cross
 
 # Audio
 
-The optional canonical `audio` object has ordered `tracks` and master `effects`.
-A track has `id`, `mute=false`, `gain=1`, effects, and clips. A clip has an id,
-asset/source, `start`, `trim_start`, optional `trim_end`, `gain=1`, `mute=false`,
-fades, optional gain automation, and effects.
+The optional canonical `audio` object has ordered tracks and master effects.
+
+| Object | Contents and defaults |
+| --- | --- |
+| Audio timeline | Ordered `tracks` and master `effects`. |
+| Track | `id`, clips, `mute=false`, `gain=1` and track effects. |
+| Clip | ID, asset/source, `start`, `trim_start`, optional `trim_end`, `gain=1`, `mute=false`, fades, optional gain automation and clip effects. |
+
+See [project format](project-format.md#audio) for the canonical object fields.
 
 For practical setup, see [add audio](../guides/python/audio.md). For analysis
 and visual consumers, see [audio and signals](../concepts/audio-and-signals.md).

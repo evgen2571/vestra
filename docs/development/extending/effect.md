@@ -32,6 +32,11 @@ record/packing and WGSL. A composite or transform effect using existing renderer
 behavior needs only the catalog and semantic module. Tests and generated output
 are additional; specialized resources can require more implementation files.
 
+Follow the sections below in order: declare the contract, implement semantics,
+plan resources, implement only the renderer work the route needs, generate the
+public surface, then verify it. The [file/responsibility map](../architecture/effect-pipeline.md#ownership-and-data-flow)
+helps locate each owner without duplicating that inventory here.
+
 ## Declare fields and parameters
 
 Edit [catalog_entries.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effect_definition/catalog_entries.rs).
@@ -294,3 +299,8 @@ Common mistakes are identity rules ignoring animation/modifiers, omitted
 conservative passes, wrong original/secondary inputs, incomplete validation,
 wrong WGSL field order, and treating shader parsing as renderer validation.
 Add effect-specific regression tests for those decisions.
+
+The change is ready when its authored contract, generated surface and tests
+agree, rendered output demonstrates each claimed backend, and the reference
+and support matrix describe any remaining limits. Record unavailable hardware
+checks as unverified rather than treating adapter-independent tests as parity.

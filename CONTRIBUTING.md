@@ -60,6 +60,10 @@ Keep each pull request focused on one problem. Follow the surrounding code style
 and update the user documentation when behavior changes. A bug fix should include
 a test that reproduces the failure and passes with the fix.
 
+Choose the implementation route in the [contributor task map](docs/development/README.md#choose-a-task).
+The extension guides show the files and completion criteria for a new source,
+effect, transition or backend.
+
 Run the tests closest to the change while working. For example, to check the
 public documentation links:
 
@@ -100,7 +104,8 @@ just check
 ```
 
 Run any additional checks needed for your change, such as `just python-test` for
-Python changes or `just docs-check` for documentation changes. Review your diff
+Python changes. Documentation-only changes need `just docs-check` and
+`just site-check`; their preview and site checks need no native engine build. Review your diff
 for unrelated edits and generated files that do not belong in the pull request.
 The [testing guide](docs/development/testing.md) describes the local and CI checks
 in detail.

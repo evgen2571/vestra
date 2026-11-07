@@ -2,6 +2,11 @@
 
 WGPU execution is not hardware-GPU validation. A WGPU backend can select a software CPU adapter. Every hardware result must name the requested graphics API, actual graphics backend, adapter name and device classification reported by Vestra/WGPU.
 
+Run from the repository root in the pinned development environment or an
+equivalent native setup. The recipes delegate to `scripts/verify-wgpu.sh`.
+
+## Discover and select an adapter
+
 1. Discover adapters:
 
    ```bash
@@ -12,18 +17,39 @@ WGPU execution is not hardware-GPU validation. A WGPU backend can select a softw
 3. Choose the graphics API that exposes the hardware adapter and set it with `VESTRA_WGPU_BACKEND`, or let strict hardware verification select the first discovered hardware backend.
 4. Run the appropriate mode and retain its discovery output with the test result.
 
+Discovery establishes adapter availability and classification, not successful
+rendering. Vestra reads `VESTRA_WGPU_BACKEND`, not `WGPU_BACKEND`.
+
+## Verify software-safe correctness
+
 ```bash
-just wgpu-list
 VESTRA_WGPU_BACKEND=vulkan just wgpu-software
+```
+
+This mode permits software adapters and makes no hardware claim. If no API is
+requested, it selects the first discovered backend. It runs the workspace suite
+without strict WGPU flags, then requires an adapter with `VESTRA_REQUIRE_WGPU=1`
+for targeted renderer tests. CI supplies its software Vulkan environment with
+`nix develop .#wgpu-software --command just wgpu-software`.
+
+## Verify hardware correctness
+
+```bash
 VESTRA_WGPU_BACKEND=gl just wgpu-hardware
 ```
 
-Run these recipes inside the pinned development environment or an equivalent
-native setup. They delegate to `scripts/verify-wgpu.sh` and preserve its adapter
-selection and strict hardware requirements. CI uses `nix develop .#wgpu-software
---command just wgpu-software` to supply a software Vulkan environment.
+Choose the API from discovery; `gl` here is an example. This mode rejects a
+backend unless discovery reports an integrated or discrete GPU. Without an API
+request, it selects the first discovered proven-hardware backend and prints that
+record. The workspace suite runs without strict hardware assumptions; targeted
+renderer tests and the CLI render regression require both
+`VESTRA_REQUIRE_WGPU=1` and `VESTRA_REQUIRE_HARDWARE_WGPU=1`.
 
-`--software` selects the first discovered backend when none is requested and makes no hardware claim. It runs the general workspace suite without strict WGPU flags, then scopes `VESTRA_REQUIRE_WGPU=1` to renderer tests that need an adapter. `--hardware` rejects the selected backend unless discovery reports a `discrete_gpu` or `integrated_gpu`. It runs the general workspace suite without strict hardware assumptions, then scopes `VESTRA_REQUIRE_WGPU=1` and `VESTRA_REQUIRE_HARDWARE_WGPU=1` to adapter-dependent renderer tests and the strict CLI render regression. When no backend is supplied, `--hardware` selects the first discovered proven-hardware backend. It reports the selected discovery record before testing.
+Retain the discovery record and actual test adapter with results. If only
+software adapters are available, report hardware validation as blocked. A pass
+on one graphics API does not establish another API's compatibility.
+
+## Understand the test evidence
 
 Both modes collect all private WGPU tests from
 `vestra-render-wgpu --lib --features adapter-tests` and
@@ -37,7 +63,9 @@ feature. It checks registration, shader structure, parameter ABI/packing, pure
 planning and resource calculations without initializing any graphics backend.
 It does not replace either strict adapter suite.
 
-On some WSL installations, `vulkan` exposes llvmpipe while `gl`/GLES reaches NVIDIA through D3D12. That is an environment-specific result, not a universal rule. Start with `nvidia-smi`, `glxinfo -B` and `vulkaninfo --summary` when available, then trust adapter discovery. Set Vestra's `VESTRA_WGPU_BACKEND=gl` when the discovered GL path exposes the required hardware. Vestra does not read `WGPU_BACKEND` as a backend-selection variable.
+## Troubleshoot platform discovery and execution
+
+On some WSL installations, `vulkan` exposes llvmpipe while `gl`/GLES reaches NVIDIA through D3D12. That is an environment-specific result, not a universal rule. Start with `nvidia-smi`, `glxinfo -B` and `vulkaninfo --summary` when available, then trust adapter discovery. Set `VESTRA_WGPU_BACKEND=gl` when the discovered GL path exposes the required hardware.
 
 GL rendering requires compute shaders and storage buffers; discovery of a desktop
 GL 3.3 adapter alone does not establish a usable Vestra renderer. WGPU 23 also
@@ -47,12 +75,14 @@ The shared root-instance lifetime and GL context restrictions remain required.
 Validate a compatible GL/GLES runtime on WSL separately from Vulkan; Vulkan
 results do not establish GL/WSL, DX12, Metal or browser runtime compatibility.
 
-llvmpipe and Lavapipe are useful software fallback/correctness adapters. They cannot support a hardware-performance or hardware-correctness claim. If discovery exposes only software adapters, report hardware validation as blocked. User selection details are in [Backends](../reference/backends.md).
+llvmpipe and Lavapipe are useful software fallback/correctness adapters. They cannot support a hardware-performance or hardware-correctness claim. User selection details are in [Backends](../reference/backends.md).
 
 Software and hardware verification use normal Rust test parallelism after the
 WGPU 23 queue-identity correction. GL keeps one active context for WSL/Mesa
 compatibility and exercises the same ownership checks serially. The explicit
 concurrent lifecycle regression retains its own preparation/render/drop workers.
+
+## Stress resource lifetimes
 
 Run the longer lifecycle stress explicitly, with strict adapter requirements and
 the appropriate graphics API/environment from above:
@@ -63,8 +93,13 @@ VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_WGPU=1 \
   public_wgpu_concurrent_lifecycle_stress -- --ignored --exact --nocapture
 ```
 
-It creates 12 workers with 30 prepare/render/drop rounds each, retaining returned
-frames across subsequent preparations and worker teardown. Add
+It requests 12 workers with 30 prepare/render/drop rounds each (GL uses one
+worker for context ownership), retaining returned frames across subsequent preparations and worker teardown. Add
 `VESTRA_REQUIRE_HARDWARE_WGPU=1` for hardware validation. The ordinary suite keeps
 a smaller concurrent regression and the deterministic retained-device/dropped-queue
 regression, including submission-index polling.
+
+This stress checks repeated preparation, submissions, retained frames and teardown.
+It does not measure sustained encoding, performance or all platform runtimes;
+use [media verification](media-pipeline.md#verify-encoded-output) and
+[performance](performance.md) for those questions.

@@ -218,3 +218,17 @@ def test_spectrum_layouts_render_the_same_band_values(tmp_path):
     )  # The recurring bass.
     assert distributions[0][4] > distributions[1][4] + 0.2
     assert distributions[1][11] > distributions[0][11] + 0.2
+
+
+@pytest.mark.parametrize("study", ("bounded", "smoothing", "spectra"))
+def test_audio_studies_reserve_a_clear_mobile_control_band(tmp_path, study):
+    example = load_example("audio_response")
+    path = tmp_path / "pulses.wav"
+    example.write_pulses(path)
+    frame = (
+        example.build_project(path, study)
+        .prepare(backend="cpu")
+        .render_frame_seconds(1.2)
+    )
+    assert (frame.width, frame.height) == (640, 560)
+    assert frame.to_bytes()[442 * 640 * 4 :] == bytes.fromhex("0b141cff") * 640 * 118

@@ -67,3 +67,23 @@ def test_catalog_represents_every_public_canonical_effect():
         if effect is not None
     }
     assert represented == {descriptor["id"] for descriptor in available_effects()}
+
+
+def test_temporal_comparisons_show_both_rows_and_tile_fills_its_viewport():
+    for name in ("motion-tile", "motion-blur", "camera-shake"):
+        project = EXAMPLE["comparison_project"](name)
+        assert project.validate().is_valid
+        assert project.output_audio is False
+        prepared = project.prepare(backend="cpu")
+        for seconds in (0.2, 0.7, 1.4, 2.6):
+            pixels = prepared.render_frame_seconds(seconds).to_bytes()
+            # Both rows retain the scene at matching timestamps, rather than a reel.
+            top = pixels[40 * 640 * 4 : 260 * 640 * 4]
+            bottom = pixels[300 * 640 * 4 : 520 * 640 * 4]
+            assert top != bottom, (name, seconds)
+            if name == "motion-tile":
+                backdrop = bytes.fromhex("1a242b")
+                uncovered = sum(
+                    bottom[i : i + 3] == backdrop for i in range(0, len(bottom), 4)
+                )
+                assert uncovered == 0, (seconds, uncovered)

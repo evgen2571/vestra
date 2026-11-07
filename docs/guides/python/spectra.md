@@ -11,7 +11,7 @@ and smoothing. The preview is silent; the waveform and moving marker show the
 input timing.
 
 <figure>
-  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-spectra.webp" width="640" height="440" aria-label="Silent spectrum comparison: a waveform marks input beats while matching frequency bands grow upward in a linear chart and outward in a radial chart.">
+  <video controls playsinline preload="metadata" poster="../../../assets/renders/audio-spectra.webp" width="640" height="560" aria-label="Silent spectrum comparison: a waveform marks input beats while matching frequency bands grow upward in a linear chart and outward in a radial chart.">
     <source src="../../assets/renders/audio-spectra.mp4" type="video/mp4">
     <a href="../../assets/renders/audio-spectra.mp4">Download the spectrum comparison</a>.
   </video>
@@ -117,6 +117,8 @@ then tune at its quiet and loud sections. Do not assume the settings of this
 sparse tone recording suit mastered music. The
 [Spectrum2D reference](../../reference/sources/spectrum2d.md) lists defaults,
 limits, gradients and presets.
+
+<span id="reproduce-this-comparison"></span>
 
 ## Complete example
 

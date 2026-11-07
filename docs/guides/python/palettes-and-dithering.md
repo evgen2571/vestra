@@ -22,8 +22,9 @@ look = photo.effects.add(OrderedDither(palette=palette, matrix="bayer8", scale=1
 
 This example needs your own `assets/photo.png`. It continues through the
 remaining Python blocks. Keep the returned `look` handle when adjusting it.
-For an asset-free version download [the catalog source](../../assets/examples/effects_catalog.py)
-and run `python effects_catalog.py --effect ordered-dither --still`.
+For the photographic comparison download [the catalog source](../../assets/examples/effects_catalog.py)
+and [landscape.jpg](../../assets/examples/landscape.jpg), then run
+`python effects_catalog.py --effect ordered-dither --still`.
 
 `PaletteMap(mode="gradient")` interpolates between tonal colors;
 `mode="nearest"` produces tonal bands. Ordered Dither selects discrete palette

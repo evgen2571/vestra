@@ -160,9 +160,9 @@ def main() -> None:
         verify_video(preview, size)
 
 
-def web_video(original, name, size, seconds, poster_time, *, audio=False):
+def web_video(original, name, size, seconds, poster_time):
     """Create compact controls-ready delivery media and verify both versions."""
-    verify_video(original, size, seconds=seconds, audio=audio)
+    verify_video(original, size, seconds=seconds)
     subprocess.run(
         [
             "ffmpeg",
@@ -179,7 +179,7 @@ def web_video(original, name, size, seconds, poster_time, *, audio=False):
             "slow",
             "-pix_fmt",
             "yuv420p",
-            *(["-c:a", "aac", "-b:a", "80k"] if audio else ["-an"]),
+            "-an",
             "-map_metadata",
             "-1",
             "-movflags",
@@ -210,7 +210,7 @@ def web_video(original, name, size, seconds, poster_time, *, audio=False):
         ],
         check=True,
     )
-    verify_video(ASSETS / f"{name}.mp4", size, seconds=seconds, audio=audio)
+    verify_video(ASSETS / f"{name}.mp4", size, seconds=seconds)
     return {
         "source_sha256": hashlib.sha256(original.read_bytes()).hexdigest(),
         "poster_seconds": poster_time,
@@ -218,7 +218,7 @@ def web_video(original, name, size, seconds, poster_time, *, audio=False):
         "seconds": seconds,
         "fps": 30,
         "backend": "cpu",
-        "audio": audio,
+        "audio": False,
         "web_sha256": hashlib.sha256((ASSETS / f"{name}.mp4").read_bytes()).hexdigest(),
         "poster_sha256": hashlib.sha256(
             (ASSETS / f"{name}.webp").read_bytes()
@@ -242,22 +242,25 @@ def render_learning():
             ).hexdigest()
             for name in programs
         },
+        "input_sha256": {
+            name: hashlib.sha256(
+                (ROOT / f"docs/assets/examples/{name}").read_bytes()
+            ).hexdigest()
+            for name in ("landscape.jpg", "learning-inputs.txt")
+        },
         "stills": {},
     }
     motion = (
-        "motion-original",
-        "tile-original",
         "camera-shake",
         "motion-blur",
         "motion-tile",
         "crt",
     )
     effects = runpy.run_path(str(ROOT / "docs/assets/examples/effects_catalog.py"))
-    for name in [*effects["effect_cases"](), "order", "order-reverse"]:
-        if name in motion:
+    for name in [*effects["effect_cases"](), "order"]:
+        if name in motion or name == "original":
             continue
-        reverse = name == "order-reverse"
-        project = effects["make_project"]("order" if reverse else name, reverse=reverse)
+        project = effects["comparison_project"](name)
         image_path = ASSETS / f"effect-{name}.webp"
         effects["save_still"](project, image_path)
         manifest["stills"][f"effect-{name}"] = {
@@ -267,12 +270,12 @@ def render_learning():
         }
     for name in motion:
         original = OUTPUT / f"effect-{name}.mp4"
-        result = effects["make_project"](name).render(
+        result = effects["comparison_project"](name).render(
             original, backend="cpu", overwrite=True
         )
         assert result.selected_backend == "cpu"
         manifest[f"effect-{name}"] = web_video(
-            original, f"effect-{name}", (640, 360), 2, 0.7
+            original, f"effect-{name}", (640, 640), 3, 0.7
         )
     for module in ("concepts_masks", "transition_comparisons", "audio_response"):
         subprocess.run(
@@ -283,11 +286,9 @@ def render_learning():
     for name in ("crossfade", "push", "zoom", "blur"):
         key = f"transition-{name}"
         manifest[key] = web_video(OUTPUT / f"{key}.mp4", key, (640, 360), 3, 1.5)
-    for name, poster in (("bounded", 1.0), ("smoothing", 0.9), ("spectra", 0.9)):
+    for name in ("bounded", "smoothing", "spectra"):
         key = f"audio-{name}"
-        manifest[key] = web_video(
-            OUTPUT / f"{key}.mp4", key, (640, 360), 3, poster, audio=True
-        )
+        manifest[key] = web_video(OUTPUT / f"{key}.mp4", key, (640, 560), 4, 1.2)
     manifest["concepts-masks"] = web_video(
         OUTPUT / "concepts-masks.mp4", "concepts-masks", (640, 480), 3, 0.5
     )

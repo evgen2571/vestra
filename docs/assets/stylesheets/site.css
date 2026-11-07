@@ -80,7 +80,7 @@
   height: auto;
   border-radius: .6rem;
 }
-.md-typeset video { aspect-ratio: 16 / 9; background: var(--vestra-surface); }
+.md-typeset video { aspect-ratio: auto; background: var(--vestra-surface); }
 .md-typeset figcaption {
   color: var(--vestra-muted);
   font-size: .83em;
@@ -239,3 +239,26 @@
   /* Zensical 0.1.0 leaves closed drawer links in the keyboard tab order. */
   .md-sidebar--primary:focus-within { transform: translateX(12.5rem); }
 }
+
+/* Diagrams keep their own reading size, independently of full-width media. */
+.md-typeset figure.diagram { max-width: 480px; margin-inline: auto; }
+.md-typeset img[src*="/diagrams/"] {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  margin-inline: auto;
+  color-scheme: light;
+}
+[data-md-color-scheme="slate"] .md-typeset img[src*="/diagrams/"] { color-scheme: dark; }
+
+.gallery-card--comparison {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: 640px;
+  justify-self: center;
+}
+
+.md-typeset figure.comparison { max-width: 640px; margin-inline: auto; }
+/* Keep media at its authored size while allowing it to shrink on mobile. */
+.md-typeset figure:has(video[width="640"]) { max-width: 640px; margin-inline: auto; }

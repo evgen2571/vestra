@@ -19,10 +19,10 @@ card = Group(size=(320, 180))
 card.add(Color("#101b32"))
 card.add(Rectangle(width=120, height=8, fill="#d6a46b"))
 card.add(Text("Repeated card", font_size=24), position=(0.5, 0.7))
-layer = project.root.add(card)
+layer = project.root.add(card, anchor=(0, 0), position=(0.25, 0.25))
 layer.effects.add(MotionTile(
-    output_width_percent=200,
-    output_height_percent=200,
+    output_width_percent=400,
+    output_height_percent=400,
     mirror_edges=True,
 ))
 layer.transform.rotation.keyframe(0, -12)
@@ -34,7 +34,9 @@ project.render("tiled-card.mp4", backend="cpu", overwrite=True)
 Run this complete program with `python tiled_card.py`; it replaces
 `tiled-card.mp4` on a rerun. Notice mirrored repeats around the original card,
 then blur in the rotated output. Motion Tile samples a virtual source region;
-the 640×360 canvas stays the same size. Its stage is intrinsically before transform,
+the 640×360 canvas stays the same size. The explicit origin anchor avoids the current
+[center-anchor limitation](../../development/documentation.md#motion-tile-anchor-limitation).
+Its stage is intrinsically before transform,
 even if it is attached after an ordinary effect. Check
 [source restrictions](../../reference/effects.md#motion-tile) before attaching it.
 

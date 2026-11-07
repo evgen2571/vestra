@@ -104,15 +104,4 @@ seconds. Keep keyframe times in increasing order when adjusting them.
 The [examples gallery](../gallery/index.md) includes larger projects with
 effects, compositing and audio-reactive motion.
 
-
-## Preview reproduction
-
-The preview is CPU output from the downloadable source, 640 × 360 at 30 fps,
-three seconds and silent. The poster is the frame at 0.75 seconds. Its graphics
-and code are original MIT-licensed project work, with no external inputs or fonts.
-The download remains byte-identical to `examples/showcase/quickstart/main.py`;
-the site check enforces this relationship.
-
-From the native contributor environment, `just docs-media` runs the downloadable
-programs, probes their full outputs under `target/docs-media/`, and refreshes the
-site copies. See [tutorial preview reproduction](../development/documentation.md#reproduce-tutorial-previews).
+<span id="preview-reproduction"></span>

@@ -15,7 +15,7 @@ from vestra.sources import (
 
 DURATION = 4
 FPS = 30
-SIZE = (640, 440)
+SIZE = (640, 560)
 SAMPLE_RATE = 48_000
 PULSE_STARTS = (0.35, 1.15, 1.95, 2.75, 3.55)
 RMS_MAX = 0.18
@@ -194,6 +194,18 @@ def build_project(audio_path: Path, study: str) -> Project:
     project = Project(size=SIZE, fps=FPS, duration=DURATION, background="#101c27")
     project.audio.track("analysis input").add(audio_path, trim_end=DURATION)
     project.output_audio = False
+    # Reserve the lower 120px for native video controls at mobile widths.
+    shape(
+        project, Rectangle(width=640, height=120, fill="#0b141c"), 0, 440, anchor=(0, 0)
+    )
+    shape(
+        project,
+        Line(start=(0, 0), end=(640, 0), stroke="#253947", stroke_width=2),
+        0,
+        440,
+        anchor=(0, 0.5),
+        z=1,
+    )
     raw, fast, slow = responses(project)
     waveform(project, audio_path)
 

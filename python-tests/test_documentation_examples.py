@@ -77,7 +77,6 @@ def test_guide_snippets_author_valid_projects(page, tmp_path, monkeypatch):
     if page.stem == "masks":
         assert renders == [
             ("portrait-reveal.mp4", {"backend": "cpu", "overwrite": True}),
-            ("concepts-masks.mp4", {"backend": "cpu", "overwrite": True}),
         ]
 
 

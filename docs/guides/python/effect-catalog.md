@@ -1,39 +1,16 @@
 # Visual effect catalog
 
-Choose a look by its visible result, then follow its parameter link for the
-exact contract. These are representative **CPU renders**, not a test of every
-parameter combination or a WGPU parity claim. All 23 public canonical effects
-are represented, plus the PseudoAscii convenience and a second dither pattern.
+Compare the **source above** with the **treatment below**. Moving views share
+one clock, so you can pause them at the same point.
 
-- [Color and tone](#color-and-tone): change tonal relationships and color.
-- [Blur and light](#blur-and-light): spread, separate or emphasize edges.
-- [Palettes and print](#palettes-and-print): reduce colors and image detail.
-- [Characters and motion](#characters-and-motion): analyze cells or change over time.
+- [Color and tone](#color-and-tone)
+- [Blur and light](#blur-and-light)
+- [Palettes and print](#palettes-and-print)
+- [Characters and motion](#characters-and-motion)
 
-## The controlled input
-
-![Original procedural study: colored gradient strips, light crescent, fine angled white lines, text and a dark-to-light grayscale ramp.](../../assets/renders/effect-original.webp)
-
-The same 640×360 study reveals tone, small edges and broad features. Each static
-preview adds exactly one effect. The final motion cases use the same study with
-specified transform animation; their baseline controls are shown alongside them.
-Settings below come from `effect_cases()` in the downloadable
-[complete source](../../assets/examples/effects_catalog.py). `PALETTE` means
-`("#101b32", "#476b80", "#d6a46b", "#fff2cf")`. Unlisted controls use Python defaults.
-
-Download the file and run a selected study:
-
-```bash
-python effects_catalog.py --effect gaussian-blur --still
-python effects_catalog.py --effect crt
-```
-
-The first writes `effect-gaussian-blur.webp`; the second writes a 2-second
-`effect-crt.mp4`. Rerunning replaces named outputs. All inputs are original
-procedural Vestra content and bundled-font text; no downloads are required.
-The [processing model](../../concepts/effects-transitions-and-animation.md)
-explains attachment order, scope and coordinates. The [basic guide](effects.md)
-explains keeping and animating returned handles.
+These selected settings cover all 23 canonical effects, PseudoAscii and a second
+dither pattern. Use [Add an effect](effects.md) to attach a treatment, or the
+[complete example](#complete-example) to run these comparisons.
 
 ## Color and tone
 
@@ -43,15 +20,15 @@ explains keeping and animating returned handles.
 
 ### Brightness
 
-![Brightness: Lift every channel. Watch the dark ramp lose its deepest steps.](../../assets/renders/effect-brightness.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, Brightness treatment below.](../../assets/renders/effect-brightness.webp){ loading=lazy width=640 height=520 }
 
-Lift every channel. Watch the dark ramp lose its deepest steps.
+Lift forest shadows; the brightest clouds begin to clip.
 
 ```python
 Brightness(amount=0.15)
 ```
 
-[Parameters](../../reference/effect-parameters.md#brightness-brightness) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#brightness-brightness)
 
 </div>
 
@@ -59,15 +36,15 @@ Brightness(amount=0.15)
 
 ### Contrast
 
-![Contrast: Separate dark and light tones around the midpoint.](../../assets/renders/effect-contrast.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, Contrast treatment below.](../../assets/renders/effect-contrast.webp){ loading=lazy width=640 height=520 }
 
-Separate dark and light tones around the midpoint.
+Separate light cliffs from the darker trees.
 
 ```python
 Contrast(amount=1.5)
 ```
 
-[Parameters](../../reference/effect-parameters.md#contrast-contrast) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#contrast-contrast)
 
 </div>
 
@@ -75,15 +52,15 @@ Contrast(amount=1.5)
 
 ### Saturation
 
-![Saturation: Reduce chroma while retaining the tonal structure.](../../assets/renders/effect-saturation.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, Saturation treatment below.](../../assets/renders/effect-saturation.webp){ loading=lazy width=640 height=520 }
 
-Reduce chroma while retaining the tonal structure.
+Reduce the green and blue color while keeping the same tonal structure.
 
 ```python
-Saturation(amount=0)
+Saturation(amount=0.1)
 ```
 
-[Parameters](../../reference/effect-parameters.md#saturation-saturation) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#saturation-saturation)
 
 </div>
 
@@ -91,15 +68,15 @@ Saturation(amount=0)
 
 ### Tint
 
-![Tint: Mix a selected color into the study.](../../assets/renders/effect-tint.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, Tint treatment below.](../../assets/renders/effect-tint.webp){ loading=lazy width=640 height=520 }
 
-Mix a selected color into the study.
+Mix a selected mint color into the photograph.
 
 ```python
-Tint(colour='#4ed5bf', amount=0.65)
+Tint(colour='#4ed5bf', amount=0.45)
 ```
 
-[Parameters](../../reference/effect-parameters.md#tint-tint) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#tint-tint)
 
 </div>
 
@@ -107,15 +84,20 @@ Tint(colour='#4ed5bf', amount=0.65)
 
 ### ColorAdjust
 
-![ColorAdjust: Lift midtones with gamma and exposure; watch highlights for clipping.](../../assets/renders/effect-color-adjust.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, ColorAdjust treatment below.](../../assets/renders/effect-color-adjust.webp){ loading=lazy width=640 height=520 }
 
-Lift midtones with gamma and exposure; watch highlights for clipping.
+Exposure lifts the image, while gamma opens its midtones.
 
 ```python
-ColorAdjust(exposure=0.5, gamma=1.3, black_point=0, white_point=1)
+ColorAdjust(
+    exposure=0.5,
+    gamma=1.3,
+    black_point=0,
+    white_point=1,
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#coloradjust-color_adjust) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#coloradjust-color_adjust)
 
 </div>
 
@@ -129,15 +111,15 @@ ColorAdjust(exposure=0.5, gamma=1.3, black_point=0, white_point=1)
 
 ### GaussianBlur
 
-![GaussianBlur: Soften equally in all directions; compare the small lines with the original.](../../assets/renders/effect-gaussian-blur.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, GaussianBlur treatment below.](../../assets/renders/effect-gaussian-blur.webp){ loading=lazy width=640 height=520 }
 
-Soften equally in all directions; compare the small lines with the original.
+Soften the same tree silhouettes equally in every direction.
 
 ```python
 GaussianBlur(radius=5)
 ```
 
-[Parameters](../../reference/effect-parameters.md#gaussianblur-gaussian_blur) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#gaussianblur-gaussian_blur)
 
 </div>
 
@@ -145,15 +127,15 @@ GaussianBlur(radius=5)
 
 ### DirectionalBlur
 
-![DirectionalBlur: Spread detail along a selected direction.](../../assets/renders/effect-directional-blur.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, DirectionalBlur treatment below.](../../assets/renders/effect-directional-blur.webp){ loading=lazy width=640 height=520 }
 
-Spread detail along a selected direction.
+Stretch those edges along the selected 25° direction.
 
 ```python
 DirectionalBlur(radius=16, angle_degrees=25)
 ```
 
-[Parameters](../../reference/effect-parameters.md#directionalblur-directional_blur) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#directionalblur-directional_blur)
 
 </div>
 
@@ -161,15 +143,15 @@ DirectionalBlur(radius=16, angle_degrees=25)
 
 ### ZoomBlur
 
-![ZoomBlur: Spread detail along rays from the anchor; the center moves least.](../../assets/renders/effect-zoom-blur.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, ZoomBlur treatment below.](../../assets/renders/effect-zoom-blur.webp){ loading=lazy width=640 height=520 }
 
-Spread detail along rays from the anchor; the center moves least.
+Spread detail along rays from the middle of the valley.
 
 ```python
 ZoomBlur(radius=18, samples=24, anchor=(0.5, 0.5))
 ```
 
-[Parameters](../../reference/effect-parameters.md#zoomblur-zoom_blur) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#zoomblur-zoom_blur)
 
 </div>
 
@@ -177,15 +159,15 @@ ZoomBlur(radius=18, samples=24, anchor=(0.5, 0.5))
 
 ### RadialBlur
 
-![RadialBlur: Current RadialBlur uses centered zoom samples with 16 taps; unlike ZoomBlur, its center is a dynamic property. It does not produce rotational trails.](../../assets/renders/effect-radial-blur.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, RadialBlur treatment below.](../../assets/renders/effect-radial-blur.webp){ loading=lazy width=640 height=520 }
 
-Current RadialBlur uses centered zoom samples with 16 taps; unlike ZoomBlur, its center is a dynamic property. It does not produce rotational trails.
+Current RadialBlur also uses centered zoom samples, with a bindable center and 16 taps. It is not rotational blur.
 
 ```python
 RadialBlur(amount=12, center=(0.5, 0.5))
 ```
 
-[Parameters](../../reference/effect-parameters.md#radialblur-radial_blur) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#radialblur-radial_blur)
 
 </div>
 
@@ -193,15 +175,20 @@ RadialBlur(amount=12, center=(0.5, 0.5))
 
 ### Glow
 
-![Glow: Tint light spread from pixels above the threshold.](../../assets/renders/effect-glow.webp){ loading=lazy width=640 height=360 }
+![Bright lettering and line art above, Glow treatment below.](../../assets/renders/effect-glow.webp){ loading=lazy width=640 height=520 }
 
-Tint light spread from pixels above the threshold.
+Bright edges spread into a blue halo; the dark background stays controlled.
 
 ```python
-Glow(threshold=0.65, radius=10, intensity=1.5, colour='#8adfff')
+Glow(
+    threshold=0.55,
+    radius=14,
+    intensity=1.8,
+    colour='#8adfff',
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#glow-glow) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#glow-glow)
 
 </div>
 
@@ -209,15 +196,15 @@ Glow(threshold=0.65, radius=10, intensity=1.5, colour='#8adfff')
 
 ### Bloom
 
-![Bloom: Spread bright source colors beyond their original edges.](../../assets/renders/effect-bloom.webp){ loading=lazy width=640 height=360 }
+![Bright lettering and line art above, Bloom treatment below.](../../assets/renders/effect-bloom.webp){ loading=lazy width=640 height=520 }
 
-Spread bright source colors beyond their original edges.
+Spread the original warm and mint highlights, rather than adding a chosen glow color.
 
 ```python
-Bloom(threshold=0.65, radius=10, intensity=1.5)
+Bloom(threshold=0.55, radius=14, intensity=1.8)
 ```
 
-[Parameters](../../reference/effect-parameters.md#bloom-bloom) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#bloom-bloom)
 
 </div>
 
@@ -225,15 +212,15 @@ Bloom(threshold=0.65, radius=10, intensity=1.5)
 
 ### ChromaticAberration
 
-![ChromaticAberration: Separate channels across high-contrast edges.](../../assets/renders/effect-chromatic-aberration.webp){ loading=lazy width=640 height=360 }
+![Bright lettering and line art above, ChromaticAberration treatment below.](../../assets/renders/effect-chromatic-aberration.webp){ loading=lazy width=640 height=520 }
 
-Separate channels across high-contrast edges.
+Offset color channels at the bright letter and ring edges.
 
 ```python
 ChromaticAberration(amount=6, angle_degrees=0)
 ```
 
-[Parameters](../../reference/effect-parameters.md#chromaticaberration-chromatic_aberration) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#chromaticaberration-chromatic_aberration)
 
 </div>
 
@@ -241,15 +228,20 @@ ChromaticAberration(amount=6, angle_degrees=0)
 
 ### Vignette
 
-![Vignette: Darken the periphery while retaining the center.](../../assets/renders/effect-vignette.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, Vignette treatment below.](../../assets/renders/effect-vignette.webp){ loading=lazy width=640 height=520 }
 
-Darken the periphery while retaining the center.
+Keep attention on the valley by darkening the photograph toward its edges.
 
 ```python
-Vignette(amount=0.8, radius=0.5, softness=0.4, colour='#000000')
+Vignette(
+    amount=0.8,
+    radius=0.5,
+    softness=0.4,
+    colour='#000000',
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#vignette-vignette) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#vignette-vignette)
 
 </div>
 
@@ -257,15 +249,15 @@ Vignette(amount=0.8, radius=0.5, softness=0.4, colour='#000000')
 
 ### Sharpen
 
-![Sharpen: Increase local edge contrast; inspect small lines and circle contours.](../../assets/renders/effect-sharpen.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, Sharpen treatment below.](../../assets/renders/effect-sharpen.webp){ loading=lazy width=640 height=520 }
 
-Increase local edge contrast; inspect small lines and circle contours.
+Both inputs start with a 3-pixel Gaussian blur. Sharpen restores local edge contrast in the lower image; it cannot recover missing detail.
 
 ```python
-Sharpen(amount=2, radius=2)
+Sharpen(amount=2.5, radius=3)
 ```
 
-[Parameters](../../reference/effect-parameters.md#sharpen-sharpen) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#sharpen-sharpen)
 
 </div>
 
@@ -273,7 +265,7 @@ Sharpen(amount=2, radius=2)
 
 ## Palettes and print
 
-Read [palettes and dithering](palettes-and-dithering.md) for mode, pattern and input-detail decisions.
+[Palettes and dithering](palettes-and-dithering.md) explains mode, pattern and input-detail choices.
 
 <div class="gallery-grid" markdown>
 
@@ -281,15 +273,15 @@ Read [palettes and dithering](palettes-and-dithering.md) for mode, pattern and i
 
 ### PaletteMap
 
-![PaletteMap: Nearest tonal stops create discrete bands in the smooth ramp.](../../assets/renders/effect-palette-map.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, PaletteMap treatment below.](../../assets/renders/effect-palette-map.webp){ loading=lazy width=640 height=520 }
 
-Nearest tonal stops create discrete bands in the smooth ramp.
+Turn the forest and cliffs into discrete tonal color bands.
 
 ```python
 PaletteMap(palette=PALETTE, mode='nearest')
 ```
 
-[Parameters](../../reference/effect-parameters.md#palettemap-palette_map) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#palettemap-palette_map)
 
 </div>
 
@@ -297,15 +289,19 @@ PaletteMap(palette=PALETTE, mode='nearest')
 
 ### OrderedDither
 
-![OrderedDither: A fine repeating Bayer pattern preserves intermediate tone as color mixtures.](../../assets/renders/effect-ordered-dither.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, OrderedDither treatment below.](../../assets/renders/effect-ordered-dither.webp){ loading=lazy width=640 height=520 }
 
-A fine repeating Bayer pattern preserves intermediate tone as color mixtures.
+Mix the same palette colors in a repeating Bayer pattern to preserve intermediate tones.
 
 ```python
-OrderedDither(palette=PALETTE, matrix='bayer8', scale=1)
+OrderedDither(
+    palette=PALETTE,
+    matrix='bayer8',
+    scale=1,
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#ordereddither-ordered_dither) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#ordereddither-ordered_dither)
 
 </div>
 
@@ -313,15 +309,19 @@ OrderedDither(palette=PALETTE, matrix='bayer8', scale=1)
 
 ### OrderedDither · blue noise
 
-![OrderedDither: The same palette with a less regular fixed threshold pattern.](../../assets/renders/effect-blue-noise.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, OrderedDither treatment below.](../../assets/renders/effect-blue-noise.webp){ loading=lazy width=640 height=520 }
 
-The same palette with a less regular fixed threshold pattern.
+Replace the regular Bayer pattern with a fixed, less regular threshold pattern.
 
 ```python
-OrderedDither(palette=PALETTE, matrix='blue_noise', seed=37)
+OrderedDither(
+    palette=PALETTE,
+    matrix='blue_noise',
+    seed=37,
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#ordereddither-ordered_dither) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#ordereddither-ordered_dither)
 
 </div>
 
@@ -329,15 +329,15 @@ OrderedDither(palette=PALETTE, matrix='blue_noise', seed=37)
 
 ### Halftone
 
-![Halftone: Cell averages become dots; the text and fine lines lose source detail.](../../assets/renders/effect-halftone.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, Halftone treatment below.](../../assets/renders/effect-halftone.webp){ loading=lazy width=640 height=520 }
 
-Cell averages become dots; the text and fine lines lose source detail.
+Replace continuous photograph detail with dots whose area follows cell tone.
 
 ```python
-Halftone(mode='source', cell_size=7, softness=0.5)
+Halftone(mode='source', cell_size=5, softness=0.5)
 ```
 
-[Parameters](../../reference/effect-parameters.md#halftone-halftone) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#halftone-halftone)
 
 </div>
 
@@ -345,15 +345,19 @@ Halftone(mode='source', cell_size=7, softness=0.5)
 
 ### PixelSort
 
-![PixelSort: Eligible horizontal runs reorder within fixed blocks; inspect the circle and colored ramp.](../../assets/renders/effect-pixel-sort.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, PixelSort treatment below.](../../assets/renders/effect-pixel-sort.webp){ loading=lazy width=640 height=520 }
 
-Eligible horizontal runs reorder within fixed blocks; inspect the circle and colored ramp.
+Reorder eligible horizontal runs in 96-pixel blocks. Tree and mountain edges become bounded horizontal streaks.
 
 ```python
-PixelSort(direction='horizontal', segment_length=96, amount=1)
+PixelSort(
+    direction='horizontal',
+    segment_length=96,
+    amount=1,
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#pixelsort-pixel_sort) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#pixelsort-pixel_sort)
 
 </div>
 
@@ -361,23 +365,7 @@ PixelSort(direction='horizontal', segment_length=96, amount=1)
 
 ## Characters and motion
 
-Read [ASCII](ascii.md) for readable cell sizes and glyph coverage. The motion previews below are silent; use native controls to play and seek.
-
-<figure>
-<video controls playsinline preload="metadata" width="640" height="360" poster="../../../assets/renders/effect-motion-original.webp" aria-label="Moving baseline: scale 1.1, rotation −12° to 12°, x position 0.35 to 0.65">
-  <source src="../../assets/renders/effect-motion-original.mp4" type="video/mp4">
-  <a href="../../assets/renders/effect-motion-original.mp4">Download the baseline video</a>.
-</video>
-<figcaption>Moving baseline: scale 1.1, rotation −12° to 12°, x position 0.35 to 0.65; 2 seconds. These controls have no effect attached.</figcaption>
-</figure>
-
-<figure>
-<video controls playsinline preload="metadata" width="640" height="360" poster="../../../assets/renders/effect-tile-original.webp" aria-label="Shrunken baseline: scale 0.7 with the same rotation and position tracks">
-  <source src="../../assets/renders/effect-tile-original.mp4" type="video/mp4">
-  <a href="../../assets/renders/effect-tile-original.mp4">Download the baseline video</a>.
-</video>
-<figcaption>Shrunken baseline: scale 0.7 with the same rotation and position tracks; 2 seconds. These controls have no effect attached.</figcaption>
-</figure>
+[ASCII](ascii.md) explains glyph coverage and readability. Play the motion comparisons deliberately with the native controls.
 
 <div class="gallery-grid" markdown>
 
@@ -385,15 +373,20 @@ Read [ASCII](ascii.md) for readable cell sizes and glyph coverage. The motion pr
 
 ### Ascii
 
-![Ascii: Character cells use source colors with a small amount of original detail mixed back.](../../assets/renders/effect-ascii.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, Ascii treatment below.](../../assets/renders/effect-ascii.webp){ loading=lazy width=640 height=520 }
 
-Character cells use source colors with a small amount of original detail mixed back.
+Express the photograph with light characters over a dark background; larger 10×14 cells expose the glyph structure.
 
 ```python
-Ascii(cell_width=8, cell_height=12, color_mode='source', source_mix=0.15)
+Ascii(
+    cell_width=10,
+    cell_height=14,
+    foreground='#efe1b8',
+    background='#172126',
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#ascii-ascii) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#ascii-ascii)
 
 </div>
 
@@ -401,116 +394,146 @@ Ascii(cell_width=8, cell_height=12, color_mode='source', source_mix=0.15)
 
 ### PseudoAscii
 
-![PseudoAscii: Geometric marks express the same cell measurements without a glyph font.](../../assets/renders/effect-pseudo-ascii.webp){ loading=lazy width=640 height=360 }
+![Source landscape photograph above, PseudoAscii treatment below.](../../assets/renders/effect-pseudo-ascii.webp){ loading=lazy width=640 height=520 }
 
-Geometric marks express the same cell measurements without a glyph font.
+Use geometric marks instead of font glyphs on the same photograph and cell grid.
 
 ```python
-PseudoAscii(cell_width=8, cell_height=12, color_mode='source')
+PseudoAscii(
+    cell_width=10,
+    cell_height=14,
+    foreground='#efe1b8',
+    background='#172126',
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#ascii-ascii) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#ascii-ascii)
 
 </div>
 
-<div class="gallery-card" markdown>
+<div class="gallery-card gallery-card--comparison" markdown>
 
 ### Crt
 
-<video controls playsinline preload="metadata" width="640" height="360" poster="../../../assets/renders/effect-crt.webp" aria-label="Crt study: Play to see continuous seeded grain, rolling brightness and jitter on a stationary input.">
+<video controls playsinline preload="metadata" width="640" height="640" poster="../../../assets/renders/effect-crt.webp" aria-label="Synchronized source above and Crt treatment below.">
   <source src="../../assets/renders/effect-crt.mp4" type="video/mp4">
-  <a href="../../assets/renders/effect-crt.mp4">Download Crt video</a>.
+  <a href="../../assets/renders/effect-crt.mp4">Download the Crt comparison</a>.
 </video>
 
-Play to see continuous seeded grain, rolling brightness and jitter on a stationary input.
+The stationary photograph acquires scanlines, seeded grain, rolling brightness and jitter. Only the lower view changes over time.
 
 ```python
 Crt(period=2, seed=7, jitter=1.5, grain=0.05)
 ```
 
-[Parameters](../../reference/effect-parameters.md#crt-crt) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#crt-crt)
 
 </div>
 
-<div class="gallery-card" markdown>
+<div class="gallery-card gallery-card--comparison" markdown>
 
 ### CameraShake
 
-<video controls playsinline preload="metadata" width="640" height="360" poster="../../../assets/renders/effect-camera-shake.webp" aria-label="CameraShake study: Compare with the moving baseline: seeded shake adds motion to the same authored transform.">
+<video controls playsinline preload="metadata" width="640" height="640" poster="../../../assets/renders/effect-camera-shake.webp" aria-label="Synchronized source above and CameraShake treatment below.">
   <source src="../../assets/renders/effect-camera-shake.mp4" type="video/mp4">
-  <a href="../../assets/renders/effect-camera-shake.mp4">Download CameraShake video</a>.
+  <a href="../../assets/renders/effect-camera-shake.mp4">Download the CameraShake comparison</a>.
 </video>
 
-Compare with the moving baseline: seeded shake adds motion to the same authored transform.
+The upper photograph is still. The lower one adds seeded translation and rotation; a three-second decay keeps the movement visible. Both start with the same 1.5× overscan.
 
 ```python
-CameraShake(position_amount=0.025, rotation_degrees=2, scale_amount=0.02, frequency=5, seed=7, attack=0.1, decay=0.2)
+CameraShake(
+    position_amount=0.08,
+    rotation_degrees=4,
+    scale_amount=0.02,
+    frequency=7,
+    seed=7,
+    attack=0.1,
+    decay=3,
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#camerashake-camera_shake) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#camerashake-camera_shake)
 
 </div>
 
-<div class="gallery-card" markdown>
+<div class="gallery-card gallery-card--comparison" markdown>
 
 ### MotionBlur
 
-<video controls playsinline preload="metadata" width="640" height="360" poster="../../../assets/renders/effect-motion-blur.webp" aria-label="MotionBlur study: Compare with the moving baseline: transform velocity determines smearing, not the static image alone.">
+<video controls playsinline preload="metadata" width="640" height="640" poster="../../../assets/renders/effect-motion-blur.webp" aria-label="Synchronized source above and MotionBlur treatment below.">
   <source src="../../assets/renders/effect-motion-blur.mp4" type="video/mp4">
-  <a href="../../assets/renders/effect-motion-blur.mp4">Download MotionBlur video</a>.
+  <a href="../../assets/renders/effect-motion-blur.mp4">Download the MotionBlur comparison</a>.
 </video>
 
-Compare with the moving baseline: transform velocity determines smearing, not the static image alone.
+Both striped objects follow the same rapid left–right path. Only the lower object smears along its velocity; pause mid-travel to compare the dark bars.
 
 ```python
-MotionBlur(intensity=1, shutter_angle=270, max_radius=32, samples=16)
+MotionBlur(
+    intensity=2,
+    shutter_angle=270,
+    max_radius=32,
+    samples=16,
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#motionblur-motion_blur) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#motionblur-motion_blur)
 
 </div>
 
-<div class="gallery-card" markdown>
+<div class="gallery-card gallery-card--comparison" markdown>
 
 ### MotionTile
 
-<video controls playsinline preload="metadata" width="640" height="360" poster="../../../assets/renders/effect-motion-tile.webp" aria-label="MotionTile study: Compare with the shrunken baseline: mirrored virtual repeats fill the area around the moving source.">
+<video controls playsinline preload="metadata" width="640" height="640" poster="../../../assets/renders/effect-motion-tile.webp" aria-label="Synchronized source above and MotionTile treatment below.">
   <source src="../../assets/renders/effect-motion-tile.mp4" type="video/mp4">
-  <a href="../../assets/renders/effect-motion-tile.mp4">Download MotionTile video</a>.
+  <a href="../../assets/renders/effect-motion-tile.mp4">Download the MotionTile comparison</a>.
 </video>
 
-Compare with the shrunken baseline: mirrored virtual repeats fill the area around the moving source.
+Both images shrink and rotate identically. The light outline marks the original image bounds; only the lower view samples mirrored copies outside that outline.
 
 ```python
-MotionTile(output_width_percent=200, output_height_percent=200, mirror_edges=True)
+MotionTile(
+    output_width_percent=300,
+    output_height_percent=300,
+    mirror_edges=True,
+)
 ```
 
-[Parameters](../../reference/effect-parameters.md#motiontile-motion_tile) · [Runnable source](../../assets/examples/effects_catalog.py)
+[Parameters](../../reference/effect-parameters.md#motiontile-motion_tile)
+
+This comparison uses `anchor=(0, 0)` on both images. The current renderer shifts
+center-anchored virtual bounds; simply increasing the extent can leave the
+right and bottom uncovered. The [isolated reproduction](../../development/documentation.md#motion-tile-anchor-limitation)
+records that engine issue. No engine behavior was changed for this example.
 
 </div>
 
 </div>
 
-## Compare and reproduce
+<span id="the-controlled-input"></span>
 
-The catalog shows one selected setting per effect. For controlled stack order,
-see [blur before and after dithering](../../concepts/effects-transitions-and-animation.md#order-changes-the-result).
-For combining effects, continue with [composed treatments](effect-treatments.md).
-All previews use CPU; [feature support](../../reference/feature-support.md)
-distinguishes specific WGPU evidence and limits.
+## Complete example
 
-From a native source checkout, regenerate all learning assets with:
+Save [effects_catalog.py](../../assets/examples/effects_catalog.py) and
+[landscape.jpg](../../assets/examples/landscape.jpg) in the same directory:
 
 ```bash
-just python-sync
-just docs-media --learning
+python effects_catalog.py --effect gaussian-blur --still
+python effects_catalog.py --effect motion-blur
 ```
 
-The renderer keeps originals and QA output under `target/docs-media/`, commits
-only web previews, and records original-video hashes, poster times and selected
-backend in [the media manifest](../../assets/renders/learning-media.json).
-Static previews sample 0.7 seconds; motion posters also sample 0.7 seconds.
-Inspect the output after regeneration; FFmpeg versions may change encoding bytes.
-See [documentation authoring](../../development/documentation.md) for the complete
-workflow and [effect contracts](../../reference/effects.md) for alpha, ownership
-and implementation-reference links.
+These write `effect-gaussian-blur.webp` and a three-second `effect-motion-blur.mp4`;
+rerunning replaces those files. Every treatment above is selected by its
+hyphenated effect name. `PALETTE` in the settings is
+`("#101b32", "#476b80", "#d6a46b", "#fff2cf")`; other unlisted controls use defaults.
+
+Photograph: “Landscape in Salzburger Land” by Dimitry Anikin, CC0; cropped from
+[the existing licensed input](https://commons.wikimedia.org/wiki/File:Landscape_in_Salzburger_Land.jpg).
+The light and motion graphics are original. [Input source record](../../assets/examples/learning-inputs.txt).
+
+
+<span id="compare-and-reproduce"></span>
+
+Continue with [order-dependent processing](../../concepts/effects-transitions-and-animation.md#order-changes-the-result)
+or [composed treatments](effect-treatments.md) when combining effects.

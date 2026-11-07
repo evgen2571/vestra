@@ -323,6 +323,11 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
             clip
         })
         .collect::<Vec<_>>();
+    let assets = if variant == "group-tile" {
+        Vec::new()
+    } else {
+        vec![json!({"id": "blue", "type": "image", "source": "examples/assets/blue.png"})]
+    };
     serde_json::from_value(json!({
         "schema_version": 1,
         "output": {
@@ -330,7 +335,7 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
             "frame_rate": "24/1", "background": "#00000000", "quality": "preview",
             "audio": false, "duration_mode": "explicit", "duration": 1.0
         },
-        "assets": [{"id": "blue", "type": "image", "source": "examples/assets/blue.png"}],
+        "assets": assets,
         "visual": {"clips": clips, "transitions": [], "flashes": [], "post_effects": []}
     }))
     .unwrap_or_else(|error| panic!("{variant} MotionTile parity project parses: {error}"))

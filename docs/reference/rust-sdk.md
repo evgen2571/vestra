@@ -19,11 +19,15 @@ type where it is exposed by the current API.
 publication, timings, and render failures. `CancellationToken` cancels a
 cooperative render.
 
+### Progress and cancellation entry points
+
 For normal rendering, use `Editor::render_auto(...)`, which applies the
 default `ProgressMode::Auto` presentation. Use `render_with_progress(...)` when
 supplying a `ProgressSink`, and `render_with_observer(...)` for an observer that
 also needs cancellation control. `Editor::render(...)` is the callback-oriented
 entry point.
+
+## Authoring visual effects through JSON values
 
 Visual effects use the canonical JSON/value route. With a mutable
 `serde_json::Value` project document, add an ordered layer `effects` array or

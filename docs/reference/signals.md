@@ -4,6 +4,8 @@ Signals are immutable scalar values derived from prepared master-audio analysis.
 Use `project.audio.signal` in high-level Python. Each constructor or transform
 returns a new `ScalarSignal`; it does not mutate the input.
 
+## Audio features
+
 | Python form | Canonical feature | Contract |
 | --- | --- | --- |
 | `signal.rms()` | `rms` | Master RMS value. |
@@ -13,6 +15,9 @@ returns a new `ScalarSignal`; it does not mutate the input.
 The canonical signal has `source.type` set to `audio`, `source.tap` set to
 `master`, and `source.feature` set to an `rms`, `peak`, or `band_energy`
 feature object.
+
+## Ordered transforms
+
 The optional `transforms` array preserves call order. Remap extrapolates
 outside its input range; use an explicit clamp when bounds are required.
 
@@ -27,6 +32,8 @@ outside its input range; use an explicit clamp when bounds are required.
 Envelopes smooth rising values with attack and falling values with release,
 in transform order during preparation. The first analysis sample initializes
 the envelope; these values are not a fixed playback delay.
+
+## Binding and time domain
 
 Signals are evaluated in project-timeline time from master audio, including
 bindings inside nested compositions. Preparation

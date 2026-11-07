@@ -1,7 +1,9 @@
 # Environment variables
 
-Only variables that affect user-visible runs belong here. Benchmark, CI, and
-verification-only variables are intentionally excluded.
+The supported user-facing settings are listed first. Internal tuning and
+verification controls are identified separately below.
+
+## User-facing settings
 
 | Variable | Values and default | Scope |
 | --- | --- | --- |
@@ -14,6 +16,8 @@ renderer. The selected adapter and its device classification are reported
 separately when available.
 
 Vestra does not read `WGPU_BACKEND` for this selection.
+
+## Internal tuning and verification controls
 
 `VESTRA_WGPU_IN_FLIGHT` is an internal implementation tuning variable. It sets
 the WGPU pipeline depth, defaults to `3`, accepts only integers `1` through

@@ -30,7 +30,7 @@ dependencies, custom media player or frontend framework.
   editorial cleanup, shared CSS/tooling/manifests and integration; diagram worker
   `8b2f`; audio worker `a518`. No additional trees were created.
 - Source/treatment appear together on the same clock. Static previews remain
-  640×520; temporal comparisons reserve a lower native-control band at 640×640.
+  640×520; temporal comparisons will use the same framing without the encoded footer.
   Audio studies use 640×560; all learning delivery videos contain no audio streams.
 - Reuse the existing CC0 landscape as a 36 KiB crop. Bright lettering exposes light
   effects; a high-contrast moving object exposes motion blur. Input provenance
@@ -107,10 +107,46 @@ was made. The contributor guide includes a minimal reproduction. The catalog
 uses identical origin anchors on baseline/treatment and outlines nominal bounds.
 
 ## Completion / handoff
-Review pass complete; compact diagrams and silent studies are integrated,
-all remaining source/media/editorial changes are ready for the final commit,
-and no publishing actions were taken. Preview from the primary worktree with
+Review pass and group/layout follow-up complete; compact diagrams, silent
+studies and source/media/editorial changes are ready for review. No publishing
+actions were taken. Preview from the primary worktree with
 `just docs-serve`; regenerate in the native environment with
 `just python-sync` then `just docs-media --learning`.
 CPU evidence only; WGPU was not retested. The center-anchor issue remains
 explicitly documented. Remove this completed plan before any future merge.
+
+## Follow-up: groups and catalog layout
+Baseline: `a5845e0`; clean working tree, with the earlier review commits already
+present on the task branch. No unrelated changes to reconcile.
+
+- [x] Lead the setup guide with standalone `Group`, explain source snapshots vs
+  owned `root.group()` placements, and centralize local coordinates/time.
+- [x] Add a root/group coordinate diagram and an actual two-placement card study;
+  validate the documented coordinates, timing and independence on CPU.
+- [x] Restore two-column video cards and remove the encoded control footer/divider;
+  regenerate the four temporal clips and their posters/manifests.
+- [x] Check snippets, media freshness, links, formatting and native examples;
+  inspect desktop/mobile layouts and manual light/dark switching; commit only.
+
+Use the existing SVG theme tokens, media renderer and learning manifest. No
+engine/API changes, new worktrees, dependencies, player or publishing actions.
+
+Follow-up evidence:
+- 43 focused native/media/snippet tests passed, including six exact rendered
+  coordinate/time samples and snapshot/placement independence. The height check
+  first failed against 640×640 output, then passed with the footer removed.
+- `group_placements.py` executed as downloaded: 640×360, 90 frames, 3 seconds,
+  CPU, silent H.264. Its still comes from the same project via the shared renderer.
+- `just docs-media --learning` regenerated and verified original/delivery media,
+  posters and source/input/delivery hashes. All 12 learning delivery videos remain
+  silent; the four temporal effects now use 640×520 with no footer or divider.
+- All six affected pages checked at 390/1440 px in both themes: 24 layouts passed
+  with no document overflow, broken images or wrong SVG color-scheme. The four
+  video cards form two desktop columns and one mobile column. All 16 video
+  playback/pause cases passed. Initial appearance and manual theme switching
+  were checked, plus diagram/card screenshots and decoded timeline contact sheets.
+- Strict site check: 14,147 generated references, zero errors, nine site tests
+  passed. Source links: 721 in 116 Markdown files, zero missing. Changed-Python
+  Ruff checks/formatting and project `fmt-check`/`lint-python` passed. CPU only; no engine/API changes or new rendering issue.
+  Native video controls now overlay the lower edge while visible, without an
+  encoded footer; audio study layout is unchanged.

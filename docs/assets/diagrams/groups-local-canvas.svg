@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="350" viewBox="0 0 480 350" role="img" aria-labelledby="title desc">
-  <title id="title">Clip locally, then transform the whole group</title>
-  <desc id="desc">A 600 by 300 local group canvas contains a 100 by 80 child centered at local position 0.25, 0.5. A second child crosses the top edge, where the dashed part is discarded. The clipped group is scaled by one half and centered in a 640 by 360 parent: group size 300 by 150, first child size 50 by 40. The clipped part does not reappear.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="370" viewBox="0 0 480 370" role="img" aria-labelledby="title desc">
+  <title id="title">A group starts a local coordinate space inside the root</title>
+  <desc id="desc">The 640 by 360 root contains a centered 320 by 180 group. Both origins are at their own top-left and axes point right and down. The child's center is at group position 0.25, 0.5: local pixel 80, 90; root pixel 240, 180; normalized root position 0.375, 0.5. The group is unrotated with scale one.</desc>
   <style>
     :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; --stripe:#466c8c; }
     @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; --stripe:#4b6e8d; } }
@@ -19,22 +19,24 @@
       <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
     </marker>
   </defs>
-  <rect width="480" height="350" rx="10" fill="var(--bg)"/>
-  <text x="20" y="34">Compose → clip → place</text>
-  <text x="20" y="77" class="small">600 × 300 group</text>
-  <text x="258" y="77" class="small">640 × 360 parent</text>
-  <rect x="20" y="98" width="206" height="103" class="panel"/>
-  <rect x="258" y="98" width="206" height="115.875" class="panel"/>
-  <rect x="54.333" y="135.767" width="34.333" height="27.467" class="shape"/>
-  <path d="M64.5 149.5h14m-7-7v14" class="line" style="stroke:var(--ink);stroke-width:2.5"/>
-  <rect x="174.5" y="87.7" width="34.333" height="10.3" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="4 4"/>
-  <rect x="174.5" y="98" width="34.333" height="30.9" class="shape"/>
-  <path d="M233 150h18" class="arrow"/>
-  <rect x="312.719" y="131.797" width="96.562" height="48.281" class="panel"/>
-  <rect x="328.812" y="149.5" width="16.094" height="12.875" class="shape"/>
-  <rect x="385.141" y="131.797" width="16.094" height="14.484" class="shape"/>
-  <text x="123" y="241" class="small" text-anchor="middle">(0.25, 0.5)</text>
-  <text x="361" y="241" class="small" text-anchor="middle">Scale 0.5</text>
-  <text x="20" y="288" class="small">Child: 100 × 80 → 50 × 40 px</text>
-  <text x="20" y="325" class="small muted">Clipped pixels stay gone.</text>
+  <rect width="480" height="370" rx="10" fill="var(--bg)"/>
+  <text x="22" y="30">Root · 640 × 360</text>
+  <rect x="44" y="67" width="392" height="220.5" class="panel"/>
+  <path d="M44 67h388M44 67v216" class="arrow"/>
+  <text x="44" y="57" class="small">(0, 0)</text>
+  <text x="446" y="75" class="small">x</text>
+  <text x="20" y="284" class="small">y</text>
+  <text x="436" y="310" class="small" text-anchor="end">(1, 1)</text>
+  <text x="142" y="109" class="small">Group · 320 × 180</text>
+  <rect x="142" y="122.125" width="196" height="110.25" fill="var(--bg)" stroke="var(--line)" stroke-width="2"/>
+  <path d="M142 122.125h191M142 122.125v105" class="arrow"/>
+  <text x="150" y="147" class="small">(0, 0)</text>
+  <text x="346" y="130" class="small">x</text>
+  <text x="122" y="232" class="small">y</text>
+  <text x="338" y="258" class="small" text-anchor="end">(1, 1)</text>
+  <path d="M191 122.125v55.125H142" class="guide"/>
+  <rect x="160.375" y="158.875" width="61.25" height="36.75" class="shape"/>
+  <path d="M184 177.25h14m-7-7v14" class="line" style="stroke:var(--ink);stroke-width:2.5"/>
+  <text x="22" y="336" class="small">Child in group: (0.25, 0.5)</text>
+  <text x="22" y="362" class="small">Child in root: (0.375, 0.5)</text>
 </svg>

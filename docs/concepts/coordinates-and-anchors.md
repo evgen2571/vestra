@@ -69,10 +69,10 @@ transform to present that content.
 
 ## Each group has a parent and a local canvas
 
-Inside `Group(size=(600, 300))`, child position `(0.25, 0.5)` means `(150, 150)`.
-The group's own position uses its parent's dimensions. Giving a group dimensions
-does not resize its children's geometry. Its transform scales and rotates the
-composited result afterward.
+A child's normalized position uses its group's local canvas. The group's own
+placement uses the parent's canvas, and its transform acts on the completed
+children. Follow the [root and group coordinate diagram](groups-and-nesting.md#compose-locally-then-transform-the-result)
+for one worked conversion from local to root pixels.
 
 Continue with [groups and nesting](groups-and-nesting.md) for local bounds and
 clipping, or use the [source guide](../guides/python/sources-and-layers.md) to

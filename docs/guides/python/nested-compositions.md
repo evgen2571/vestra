@@ -16,25 +16,18 @@ A standalone `Group` is reusable visual content. Each `add()` snapshots the
 source, so placing the same group again creates independent children and
 presentation state:
 
+<figure class="comparison" markdown="span">
+![Two placements of one card group. The right card's circle, title and underline rotate and fade together while the left copy stays upright and opaque.](../../assets/renders/group-placements.webp)
+<figcaption>Both copies use scale 0.8. Only the right placement changes rotation and opacity.</figcaption>
+</figure>
+
 ```python
-from vestra import Circle, Color, Group, Project, Rectangle
-
-project = Project(
-    size=(1280, 720),
-    fps=30,
-    duration=5,
-)
-card = Group()
-card.add(
-    Rectangle(width=200, height=100, fill="#ff0000", position=(0.4, 0.5), rotation=15)
-)
-card.add(Circle(radius=30, fill="#2563eb", position=(0.6, 0.5)))
-project.root.add(card, duration=5)
-right_card = project.root.add(card, duration=5, position=(0.75, 0.5))
-
-right_card.transform.rotation.keyframe(0, 0)
-right_card.transform.rotation.keyframe(5, 180)
+--8<-- "docs/assets/examples/group_placements.py"
 ```
+
+Save the [complete example](../../assets/examples/group_placements.py) and run
+`python group_placements.py`. It replaces `group-placements.mp4` in the current
+directory. The graphics are original and use the bundled font.
 
 `Group.add()` returns a child placement with `transform`, `opacity`, `effects`,
 `masks`, and `blend_mode`. Child `start` is group-local seconds; omitted child
@@ -56,7 +49,8 @@ card = Group(size=(600, 300))
 card.add(Rectangle(width=100, height=80, fill="#2563eb", position=(0.25, 0.5)))
 ```
 
-The rectangle's anchor is at `(150, 150)` inside the card. The card's own anchor
+This new sized-group example is separate from the card above. The rectangle's
+anchor is at `(150, 150)` inside the card. The card's own anchor
 is placed at the center of its parent. The rectangle remains 100×80 pixels
 before placement transforms; `size` does not stretch its geometry.
 
@@ -84,11 +78,14 @@ and [exact bounds rules](../../reference/nested-compositions.md#sized-group-coor
 
 ## Edit a child composition directly
 
-For direct authoring, `composition.group()` creates one `CompositionLayer`
-that owns an editable child composition. Add children through `group.add()`
+Use this alternative when you need to edit the actual placed children after
+creating the scene, or to add transitions between them. `composition.group()`
+creates one `CompositionLayer` that owns an editable child composition. Add children through `group.add()`
 or its `child` composition:
 
 ```python
+from vestra import Color, Project
+
 project = Project(
     size=(1280, 720),
     fps=30,
@@ -99,6 +96,10 @@ group.add(Color("#0f172a"), duration=3)
 badge = group.child.add(Color("#f97316"), start=0.5, duration=1.5, z=1)
 badge.transform.scale = 0.5
 ```
+
+Unlike `Group(size=...)`, `group()` has no size argument: here the child canvas
+is 1280 × 720, inherited from the root. Adding or editing `badge` updates this
+placed scene directly; there is no separate source to add afterward.
 
 The group starts at parent time one. `badge` starts at child time 0.5, so it
 appears at parent time 1.5. Transforms, opacity, effects, and transitions on

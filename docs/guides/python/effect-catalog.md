@@ -411,11 +411,11 @@ PseudoAscii(
 
 </div>
 
-<div class="gallery-card gallery-card--comparison" markdown>
+<div class="gallery-card" markdown>
 
 ### Crt
 
-<video controls playsinline preload="metadata" width="640" height="640" poster="../../../assets/renders/effect-crt.webp" aria-label="Synchronized source above and Crt treatment below.">
+<video controls playsinline preload="metadata" width="640" height="520" poster="../../../assets/renders/effect-crt.webp" aria-label="Synchronized source above and Crt treatment below.">
   <source src="../../assets/renders/effect-crt.mp4" type="video/mp4">
   <a href="../../assets/renders/effect-crt.mp4">Download the Crt comparison</a>.
 </video>
@@ -430,11 +430,11 @@ Crt(period=2, seed=7, jitter=1.5, grain=0.05)
 
 </div>
 
-<div class="gallery-card gallery-card--comparison" markdown>
+<div class="gallery-card" markdown>
 
 ### CameraShake
 
-<video controls playsinline preload="metadata" width="640" height="640" poster="../../../assets/renders/effect-camera-shake.webp" aria-label="Synchronized source above and CameraShake treatment below.">
+<video controls playsinline preload="metadata" width="640" height="520" poster="../../../assets/renders/effect-camera-shake.webp" aria-label="Synchronized source above and CameraShake treatment below.">
   <source src="../../assets/renders/effect-camera-shake.mp4" type="video/mp4">
   <a href="../../assets/renders/effect-camera-shake.mp4">Download the CameraShake comparison</a>.
 </video>
@@ -457,11 +457,11 @@ CameraShake(
 
 </div>
 
-<div class="gallery-card gallery-card--comparison" markdown>
+<div class="gallery-card" markdown>
 
 ### MotionBlur
 
-<video controls playsinline preload="metadata" width="640" height="640" poster="../../../assets/renders/effect-motion-blur.webp" aria-label="Synchronized source above and MotionBlur treatment below.">
+<video controls playsinline preload="metadata" width="640" height="520" poster="../../../assets/renders/effect-motion-blur.webp" aria-label="Synchronized source above and MotionBlur treatment below.">
   <source src="../../assets/renders/effect-motion-blur.mp4" type="video/mp4">
   <a href="../../assets/renders/effect-motion-blur.mp4">Download the MotionBlur comparison</a>.
 </video>
@@ -481,11 +481,11 @@ MotionBlur(
 
 </div>
 
-<div class="gallery-card gallery-card--comparison" markdown>
+<div class="gallery-card" markdown>
 
 ### MotionTile
 
-<video controls playsinline preload="metadata" width="640" height="640" poster="../../../assets/renders/effect-motion-tile.webp" aria-label="Synchronized source above and MotionTile treatment below.">
+<video controls playsinline preload="metadata" width="640" height="520" poster="../../../assets/renders/effect-motion-tile.webp" aria-label="Synchronized source above and MotionTile treatment below.">
   <source src="../../assets/renders/effect-motion-tile.mp4" type="video/mp4">
   <a href="../../assets/renders/effect-motion-tile.mp4">Download the MotionTile comparison</a>.
 </video>

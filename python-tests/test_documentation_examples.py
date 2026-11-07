@@ -95,3 +95,42 @@ def test_nested_group_example_places_the_badge() -> None:
         child["source"].get("size") == {"width": 120, "height": 60}
         for child in card["clips"]
     ), "Place the card after adding its badge: placement snapshots the source"
+
+
+def test_group_concept_coordinates_and_clocks_match_rendered_output():
+    namespace = {}
+    page = ROOT / "docs/concepts/groups-and-nesting.md"
+    for code in snippets(page):
+        exec(code, namespace)
+    project = namespace["project"]
+    assert project.validate().is_valid
+    prepared = project.prepare(backend="cpu")
+    # The child's group-local (80, 90) is root pixel (240, 180).
+    for seconds, colour in (
+        (0.9, "101c27ff"),
+        (1.25, "263e4bff"),
+        (1.5, "263e4bff"),
+        (2.0, "e9bd72ff"),
+        (3.6, "263e4bff"),
+        (4.2, "101c27ff"),
+    ):
+        frame = prepared.render_frame_seconds(seconds).to_bytes()
+        offset = (180 * 640 + 240) * 4
+        assert frame[offset : offset + 4] == bytes.fromhex(colour), seconds
+
+
+def test_card_study_keeps_source_and_placements_independent():
+    from vestra import Circle
+
+    example = runpy.run_path(str(ROOT / "docs/assets/examples/group_placements.py"))
+    project = example["project"]
+    before = project.snapshot().to_dict()
+    # A later source edit must not update either already-placed card.
+    example["card"].add(Circle(radius=10, fill="#ffffff"))
+    assert project.snapshot().to_dict() == before
+    # Editing the right placement must not change the left copy.
+    example["right"].opacity = 0.25
+    after = project.snapshot().to_dict()
+    assert before["visual"]["clips"][0] == after["visual"]["clips"][0]
+    assert before["visual"]["clips"][1] != after["visual"]["clips"][1]
+    assert project.validate().is_valid

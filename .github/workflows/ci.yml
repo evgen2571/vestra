@@ -140,7 +140,7 @@ jobs:
             cargo --version
             command -v ffmpeg
             ffmpeg -version 2>&1 | sed -n "1p"
-            for library in libavcodec libavformat libavutil libswscale; do
+            for library in libavcodec libavformat libavutil libswresample libswscale; do
               printf "%s=" "$library"
               pkg-config --modversion "$library"
             done

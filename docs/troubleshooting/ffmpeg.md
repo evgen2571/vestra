@@ -8,9 +8,18 @@ network access for the first FFmpeg source fetch. A local patch removes the
 dependency's host-specific `-march=native` compiler flag for portable wheels.
 The repository Nix development shell supplies the build tools.
 
-## `ffmpeg` or `ffprobe` is missing at runtime
+<span id="ffmpeg-or-ffprobe-is-missing-at-runtime"></span>
 
-Some operational checks/workflows require `ffmpeg` and `ffprobe` on `PATH`; that is separate from native linking. Confirm with `command -v ffmpeg` and `command -v ffprobe`, then run their `-version` commands in the same shell that runs Vestra. Keep the executable path and version in a bug report.
+## `ffmpeg` is missing at runtime
+
+Encoding and audio processing require `ffmpeg` on `PATH`, separately from
+native linking. Run `ffmpeg -version` in the same shell that runs Vestra. On
+Linux/macOS, use `command -v ffmpeg` to find the executable; on Windows, use
+`where.exe ffmpeg`. Keep the executable path and version in a bug report.
+
+Media probing uses bundled FFmpeg libraries and does not require `ffprobe`.
+Some optional developer checks use `ffprobe` to verify output independently;
+install it when running those checks.
 
 ## An existing asset does not decode
 

@@ -114,9 +114,10 @@ Windows Server 2022. This is not exhaustive testing of older operating systems
 or GPUs. Native Windows/macOS PR smoke checks run for non-documentation changes;
 full artifact checks run for release/packaging changes and manual CI runs.
 
-Wheels and CLI executables statically link a bundled LGPL FFmpeg build. Encoding
-still needs `ffmpeg` and media inspection needs `ffprobe` on PATH. They are not
-bundled executables. Source builds need Rust, a C toolchain, libclang, `make`,
+Wheels and CLI executables statically link a bundled LGPL FFmpeg build for media
+probing and video decoding. Encoding and audio processing still need `ffmpeg`
+on PATH; that executable is not bundled. `ffprobe` is optional for independent
+media verification. Source builds need Rust, a C toolchain, libclang, `make`,
 Git and NASM. The vendored `ffmpeg-sys-next` build recipe removes `-march=native`
 and fixes MSVC dependency parsing/archive response files.
 

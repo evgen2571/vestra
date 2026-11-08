@@ -31,6 +31,14 @@ or `hold` interpolation. `trim_end` must follow `trim_start`; validation also
 checks ids, assets, timing, automation order/duration, effect scope, and media
 availability during preflight.
 
+Preflight measures the first audio stream's decoded samples using the bundled
+FFmpeg libraries; `ffprobe` is not required. An omitted `trim_end` uses that
+duration, excluding other streams and timestamp offsets. Probing reads the full
+source, so long audio takes longer to validate or prepare. Codec padding can
+make the result differ slightly from container metadata. See
+[audio probing](../development/architecture/media-io.md#audio-duration) for
+failure cases and native path restrictions.
+
 ## Effects
 
 | Type | Parameters | Scope and duration |

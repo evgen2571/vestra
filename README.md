@@ -13,7 +13,7 @@ Python library, with a canonical JSON format and a separate native `ve` CLI.
 
 ## Quick start
 
-Requires Python 3.11–3.14. Rendering needs `ffmpeg` and `ffprobe` on `PATH`
+Requires Python 3.11–3.14. Rendering needs `ffmpeg` on `PATH`
 (see [installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)).
 
 ```bash
@@ -59,8 +59,9 @@ for a summary, while `prepare()` sets up reusable rendering. CPU and GPU share
 one evaluated plan.
 
 - Output is MP4 (H.264 + AAC) up to 8192×8192; even dimensions are required.
-- Rendering shells out to `ffmpeg`/`ffprobe` at runtime; wheels only bundle
-  the FFmpeg libraries used internally for decoding.
+- Rendering shells out to `ffmpeg` for encoding and audio processing; bundled
+  FFmpeg libraries handle media probing and video decoding. `ffprobe` is optional
+  for independent output inspection.
 - `auto` uses WGPU when a usable adapter is found and falls back to CPU;
   `cpu` and `wgpu` force a renderer. WGPU coverage per feature is in the
   [feature matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md).
@@ -133,7 +134,7 @@ Install these dependencies before running `uv sync`:
 - libclang for native bindings, and `pkg-config` for library discovery.
 - Git to fetch the source code.
 - **NASM** for FFmpeg's x86 assembly.
-- FFmpeg runtime: `ffmpeg` and `ffprobe` on `PATH` for rendering.
+- FFmpeg runtime: `ffmpeg` on `PATH` for encoding and audio processing.
 
 See [native setup instructions](docs/getting-started/installation.md#without-nix)
 for the prerequisites and build commands, including an Ubuntu/Debian example.

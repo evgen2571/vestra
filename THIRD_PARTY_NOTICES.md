@@ -10,8 +10,9 @@ Binary wheels and native CLI executables statically link libraries from [FFmpeg]
 licensed under the GNU Lesser General Public License version 2.1 or later.
 The [LGPL text](licenses/FFmpeg-LGPL-2.1.txt) accompanies Vestra distributions.
 The normal build disables GPL, nonfree and version-3-only components and
-external-library autodetection. The runtime `ffmpeg` and `ffprobe` executables
-are separately installed tools and may have different build configurations.
+external-library autodetection. The runtime `ffmpeg` executable and optional
+`ffprobe` verification tool are installed separately and may have different
+build configurations.
 
 Release builds preserve the exact FFmpeg checkout used by each wheel and CLI build in a
 separate source archive, including source modifications, revision and configure

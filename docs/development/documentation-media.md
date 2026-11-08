@@ -6,20 +6,24 @@ assets. Ordinary prose, navigation and theme changes need only the
 
 | Media to rebuild | Route | Prerequisites and output |
 | --- | --- | --- |
-| Introductory tutorial previews | [Tutorial previews](#reproduce-tutorial-previews) | Native contributor environment and FFmpeg; CPU renders and web assets. |
-| Effect, audio, transition and group studies | [Visual learning studies](#reproduce-visual-learning-studies) | Native environment and FFmpeg; stills, videos, posters and manifest. |
+| Introductory tutorial previews | [Tutorial previews](#reproduce-tutorial-previews) | Native contributor environment, `ffmpeg` and `ffprobe`; CPU renders and web assets. |
+| Effect, audio, transition and group studies | [Visual learning studies](#reproduce-visual-learning-studies) | Native environment, `ffmpeg` and `ffprobe`; stills, videos, posters and manifest. |
 | Gallery delivery copies | [Gallery previews](#reproduce-gallery-previews) | FFmpeg and existing bundled renders; compact MP4/WebP copies. |
 
 These commands replace generated delivery assets. Inspect actual output before
 committing, retain provenance and [asset credits](documentation.md#asset-credits),
 and keep diagnostic originals under ignored `target/`.
 
+Preview regeneration uses `ffprobe` as an independent output verifier. This
+developer check is separate from Vestra's native media probing, which does not
+require the executable.
+
 ## Reproduce tutorial previews
 
 To regenerate the introductory media with the current source checkout:
 
 ```bash
-# Requires the native contributor environment and FFmpeg, unlike site preview.
+# Requires the native environment, ffmpeg and ffprobe, unlike site preview.
 just python-sync
 just docs-media
 ```

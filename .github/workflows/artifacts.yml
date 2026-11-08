@@ -71,9 +71,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "${env:ProgramFiles}\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
           "${env:ProgramFiles}\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-      - name: Build native CLI without the Python SDK
-        if: runner.os != 'Linux'
-        shell: bash
+      - name: Build macOS CLI without the Python SDK
+        if: runner.os == 'macOS'
+        run: cargo build --release --locked -p vestra-cli --target ${{ matrix.platform.target }} --target-dir target/cli
+      - name: Build Windows CLI without the Python SDK
+        if: runner.os == 'Windows'
+        # Git Bash puts its Unix link.exe ahead of the MSVC linker.
+        shell: pwsh
         run: cargo build --release --locked -p vestra-cli --target ${{ matrix.platform.target }} --target-dir target/cli
       - name: Build wheel and portable Linux CLI
         uses: PyO3/maturin-action@v1

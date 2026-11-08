@@ -101,3 +101,8 @@ part of this task.
   Flake packages are ordinary nixpkgs binary substitutes; remove that extra
   upload service consistently from CI while retaining Rust/uv caches. Verify
   next run reaches dependent jobs without the cache post-step.
+
+- Hosted Windows evidence found Git Bash selecting its Unix `link.exe` ahead
+  of MSVC for both new Cargo build paths. Use PowerShell for native Cargo
+  commands on Windows; keep portable Python packaging steps in Bash. No
+  engine/compiler workaround or skipped checks.

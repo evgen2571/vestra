@@ -243,11 +243,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "${env:ProgramFiles}\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
           "${env:ProgramFiles}\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-      - name: Test native CLI and render through the packaged executable
-        shell: bash
+      - name: Test and build macOS CLI
+        if: runner.os == 'macOS'
         run: |
           cargo test --locked -p vestra-cli
           cargo build --locked -p vestra-cli
+      - name: Test and build Windows CLI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo test --locked -p vestra-cli
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --locked -p vestra-cli
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Render through the packaged executable
+        shell: bash
+        run: |
           target="aarch64-apple-darwin"
           binary="target/debug/ve"
           if [[ "$RUNNER_OS" == Windows ]]; then

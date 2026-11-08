@@ -111,3 +111,9 @@ part of this task.
   used removed runtime FFmpeg `-vsync 0`. Replace it with equivalent per-stream
   `-fps_mode passthrough`; preserve the existing crossfade/flash assertions.
   The same helper is used by CPU/software-WGPU encoded-frame comparisons.
+
+- Repository inspection confirmed `pypi` currently has tag restrictions but no
+  required reviewers. Publication preflight must fail closed until maintainers
+  configure reviewers; build-only candidates remain independent of that setting.
+  Manual publication must execute the workflow from the same version tag as
+  the source input, matching the environment's allowed tag refs.

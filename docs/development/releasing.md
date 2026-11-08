@@ -64,11 +64,19 @@ correctness, not hardware GPU support.
 4. Configure PyPI Trusted Publishing for owner `evgen2571`, repository
    `vestra`, workflow `release.yml`, environment `pypi`. Protect the GitHub
    `pypi` environment with required maintainer review and appropriate tag rules.
-   Confirm approval settings before pushing a release tag.
+   Publication fails before building if the environment has no required
+   reviewers. Confirm approval settings before pushing a release tag.
 5. Push the immutable `v<version>` tag. The workflow rebuilds and validates
    from that tag; a prior branch candidate is evidence, not an artifact promoted
-   to a different revision. Alternatively, dispatch the workflow with `ref`
-   set to that version tag and `publish` true.
+   to a different revision. Alternatively, dispatch the workflow **from the
+   same version tag**, with `ref` set to that tag and `publish` true:
+
+   ```bash
+   gh workflow run release.yml --ref vVERSION -f ref=vVERSION -f publish=true
+   ```
+
+   Replace `vVERSION` with the workspace version tag. Selecting a workflow
+   branch while supplying a tag input is rejected for publication.
 6. Review the staged GitHub prerelease, manifest and source downloads, then
    approve the `pypi` environment. PyPI uses OIDC; no long-lived upload token
    is configured. Only staging/promotion jobs have `contents: write`, and only

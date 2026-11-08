@@ -103,3 +103,31 @@ def test_license_and_version_inheritance_are_still_required(tmp_path):
     )
     with pytest.raises(ValueError, match="workspace version"):
         load_script().metadata(root, "develop", publish=False)
+
+
+def test_publication_requires_workflow_from_same_tag():
+    environment = {
+        "protection_rules": [
+            {"type": "required_reviewers", "reviewers": [{"type": "User"}]}
+        ]
+    }
+    script = load_script()
+    script.publication_policy("v0.1.4", "refs/tags/v0.1.4", environment)
+    for ref in ("refs/heads/develop", "refs/tags/v0.1.3", ""):
+        with pytest.raises(ValueError, match="workflow.*version tag"):
+            script.publication_policy("v0.1.4", ref, environment)
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        [],
+        [{"type": "branch_policy"}],
+        [{"type": "required_reviewers", "reviewers": []}],
+    ],
+)
+def test_publication_rejects_environment_without_required_reviewers(rules):
+    with pytest.raises(ValueError, match="pypi.*required reviewers"):
+        load_script().publication_policy(
+            "v0.1.4", "refs/tags/v0.1.4", {"protection_rules": rules}
+        )

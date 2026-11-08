@@ -27,6 +27,9 @@ jobs:
   version:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       revision: ${{ steps.identity.outputs.revision }}
       version: ${{ steps.identity.outputs.version }}
@@ -44,9 +47,15 @@ jobs:
         env:
           SOURCE_REF: ${{ inputs.ref || github.ref }}
           PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+          WORKFLOW_REF: ${{ github.ref }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           flags=()
-          if [[ "$PUBLISH" == true ]]; then flags+=(--publish); fi
+          if [[ "$PUBLISH" == true ]]; then
+            gh api "repos/$GH_REPO/environments/pypi" > pypi-environment.json
+            flags+=(--publish --workflow-ref "$WORKFLOW_REF" --environment-policy pypi-environment.json)
+          fi
           python scripts/release-metadata.py --ref "$SOURCE_REF" "${flags[@]}" --output "$GITHUB_OUTPUT"
 
   artifacts:

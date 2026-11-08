@@ -2,6 +2,7 @@
 """Check release contracts and freeze the source identity before artifact builds."""
 
 import argparse
+import json
 from pathlib import Path
 import subprocess
 import tomllib
@@ -33,15 +34,37 @@ def metadata(root: Path, ref: str, *, publish: bool) -> dict[str, str]:
     return {"version": version, "revision": revision, "tag": tag}
 
 
+def publication_policy(tag: str, workflow_ref: str, environment: dict) -> None:
+    if workflow_ref != f"refs/tags/{tag}":
+        raise ValueError("publication must run the workflow from the same version tag")
+    if not any(
+        rule["type"] == "required_reviewers" and rule.get("reviewers")
+        for rule in environment.get("protection_rules", [])
+    ):
+        raise ValueError(
+            "pypi environment must have required reviewers before publication"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ref", required=True)
     parser.add_argument("--publish", action="store_true")
+    parser.add_argument("--workflow-ref", default="")
+    parser.add_argument("--environment-policy", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     result = metadata(
         Path(__file__).resolve().parents[1], args.ref, publish=args.publish
     )
+    if args.publish:
+        if not args.environment_policy:
+            parser.error("--publish requires --environment-policy")
+        publication_policy(
+            result["tag"],
+            args.workflow_ref,
+            json.loads(args.environment_policy.read_text()),
+        )
     lines = "".join(f"{key}={value}\n" for key, value in result.items())
     print(lines, end="")
     if args.output:

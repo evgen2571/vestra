@@ -70,7 +70,6 @@ jobs:
               - 'pyproject.toml'
               - 'vendor/ffmpeg-sys-next/**'
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
       - name: Check Rust/Python formatting and Python lint
         run: nix develop .#ci --command just style
       - name: Check release helpers without a native build
@@ -88,7 +87,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
       - uses: Swatinem/rust-cache@v2
         with:
           cmd-format: nix develop .#ci --command {0}
@@ -127,7 +125,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
       - uses: Swatinem/rust-cache@v2
         with:
           # Query the pinned Nix toolchain, not the runner's preinstalled Rust.
@@ -184,7 +181,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v19
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
       - uses: Swatinem/rust-cache@v2
         with:
           cmd-format: nix develop .#wgpu-software --command {0}

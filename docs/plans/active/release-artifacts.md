@@ -95,3 +95,9 @@ style/docs gates, earlier Windows/macOS native coverage, and a reviewed PR.
 
 Pending implementation and verification. No release publication or merge is
 part of this task.
+
+- Actions exposed redundant magic-nix-cache post-job cleanup stalling Style for
+  over five minutes after all checks passed (checks themselves: 67 seconds).
+  Flake packages are ordinary nixpkgs binary substitutes; remove that extra
+  upload service consistently from CI while retaining Rust/uv caches. Verify
+  next run reaches dependent jobs without the cache post-step.

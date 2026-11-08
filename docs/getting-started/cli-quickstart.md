@@ -12,9 +12,9 @@ a repository checkout using the
 [build-from-source instructions](installation.md#build-from-source--development).
 You also need `ffmpeg` and `ffprobe` on `PATH`.
 
-Run the commands below from the checkout. They use `cargo run` to build and
-execute the CLI. If you have already added `ve` to your `PATH`, replace
-`cargo run -q -p vestra-cli --` with `ve`.
+Run the commands below in a working directory with `ve` on your `PATH`.
+They need no repository checkout. If you built from source, add the binary
+to PATH as described in the installation instructions, or use its full path.
 
 ## Create a project
 
@@ -60,7 +60,7 @@ whole second. This is enough for the CLI to build and render a project.
 Run validation before rendering:
 
 ```bash
-cargo run -q -p vestra-cli -- validate solid.json
+ve validate solid.json
 ```
 
 The command should print `solid.json is valid`. Validation checks the JSON
@@ -82,7 +82,7 @@ command rejects an existing destination. The render below writes to
 Render to an explicit output path and allow replacement of an existing file:
 
 ```bash
-cargo run -q -p vestra-cli -- render solid.json \
+ve render solid.json \
   --output quickstart.mp4 \
   --overwrite \
   --progress none \
@@ -118,7 +118,7 @@ check `ffmpeg -version` and `ffprobe -version`, then consult
 Use `inspect` to see the resolved output settings, duration and contents:
 
 ```bash
-cargo run -q -p vestra-cli -- inspect solid.json
+ve inspect solid.json
 ```
 
 ```text

@@ -32,7 +32,15 @@ pub fn decoded_frame(path: &std::path::Path, frame: u64, width: u32, height: u32
         .args(["-hide_banner", "-loglevel", "error", "-i"])
         .arg(path)
         .args([
-            "-vf", &filter, "-vsync", "0", "-f", "rawvideo", "-pix_fmt", "rgba", "-",
+            "-vf",
+            &filter,
+            "-fps_mode",
+            "passthrough",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgba",
+            "-",
         ])
         .output()
         .expect("FFmpeg decodes rendered frame");

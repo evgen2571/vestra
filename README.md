@@ -3,7 +3,7 @@
 Vestra is a video composition and rendering engine. You describe a video as a
 project — layers, sources, keyframes, effects, audio — and Vestra renders it to
 MP4 through a native Rust engine, on the CPU or GPU (WGPU). It ships as a
-Python library, with a canonical JSON format and a `ve` CLI built from source.
+Python library, with a canonical JSON format and a separate native `ve` CLI.
 
 ![Animated showcase: animation, media, compositing and audio-reactive graphics](examples/showcase/readme-demo/preview.gif)
 
@@ -64,8 +64,9 @@ one evaluated plan.
 - `auto` uses WGPU when a usable adapter is found and falls back to CPU;
   `cpu` and `wgpu` force a renderer. WGPU coverage per feature is in the
   [feature matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md).
-- The Python wheel does not install the `ve` CLI — build it with
-  `cargo build -p vestra-cli` ([JSON authoring](https://github.com/evgen2571/vestra/blob/main/docs/guides/json-authoring.md)).
+- Download the separate `ve` CLI from [GitHub Releases](https://github.com/evgen2571/vestra/releases),
+  or build it with `cargo build -p vestra-cli`. It needs no Python; see
+  [CLI installation](https://github.com/evgen2571/vestra/blob/develop/docs/getting-started/installation.md#install-the-native-cli).
 - Python text uses a bundled default, an installed font family, or an explicit font file.
 
 Vestra is a rendering engine, not a live editor: it renders a finished project

@@ -1,0 +1,246 @@
+name: Build and validate release artifacts
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        description: Exact source revision to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      revision: ${{ steps.identity.outputs.revision }}
+      version: ${{ steps.identity.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - id: identity
+        env:
+          SOURCE_REF: ${{ inputs.revision }}
+        run: python scripts/release-metadata.py --ref "$SOURCE_REF" --output "$GITHUB_OUTPUT"
+
+  build:
+    needs: identity
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { runner: macos-15-intel, target: x86_64-apple-darwin }
+          - { runner: macos-15, target: aarch64-apple-darwin }
+          - { runner: windows-2022, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 90
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.revision }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: artifacts-${{ matrix.platform.target }}
+          workspaces: |
+            . -> target/cli
+            . -> target/wheel
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: brew install nasm
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Install Windows build tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install make nasm -y
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "${env:ProgramFiles}\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "${env:ProgramFiles}\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Build macOS CLI without the Python SDK
+        if: runner.os == 'macOS'
+        run: cargo build --release --locked -p vestra-cli --target ${{ matrix.platform.target }} --target-dir target/cli
+      - name: Build Windows CLI without the Python SDK
+        if: runner.os == 'Windows'
+        # Git Bash puts its Unix link.exe ahead of the MSVC linker.
+        shell: pwsh
+        run: cargo build --release --locked -p vestra-cli --target ${{ matrix.platform.target }} --target-dir target/cli
+      - name: Build wheel and portable Linux CLI
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.14.1
+          target: ${{ matrix.platform.target }}
+          manylinux: '2_28'
+          # Both Linux binaries use the same portable toolchain, with distinct
+          # directories so corresponding source always identifies its binary.
+          before-script-linux: |
+            dnf install -y clang clang-devel git make nasm
+            cargo build --release --locked -p vestra-cli --target ${{ matrix.platform.target }} --target-dir target/cli
+          args: --release --locked --out dist --compatibility pypi --target-dir target/wheel -i ${{ runner.os == 'Windows' && 'python' || 'python3.11' }}
+      - name: Package CLI and preserve each build's corresponding source
+        shell: bash
+        env:
+          TARGET: ${{ matrix.platform.target }}
+        run: |
+          binary="target/cli/$TARGET/release/ve"
+          if [[ "$RUNNER_OS" == Windows ]]; then binary="$binary.exe"; fi
+          python scripts/package-cli.py --binary "$binary" --target "$TARGET" --output-dir dist
+          wheel=(dist/*.whl)
+          cli=(dist/ve-*.tar.gz dist/ve-*.zip)
+          python scripts/archive-ffmpeg-source.py --search-root target/wheel --artifact "${wheel[0]}" --output "dist/ffmpeg-wheel-$TARGET.zip"
+          for archive in "${cli[@]}"; do
+            if [[ -f "$archive" ]]; then
+              python scripts/archive-ffmpeg-source.py --search-root target/cli --artifact "$archive" --output "dist/ffmpeg-cli-$TARGET.zip"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  smoke:
+    name: Installed artifacts (${{ matrix.platform.target }}, Python ${{ matrix.python }})
+    needs: [identity, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { runner: macos-15-intel, target: x86_64-apple-darwin }
+          - { runner: macos-15, target: aarch64-apple-darwin }
+          - { runner: windows-2022, target: x86_64-pc-windows-msvc }
+        python: ['3.11', '3.12', '3.13', '3.14']
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.revision }}
+          sparse-checkout: scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ matrix.platform.target }}
+          path: dist
+      - name: Install runtime tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+      - name: Install runtime tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Install runtime tools (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
+      - name: Install the same wheel in a fresh environment and smoke test
+        shell: bash
+        env:
+          VERSION: ${{ needs.identity.outputs.version }}
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          python="$RUNNER_TEMP/wheel-venv/bin/python"
+          if [[ "$RUNNER_OS" == Windows ]]; then python="$RUNNER_TEMP/wheel-venv/Scripts/python.exe"; fi
+          "$python" -m pip install --only-binary=:all: dist/*.whl
+          verifier="$PWD/scripts/verify-wheel.py"
+          cd "$RUNNER_TEMP"
+          "$python" "$verifier" --expected-version "$VERSION"
+      - name: Smoke test extracted CLI without an installed SDK
+        if: matrix.python == '3.11'
+        shell: bash
+        env:
+          VERSION: ${{ needs.identity.outputs.version }}
+        run: |
+          found=false
+          for archive in dist/ve-*.tar.gz dist/ve-*.zip; do
+            if [[ -f "$archive" ]]; then
+              python scripts/verify-cli.py "$archive" --expected-version "$VERSION"
+              found=true
+            fi
+          done
+          test "$found" = true
+
+  sdist:
+    needs: identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.revision }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: sdist
+      - name: Install build and runtime tools
+        run: sudo apt-get update -qq && sudo apt-get install -y clang libclang-dev make nasm ffmpeg
+      - name: Build source distribution
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.14.1
+          command: sdist
+          args: --out dist
+      - name: Install source distribution in a fresh environment
+        env:
+          VERSION: ${{ needs.identity.outputs.version }}
+        run: |
+          python -m venv "$RUNNER_TEMP/sdist-venv"
+          "$RUNNER_TEMP/sdist-venv/bin/python" -m pip install maturin==1.14.1
+          "$RUNNER_TEMP/sdist-venv/bin/python" -m pip install --no-build-isolation dist/*.tar.gz
+          verifier="$PWD/scripts/verify-wheel.py"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/sdist-venv/bin/python" "$verifier" --expected-version "$VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  inventory:
+    needs: [identity, smoke, sdist]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.revision }}
+          sparse-checkout: scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - name: Verify complete inventory and binary/source associations
+        env:
+          REVISION: ${{ needs.identity.outputs.revision }}
+          VERSION: ${{ needs.identity.outputs.version }}
+        run: python scripts/release-manifest.py dist --revision "$REVISION" --version "$VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest
+          path: |
+            dist/release-manifest.json
+            dist/SHA256SUMS
+          if-no-files-found: error

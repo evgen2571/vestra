@@ -22,14 +22,57 @@ the stream and sample-based trimming used by the audio graph. Container duration
 other streams, start timestamps and timestamp gaps do not extend the audio's
 source-local duration. Missing or estimated duration metadata therefore needs no
 container fallback. Codec delay and padding follow FFmpeg's decoded output, so
-the result may differ slightly from a container's declared duration.
+the result may differ slightly from a container's declared duration. After sample
+trimming, the audio graph rebuilds contiguous source-local timestamps before
+effects and authored timeline placement; source timestamp gaps cannot drop audio.
 
-Probing reads the whole source, with packet/frame storage bounded independently
-of source length; long audio increases validation and preparation time. Empty
-audio, missing audio streams, reported demux/decode errors, corrupt packets/frames,
+Probing reads the whole source; long audio increases validation and preparation
+time. Positive stream metadata is not sufficient to skip decoding: FLAC sample
+counts can be wrong, AAC padding can differ from the declared duration, and
+metadata or seeking cannot detect errors and sample-rate changes in the middle.
+Packet durations also need not describe the samples retained by the decoder.
+Preflight reuses each resolved audio path's result within that operation, including
+failures. Subsequent operations probe again, so edited files are not hidden by a
+persistent cache. Preparing once and reusing the prepared project avoids repeated
+preflight; its normal source-lifetime rules still apply.
+
+The probe retains one packet and decoded frame at a time; FFmpeg's own buffers
+and indexes depend on the container and codec. One-shot render cancellation is
+checked between packets/frames and assets. A native open/read/decode call already
+in progress must return before cancellation is observed; stalled filesystem I/O
+is not preempted. Standalone validation and preparation remain synchronous.
+
+Empty audio, missing audio streams, reported demux/decode errors, corrupt packets/frames,
 and zero or changing decoded sample rates produce media diagnostics. Native
 audio paths must be valid UTF-8 without NUL bytes; unsupported paths are reported
 as errors rather than passed to the bindings' panicking path conversion.
+
+### Future probing direction
+
+The intended follow-up architecture uses fast native FFmpeg metadata inspection
+by default, with optional full decoding for precise duration and strict validation.
+It will continue to avoid a runtime `ffprobe` dependency. The implementation above
+still fully decodes audio; this direction is a separate change, not a current mode.
+
+That change needs to:
+
+- Represent unavailable or estimated duration and its provenance separately from
+  verified decoded duration, and define native fallbacks for missing metadata.
+- Carry the selected precision/validation policy through SDK, CLI and Python
+  preflight/preparation without silently promising strict checks in fast mode.
+- Define how estimates affect automatic timeline length, omitted trim ends and
+  explicit source ranges. Keep actual decoded samples authoritative during
+  rendering, with explicit diagnostics and a documented policy for early EOF,
+  extra samples and discrepancies discovered after compilation or encoding starts.
+- Preserve first-stream selection, sample-based trimming, timestamp normalization,
+  cancellation and useful malformed-input errors. Full-stream corruption and rate
+  checks belong to strict decoding; metadata inspection cannot establish them.
+- Test both policies against misleading/missing metadata, padding, multiple streams,
+  timestamp discontinuities, truncated media and changed files. Measure short/long
+  assets and repeated validation/preparation separately from render throughput.
+
+The current full-decoding cost and reproducible probe benchmark are described in
+[benchmarks](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md).
 
 ## Frame writes and publication
 

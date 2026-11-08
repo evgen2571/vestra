@@ -245,7 +245,7 @@ impl GraphBuilder {
         let fade_out = requested_fade_out.min(processed.saturating_sub(fade_in));
         let normalized = self.label("clip");
         self.filters.push(format!(
-            "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=PTS-STARTPTS[{normalized}]"
+            "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=N/SR/TB[{normalized}]"
         ));
         let effected = self.apply_effect_chain(normalized, &clip.effects)?;
         let effected = if clip.effects.has_duration_transform() {
@@ -273,7 +273,10 @@ impl GraphBuilder {
                 "aeval=exprs='val(0)*({envelope})|val(1)*({envelope})':c=stereo,aformat=sample_rates={MIX_SAMPLE_RATE}:sample_fmts=fltp:channel_layouts=stereo"
             ));
         }
-        filters.push(format!("adelay={timeline_start}S:all=1[{label}]"));
+        // FFmpeg's synthetic delay frames can have no usable timestamps.
+        filters.push(format!(
+            "adelay={timeline_start}S:all=1,asetpts=N/SR/TB[{label}]"
+        ));
         self.filters.push(filters.join(","));
         Ok(label)
     }

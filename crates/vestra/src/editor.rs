@@ -1,6 +1,7 @@
 use std::{
     fmt,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
 
@@ -380,7 +381,8 @@ impl Editor {
     #[must_use]
     pub fn preflight(&self, project: &Project, options: PreflightOptions) -> PreflightReport {
         let validation = self.validate(project);
-        self.run_preflight(project, &validation, &options).report
+        self.run_preflight(project, &validation, &options, &AtomicBool::new(false))
+            .report
     }
 
     fn run_preflight(
@@ -388,6 +390,7 @@ impl Editor {
         project: &Project,
         validation: &ValidationReport,
         options: &PreflightOptions,
+        cancelled: &AtomicBool,
     ) -> InternalPreflightOutcome {
         let outcome = crate::project::validation::preflight(
             project,
@@ -395,7 +398,16 @@ impl Editor {
             &ValidationOptions {
                 limits: self.limits,
             },
+            cancelled,
         );
+        if cancelled.load(Ordering::Relaxed) {
+            return InternalPreflightOutcome {
+                report: PreflightReport {
+                    diagnostics: outcome.diagnostics,
+                },
+                resolved: None,
+            };
+        }
         let mut diagnostics = outcome.diagnostics;
         let target = &options.target;
         let render_target = match target {
@@ -467,7 +479,12 @@ impl Editor {
         preview: bool,
     ) -> Result<InspectionReport, EditorError> {
         let validation = self.validate(project);
-        let outcome = self.run_preflight(project, &validation, &PreflightOptions::for_inspection());
+        let outcome = self.run_preflight(
+            project,
+            &validation,
+            &PreflightOptions::for_inspection(),
+            &AtomicBool::new(false),
+        );
         let validated = outcome.resolved.ok_or_else(|| {
             Self::diagnostic_error(outcome.report.diagnostics, crate::RenderTimings::default())
         })?;
@@ -489,8 +506,11 @@ impl Editor {
         project: &Project,
         options: PrepareOptions,
     ) -> Result<PreparedProject, EditorError> {
-        let coordinated =
-            self.prepare_internal(project, InternalPreparationTarget::Public(options))?;
+        let coordinated = self.prepare_internal(
+            project,
+            InternalPreparationTarget::Public(options),
+            &AtomicBool::new(false),
+        )?;
         Ok(PreparedProject::new(
             coordinated.prepared,
             Self::project_display_path(project).to_path_buf(),
@@ -506,6 +526,7 @@ impl Editor {
         &self,
         project: &Project,
         target: InternalPreparationTarget<'_>,
+        cancelled: &AtomicBool,
     ) -> Result<CoordinatedPreparation, EditorError> {
         let _prepare_span = tracing::debug_span!(
             target: "vestra.render",
@@ -540,7 +561,7 @@ impl Editor {
                 request.preview,
             ),
         };
-        let outcome = self.run_preflight(project, &validation, &options);
+        let outcome = self.run_preflight(project, &validation, &options, cancelled);
         let preflight_elapsed = preflight_started.elapsed();
         tracing::debug!(
             target: "vestra.project",
@@ -559,12 +580,20 @@ impl Editor {
             }
             Self::operation_warnings(&warnings)
         };
-        let validated = outcome.resolved.ok_or_else(|| {
-            Self::diagnostic_error(
-                outcome.report.diagnostics,
-                Self::operation_timings(project, started, validation_elapsed, preflight_elapsed),
-            )
-        })?;
+        let validated = outcome
+            .resolved
+            .filter(|_| !cancelled.load(Ordering::Relaxed))
+            .ok_or_else(|| {
+                Self::diagnostic_error(
+                    outcome.report.diagnostics,
+                    Self::operation_timings(
+                        project,
+                        started,
+                        validation_elapsed,
+                        preflight_elapsed,
+                    ),
+                )
+            })?;
         let prepared = self.prepare_validated(
             project,
             validated,
@@ -794,15 +823,35 @@ impl Editor {
             preview = request.preview,
             "render preparation started"
         );
-        let coordinated =
-            match self.prepare_internal(project, InternalPreparationTarget::OneShot(&request)) {
-                Ok(coordinated) => coordinated,
-                Err(error) => {
-                    lifecycle.failed();
-                    log_render_failure(operation_id, &output_path, operation_started, &error);
-                    return Err(error);
+        let coordinated = match self.prepare_internal(
+            project,
+            InternalPreparationTarget::OneShot(&request),
+            &cancellation.flag(),
+        ) {
+            Ok(coordinated) => coordinated,
+            Err(error) if cancellation.is_cancelled() => {
+                lifecycle.cancelled();
+                let mut cancelled_error = Self::cancelled_editor_error(
+                    operation_started,
+                    total_frames.unwrap_or_default(),
+                    output_path,
+                );
+                if let EditorError::Render {
+                    warnings, timings, ..
+                } = &mut cancelled_error
+                {
+                    *warnings = error.warnings().to_vec();
+                    *timings = error.timings().clone();
+                    timings.operation_total_ms = operation_started.elapsed().as_millis();
                 }
-            };
+                return Err(cancelled_error);
+            }
+            Err(error) => {
+                lifecycle.failed();
+                log_render_failure(operation_id, &output_path, operation_started, &error);
+                return Err(error);
+            }
+        };
         let render_request = RenderRequest {
             output_override: request.output,
             overwrite: request.overwrite,
@@ -1192,6 +1241,88 @@ mod tests {
     use std::io;
 
     use super::*;
+
+    #[test]
+    fn cancellation_during_audio_preflight_emits_cancelled_instead_of_failed() {
+        struct CancelAfterAudioProbe(CancellationToken);
+
+        impl io::Write for CancelAfterAudioProbe {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                if String::from_utf8_lossy(bytes).contains("audio media probe completed") {
+                    self.0.cancel();
+                }
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let project = Project::from_value(
+            serde_json::json!({
+                "schema_version": 1,
+                "output": {"path": "missing-directory/out.mp4", "width": 2, "height": 2,
+                    "frame_rate": 1, "background": "#000000", "quality": "preview",
+                    "audio": false, "duration_mode": "explicit", "duration": 1},
+                "assets": [
+                    {"id": "tone", "type": "audio", "source": format!(
+                        "{}/../../examples/assets/tone.wav", env!("CARGO_MANIFEST_DIR")
+                    )},
+                    {"id": "missing", "type": "audio", "source": "missing.wav"}
+                ],
+                "visual": {"clips": []}
+            }),
+            directory.path(),
+        )
+        .expect("project");
+        let cancellation = CancellationToken::new();
+        let writer_cancellation = cancellation.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_writer(move || CancelAfterAudioProbe(writer_cancellation.clone()))
+            .finish();
+        let mut events = Vec::new();
+        let error = tracing::subscriber::with_default(subscriber, || {
+            Editor::new()
+                .render_with_observer(
+                    &project,
+                    SdkRenderRequest {
+                        backend: RenderBackendPreference::Cpu,
+                        ..SdkRenderRequest::default()
+                    },
+                    |event| {
+                        events.push(event);
+                        crate::RenderObserverControl::Continue
+                    },
+                    &cancellation,
+                )
+                .expect_err("cancellation must stop preparation")
+        });
+
+        assert!(
+            cancellation.is_cancelled(),
+            "cancel after the initial check"
+        );
+        assert!(error.is_cancelled(), "{error:?}");
+        assert!(matches!(events.last(), Some(RenderEvent::Cancelled { .. })));
+        assert_eq!(events.iter().filter(|event| event.is_terminal()).count(), 1);
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, RenderEvent::Failed { .. }))
+        );
+        assert_eq!(error.diagnostics()[0].code, "VESTRA-CANCELLED");
+        assert_eq!(
+            error
+                .render_failure_context()
+                .expect("render context")
+                .completed_frames,
+            0
+        );
+        assert!(!directory.path().join("missing-directory").exists());
+    }
 
     #[test]
     fn editor_error_accessors_cover_every_variant() {

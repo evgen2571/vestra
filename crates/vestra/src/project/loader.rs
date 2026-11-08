@@ -8,7 +8,12 @@ pub(crate) fn load_and_validate(
 ) -> Result<ValidatedProject, LoadError> {
     let project = Project::load(path)?;
     let validation = crate::Editor::new().validate(&project);
-    let outcome = validation::preflight(&project, &validation, options);
+    let outcome = validation::preflight(
+        &project,
+        &validation,
+        options,
+        &std::sync::atomic::AtomicBool::new(false),
+    );
     outcome
         .resolved
         .ok_or(super::LoadError::Diagnostics(outcome.diagnostics))

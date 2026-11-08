@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::{Diagnostic, ValidationReport};
 use vestra_core::timeline::{frame_count, seconds_to_nanos};
 
@@ -16,6 +18,7 @@ pub(crate) fn preflight(
     project: &Project,
     validation: &ValidationReport,
     options: &ValidationOptions,
+    cancelled: &AtomicBool,
 ) -> PreflightOutcome {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -27,7 +30,25 @@ pub(crate) fn preflight(
         }
     }
     let frame_rate = canonical.output.frame_rate.rational().unwrap_or((1, 1));
-    let assets = assets::validate(&canonical.assets, project.base_directory(), &mut errors);
+    let assets = assets::validate(
+        &canonical.assets,
+        project.base_directory(),
+        &mut errors,
+        cancelled,
+    );
+    if cancelled.load(Ordering::Relaxed) {
+        errors.push(Diagnostic::error(
+            "VESTRA-CANCELLED",
+            crate::Category::Cancellation,
+            "render cancelled",
+            "",
+        ));
+        errors.extend(warnings);
+        return PreflightOutcome {
+            diagnostics: errors,
+            resolved: None,
+        };
+    }
     let audio_end = audio::validate(
         canonical.audio.as_ref(),
         &assets.kinds,
@@ -231,7 +252,12 @@ mod tests {
         let validation = crate::ValidationReport {
             diagnostics: core_validate(project.canonical(), limits).into_diagnostics(),
         };
-        preflight(project, &validation, &ValidationOptions { limits })
+        preflight(
+            project,
+            &validation,
+            &ValidationOptions { limits },
+            &super::AtomicBool::new(false),
+        )
     }
 
     #[test]

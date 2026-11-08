@@ -66,8 +66,11 @@ jobs:
           TARGET: ${{ matrix.platform.target }}
         run: |
           # Partial cache restores can contain obsolete Cargo feature hashes.
-          cargo clean --release --locked -p ffmpeg-sys-next --target "$TARGET" --target-dir target/cli
-          cargo clean --release --locked -p ffmpeg-sys-next --target "$TARGET" --target-dir target/wheel
+          for directory in target/cli target/wheel; do
+            if compgen -G "$directory/$TARGET/release/build/ffmpeg-sys-next-*/out/ffmpeg-*/ffbuild/config.mak" > /dev/null; then
+              cargo clean --release --locked -p ffmpeg-sys-next --target "$TARGET" --target-dir "$directory"
+            fi
+          done
       - name: Install macOS build tools
         if: runner.os == 'macOS'
         run: brew install nasm

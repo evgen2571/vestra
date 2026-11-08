@@ -36,8 +36,8 @@ pub use error::{AudioAnalysisError, MediaError};
 pub use ffmpeg::FfmpegSink;
 pub use output::{OutputTarget, check_output, effective_parent};
 pub use probe::{
-    backend_available, check_ffmpeg_available, probe_audio_duration,
-    probe_audio_duration_cancellable,
+    AudioDurationSource, AudioMediaInfo, backend_available, check_ffmpeg_available, inspect_audio,
+    inspect_audio_cancellable, probe_audio_duration, probe_audio_duration_cancellable,
 };
 pub use sink::{FrameSink, SinkResult};
 pub use video::{

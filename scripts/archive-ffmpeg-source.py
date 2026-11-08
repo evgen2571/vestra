@@ -127,7 +127,9 @@ For a modified bundled build, adapt fetch() in vendor/ffmpeg-sys-next/build.rs
 to copy your modified ffmpeg/ source into source() instead of cloning upstream,
 then rebuild the Python module with Maturin or the CLI with
 cargo build --locked --release -p vestra-cli. The remaining build recipe configures and
-links those libraries. Use a clean Cargo target directory for the rebuild.
+links those libraries. On Windows, skip the two patch_windows_* calls when
+reusing this already patched source tree. Use a clean Cargo target directory
+for the rebuild.
 The source distribution includes Cargo.lock and the native module's source.
 The runtime ffmpeg/ffprobe executables are installed separately.
 This archive supplies library source material; it does not certify that all

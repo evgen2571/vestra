@@ -89,8 +89,8 @@ validated artifacts. Publication compares already-uploaded PyPI filenames and
 hashes before skipping existing files, allowing a partial upload to resume
 while rejecting different builds under an existing filename. Before replacing
 any staged file, staging checks existing GitHub asset hashes and PyPI hashes;
-a rebuild cannot replace the corresponding source of already distributed binaries. A complete GitHub
-release cannot be overwritten by staging. If only promotion failed, rerun that
+a rebuild cannot replace the corresponding source of already distributed binaries.
+A complete GitHub release cannot be overwritten by staging. If only promotion failed, rerun that
 job; do not start a new build or replace PyPI files. Release runs are serialized
 to avoid concurrent uploads. GitHub and PyPI are separate services, so publication
 is not atomic; a failed promotion can leave PyPI complete and GitHub prerelease
@@ -142,7 +142,9 @@ certify legal compliance.
 
 The source ZIP README describes rebuilding its FFmpeg tree and adapting the
 vendored fetch step to use modified source, followed by a clean Maturin or CLI
-Cargo rebuild. Retain the matching complete Vestra source from the GitHub tag (including the
+Cargo rebuild. When reusing the already patched Windows tree, skip the two
+`patch_windows_*` calls instead of applying the patches a second time. Retain
+the matching complete Vestra source from the GitHub tag (including the
 CLI crate), Cargo.lock, patches and build instructions alongside the corresponding
 source. The Python sdist contains the extension and its dependencies, not the
 CLI crate; use it only for Python-module rebuilds. This route

@@ -106,3 +106,8 @@ part of this task.
   of MSVC for both new Cargo build paths. Use PowerShell for native Cargo
   commands on Windows; keep portable Python packaging steps in Bash. No
   engine/compiler workaround or skipped checks.
+
+- Hosted macOS CLI tests render successfully but their shared frame decoder
+  used removed runtime FFmpeg `-vsync 0`. Replace it with equivalent per-stream
+  `-fps_mode passthrough`; preserve the existing crossfade/flash assertions.
+  The same helper is used by CPU/software-WGPU encoded-frame comparisons.

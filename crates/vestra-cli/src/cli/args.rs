@@ -11,7 +11,7 @@ use super::formats::{CliProgressFormat, CliRenderBackend, CliResultFormat};
     name = "ve",
     version,
     about = "Validate, inspect and render Vestra JSON projects",
-    after_help = "Rendering needs `ffmpeg` and `ffprobe` on PATH.\n\
+    after_help = "Rendering needs `ffmpeg` on PATH.\n\
                   Documentation: https://github.com/evgen2571/vestra/blob/main/docs/reference/cli.md",
     arg_required_else_help = true
 )]

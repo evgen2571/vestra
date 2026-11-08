@@ -103,7 +103,9 @@ it uses this checkout and does not fetch a separate documentation branch.
 If you don't use Nix, follow the
 [source-build installation instructions](../getting-started/installation.md#build-from-source--development)
 for your platform. Building from the checkout needs Rust and native build tools;
-rendering also needs `ffmpeg` and `ffprobe` on `PATH`.
+encoding and audio processing also need `ffmpeg` on `PATH`. The captured revision
+above also uses `ffprobe` for audio probing. Current Vestra probes media through
+bundled libraries and does not require that executable.
 
 Each project page gives its render command. Add `--smoke` for a 320 × 180,
 6 fps version of the full timeline. Full renders use the CPU at 1280 × 720

@@ -131,7 +131,9 @@ links those libraries. On Windows, skip the two patch_windows_* calls when
 reusing this already patched source tree. Use a clean Cargo target directory
 for the rebuild.
 The source distribution includes Cargo.lock and the native module's source.
-The runtime ffmpeg/ffprobe executables are installed separately.
+Encoding and audio processing use a separately installed ffmpeg executable.
+Media probing uses bundled libraries; ffprobe is optional for independent output
+verification.
 This archive supplies library source material; it does not certify that all
 static-linking LGPL relinking obligations have been met. Review LGPL 2.1 section 6.
 """,

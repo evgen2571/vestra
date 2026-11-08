@@ -166,8 +166,9 @@ downloaded footage or new fixture generators when existing helpers cover the cas
 ### Probe the published file
 
 After rendering a deterministic test project, probe the published target, not
-just the encoder's temporary file. Substitute its path in this command (requires
-`ffprobe` on `PATH`):
+just the encoder's temporary file. Use `ffprobe` as an independent verification
+tool; it is optional for Vestra runtime use. Substitute the target path in this
+command (requires `ffprobe` on `PATH`):
 
 ```bash
 ffprobe -v error -select_streams v:0 -count_frames \

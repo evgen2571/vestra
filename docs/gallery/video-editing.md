@@ -35,7 +35,7 @@ at a smaller size and lower frame rate.
 
 Three five-second footage selections and the Manrope font are included in the
 checkout. To reproduce the selections from the larger original video, use the
-[asset preparation instructions](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/README.md#prepare-shared-inputs).
+[current asset preparation instructions](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/README.md#prepare-shared-inputs).
 That optional step downloads a checksum-verified 18 MiB original.
 
 ## Create a dissolve with overlapping layers

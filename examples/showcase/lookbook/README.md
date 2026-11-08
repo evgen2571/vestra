@@ -9,8 +9,8 @@ photograph, warm halftone and mint ASCII. Each panel uses the same eased zoom;
 a rounded group mask keeps the crop consistent. All effects, masks, animation
 and text are rendered by Vestra, with no postproduction compositing.
 
-From the repository root after `uv sync --locked --extra dev`, with FFmpeg and
-ffprobe on `PATH`:
+From the repository root after `uv sync --locked --extra dev`, with `ffmpeg`
+on `PATH`:
 
 ```bash
 uv run python examples/showcase/lookbook/main.py

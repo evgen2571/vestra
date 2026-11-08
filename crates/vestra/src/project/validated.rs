@@ -20,6 +20,7 @@ pub struct ValidatedProject {
     pub(crate) base_directory: PathBuf,
     pub(crate) asset_paths: BTreeMap<String, PathBuf>,
     pub(crate) audio_durations: BTreeMap<String, f64>,
+    pub(crate) audio_duration_sources: BTreeMap<String, vestra_media::AudioDurationSource>,
     pub(crate) video_durations: BTreeMap<String, f64>,
     pub(crate) video_dimensions: BTreeMap<String, (u32, u32)>,
     pub(crate) video_metadata: BTreeMap<String, vestra_media::VideoMediaInfo>,

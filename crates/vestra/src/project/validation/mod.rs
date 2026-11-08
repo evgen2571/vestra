@@ -19,6 +19,7 @@ pub(crate) fn preflight(
     validation: &ValidationReport,
     options: &ValidationOptions,
     cancelled: &AtomicBool,
+    strict_audio: bool,
 ) -> PreflightOutcome {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -35,6 +36,8 @@ pub(crate) fn preflight(
         project.base_directory(),
         &mut errors,
         cancelled,
+        strict_audio,
+        canonical.audio.as_ref(),
     );
     if cancelled.load(Ordering::Relaxed) {
         errors.push(Diagnostic::error(
@@ -48,6 +51,17 @@ pub(crate) fn preflight(
             diagnostics: errors,
             resolved: None,
         };
+    }
+    for (index, asset) in canonical.assets.iter().enumerate() {
+        if assets.audio_duration_sources.get(&asset.id)
+            == Some(&vestra_media::AudioDurationSource::Reported)
+        {
+            warnings.push(Diagnostic::warning(
+                "VESTRA-AUDIO-DURATION-REPORTED",
+                format!("audio asset '{}' uses reported duration; use strict_audio to verify decoded samples and integrity", asset.id),
+                format!("/assets/{index}/source"),
+            ).with_related_id(&asset.id));
+        }
     }
     let audio_end = audio::validate(
         canonical.audio.as_ref(),
@@ -121,6 +135,7 @@ pub(crate) fn preflight(
             base_directory: project.base_directory().to_path_buf(),
             asset_paths: assets.paths,
             audio_durations: assets.audio_durations,
+            audio_duration_sources: assets.audio_duration_sources,
             video_durations: assets.video_durations,
             video_dimensions: assets
                 .video_metadata
@@ -257,6 +272,7 @@ mod tests {
             &validation,
             &ValidationOptions { limits },
             &super::AtomicBool::new(false),
+            true,
         )
     }
 

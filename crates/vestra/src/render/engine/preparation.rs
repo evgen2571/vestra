@@ -261,6 +261,10 @@ enum PreparedLifecycle {
 }
 
 impl PreparedState {
+    pub(crate) fn audio_mix(&self) -> &vestra_core::plan_audio::AudioMixPlan {
+        &self.plan.audio_mix
+    }
+
     pub(crate) fn frame_details(&self) -> (u32, u32, (u64, u64), u64, f64, usize) {
         (
             self.plan.canvas.width,
@@ -718,6 +722,21 @@ pub(super) fn frame_error(prepared: &PreparedState, diagnostic: Diagnostic) -> R
             RenderFailureStage::FrameComposition,
             &prepared.plan,
         ),
+        timings: RenderTimings::default(),
+    }
+}
+
+pub(crate) fn engine_audio_error(prepared: &PreparedState, diagnostic: Diagnostic) -> RenderError {
+    let stage = if diagnostic.category == Category::Cancellation {
+        RenderFailureStage::Cancellation
+    } else {
+        RenderFailureStage::AssetPreparation
+    };
+    RenderError {
+        diagnostic,
+        warnings: Vec::new(),
+        temporary_removed: true,
+        context: RenderFailureContext::before_render(stage, &prepared.plan),
         timings: RenderTimings::default(),
     }
 }

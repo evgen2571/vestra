@@ -29,6 +29,15 @@ Owned video masks point to `/masks/{index}/input/source` under their owning clip
 Children of owned Group masks continue through `/input/source/clips/{index}`,
 including any further nested groups or masks.
 
+## Audio duration precision
+
+`VESTRA-AUDIO-DURATION-REPORTED` warns that preflight used first-stream metadata
+without verifying the decoded sample count. Its pointer identifies the asset
+source; select strict audio validation for exact duration and decoder checks.
+A metadata-prepared video that requests samples beyond decoded EOF fails with
+`VESTRA-AUDIO-CLIP-SOURCE` before creating output; `related_id` identifies the
+clip. Use strict preparation to resolve its timeline from actual samples.
+
 ## Diagnostics, logs and progress
 
 Tracing/logging is operational observability. `RenderEvent` progress describes

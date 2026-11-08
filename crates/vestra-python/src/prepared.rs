@@ -36,13 +36,18 @@ pub(crate) struct PyPrepareOptions {
 #[pymethods]
 impl PyPrepareOptions {
     #[new]
-    #[pyo3(signature = (*, backend = None))]
-    fn new(backend: Option<&PyBackendPreference>) -> Self {
+    #[pyo3(signature = (*, backend = None, strict_audio = false))]
+    fn new(backend: Option<&PyBackendPreference>, strict_audio: bool) -> Self {
         let backend = backend.copied().unwrap_or(PyBackendPreference::Auto);
         Self {
-            inner: NativePrepareOptions::new(backend.native()),
+            inner: NativePrepareOptions::new(backend.native()).with_strict_audio(strict_audio),
             backend,
         }
+    }
+
+    #[getter]
+    fn strict_audio(&self) -> bool {
+        self.inner.strict_audio()
     }
 
     #[getter]

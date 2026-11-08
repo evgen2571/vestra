@@ -56,6 +56,15 @@ prepare again to include them. For one quick inspection,
 `project.render_frame(0.5, backend="cpu")` is convenient, but every call prepares
 again. Neither route encodes video or verifies output publication.
 
+Audio preparation uses reported duration by default. Choose
+`project.prepare(backend="cpu", strict_audio=True)` to fully decode audio,
+check source integrity and resolve exact sample duration before compiling the
+timeline. This is useful when an automatic timeline or an omitted trim end
+must include decoded padding. One-shot `project.render()` always resolves
+actual decoded duration. A prepared video render checks actual source bounds
+before encoding and preserves its compiled timeline; prepare again in strict
+mode if metadata overstated the available samples.
+
 A prepared runtime can also produce several videos without rebuilding it:
 
 ```python

@@ -31,15 +31,27 @@ or `hold` interpolation. `trim_end` must follow `trim_start`; validation also
 checks ids, assets, timing, automation order/duration, effect scope, and media
 availability during preflight.
 
-Preflight measures the first audio stream's decoded samples using the bundled
-FFmpeg libraries; `ffprobe` is not required. An omitted `trim_end` uses that
-duration, excluding other streams and timestamp offsets. Probing reads the full
-source, so long audio takes longer to validate or prepare. Codec padding can
-make the result differ slightly from container metadata. Assets sharing a resolved
-path are probed once per preflight. One-shot render cancellation is checked
-between native packet/frame operations. See
-[audio probing](../development/architecture/media-io.md#audio-duration) for
-failure cases and native path restrictions.
+Inspection and reusable preparation use the first audio stream's reported duration
+by default, with decoded-sample fallback when stream metadata is unavailable.
+An omitted `trim_end` and automatic prepared duration use that result. Reported
+durations produce `VESTRA-AUDIO-DURATION-REPORTED`; inspection exposes each audio
+clip's `duration_source` as `reported` or `decoded`. Metadata does not prove sample
+availability or source integrity. Explicit bounds beyond metadata trigger a scan
+before a source-range error is returned. Verified bounds allow one 48 kHz sample
+for edge rounding; a source offset at or beyond EOF is an error.
+
+Use `project.prepare(strict_audio=True)` or the SDK's strict preflight options for
+full decoding and exact sample duration. CLI `ve inspect --strict-audio` and
+`ve validate --strict-audio` provide the same policy. One-shot rendering always
+resolves exact duration. A metadata-prepared video keeps its prepared timeline,
+verifies selected sample bounds before encoding, rejects early EOF, and discards
+samples beyond its prepared trim; strict preparation includes decoded padding.
+
+Probing uses bundled FFmpeg libraries without a runtime `ffprobe` requirement.
+Other streams and source timestamp origins/gaps do not extend source-local audio.
+Paths are reused within each preflight, while later operations observe edits.
+See [audio probing](../development/architecture/media-io.md#audio-duration) for
+precision, execution checks, cancellation and failure behavior.
 
 ## Effects
 

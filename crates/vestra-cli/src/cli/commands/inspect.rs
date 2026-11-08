@@ -5,10 +5,15 @@ use std::{path::PathBuf, process::ExitCode};
 use crate::output::{ResultFormat, print_failure, print_success};
 use vestra::Editor;
 
-pub(super) fn run(project: PathBuf, preview: bool, format: ResultFormat) -> ExitCode {
+pub(super) fn run(
+    project: PathBuf,
+    preview: bool,
+    strict_audio: bool,
+    format: ResultFormat,
+) -> ExitCode {
     let editor = Editor::new();
     let outcome = match editor.load_project(&project) {
-        Ok(loaded) => editor.inspect(&loaded, preview),
+        Ok(loaded) => editor.inspect_with_strict_audio(&loaded, preview, strict_audio),
         Err(error) => Err(error),
     };
     match outcome {

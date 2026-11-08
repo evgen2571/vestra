@@ -129,3 +129,6 @@ impl PreflightReport {
             .filter(|item| item.severity == Severity::Warning)
     }
 }
+
+/// Provenance of an inspected audio source duration.
+pub use vestra_media::AudioDurationSource;

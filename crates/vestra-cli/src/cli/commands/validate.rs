@@ -5,7 +5,7 @@ use std::{path::PathBuf, process::ExitCode};
 use crate::output::{ResultFormat, print_failure, print_success};
 use vestra::{Editor, ValidateResult};
 
-pub(super) fn run(project: PathBuf, format: ResultFormat) -> ExitCode {
+pub(super) fn run(project: PathBuf, strict_audio: bool, format: ResultFormat) -> ExitCode {
     let editor = Editor::new();
     let loaded = match editor.load_project(&project) {
         Ok(project) => project,
@@ -20,7 +20,10 @@ pub(super) fn run(project: PathBuf, format: ResultFormat) -> ExitCode {
     };
     // Validation remains a pure SDK operation. The established CLI command
     // also reports whether that valid project can actually use its assets.
-    let report = editor.preflight(&loaded, vestra::PreflightOptions::for_validation());
+    let report = editor.preflight(
+        &loaded,
+        vestra::PreflightOptions::for_validation().with_strict_audio(strict_audio),
+    );
     if report.is_valid() {
         let result = ValidateResult {
             project,

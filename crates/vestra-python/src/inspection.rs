@@ -103,6 +103,8 @@ pub(crate) struct PyInspectAudioTrack {
 #[derive(Clone)]
 pub(crate) struct PyInspectAudioClip {
     #[pyo3(get)]
+    duration_source: String,
+    #[pyo3(get)]
     id: String,
     #[pyo3(get)]
     asset: String,
@@ -224,6 +226,10 @@ impl From<NativeInspection> for PyInspectionReport {
                             .clips
                             .into_iter()
                             .map(|clip| PyInspectAudioClip {
+                                duration_source: match clip.duration_source {
+                                    vestra::AudioDurationSource::Reported => "reported".to_owned(),
+                                    vestra::AudioDurationSource::Decoded => "decoded".to_owned(),
+                                },
                                 id: clip.id,
                                 asset: clip.asset,
                                 start: clip.start,

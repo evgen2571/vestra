@@ -151,6 +151,22 @@ def test_every_preflight_constructor_preserves_its_exposed_state(tmp_path: Path)
     assert (rendering.kind, rendering.backend, rendering.output, rendering.overwrite) == ("render", vestra.BackendPreference.CPU, tmp_path / "out.mp4", True)
 
 
+def test_strict_audio_options_are_explicit_and_read_only(tmp_path: Path) -> None:
+    factories = [
+        vestra.PreflightOptions.for_validation,
+        vestra.PreflightOptions.for_inspection,
+        lambda **kwargs: vestra.PreflightOptions.for_preparation(vestra.BackendPreference.CPU, **kwargs),
+        lambda **kwargs: vestra.PreflightOptions.for_render(vestra.BackendPreference.CPU, tmp_path / "out.mp4", **kwargs),
+        vestra.PrepareOptions,
+    ]
+    for factory in factories:
+        assert factory().strict_audio is False
+        options = factory(strict_audio=True)
+        assert options.strict_audio is True
+        with pytest.raises(AttributeError):
+            options.strict_audio = False
+
+
 def test_from_dict_accepts_general_mappings() -> None:
     assert vestra.ProjectSnapshot.from_dict(types.MappingProxyType(VALID)).to_dict()["schema_version"] == 1
     assert vestra.ProjectSnapshot.from_dict(UserDict(VALID)).to_dict()["schema_version"] == 1

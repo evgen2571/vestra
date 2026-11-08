@@ -33,6 +33,12 @@ output readiness and backend availability where applicable. CLI `ve validate`
 includes its validation preflight target, so it can report environment problems
 that Python `project.validate()` does not inspect.
 
+Ordinary audio preflight uses reported first-stream durations and warns when
+those have not been verified by decoding. Select `strict_audio=True` for exact
+preparation. One-shot rendering resolves decoded durations; metadata-prepared
+video checks selected source samples before encoding. See the
+[audio duration contract](../reference/audio.md).
+
 Preparation validates and preflights, resolves media and audio analysis, compiles
 the project plan and initializes the renderer. `project.prepare()` returns a
 reusable `PreparedProject`; it does not encode or publish a video. The prepared

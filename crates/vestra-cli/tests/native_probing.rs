@@ -446,3 +446,330 @@ fn sdk_prepares_video_and_audio_without_ffprobe() {
             .env(CHILD_PROJECT, project_path),
     );
 }
+
+#[test]
+fn strict_audio_cli_resolves_decoded_duration_and_checks_source_bounds() {
+    let directory = TempDir::new().expect("temporary directory");
+    let source = directory.path().join("misleading.flac");
+    success(
+        Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=sample_rate=48000:duration=0.375",
+                "-c:a",
+                "flac",
+            ])
+            .arg(&source),
+    );
+    let mut bytes = std::fs::read(&source).expect("FLAC fixture");
+    assert_eq!(&bytes[..4], b"fLaC");
+    let field = u64::from_be_bytes(bytes[18..26].try_into().expect("STREAMINFO"));
+    bytes[18..26].copy_from_slice(&((field & !((1_u64 << 36) - 1)) | 480_000).to_be_bytes());
+    std::fs::write(&source, bytes).expect("misleading metadata");
+    let path = directory.path().join("project.json");
+    let mut value = project(true);
+    value["visual"]["clips"] = json!([]);
+    value["assets"] = json!([{"id": "tone", "type": "audio", "source": "misleading.flac"}]);
+    value["audio"]["tracks"][0]["clips"][0]["trim_start"] = json!(0);
+    write_project(&path, &value);
+    for (strict, expected) in [(false, 10.0), (true, 0.375)] {
+        let mut command = common::command();
+        command.arg("inspect").arg(&path).args(["--format", "json"]);
+        if strict {
+            command.arg("--strict-audio");
+        }
+        let output = success(&mut command);
+        let report: Value = serde_json::from_slice(&output.stdout).expect("inspection JSON");
+        assert_eq!(report["output"]["duration"], expected);
+    }
+    value["audio"]["tracks"][0]["clips"][0]["trim_end"] = json!(0.75);
+    write_project(&path, &value);
+    success(common::command().arg("validate").arg(&path));
+    let output = common::command()
+        .arg("validate")
+        .arg(&path)
+        .args(["--strict-audio", "--format", "json"])
+        .output()
+        .expect("strict validation");
+    assert!(!output.status.success());
+    let report: Value = serde_json::from_slice(&output.stdout).expect("validation JSON");
+    assert!(
+        report["errors"]
+            .as_array()
+            .expect("errors")
+            .iter()
+            .any(|item| { item["code"] == "VESTRA-AUDIO-CLIP-SOURCE" })
+    );
+}
+
+#[test]
+fn fast_preparation_rejects_early_eof_before_output_and_strict_render_uses_samples() {
+    use vestra::{CancellationToken, PreparedVideoRenderRequest};
+    let directory = TempDir::new().expect("temporary directory");
+    let source = directory.path().join("misleading.flac");
+    success(
+        Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:sample_rate=48000:duration=0.375",
+                "-c:a",
+                "flac",
+            ])
+            .arg(&source),
+    );
+    let mut bytes = std::fs::read(&source).expect("FLAC fixture");
+    let field = u64::from_be_bytes(bytes[18..26].try_into().expect("STREAMINFO"));
+    bytes[18..26].copy_from_slice(&((field & !((1_u64 << 36) - 1)) | 480_000).to_be_bytes());
+    std::fs::write(&source, bytes).expect("reported duration fixture");
+    let mut value = project(true);
+    value["visual"]["clips"] = json!([]);
+    value["assets"] = json!([{"id": "tone", "type": "audio", "source": "misleading.flac"}]);
+    value["audio"]["tracks"][0]["clips"][0]["trim_start"] = json!(0);
+    let editor = Editor::new();
+    let authored = vestra::Project::from_value(value.clone(), directory.path()).expect("project");
+    let mut fast = editor
+        .prepare(&authored, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("fast preparation");
+    assert_eq!(
+        fast.preparation_report().duration(),
+        Duration::from_secs(10)
+    );
+    assert!(
+        fast.preparation_report()
+            .warnings()
+            .iter()
+            .any(|d| d.code == "VESTRA-AUDIO-DURATION-REPORTED")
+    );
+    let output = directory.path().join("output.mp4");
+    std::fs::write(&output, b"previous output").expect("existing output");
+    let error = fast
+        .render_video(
+            PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+            &mut |_| {},
+            &CancellationToken::new(),
+        )
+        .expect_err("decoded bounds must be checked before mixer padding");
+    assert!(
+        error
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == "VESTRA-AUDIO-CLIP-SOURCE")
+    );
+    assert_eq!(
+        std::fs::read(&output).expect("preserved destination"),
+        b"previous output"
+    );
+    assert!(
+        !std::fs::read_dir(directory.path())
+            .expect("directory")
+            .any(|entry| entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".vestra-"))
+    );
+
+    for start in [0.375, 0.375 - 0.25 / 48_000.0] {
+        let mut at_eof = value.clone();
+        at_eof["audio"]["tracks"][0]["clips"][0]["trim_start"] = json!(start);
+        at_eof["audio"]["tracks"][0]["clips"][0]["trim_end"] = json!(start + 1.0 / 48_000.0);
+        let at_eof = vestra::Project::from_value(at_eof, directory.path()).expect("EOF selection");
+        let mut prepared = editor
+            .prepare(&at_eof, PrepareOptions::new(BackendPreference::Cpu))
+            .expect("reported bounds permit the selection");
+        let error = prepared
+            .render_video(
+                PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+                &mut |_| {},
+                &CancellationToken::new(),
+            )
+            .expect_err("rounding tolerance cannot permit a selection starting at decoded EOF");
+        assert!(
+            error
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == "VESTRA-AUDIO-CLIP-SOURCE")
+        );
+        assert_eq!(
+            std::fs::read(&output).expect("preserved destination"),
+            b"previous output"
+        );
+    }
+
+    let mut strict = editor
+        .prepare(
+            &authored,
+            PrepareOptions::new(BackendPreference::Cpu).with_strict_audio(true),
+        )
+        .expect("strict preparation");
+    assert_eq!(
+        strict.preparation_report().duration(),
+        Duration::from_secs_f64(0.375)
+    );
+    strict
+        .render_video(
+            PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+            &mut |_| {},
+            &CancellationToken::new(),
+        )
+        .expect("exact prepared output");
+    let decoded = success(
+        Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(&output)
+            .args([
+                "-map", "0:a:0", "-ac", "1", "-ar", "48000", "-f", "f32le", "-",
+            ]),
+    );
+    let samples: Vec<_> = decoded
+        .stdout
+        .chunks_exact(4)
+        .map(|sample| f32::from_le_bytes(sample.try_into().expect("sample")))
+        .collect();
+    assert!(
+        (18_000..=19_024).contains(&samples.len()),
+        "AAC padding: {}",
+        samples.len()
+    );
+    assert!(samples[2_400..16_800].iter().map(|x| x * x).sum::<f32>() / 14_400.0 > 0.004);
+
+    // A bounded excerpt is valid even when the unused reported tail is wrong.
+    value["audio"]["tracks"][0]["clips"][0]["trim_end"] = json!(0.25);
+    value["audio"]["tracks"][0]["clips"][0]["start"] = json!(0.125);
+    let excerpt = vestra::Project::from_value(value.clone(), directory.path()).expect("excerpt");
+    let mut prepared = editor
+        .prepare(&excerpt, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("bounded fast preparation");
+    prepared
+        .render_video(
+            PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+            &mut |_| {},
+            &CancellationToken::new(),
+        )
+        .expect("available excerpt");
+    let decoded = success(
+        Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(&output)
+            .args([
+                "-map", "0:a:0", "-ac", "1", "-ar", "48000", "-f", "f32le", "-",
+            ]),
+    );
+    let samples: Vec<_> = decoded
+        .stdout
+        .chunks_exact(4)
+        .map(|sample| f32::from_le_bytes(sample.try_into().expect("sample")))
+        .collect();
+    assert!((18_000..=19_024).contains(&samples.len()));
+    assert!(samples[..4_800].iter().all(|sample| sample.abs() < 0.001));
+    assert!(samples[7_200..16_800].iter().map(|x| x * x).sum::<f32>() / 9_600.0 > 0.004);
+    value["output"]["audio"] = json!(false);
+    value["audio"]["tracks"][0]["clips"][0]["trim_end"] = json!(0.75);
+    let visual_only =
+        vestra::Project::from_value(value, directory.path()).expect("visual-only project");
+    let mut prepared = editor
+        .prepare(&visual_only, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("visual-only preparation");
+    let result = prepared
+        .render_video(
+            PreparedVideoRenderRequest::new(&output).with_overwrite(true),
+            &mut |_| {},
+            &CancellationToken::new(),
+        )
+        .expect("unconsumed audio needs no execution scan");
+    assert!(!result.audio_present);
+}
+
+#[test]
+fn prepared_aac_keeps_reported_selection_and_strict_preparation_includes_padding() {
+    use vestra::{CancellationToken, PreparedVideoRenderRequest};
+    let directory = TempDir::new().expect("directory");
+    success(
+        Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:sample_rate=48000:duration=1.25",
+                "-c:a",
+                "aac",
+            ])
+            .arg(directory.path().join("source.m4a")),
+    );
+    let mut value = project(true);
+    value["visual"]["clips"] = json!([]);
+    value["assets"] = json!([{"id":"tone", "type":"audio", "source":"source.m4a"}]);
+    value["audio"]["tracks"][0]["clips"][0]["start"] = json!(0.125);
+    let editor = Editor::new();
+    let project = vestra::Project::from_value(value, directory.path()).expect("project");
+    for strict in [false, true] {
+        let mut prepared = editor
+            .prepare(
+                &project,
+                PrepareOptions::new(BackendPreference::Cpu).with_strict_audio(strict),
+            )
+            .expect("prepare AAC");
+        let duration = prepared.preparation_report().duration().as_secs_f64();
+        if strict {
+            assert!(
+                duration > 1.125 && duration < 1.15,
+                "decoded padding: {duration}"
+            );
+        } else {
+            assert_eq!(duration, 1.125);
+        }
+        let path = directory.path().join(format!("aac-{strict}.mp4"));
+        prepared
+            .render_video(
+                PreparedVideoRenderRequest::new(&path),
+                &mut |_| {},
+                &CancellationToken::new(),
+            )
+            .expect("publish AAC");
+        prepared
+            .render_video(
+                PreparedVideoRenderRequest::new(&path).with_overwrite(true),
+                &mut |_| {},
+                &CancellationToken::new(),
+            )
+            .expect("repeat prepared AAC output");
+        let decoded = success(
+            Command::new("ffmpeg")
+                .args(["-v", "error", "-i"])
+                .arg(&path)
+                .args([
+                    "-map", "0:a:0", "-ac", "1", "-ar", "48000", "-f", "f32le", "-",
+                ]),
+        );
+        let samples: Vec<_> = decoded
+            .stdout
+            .chunks_exact(4)
+            .map(|sample| f32::from_le_bytes(sample.try_into().expect("sample")))
+            .collect();
+        let expected = (duration * 48_000.0).round() as usize;
+        assert!(
+            (expected..=expected + 1_024).contains(&samples.len()),
+            "{} samples, expected {expected}",
+            samples.len()
+        );
+        assert!(samples[..4_800].iter().all(|sample| sample.abs() < 0.001));
+        assert!(
+            samples[9_600..48_000]
+                .iter()
+                .map(|sample| sample * sample)
+                .sum::<f32>()
+                / 38_400.0
+                > 0.004
+        );
+    }
+}

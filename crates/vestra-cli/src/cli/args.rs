@@ -42,6 +42,9 @@ pub(super) enum Command {
 pub(super) struct ValidateArgs {
     /// Project JSON file.
     pub(super) project: PathBuf,
+    /// Fully decode audio to verify sample duration and source integrity.
+    #[arg(long)]
+    pub(super) strict_audio: bool,
     /// Result format written to stdout.
     #[arg(long, value_enum, default_value_t = CliResultFormat::Human)]
     pub(super) format: CliResultFormat,
@@ -51,6 +54,9 @@ pub(super) struct ValidateArgs {
 pub(super) struct InspectArgs {
     /// Project JSON file.
     pub(super) project: PathBuf,
+    /// Fully decode audio to verify sample duration and source integrity.
+    #[arg(long)]
+    pub(super) strict_audio: bool,
     /// Report preview dimensions (longest side capped at 640 px).
     #[arg(long)]
     pub(super) preview: bool,

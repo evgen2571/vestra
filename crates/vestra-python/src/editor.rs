@@ -103,7 +103,7 @@ impl PyEditor {
             py.detach(|| self.inner.preflight(&project.inner, options.inner.clone())),
         )
     }
-    #[pyo3(signature = (project, *, preview = false))]
+    #[pyo3(signature = (project, *, preview = false, strict_audio = false))]
     #[expect(
         clippy::result_large_err,
         reason = "the Python bridge preserves native editor diagnostics"
@@ -113,8 +113,12 @@ impl PyEditor {
         py: Python<'_>,
         project: &PyProject,
         preview: bool,
+        strict_audio: bool,
     ) -> PyResult<PyInspectionReport> {
-        match py.detach(|| self.inner.inspect(&project.inner, preview)) {
+        match py.detach(|| {
+            self.inner
+                .inspect_with_strict_audio(&project.inner, preview, strict_audio)
+        }) {
             Ok(report) => Ok(PyInspectionReport::from(report)),
             Err(error) => Err(editor_error(py, error)?),
         }
@@ -186,9 +190,10 @@ pub(crate) struct PyPreflightOptions {
 #[pymethods]
 impl PyPreflightOptions {
     #[classmethod]
-    fn for_validation(_cls: &Bound<'_, PyType>) -> Self {
+    #[pyo3(signature = (*, strict_audio = false))]
+    fn for_validation(_cls: &Bound<'_, PyType>, strict_audio: bool) -> Self {
         Self {
-            inner: NativePreflightOptions::for_validation(),
+            inner: NativePreflightOptions::for_validation().with_strict_audio(strict_audio),
             kind: "validation".to_owned(),
             backend: None,
             output: None,
@@ -196,9 +201,10 @@ impl PyPreflightOptions {
         }
     }
     #[classmethod]
-    fn for_inspection(_cls: &Bound<'_, PyType>) -> Self {
+    #[pyo3(signature = (*, strict_audio = false))]
+    fn for_inspection(_cls: &Bound<'_, PyType>, strict_audio: bool) -> Self {
         Self {
-            inner: NativePreflightOptions::for_inspection(),
+            inner: NativePreflightOptions::for_inspection().with_strict_audio(strict_audio),
             kind: "inspection".to_owned(),
             backend: None,
             output: None,
@@ -206,9 +212,15 @@ impl PyPreflightOptions {
         }
     }
     #[classmethod]
-    fn for_preparation(_cls: &Bound<'_, PyType>, backend: &PyBackendPreference) -> Self {
+    #[pyo3(signature = (backend, *, strict_audio = false))]
+    fn for_preparation(
+        _cls: &Bound<'_, PyType>,
+        backend: &PyBackendPreference,
+        strict_audio: bool,
+    ) -> Self {
         Self {
-            inner: NativePreflightOptions::for_preparation(backend.native()),
+            inner: NativePreflightOptions::for_preparation(backend.native())
+                .with_strict_audio(strict_audio),
             kind: "preparation".to_owned(),
             backend: Some(*backend),
             output: None,
@@ -216,12 +228,13 @@ impl PyPreflightOptions {
         }
     }
     #[classmethod]
-    #[pyo3(signature = (backend, output, *, overwrite = false))]
+    #[pyo3(signature = (backend, output, *, overwrite = false, strict_audio = false))]
     fn for_render(
         _cls: &Bound<'_, PyType>,
         backend: &PyBackendPreference,
         output: &Bound<'_, PyAny>,
         overwrite: bool,
+        strict_audio: bool,
     ) -> PyResult<Self> {
         let output = conversion::path_from_python(output)?;
         Ok(Self {
@@ -229,12 +242,17 @@ impl PyPreflightOptions {
                 backend.native(),
                 Some(output.clone()),
                 overwrite,
-            ),
+            )
+            .with_strict_audio(strict_audio),
             kind: "render".to_owned(),
             backend: Some(*backend),
             output: Some(output),
             overwrite,
         })
+    }
+    #[getter]
+    fn strict_audio(&self) -> bool {
+        self.inner.strict_audio()
     }
     #[getter]
     fn kind(&self) -> String {

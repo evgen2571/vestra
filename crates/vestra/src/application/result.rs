@@ -85,6 +85,8 @@ pub struct InspectAudioTrack {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct InspectAudioClip {
+    /// Whether the source duration was reported by metadata or verified by decoding.
+    pub duration_source: vestra_media::AudioDurationSource,
     pub id: String,
     pub asset: String,
     pub start: f64,
@@ -152,6 +154,8 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
                                         .unwrap_or(clip.trim_start)
                                 });
                                 InspectAudioClip {
+                                    duration_source: inspection.validated.audio_duration_sources
+                                        [&clip.asset],
                                     id: clip.id.clone(),
                                     asset: clip.asset.clone(),
                                     start: clip.start,

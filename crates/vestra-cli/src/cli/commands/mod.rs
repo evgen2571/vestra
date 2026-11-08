@@ -24,11 +24,16 @@ pub fn run() -> ExitCode {
     match cli.command {
         Command::Validate(args) => {
             tracing::info!(target: "vestra.project", command = "validate", "command started");
-            validate::run(args.project, args.format.into())
+            validate::run(args.project, args.strict_audio, args.format.into())
         }
         Command::Inspect(args) => {
             tracing::info!(target: "vestra.project", command = "inspect", "command started");
-            inspect::run(args.project, args.preview, args.format.into())
+            inspect::run(
+                args.project,
+                args.preview,
+                args.strict_audio,
+                args.format.into(),
+            )
         }
         Command::Render(args) => render::run(
             args.project,

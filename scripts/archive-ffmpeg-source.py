@@ -151,10 +151,14 @@ def main() -> None:
     args = parser.parse_args()
     source = args.source
     if source is None:
-        candidates = list(args.search_root.glob("**/out/ffmpeg-*/ffbuild/config.mak"))
+        candidates = sorted(args.search_root.glob("**/out/ffmpeg-*/ffbuild/config.mak"))
         if len(candidates) != 1:
+            paths = "".join(
+                f"\n  {candidate.relative_to(args.search_root)}"
+                for candidate in candidates
+            )
             parser.error(
-                f"expected exactly one FFmpeg build source, found {len(candidates)}"
+                f"expected exactly one FFmpeg build source, found {len(candidates)}{paths}"
             )
         source = candidates[0].parents[1]
     archive(source, args.output, artifacts=args.artifact)

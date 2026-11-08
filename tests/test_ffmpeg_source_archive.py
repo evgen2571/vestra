@@ -2,9 +2,12 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import textwrap
 import zipfile
 
 import pytest
@@ -171,7 +174,101 @@ def test_search_root_rejects_missing_or_ambiguous_builds(tmp_path: Path, count: 
     )
     assert result.returncode != 0
     assert f"expected exactly one FFmpeg build source, found {count}" in result.stderr
+    if count:
+        paths = [
+            f"build-{index}/out/ffmpeg-8.0/ffbuild/config.mak" for index in range(count)
+        ]
+        assert all(path in result.stderr for path in paths)
+        assert result.stderr.index(paths[0]) < result.stderr.index(paths[1])
     assert not output.exists()
+
+
+@pytest.mark.skipif(shutil.which("cargo") is None, reason="requires Cargo")
+@pytest.mark.parametrize("kind", ["cli", "wheel"])
+def test_release_cleanup_removes_stale_ffmpeg_feature_builds(tmp_path: Path, kind: str):
+    fixture = source_tree(tmp_path / "fixture")
+    (tmp_path / "Cargo.toml").write_text(
+        '[package]\nname="ffmpeg-sys-next"\nversion="8.1.0"\nedition="2021"\n'
+        "[features]\nresampling=[]\n"
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/lib.rs").touch()
+    (tmp_path / "build.rs").write_text(
+        """fn main() {
+    let fixture = std::env::var("FFMPEG_ARCHIVE_FIXTURE").unwrap();
+    let source = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap())
+        .join("ffmpeg-8.1");
+    assert!(std::process::Command::new("git")
+        .args(["clone", "--quiet", &fixture]).arg(&source)
+        .status().unwrap().success());
+    std::fs::create_dir(source.join("ffbuild")).unwrap();
+    std::fs::copy(std::path::Path::new(&fixture).join("ffbuild/config.mak"),
+        source.join("ffbuild/config.mak")).unwrap();
+    let contents = if std::env::var_os("CARGO_FEATURE_RESAMPLING").is_some() {
+        "resampling source\\n"
+    } else { "cached source\\n" };
+    std::fs::write(source.join("configure"), contents).unwrap();
+}
+"""
+    )
+    target = next(
+        line.removeprefix("host: ")
+        for line in subprocess.check_output(["rustc", "-vV"], text=True).splitlines()
+        if line.startswith("host: ")
+    )
+    environment = dict(os.environ, TARGET=target, FFMPEG_ARCHIVE_FIXTURE=str(fixture))
+    build = [
+        "cargo",
+        "build",
+        "--release",
+        "--target",
+        target,
+        "--target-dir",
+        f"target/{kind}",
+    ]
+    subprocess.run(build, cwd=tmp_path, env=environment, check=True)
+    subprocess.run(
+        build + ["--features", "resampling"], cwd=tmp_path, env=environment, check=True
+    )
+    assert len(list((tmp_path / f"target/{kind}").rglob("config.mak"))) == 2
+    unrelated = tmp_path / f"target/{kind}/{target}/release/deps/libunrelated.rlib"
+    unrelated.touch()
+
+    workflow = (SCRIPT.parents[1] / ".github/workflows/artifacts.yml").read_text()
+    step = workflow.partition("      - name: Clear outdated bundled FFmpeg builds\n")[2]
+    step = step.split("\n      - ", 1)[0]
+    cleanup = textwrap.dedent(step.partition("        run: |\n")[2])
+    subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", cleanup],
+        cwd=tmp_path,
+        env=environment,
+        check=True,
+    )
+    assert unrelated.exists()
+    subprocess.run(
+        build + ["--features", "resampling"], cwd=tmp_path, env=environment, check=True
+    )
+
+    artifact = tmp_path / "vestra.whl"
+    artifact.write_bytes(b"resampling binary\n")
+    output = tmp_path / "source.zip"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--search-root",
+            str(tmp_path / f"target/{kind}"),
+            "--artifact",
+            str(artifact),
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    with zipfile.ZipFile(output) as bundle:
+        assert bundle.read("ffmpeg/configure") == b"resampling source\n"
 
 
 def test_missing_artifact_does_not_create_source_archive(tmp_path: Path):

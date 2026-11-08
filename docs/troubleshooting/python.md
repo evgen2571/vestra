@@ -49,8 +49,8 @@ not check whether media files exist, codecs are available, the output path is
 writable or a graphics adapter can be used. Those checks happen during
 `project.prepare()` or `project.render()`.
 
-Read the render error for the failing file or resource. Check `ffmpeg` and
-`ffprobe` on `PATH`, and confirm that relative media paths are resolved from the
+Read the render error for the failing file or resource. Check `ffmpeg` on
+`PATH`, and confirm that relative media paths are resolved from the
 project's `base_directory`, which may differ from your shell's current directory.
 See [FFmpeg troubleshooting](ffmpeg.md) and
 [rendering troubleshooting](rendering.md) for the next checks.

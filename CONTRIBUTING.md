@@ -48,7 +48,8 @@ Choose the environment for your change:
   ```
 
   Without Nix, follow [native installation](docs/getting-started/installation.md#build-from-source--development).
-  Rendering also needs `ffmpeg` and `ffprobe` on `PATH`.
+  Encoding and audio processing also need `ffmpeg` on `PATH`. Some optional
+  media verification workflows use `ffprobe` as an independent reference.
 
 Run `just` to list commands. Coding agents should read [AGENTS.md](AGENTS.md);
 substantial changes follow the [plan convention](PLANS.md).

@@ -133,7 +133,9 @@ Use `just schema-check` for schema validation and generated-schema freshness.
 CLI changes also need current help (`just cli-smoke`) and CLI integration tests.
 Public Python contract changes need the rebuilt extension and relevant typing,
 serialization and validation tests. Media tests require native FFmpeg development
-libraries; runtime workflows may also need `ffmpeg` and `ffprobe` on `PATH`.
+libraries; encoding and audio workflows also need `ffmpeg` on `PATH`. Optional
+independent media verification may use `ffprobe`; Vestra's native probing does
+not require that executable.
 
 For effects, start with `just effect-check` and the affected pixel tests. The
 [effect test reference](effect-testing.md) maps generator, frozen compatibility,

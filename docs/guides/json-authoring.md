@@ -7,7 +7,7 @@ uses `layer` for stacking order, for example, while Python uses `z`.
 
 The CLI is built separately from the Python package. Follow the
 [CLI quickstart](../getting-started/cli-quickstart.md) for setup, including
-`ffmpeg` and `ffprobe`. Commands below assume `ve` is on `PATH`; from a checkout,
+`ffmpeg`. Commands below assume `ve` is on `PATH`; from a checkout,
 you can replace `ve` with `cargo run -q -p vestra-cli --`.
 
 ## Start with a complete project

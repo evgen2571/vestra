@@ -1,5 +1,26 @@
 # Benchmarks
 
+The ignored media `benchmark_audio_probing` compares the previous ffprobe JSON
+subprocess, native first-stream duration metadata, and the production decoded
+sample count on the same existing audio file:
+
+```bash
+mkdir -p target/benchmark-results/audio-probing
+ffmpeg -v error -f lavfi -i 'sine=sample_rate=48000:duration=1800' -ac 2 \
+  target/benchmark-results/audio-probing/long.flac
+VESTRA_BENCH_AUDIO=target/benchmark-results/audio-probing/long.flac \
+  cargo test --release -p vestra-media benchmark_audio_probing -- --ignored --nocapture
+```
+
+Run inside the native contributor environment. Repeat with short and long WAV,
+FLAC, MP3 and AAC/M4A fixtures, generating media outside measurement. Each method
+gets one warmup and five measured calls; the JSON line records raw milliseconds,
+file bytes and returned durations. Missing native stream duration is `null`, not
+a usable metadata result. Record toolchain, linked FFmpeg and reference ffprobe
+versions, CPU and cache state. Run without concurrent compilation or benchmarks;
+compare medians and ranges. These are probe timings, excluding rendering and
+encoding; faster metadata lookup does not establish sample-duration correctness.
+
 The focused `row-copy-1080p` suite measures ten seconds of deterministic H.264
 with two source-sized video presentations per frame, including an integer-clipped
 overlay. `opaque_video` uses unit opacity; `ineligible_video` uses 0.9. Run with

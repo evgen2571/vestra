@@ -36,14 +36,16 @@ pub enum MediaError {
         status: ExitStatus,
         stderr: String,
     },
-    #[error("invalid FFprobe response: {0}")]
-    InvalidProbeOutput(#[from] serde_json::Error),
-    #[error("audio duration is unavailable")]
+    #[error("cannot probe audio media '{path}': {message}")]
+    AudioProbe { path: PathBuf, message: String },
+    #[error("media contains no audio stream")]
+    NoAudioStream,
+    #[error("audio duration is unavailable: no decoded samples")]
     MissingAudioDuration,
     #[error("invalid audio duration: {0}")]
     InvalidAudioDuration(String),
-    #[error("cannot initialize FFmpeg video support: {0}")]
-    VideoInitialization(String),
+    #[error("cannot initialize FFmpeg media support: {0}")]
+    FfmpegInitialization(String),
     #[error("cannot open video media '{path}': {message}")]
     VideoOpen { path: PathBuf, message: String },
     #[error("media contains no usable video stream")]

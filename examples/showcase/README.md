@@ -44,7 +44,7 @@ The hero, lookbook and original three showcases are 1280×720 at 30 fps; the qui
 640×360 at 30 fps. All are rendered by Vestra itself. Only Audio + spectrum has an audio stream. Each example README records its input sources, licenses and modifications.
 Third-party inputs retain their own terms; the software license does not replace them.
 
-From a checkout with FFmpeg/ffprobe and the native package installed:
+From a checkout with `ffmpeg`, `ffprobe` and the native package installed:
 
 ```bash
 uv sync --locked --extra dev
@@ -52,6 +52,10 @@ just showcase-smoke                 # full timelines, offline test footage; smal
 just showcase                       # full renders from the bundled real inputs
 just showcase-refresh               # regenerate committed MP4s, posters and GIFs
 ```
+
+These bulk commands use `ffprobe` for independent output verification. Individual
+example renders use native media probing and need only `ffmpeg` for encoding and
+audio processing.
 
 Full output goes to the ignored `examples/output/` directory. Smoke output goes
 to `target/showcase-smoke/`. The smoke command deliberately substitutes generated

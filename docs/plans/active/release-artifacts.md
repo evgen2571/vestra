@@ -78,6 +78,12 @@ style/docs gates, earlier Windows/macOS native coverage, and a reviewed PR.
 - Independent review found a retry/source-overwrite hazard. Stage now checks
   existing PyPI and GitHub artifact hashes before replacing any staged files;
   regression test passed. Platform Actions verification remains outstanding.
+- Full Python suite with editable ABI3 and locked mypy passed: 1433 passed,
+  42 skipped. A clean-wheel invocation initially failed setup-sensitive tests;
+  normal editable/locked setup resolved all 23 failures.
+- Inspected generated sdist: Cargo.lock and Python dependencies are included,
+  CLI crate is excluded. Rebuild docs now explicitly require complete GitHub
+  source for the CLI.
 
 ## Decisions and discoveries
 

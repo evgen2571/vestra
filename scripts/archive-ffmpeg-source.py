@@ -120,8 +120,9 @@ vestra-build.rs is the bundled-library build recipe, including target-specific f
 
 To modify/rebuild: unpack this archive, edit ffmpeg/, then run ./configure with
 BUILD.json's options and a local --prefix, followed by make and make install.
-Download/unpack the matching Vestra source revision from GitHub, or the matching
-Python source distribution from PyPI. BUILD.json identifies the Vestra revision.
+For CLI rebuilds, download/unpack the complete matching Vestra source revision
+from GitHub. Python-module rebuilds can also use the matching PyPI source
+distribution, which excludes the CLI crate. BUILD.json identifies the revision.
 For a modified bundled build, adapt fetch() in vendor/ffmpeg-sys-next/build.rs
 to copy your modified ffmpeg/ source into source() instead of cloning upstream,
 then rebuild the Python module with Maturin or the CLI with

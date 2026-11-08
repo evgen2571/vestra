@@ -18,7 +18,9 @@ separate source archive, including source modifications, revision and configure
 options. These archives accompany the GitHub Release downloads. Vestra's PyPI
 source distribution includes the Rust/Python source, lockfile, and patched
 `vendor/ffmpeg-sys-next` build script. Together these provide the source and
-build instructions for rebuilding the native module or CLI with modified FFmpeg. Static linking
+build instructions for rebuilding the native module with modified FFmpeg.
+CLI rebuilds use the complete matching GitHub source revision, including the
+CLI crate, rather than the Python sdist. Static linking
 also requires review of LGPL §6 modification/relinking obligations; supplying
 source archives alone is not a compliance certification.
 Use the corresponding archive rather than assuming the upstream release branch

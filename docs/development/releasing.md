@@ -142,8 +142,10 @@ certify legal compliance.
 
 The source ZIP README describes rebuilding its FFmpeg tree and adapting the
 vendored fetch step to use modified source, followed by a clean Maturin or CLI
-Cargo rebuild. Retain the matching complete Vestra source/sdist, Cargo.lock,
-patches and build instructions alongside the corresponding source. This route
+Cargo rebuild. Retain the matching complete Vestra source from the GitHub tag (including the
+CLI crate), Cargo.lock, patches and build instructions alongside the corresponding
+source. The Python sdist contains the extension and its dependencies, not the
+CLI crate; use it only for Python-module rebuilds. This route
 has not been validated as an LGPL-compliant relinking kit on all platforms;
 maintainer/legal review is still required. Keep source downloads accessible for
 as long as required by the chosen redistribution route.

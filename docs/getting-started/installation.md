@@ -32,17 +32,18 @@ pip may attempt a source build, which needs the tools below.
 
 ## Install the FFmpeg runtime
 
-Install FFmpeg with your platform's package manager. Both `ffmpeg` (encoding)
-and `ffprobe` (media inspection) must be available on `PATH` in the shell that
-runs Vestra:
+Install FFmpeg with your platform's package manager. The `ffmpeg` executable
+must be available on `PATH` in the shell that runs Vestra for encoding and
+audio processing:
 
 ```bash
 ffmpeg -version
-ffprobe -version
 ```
 
-These executables are required even though wheels bundle the native FFmpeg
-libraries used by the engine. A working Python import does not check them.
+This executable is required even though wheels bundle the native FFmpeg
+libraries used for media probing and video decoding. A working Python import
+does not check it. `ffprobe` is optional for independent media verification;
+Vestra does not invoke it at runtime.
 For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
 
 ## Supported Python versions and platforms
@@ -89,8 +90,8 @@ sidecar, use `Expand-Archive <archive>`, and add the extracted folder containing
 `ve.exe` to your user PATH. Open a new terminal and run `ve version`. Windows
 may require the Microsoft Visual C++ 2015–2022 x64 Redistributable.
 
-The native FFmpeg libraries are statically linked, but `ffmpeg` and `ffprobe`
-**executables remain external requirements** for rendering and inspection.
+The native FFmpeg libraries are statically linked, but the `ffmpeg`
+**executable remains an external requirement** for encoding and audio processing.
 Linux also needs its standard C/C++ runtime libraries; macOS needs its system
 frameworks. A GPU and compatible driver are needed only for WGPU rendering;
 use `--render-backend cpu` for a first render. Release smoke coverage is Ubuntu
@@ -107,7 +108,8 @@ For contribution guidance, see [Contributing](https://github.com/evgen2571/vestr
 A source build compiles the Rust engine and bundled FFmpeg libraries. It needs
 Rust, Python 3.11–3.14, uv, a C compiler, libclang, `make`, `git`, and NASM,
 plus network access for the initial FFmpeg source fetch. The first build can
-take a while. Runtime rendering still needs the FFmpeg executables above.
+take a while. Runtime encoding and audio processing still need the `ffmpeg`
+executable above.
 
 Cargo builds the Rust workspace. Maturin, configured in `pyproject.toml`, builds
 the Python extension from `crates/vestra-python`; uv invokes it when installing
@@ -154,7 +156,7 @@ Native build and runtime dependencies:
 - `pkg-config` for library discovery.
 - Git for the initial FFmpeg source fetch.
 - **NASM** for FFmpeg's x86 assembly.
-- `ffmpeg` and `ffprobe` for runtime encoding and media inspection.
+- `ffmpeg` for runtime encoding and audio processing.
 
 On Ubuntu/Debian, install the native build tools and FFmpeg runtime before
 running `uv sync`:

@@ -7,8 +7,7 @@ example needs no images, fonts or other media files.
 
 Install Vestra with `uv add vestra` in your Python project or
 `python -m pip install vestra` in your chosen environment. Complete the
-[installation guide](installation.md), including the `ffmpeg` and `ffprobe`
-runtime checks.
+[installation guide](installation.md), including the `ffmpeg` runtime check.
 
 ## Create the project
 
@@ -56,7 +55,7 @@ backend makes the first render independent of WGPU adapter availability.
 
 You should see a line naming `quickstart.mp4` and the selected CPU backend. The
 file should exist and be playable by an MP4-capable video player.
-If rendering fails, check that `ffmpeg` and `ffprobe` are available as described
+If rendering fails, check that `ffmpeg` is available as described
 in the [installation guide](installation.md), then see
 [Python troubleshooting](../troubleshooting/python.md).
 

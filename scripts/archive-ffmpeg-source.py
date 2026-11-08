@@ -131,7 +131,9 @@ links those libraries. On Windows, skip the two patch_windows_* calls when
 reusing this already patched source tree. Use a clean Cargo target directory
 for the rebuild.
 The source distribution includes Cargo.lock and the native module's source.
-The runtime ffmpeg/ffprobe executables are installed separately.
+Encoding and audio processing use a separately installed ffmpeg executable.
+Media probing uses bundled libraries; ffprobe is optional for independent output
+verification.
 This archive supplies library source material; it does not certify that all
 static-linking LGPL relinking obligations have been met. Review LGPL 2.1 section 6.
 """,
@@ -149,10 +151,14 @@ def main() -> None:
     args = parser.parse_args()
     source = args.source
     if source is None:
-        candidates = list(args.search_root.glob("**/out/ffmpeg-*/ffbuild/config.mak"))
+        candidates = sorted(args.search_root.glob("**/out/ffmpeg-*/ffbuild/config.mak"))
         if len(candidates) != 1:
+            paths = "".join(
+                f"\n  {candidate.relative_to(args.search_root)}"
+                for candidate in candidates
+            )
             parser.error(
-                f"expected exactly one FFmpeg build source, found {len(candidates)}"
+                f"expected exactly one FFmpeg build source, found {len(candidates)}{paths}"
             )
         source = candidates[0].parents[1]
     archive(source, args.output, artifacts=args.artifact)

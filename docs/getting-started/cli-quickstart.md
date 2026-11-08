@@ -10,7 +10,7 @@ The Python package does not install the `ve` CLI. Download a
 [native CLI archive](installation.md#install-the-native-cli), or build it from
 a repository checkout using the
 [build-from-source instructions](installation.md#build-from-source--development).
-You also need `ffmpeg` and `ffprobe` on `PATH`.
+You also need `ffmpeg` on `PATH` for encoding and audio processing.
 
 Run the commands below in a working directory with `ve` on your `PATH`.
 They need no repository checkout. If you built from source, add the binary
@@ -111,7 +111,7 @@ hardware GPU. The render result reports the selected backend.
 
 Read the diagnostic message for the setting or asset that needs attention.
 Check that `solid.json` contains the complete example above. If rendering fails,
-check `ffmpeg -version` and `ffprobe -version`, then consult
+check `ffmpeg -version`, then consult
 [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md) or
 [rendering troubleshooting](../troubleshooting/rendering.md).
 

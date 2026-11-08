@@ -24,9 +24,10 @@ Extract this archive and put ve (ve.exe on Windows) on PATH, or run it by its
 full path. On Unix, preserve its executable permission (chmod +x ve if needed).
 Run ve --version and ve --help to check the installation. Python is not needed.
 
-Rendering and media inspection require separately installed ffmpeg and ffprobe
-executables on PATH. Rendering currently requires an FFmpeg build with libx264.
-The executable bundles FFmpeg libraries; it is not fully self-contained.
+Encoding and audio processing require a separately installed ffmpeg executable
+on PATH. Rendering currently requires an FFmpeg build with libx264.
+Media probing uses bundled FFmpeg libraries; ffprobe is optional for independent
+output verification. The executable is not fully self-contained.
 Use the archive matching your operating system and processor architecture.
 See the release installation documentation for supported operating-system versions
 and system-library requirements. These archives are not universal binaries.

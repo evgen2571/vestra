@@ -233,6 +233,32 @@ def test_release_cleanup_removes_stale_ffmpeg_feature_builds(tmp_path: Path, kin
     assert len(list((tmp_path / f"target/{kind}").rglob("config.mak"))) == 2
     unrelated = tmp_path / f"target/{kind}/{target}/release/deps/libunrelated.rlib"
     unrelated.touch()
+    unused = tmp_path / ("target/wheel" if kind == "cli" else "target/cli")
+    unused.mkdir(parents=True)
+    (unused / "restored-cache").touch()
+    # Cargo 1.99 rejects restored targets without its cache marker.
+    cargo = shutil.which("cargo")
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    wrapper = tools / "cargo"
+    wrapper.write_text(
+        f"""#!{sys.executable}
+import os
+from pathlib import Path
+import sys
+target = Path(sys.argv[sys.argv.index("--target-dir") + 1])
+marker = target / "CACHEDIR.TAG"
+if not marker.is_file() or not marker.read_bytes().startswith(
+    b"Signature: 8a477f597d28d172789f06886806bc55"
+):
+    sys.exit(f"error: cannot clean {{target}}: missing or invalid `CACHEDIR.TAG` file")
+os.execv({cargo!r}, [{cargo!r}, *sys.argv[1:]])
+"""
+    )
+    wrapper.chmod(0o755)
+    cleanup_environment = dict(
+        environment, PATH=str(tools) + os.pathsep + os.environ["PATH"]
+    )
 
     workflow = (SCRIPT.parents[1] / ".github/workflows/artifacts.yml").read_text()
     step = workflow.partition("      - name: Clear outdated bundled FFmpeg builds\n")[2]
@@ -241,10 +267,11 @@ def test_release_cleanup_removes_stale_ffmpeg_feature_builds(tmp_path: Path, kin
     subprocess.run(
         ["bash", "-euo", "pipefail", "-c", cleanup],
         cwd=tmp_path,
-        env=environment,
+        env=cleanup_environment,
         check=True,
     )
     assert unrelated.exists()
+    assert (unused / "restored-cache").exists()
     subprocess.run(
         build + ["--features", "resampling"], cwd=tmp_path, env=environment, check=True
     )

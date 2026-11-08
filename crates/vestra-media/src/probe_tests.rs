@@ -1,6 +1,6 @@
 use std::{path::Path, process::Command};
 
-use super::probe_audio_duration;
+use super::{AudioDurationSource, inspect_audio, probe_audio_duration};
 use crate::test_support::write_mono_wav;
 
 fn encode(path: &Path, arguments: &[&str]) {
@@ -108,6 +108,8 @@ fn audio_duration_excludes_longer_video() {
         ],
     );
     assert_duration(&path, 0.5, 0.03);
+    let info = inspect_audio(&path).expect("first audio stream inspection");
+    assert!((info.duration_seconds - 0.5).abs() < 1e-6);
 }
 
 #[test]
@@ -138,6 +140,8 @@ fn probes_first_audio_even_when_another_stream_is_default_and_longer() {
         ],
     );
     assert_duration(&path, 0.375, 1e-6);
+    let info = inspect_audio(&path).expect("first audio stream inspection");
+    assert!((info.duration_seconds - 0.375).abs() < 1e-6);
 }
 
 #[test]
@@ -163,6 +167,9 @@ fn missing_stream_duration_and_nonzero_timestamps_do_not_inflate_audio() {
     assert_eq!(stream.time_base(), ffmpeg_next::Rational(1, 1000));
     assert_eq!(stream.start_time(), 5000);
     assert_duration(&path, 0.375, 1e-6);
+    let info = inspect_audio(&path).expect("missing metadata falls back to decoding");
+    assert_eq!(info.duration_source, AudioDurationSource::Decoded);
+    assert!((info.duration_seconds - 0.375).abs() < 1e-6);
 }
 
 #[test]
@@ -181,6 +188,7 @@ fn rejects_media_without_audio_instead_of_using_video_duration() {
         ],
     );
     assert!(probe_audio_duration(&path).is_err());
+    assert!(inspect_audio(&path).is_err());
 }
 
 #[test]
@@ -188,10 +196,25 @@ fn rejects_missing_empty_and_unsupported_files() {
     let directory = tempfile::tempdir().expect("temporary media directory");
     let path = directory.path().join("broken.wav");
     assert!(probe_audio_duration(&path).is_err());
+    assert!(inspect_audio(&path).is_err());
     for bytes in [&b""[..], &b"not a media container"[..]] {
         std::fs::write(&path, bytes).expect("invalid fixture");
         assert!(probe_audio_duration(&path).is_err());
+        assert!(inspect_audio(&path).is_err());
     }
+}
+
+#[test]
+fn inspection_requires_a_supported_audio_decoder() {
+    let directory = tempfile::tempdir().expect("temporary media directory");
+    let path = directory.path().join("unsupported.wav");
+    write_mono_wav(&path, 48_000, 12_000, 0.1);
+    let mut bytes = std::fs::read(&path).expect("WAV fixture");
+    // The container has duration and audio parameters, but this codec tag has no decoder.
+    bytes[20..22].copy_from_slice(&0xffff_u16.to_le_bytes());
+    std::fs::write(&path, bytes).expect("unsupported codec fixture");
+    assert!(inspect_audio(&path).is_err());
+    assert!(probe_audio_duration(&path).is_err());
 }
 
 #[test]
@@ -241,7 +264,43 @@ fn positive_stream_duration_can_disagree_with_decoded_samples() {
     let input = ffmpeg_next::format::input(&path).expect("FLAC metadata");
     let stream = input.streams().next().expect("audio stream");
     assert_eq!(stream.duration(), 480_000);
+    let info = inspect_audio(&path).expect("reported FLAC duration");
+    assert_eq!(info.duration_source, AudioDurationSource::Reported);
+    assert!((info.duration_seconds - 10.0).abs() < 1e-6);
     assert_duration(&path, 0.375, 1e-6);
+}
+
+#[test]
+fn inspection_distinguishes_aac_reported_duration_from_decoded_padding() {
+    let directory = tempfile::tempdir().expect("temporary media directory");
+    let path = directory.path().join("padding.m4a");
+    encode(
+        &path,
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=sample_rate=48000:duration=1.25",
+            "-c:a",
+            "aac",
+        ],
+    );
+    let info = inspect_audio(&path).expect("reported AAC duration");
+    assert_eq!(info.duration_source, AudioDurationSource::Reported);
+    assert!((info.duration_seconds - 1.25).abs() < 1e-6);
+    let decoded = probe_audio_duration(&path).expect("decoded AAC duration");
+    assert!(decoded > info.duration_seconds);
+    assert!((decoded - reference_duration_48khz(&path)).abs() < 1e-6);
+}
+
+#[test]
+fn inspection_reports_pcm_duration_without_a_full_decode() {
+    let directory = tempfile::tempdir().expect("temporary media directory");
+    let path = directory.path().join("tone.wav");
+    write_mono_wav(&path, 32_000, 12_000, 0.1);
+    let info = inspect_audio(&path).expect("reported PCM duration");
+    assert_eq!(info.duration_source, AudioDurationSource::Reported);
+    assert!((info.duration_seconds - 0.375).abs() < 1e-6);
 }
 
 #[test]
@@ -259,19 +318,62 @@ fn rejects_truncated_audio_instead_of_trusting_its_advertised_duration() {
 }
 
 #[test]
+fn strict_probe_detects_a_corrupt_aac_frame_after_valid_audio() {
+    let directory = tempfile::tempdir().expect("temporary media directory");
+    let path = directory.path().join("corrupt.aac");
+    encode(
+        &path,
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=sample_rate=48000:duration=2.5",
+            "-c:a",
+            "aac",
+        ],
+    );
+    let mut bytes = std::fs::read(&path).expect("AAC fixture");
+    let mut frames = Vec::new();
+    let mut offset = 0;
+    while offset + 7 <= bytes.len() {
+        assert_eq!(bytes[offset], 0xff, "ADTS sync");
+        assert_eq!(bytes[offset + 1] & 0xf6, 0xf0, "ADTS sync");
+        let size = (usize::from(bytes[offset + 3] & 3) << 11)
+            | (usize::from(bytes[offset + 4]) << 3)
+            | usize::from(bytes[offset + 5] >> 5);
+        assert!(size > 7 && offset + size <= bytes.len(), "ADTS frame size");
+        frames.push((offset, size));
+        offset += size;
+    }
+    assert_eq!(offset, bytes.len());
+    assert!(frames.len() > 90);
+    let (offset, size) = frames[frames.len() * 3 / 4];
+    // Keep the demuxable frame header but invalidate the later AAC channel elements.
+    bytes[offset + 7..offset + size].fill(0x55);
+    std::fs::write(&path, bytes).expect("corrupt decoder payload");
+    assert!(probe_audio_duration(&path).is_err());
+}
+
+#[test]
 fn rejects_empty_audio_and_invalid_sample_rate_metadata() {
     let directory = tempfile::tempdir().expect("temporary media directory");
     let path = directory.path().join("empty.wav");
     write_mono_wav(&path, 48_000, 0, 0.0);
     assert!(probe_audio_duration(&path).is_err());
+    assert!(inspect_audio(&path).is_err());
     write_mono_wav(&path, 0, 10, 0.1);
     assert!(probe_audio_duration(&path).is_err());
+    assert!(inspect_audio(&path).is_err());
 }
 
 #[test]
 fn invalid_native_paths_return_errors_without_panicking() {
     assert!(matches!(
         probe_audio_duration(Path::new("invalid\0.wav")),
+        Err(crate::MediaError::AudioProbe { .. })
+    ));
+    assert!(matches!(
+        inspect_audio(Path::new("invalid\0.wav")),
         Err(crate::MediaError::AudioProbe { .. })
     ));
     #[cfg(unix)]
@@ -284,6 +386,10 @@ fn invalid_native_paths_return_errors_without_panicking() {
         write_mono_wav(&path, 48_000, 10, 0.1);
         assert!(matches!(
             probe_audio_duration(&path),
+            Err(crate::MediaError::AudioProbe { .. })
+        ));
+        assert!(matches!(
+            inspect_audio(&path),
             Err(crate::MediaError::AudioProbe { .. })
         ));
     }
@@ -321,6 +427,9 @@ fn cancelled_audio_probe_stops_before_opening_the_source() {
     let cancelled = std::sync::atomic::AtomicBool::new(true);
     let error = super::probe_audio_duration_cancellable(Path::new("missing.wav"), &cancelled)
         .expect_err("cancel before opening missing media");
+    assert!(error.to_string().contains("cancelled"), "{error}");
+    let error = super::inspect_audio_cancellable(Path::new("missing.wav"), &cancelled)
+        .expect_err("cancel inspection before opening missing media");
     assert!(error.to_string().contains("cancelled"), "{error}");
 }
 
@@ -370,7 +479,12 @@ fn benchmark_audio_probing() {
     let path = std::env::var_os("VESTRA_BENCH_AUDIO").expect("VESTRA_BENCH_AUDIO fixture");
     let path = Path::new(&path);
     let mut records = Vec::new();
-    for method in ["previous_ffprobe", "native_metadata", "native_decode"] {
+    for method in [
+        "previous_ffprobe",
+        "native_metadata",
+        "native_inspect",
+        "native_decode",
+    ] {
         let mut samples_ms = Vec::new();
         let mut duration = None;
         for iteration in 0..6 {
@@ -412,6 +526,11 @@ fn benchmark_audio_probing() {
                     (stream.duration() > 0)
                         .then(|| stream.duration() as f64 * f64::from(stream.time_base()))
                 }
+                "native_inspect" => Some(
+                    inspect_audio(path)
+                        .expect("audio inspection")
+                        .duration_seconds,
+                ),
                 _ => Some(probe_audio_duration(path).expect("decoded duration")),
             };
             if iteration > 0 {

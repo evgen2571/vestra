@@ -241,6 +241,10 @@ jobs:
         run: |
           choco install make nasm ffmpeg -y
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # The isolated-PATH tests relocate FFmpeg, so use the executable, not Chocolatey's shim.
+          $ffmpeg = Get-ChildItem "$env:ChocolateyInstall\lib\ffmpeg\tools" -Filter ffmpeg.exe -File -Recurse | Select-Object -First 1
+          if (-not $ffmpeg) { throw "Chocolatey FFmpeg executable not found" }
+          $ffmpeg.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Append
           "${env:ProgramFiles}\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
           "${env:ProgramFiles}\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Test and build macOS CLI

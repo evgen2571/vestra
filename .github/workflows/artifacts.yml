@@ -53,11 +53,21 @@ jobs:
         with:
           python-version: '3.11'
       - uses: Swatinem/rust-cache@v2
+        id: build-cache
         with:
           key: artifacts-${{ matrix.platform.target }}
           workspaces: |
             . -> target/cli
             . -> target/wheel
+      - name: Clear outdated bundled FFmpeg builds
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.platform.target }}
+        run: |
+          # Partial cache restores can contain obsolete Cargo feature hashes.
+          cargo clean --release --locked -p ffmpeg-sys-next --target "$TARGET" --target-dir target/cli
+          cargo clean --release --locked -p ffmpeg-sys-next --target "$TARGET" --target-dir target/wheel
       - name: Install macOS build tools
         if: runner.os == 'macOS'
         run: brew install nasm

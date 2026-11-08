@@ -54,12 +54,6 @@ fn ffmpeg_only_path(directory: &Path) -> PathBuf {
             .arg("-version")
             .env("PATH", &bin),
     );
-    let error = Command::new("ffprobe")
-        .arg("-version")
-        .env("PATH", &bin)
-        .output()
-        .expect_err("ffprobe must be absent from the child environment");
-    assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     bin
 }
 
@@ -409,6 +403,12 @@ fn cli_rejects_invalid_source_ranges_and_missing_audio_without_ffprobe() {
 fn sdk_prepares_video_and_audio_without_ffprobe() {
     const CHILD_PROJECT: &str = "VESTRA_NATIVE_PROBING_CHILD_PROJECT";
     if let Some(path) = std::env::var_os(CHILD_PROJECT) {
+        // Windows also searches the spawning process's PATH, so check inside the child.
+        let error = Command::new("ffprobe")
+            .arg("-version")
+            .output()
+            .expect_err("ffprobe must be absent from the child environment");
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
         let editor = Editor::new();
         let project = editor.load_project(path).expect("load project");
         let mut prepared = editor

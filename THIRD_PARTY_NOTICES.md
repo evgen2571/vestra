@@ -1,24 +1,28 @@
 # Third-party notices
 
-This notice accompanies Vestra software distributions, including binary wheels
-and source archives. Vestra's original software is [MIT licensed](LICENSE);
+This notice accompanies Vestra software distributions, including binary wheels,
+native CLI executables and source archives. Vestra's original software is [MIT licensed](LICENSE);
 bundled third-party software and fonts retain the terms and notices below.
 
 ## FFmpeg
 
-Binary wheels statically link libraries from [FFmpeg](https://ffmpeg.org),
+Binary wheels and native CLI executables statically link libraries from [FFmpeg](https://ffmpeg.org),
 licensed under the GNU Lesser General Public License version 2.1 or later.
 The [LGPL text](licenses/FFmpeg-LGPL-2.1.txt) accompanies Vestra distributions.
 The normal build disables GPL, nonfree and version-3-only components and
 external-library autodetection. The runtime `ffmpeg` and `ffprobe` executables
 are separately installed tools and may have different build configurations.
 
-Release builds preserve the exact FFmpeg checkout used by each wheel in a
+Release builds preserve the exact FFmpeg checkout used by each wheel and CLI build in a
 separate source archive, including source modifications, revision and configure
 options. These archives accompany the GitHub Release downloads. Vestra's PyPI
 source distribution includes the Rust/Python source, lockfile, and patched
 `vendor/ffmpeg-sys-next` build script. Together these provide the source and
 build instructions for rebuilding the native module with modified FFmpeg.
+CLI rebuilds use the complete matching GitHub source revision, including the
+CLI crate, rather than the Python sdist. Static linking
+also requires review of LGPL §6 modification/relinking obligations; supplying
+source archives alone is not a compliance certification.
 Use the corresponding archive rather than assuming the upstream release branch
 still has the same contents. The [release procedure](docs/development/releasing.md)
 covers distribution and verification of this material.

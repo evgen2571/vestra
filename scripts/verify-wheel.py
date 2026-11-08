@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Verify that an installed Vestra wheel can render a small audio project."""
+"""Verify an installed wheel, including native APIs, bundled fonts and audio/video."""
 
 from __future__ import annotations
 
 import argparse
 from importlib.metadata import distribution, version as distribution_version
+import json
 import math
 import struct
 import subprocess
@@ -21,7 +22,9 @@ SAMPLE_RATE = 48_000
 def write_tone(path: Path, frequency: float) -> None:
     samples = bytearray()
     for index in range(SAMPLE_RATE * 3):
-        value = int(0.35 * 32_767 * math.sin(2 * math.pi * frequency * index / SAMPLE_RATE))
+        value = int(
+            0.35 * 32_767 * math.sin(2 * math.pi * frequency * index / SAMPLE_RATE)
+        )
         samples.extend(struct.pack("<hh", value, value))
     with wave.open(str(path), "wb") as output:
         output.setnchannels(2)
@@ -54,7 +57,9 @@ def decode_aac(path: Path) -> list[float]:
     return list(struct.unpack(f"<{len(decoded) // 4}f", decoded))
 
 
-def tone_correlation(samples: list[float], frequency: float, start: float, duration: float) -> float:
+def tone_correlation(
+    samples: list[float], frequency: float, start: float, duration: float
+) -> float:
     first = round(start * SAMPLE_RATE) * 2
     count = round(duration * SAMPLE_RATE)
     window = samples[first : first + count * 2]
@@ -69,7 +74,7 @@ def tone_correlation(samples: list[float], frequency: float, start: float, durat
     return math.hypot(sine, cosine) / math.sqrt(energy * count)
 
 
-def verify(output_dir: Path) -> None:
+def verify(output_dir: Path, expected_version: str | None = None) -> None:
     import vestra
     from vestra import (
         BackendPreference,
@@ -81,6 +86,7 @@ def verify(output_dir: Path) -> None:
         InspectAudioTrack,
         PrepareOptions,
         PreparedVideoRenderRequest,
+        ProjectSnapshot,
     )
     from vestra.authoring import (
         AudioFadeCurve,
@@ -90,20 +96,30 @@ def verify(output_dir: Path) -> None:
     )
 
     package_path = Path(vestra.__file__).resolve()
-    workspace_manifest = Path(__file__).resolve().parents[1] / "Cargo.toml"
-    workspace = tomllib.loads(workspace_manifest.read_text())
-    expected_version = workspace["workspace"]["package"]["version"]
+    if expected_version is None:
+        workspace_manifest = Path(__file__).resolve().parents[1] / "Cargo.toml"
+        workspace = tomllib.loads(workspace_manifest.read_text())
+        expected_version = workspace["workspace"]["package"]["version"]
     assert distribution_version("vestra") == expected_version
     assert vestra.__version__ == expected_version
+    assert vestra.native_version() == expected_version
     installed = distribution("vestra")
     assert installed.metadata["License-Expression"] == "MIT"
     requirement = installed.metadata["Requires-Python"].replace(" ", "")
     assert ">=3.11" in requirement and "<3.15" in requirement
     included = {Path(str(path)).name for path in installed.files or ()}
-    assert {"LICENSE", "FFmpeg-LGPL-2.1.txt", "DejaVuSans.txt", "THIRD_PARTY_NOTICES.md", "_native.pyi"} <= included
+    assert {
+        "LICENSE",
+        "FFmpeg-LGPL-2.1.txt",
+        "DejaVuSans.txt",
+        "THIRD_PARTY_NOTICES.md",
+        "_native.pyi",
+    } <= included
 
     if "site-packages" not in package_path.parts:
-        raise AssertionError(f"vestra did not import from the installed wheel: {package_path}")
+        raise AssertionError(
+            f"vestra did not import from the installed wheel: {package_path}"
+        )
     if not (package_path.parent / "py.typed").is_file():
         raise AssertionError("the installed wheel is missing vestra/py.typed")
 
@@ -111,10 +127,17 @@ def verify(output_dir: Path) -> None:
     font_config = output_dir / "empty-fonts.conf"
     empty_fonts = output_dir / "empty-fonts"
     empty_fonts.mkdir(exist_ok=True)
-    font_config.write_text(f'<?xml version="1.0"?><fontconfig><dir>{empty_fonts}</dir></fontconfig>')
+    font_config.write_text(
+        f'<?xml version="1.0"?><fontconfig><dir>{empty_fonts}</dir></fontconfig>'
+    )
     import os
     import sys
-    subprocess.run([sys.executable, "-c", """
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
 from pathlib import Path
 import vestra
 p = vestra.Project(size=(160, 80), fps=1, duration=1)
@@ -124,7 +147,12 @@ assert asset.is_file() and "site-packages" in asset.parts
 assert asset.with_name("LICENSE.txt").is_file()
 pixels = p.render_frame(0, backend="cpu").to_bytes()
 assert any(pixels[i:i+3] != bytes(3) for i in range(0, len(pixels), 4))
-"""], cwd=output_dir, env=dict(os.environ, FONTCONFIG_FILE=str(font_config)), check=True)
+""",
+        ],
+        cwd=output_dir,
+        env=dict(os.environ, FONTCONFIG_FILE=str(font_config)),
+        check=True,
+    )
 
     tone_440 = output_dir / "tone-440.wav"
     tone_880 = output_dir / "tone-880.wav"
@@ -161,6 +189,14 @@ assert any(pixels[i:i+3] != bytes(3) for i in range(0, len(pixels), 4))
     validation = builder.validate()
     assert validation.is_valid and not validation.warnings
     project = builder.build()
+    data = project.to_dict()
+    assert ProjectSnapshot.from_dict(data, base_directory=output_dir).to_dict() == data
+    assert (
+        ProjectSnapshot.from_json(
+            project.to_json(), base_directory=output_dir
+        ).to_dict()
+        == data
+    )
     inspection = Editor().inspect(project)
     assert isinstance(inspection.audio, InspectAudio)
     assert isinstance(inspection.audio.tracks[0], InspectAudioTrack)
@@ -170,28 +206,51 @@ assert any(pixels[i:i+3] != bytes(3) for i in range(0, len(pixels), 4))
     assert len(inspected_incoming.gain_automation) == 3
 
     prepared = Editor().prepare(project, PrepareOptions(backend=BackendPreference.CPU))
-    result = prepared.render_video(PreparedVideoRenderRequest(output))
+    assert prepared.preparation_report.selected_backend == vestra.BackendKind.CPU
+    frame = prepared.render_frame_number(0)
+    assert (frame.width, frame.height, frame.frame_number) == (32, 32, 0)
+    assert frame.pixel_format == vestra.PixelFormat.RGBA8
+    assert len(frame.to_bytes()) == 32 * 32 * 4
+    assert frame.to_bytes() == bytes(frame)
+    events = []
+    result = prepared.render_video(
+        PreparedVideoRenderRequest(output), on_progress=events.append
+    )
     assert result.audio_present
-    streams = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "a:0",
-            "-show_entries",
-            "stream=codec_name,sample_rate,channels",
-            "-of",
-            "default=noprint_wrappers=1",
-            str(output),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    assert "codec_name=aac" in streams
-    assert "sample_rate=48000" in streams
-    assert "channels=2" in streams
+    assert result.selected_backend == "cpu"
+    assert events and all(isinstance(event, vestra.RenderEvent) for event in events)
+    probe = json.loads(
+        subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-count_frames",
+                "-show_entries",
+                "stream=codec_type,codec_name,sample_rate,channels,width,height,nb_read_frames:format=duration",
+                "-of",
+                "json",
+                str(output),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    video = next(
+        stream for stream in probe["streams"] if stream["codec_type"] == "video"
+    )
+    audio = next(
+        stream for stream in probe["streams"] if stream["codec_type"] == "audio"
+    )
+    assert (video["codec_name"], video["width"], video["height"]) == ("h264", 32, 32)
+    assert int(video["nb_read_frames"]) == 90
+    assert abs(float(probe["format"]["duration"]) - 3.0) < 0.1
+    assert (audio["codec_name"], audio["sample_rate"], audio["channels"]) == (
+        "aac",
+        "48000",
+        2,
+    )
     samples = decode_aac(output)
     early_440 = tone_correlation(samples, 440.0, 0.5, 0.4)
     early_880 = tone_correlation(samples, 880.0, 0.5, 0.4)
@@ -208,7 +267,13 @@ assert any(pixels[i:i+3] != bytes(3) for i in range(0, len(pixels), 4))
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=Path, help="keep the rendered smoke artifact here")
+    parser.add_argument(
+        "--output-dir", type=Path, help="keep the rendered smoke artifact here"
+    )
+    parser.add_argument(
+        "--expected-version",
+        help="expected release version; defaults to the checkout version",
+    )
     args = parser.parse_args()
 
     context = (
@@ -219,7 +284,7 @@ def main() -> None:
     with context as directory:
         output_dir = Path(directory).resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
-        verify(output_dir)
+        verify(output_dir, args.expected_version)
 
 
 if __name__ == "__main__":

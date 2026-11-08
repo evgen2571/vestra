@@ -1,272 +1,160 @@
-name: Python release artifacts
+name: Release artifacts
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
-  release:
-    types: [published]
+    inputs:
+      ref:
+        description: Revision or version tag to prepare (publication requires a version tag)
+        required: true
+        default: develop
+        type: string
+      publish:
+        description: Publish this version tag after validation and protected PyPI approval
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-artifacts
+  cancel-in-progress: false
 
 jobs:
   version:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      revision: ${{ steps.identity.outputs.revision }}
+      version: ${{ steps.identity.outputs.version }}
+      tag: ${{ steps.identity.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Verify release version and tag before building
+      - name: Freeze revision and verify version, license and tag
+        id: identity
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ inputs.ref || github.ref }}
+          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
         run: |
-          python - <<'PYTHON'
-          import os
-          import tomllib
-          from pathlib import Path
+          flags=()
+          if [[ "$PUBLISH" == true ]]; then flags+=(--publish); fi
+          python scripts/release-metadata.py --ref "$SOURCE_REF" "${flags[@]}" --output "$GITHUB_OUTPUT"
 
-          workspace = tomllib.loads(Path('Cargo.toml').read_text())
-          version = workspace['workspace']['package']['version']
-          package = tomllib.loads(Path('pyproject.toml').read_text())['project']
-          assert package['dynamic'] == ['version']
-          assert package['license'] == 'MIT'
-          for member in workspace['workspace']['members']:
-              crate = tomllib.loads((Path(member) / 'Cargo.toml').read_text())['package']
-              assert crate['version'] == {'workspace': True}, member
-              assert crate['license'] == 'MIT', member
-          if os.environ['EVENT_NAME'] == 'release':
-              assert os.environ['RELEASE_TAG'] == f'v{version}', 'Tag/version mismatch'
-          PYTHON
-  linux-wheels:
+  artifacts:
     needs: version
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, arch: x86_64 }
-          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, arch: aarch64 }
-        python: ['3.11', '3.12', '3.13', '3.14']
-    runs-on: ${{ matrix.platform.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Build portable wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          maturin-version: v1.14.1
-          target: ${{ matrix.platform.target }}
-          manylinux: '2_28'
-          before-script-linux: dnf install -y clang clang-devel git make nasm
-          args: --release --locked --out dist --compatibility pypi -i python${{ matrix.python }}
-      - name: Install and smoke test wheel
-        shell: bash
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
-          python -m venv release-venv
-          release-venv/bin/python -m pip install dist/*.whl
-          release-venv/bin/python scripts/verify-wheel.py
-      - name: Preserve corresponding FFmpeg source
-        run: python scripts/archive-ffmpeg-source.py --output source-dist/ffmpeg-linux-${{ matrix.platform.arch }}-py${{ matrix.python }}.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ffmpeg-source-linux-${{ matrix.platform.arch }}-py${{ matrix.python }}
-          path: source-dist/*.zip
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-linux-${{ matrix.platform.arch }}-py${{ matrix.python }}
-          path: dist/*.whl
-          if-no-files-found: error
+    uses: ./.github/workflows/artifacts.yml
+    with:
+      revision: ${{ needs.version.outputs.revision }}
 
-  macos-wheels:
-    needs: version
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - { runner: macos-15-intel, target: x86_64-apple-darwin, arch: x86_64 }
-          - { runner: macos-15, target: aarch64-apple-darwin, arch: aarch64 }
-        python: ['3.11', '3.12', '3.13', '3.14']
-    runs-on: ${{ matrix.platform.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Install FFmpeg build and smoke tools
-        run: brew install nasm ffmpeg
-      - name: Build wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          maturin-version: v1.14.1
-          target: ${{ matrix.platform.target }}
-          args: --release --locked --out dist --compatibility pypi -i python${{ matrix.python }}
-      - name: Install and smoke test wheel
-        run: |
-          python -m venv release-venv
-          release-venv/bin/python -m pip install dist/*.whl
-          release-venv/bin/python scripts/verify-wheel.py
-      - name: Preserve corresponding FFmpeg source
-        run: python scripts/archive-ffmpeg-source.py --output source-dist/ffmpeg-macos-${{ matrix.platform.arch }}-py${{ matrix.python }}.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ffmpeg-source-macos-${{ matrix.platform.arch }}-py${{ matrix.python }}
-          path: source-dist/*.zip
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-macos-${{ matrix.platform.arch }}-py${{ matrix.python }}
-          path: dist/*.whl
-          if-no-files-found: error
-
-  windows-wheels:
-    needs: version
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ['3.11', '3.12', '3.13', '3.14']
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-          architecture: x64
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: Install FFmpeg build and smoke tools
-        shell: pwsh
-        run: |
-          choco install make nasm ffmpeg -y
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "${env:ProgramFiles}\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
-          "${env:ProgramFiles}\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-      - name: Build wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          maturin-version: v1.14.1
-          target: x86_64-pc-windows-msvc
-          args: --release --locked --out dist -i python${{ matrix.python }}
-      - name: Install and smoke test wheel
-        shell: pwsh
-        run: |
-          python -m venv release-venv
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          release-venv\Scripts\python -m pip install (Get-ChildItem dist\*.whl).FullName
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          release-venv\Scripts\python scripts\verify-wheel.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Preserve corresponding FFmpeg source
-        shell: pwsh
-        run: |
-          python scripts/archive-ffmpeg-source.py --output source-dist/ffmpeg-windows-x64-py${{ matrix.python }}.zip
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ffmpeg-source-windows-x64-py${{ matrix.python }}
-          path: source-dist/*.zip
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-windows-x64-py${{ matrix.python }}
-          path: dist/*.whl
-          if-no-files-found: error
-
-  sdist:
-    needs: version
-    timeout-minutes: 60
+  stage:
+    if: github.event_name == 'push' || inputs.publish
+    needs: [version, artifacts]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
-      - name: Install build and smoke tools
-        run: sudo apt-get update -qq && sudo apt-get install -y clang libclang-dev make nasm ffmpeg
-      - name: Build source distribution
-        uses: PyO3/maturin-action@v1
+          ref: ${{ needs.version.outputs.revision }}
+      - uses: actions/download-artifact@v4
         with:
-          maturin-version: v1.14.1
-          command: sdist
-          args: --out dist
-      - name: Install and smoke test source distribution
-        run: |
-          python -m venv release-venv
-          release-venv/bin/python -m pip install maturin==1.14.1
-          release-venv/bin/python -m pip install --no-build-isolation dist/*.tar.gz
-          release-venv/bin/python scripts/verify-wheel.py
-      - uses: actions/upload-artifact@v4
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
         with:
           name: sdist
-          path: dist/*.tar.gz
-          if-no-files-found: error
+          path: dist
+      - name: Record exact artifact identities
+        env:
+          REVISION: ${{ needs.version.outputs.revision }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: python scripts/release-manifest.py dist --revision "$REVISION" --version "$VERSION" --verify-pypi
+      - name: Stage tested artifacts and source as a prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          REVISION: ${{ needs.version.outputs.revision }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          test "$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)" = "$REVISION"
+          if gh release view "$RELEASE_TAG" --json isPrerelease,isDraft > release-state.json; then
+            python -c 'import json; r=json.load(open("release-state.json")); assert r["isPrerelease"] or r["isDraft"], "refusing to replace a complete release"'
+            count=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets | length')
+            if [[ "$count" != 0 ]]; then
+              gh release download "$RELEASE_TAG" --dir staged
+              python scripts/release-manifest.py dist --revision "$REVISION" --version "$VERSION" --compare-directory staged
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --prerelease --title "$RELEASE_TAG (publication pending)" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease
 
   publish:
-    if: github.event_name == 'release' && github.event.action == 'published'
-    needs: [linux-wheels, macos-wheels, windows-wheels, sdist, attach]
+    if: github.event_name == 'push' || inputs.publish
+    needs: [version, artifacts, stage]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: pypi
     permissions:
       id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Verify release tag matches package version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          python - <<'PY'
-          import os
-          import tomllib
-          from pathlib import Path
-
-          manifest = tomllib.loads(Path('Cargo.toml').read_text())
-          version = manifest['workspace']['package']['version']
-          assert os.environ['RELEASE_TAG'] == f'v{version}'
-          PY
+        with:
+          ref: ${{ needs.version.outputs.revision }}
       - uses: actions/download-artifact@v4
         with:
-          pattern: wheel-*
-          path: dist
+          pattern: release-*
+          path: artifacts
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
           name: sdist
-          path: dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
-
-  attach:
-    if: github.event_name == 'release' && github.event.action == 'published'
-    needs: [linux-wheels, macos-wheels, windows-wheels, sdist]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: wheel-*
-          path: dist
-          merge-multiple: true
-      - uses: actions/download-artifact@v4
-        with:
-          name: sdist
-          path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: ffmpeg-source-*
-          path: source-dist
-          merge-multiple: true
-      - name: Attach tested distributions to the GitHub Release
+          path: artifacts
+      - name: Recheck tag and prepare only tested Python distributions
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" dist/*.whl dist/*.tar.gz source-dist/*.zip --clobber
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          REVISION: ${{ needs.version.outputs.revision }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          test "$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)" = "$REVISION"
+          python scripts/release-manifest.py artifacts --revision "$REVISION" --version "$VERSION" --verify-pypi
+          mkdir dist
+          cp artifacts/*.whl artifacts/vestra-*.tar.gz dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Resume a partially successful upload with the same tested artifacts.
+          skip-existing: true
+
+  complete:
+    if: github.event_name == 'push' || inputs.publish
+    needs: [version, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Mark GitHub release complete only after PyPI publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          REVISION: ${{ needs.version.outputs.revision }}
+        run: |
+          test "$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)" = "$REVISION"
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --title "$RELEASE_TAG"

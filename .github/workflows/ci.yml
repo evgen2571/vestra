@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [develop, main]
   pull_request:
   workflow_dispatch:
 
@@ -27,6 +27,7 @@ jobs:
       pull-requests: read
     outputs:
       native: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.native == 'true' }}
+      packaging: ${{ github.event_name == 'workflow_dispatch' || steps.packaging.outputs.packaging == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -41,10 +42,39 @@ jobs:
               - '!**/*.md'
               - '!docs/**'
               - '!LICENSE'
+              - '!zensical.toml'
+              - '!overrides/**'
+              - '!scripts/check-docs.py'
+              - '!scripts/check-site.py'
+              - '!tests/test_documentation_links.py'
+              - '!tests/test_site_links.py'
+              - '!tests/test_site_navigation.py'
+              - '!tests/test_documentation_examples.py'
+              - '!.github/workflows/docs.yml'
+      - uses: dorny/paths-filter@v3
+        id: packaging
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            packaging:
+              - '.github/workflows/artifacts.yml'
+              - '.github/workflows/release.yml'
+              - 'scripts/*release*.py'
+              - 'scripts/*wheel*.py'
+              - 'scripts/*cli.py'
+              - 'scripts/archive-ffmpeg-source.py'
+              - 'tests/test_release*.py'
+              - 'tests/test_cli_release.py'
+              - 'tests/test_ffmpeg_source_archive.py'
+              - 'crates/vestra-python/Cargo.toml'
+              - 'pyproject.toml'
+              - 'vendor/ffmpeg-sys-next/**'
       - uses: DeterminateSystems/nix-installer-action@v19
       - uses: DeterminateSystems/magic-nix-cache-action@v15
       - name: Check Rust/Python formatting and Python lint
         run: nix develop .#ci --command just style
+      - name: Check release helpers without a native build
+        run: nix develop .#ci --command just release-check
 
   rust-cpu:
     name: Rust CPU
@@ -182,10 +212,69 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         run: nix develop .#ci --command just wheel-smoke
 
+  native-portability:
+    name: Native (${{ matrix.os }})
+    needs: style
+    if: needs.style.outputs.native == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: native-portability
+      - name: Install native and runtime tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install nasm ffmpeg
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Install native and runtime tools (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install make nasm ffmpeg -y
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "${env:ProgramFiles}\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "${env:ProgramFiles}\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Test native CLI and render through the packaged executable
+        shell: bash
+        run: |
+          cargo test --locked -p vestra-cli
+          cargo build --locked -p vestra-cli
+          target="aarch64-apple-darwin"
+          binary="target/debug/ve"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            target="x86_64-pc-windows-msvc"
+            binary="$binary.exe"
+          fi
+          python scripts/package-cli.py --binary "$binary" --target "$target" --output-dir cli-smoke
+          for archive in cli-smoke/ve-*.tar.gz cli-smoke/ve-*.zip; do
+            if [[ -f "$archive" ]]; then python scripts/verify-cli.py "$archive"; fi
+          done
+
+  packaging:
+    name: Release packaging
+    needs: style
+    if: needs.style.outputs.packaging == 'true'
+    uses: ./.github/workflows/artifacts.yml
+    with:
+      revision: ${{ github.sha }}
+
   ci-success:
     name: CI Success
     if: ${{ always() }}
-    needs: [style, rust-cpu, rust, python]
+    needs: [style, rust-cpu, rust, python, native-portability, packaging]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -196,6 +285,9 @@ jobs:
           RUST_CPU_RESULT: ${{ needs.rust-cpu.result }}
           RUST_RESULT: ${{ needs.rust.result }}
           PYTHON_RESULT: ${{ needs.python.result }}
+          PORTABILITY_RESULT: ${{ needs.native-portability.result }}
+          PACKAGING_REQUIRED: ${{ needs.style.outputs.packaging }}
+          PACKAGING_RESULT: ${{ needs.packaging.result }}
         run: |
           test "$STYLE_RESULT" = success
           case "$NATIVE_REQUIRED" in
@@ -203,11 +295,18 @@ jobs:
               test "$RUST_CPU_RESULT" = success
               test "$RUST_RESULT" = success
               test "$PYTHON_RESULT" = success
+              test "$PORTABILITY_RESULT" = success
               ;;
             false)
               test "$RUST_CPU_RESULT" = skipped
               test "$RUST_RESULT" = skipped
               test "$PYTHON_RESULT" = skipped
+              test "$PORTABILITY_RESULT" = skipped
               ;;
+            *) exit 1 ;;
+          esac
+          case "$PACKAGING_REQUIRED" in
+            true) test "$PACKAGING_RESULT" = success ;;
+            false) test "$PACKAGING_RESULT" = skipped ;;
             *) exit 1 ;;
           esac

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Preserve the actual bundled FFmpeg sources for a release wheel, without host dumps."""
+"""Preserve the bundled FFmpeg sources for an associated release artifact."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import shlex
@@ -17,7 +18,7 @@ def git(source: Path, *args: str) -> bytes:
     )
 
 
-def archive(source: Path, output: Path) -> None:
+def archive(source: Path, output: Path, *, artifacts: list[Path] | None = None) -> None:
     revision = git(source, "rev-parse", "HEAD").decode().strip()
     tracked = git(source, "ls-files", "-z").decode().split("\0")
     config = (source / "ffbuild/config.mak").read_text()
@@ -26,6 +27,9 @@ def archive(source: Path, output: Path) -> None:
         for line in config.splitlines()
         if line.startswith("FFMPEG_CONFIGURATION=")
     )
+    for name in ("COPYING.LGPLv2.1", "LICENSE.md"):
+        if name not in tracked or not (source / name).is_file():
+            raise ValueError(f"missing FFmpeg license: {name}")
     # Prefixes, compiler/tool paths and extra search paths are local build details.
     options = shlex.split(configuration)
     portable = [
@@ -41,17 +45,43 @@ def archive(source: Path, output: Path) -> None:
                 "--ar=",
                 "--nm=",
                 "--strip=",
-                "--extra-cflags=",
-                "--extra-ldflags=",
                 "--sysroot=",
                 "--cross-prefix=",
             )
         )
     ]
-    for option in ("--disable-gpl", "--disable-nonfree", "--disable-version3"):
-        if option not in portable:
+    for index, option in enumerate(portable):
+        if option.startswith(("--extra-cflags=", "--extra-ldflags=")):
+            key, value = option.split("=", 1)
+            flags = []
+            values = iter(shlex.split(value))
+            for flag in values:
+                if flag in ("-I", "-L", "-F", "-isystem", "-isysroot", "--sysroot"):
+                    next(values, None)
+                elif not flag.startswith(("-I", "-L", "-F", "-isystem", "-isysroot")):
+                    if "/" not in flag and "\\" not in flag:
+                        flags.append(flag)
+            portable[index] = key + "=" + shlex.join(flags)
+    for component in ("gpl", "nonfree", "version3"):
+        if (
+            f"--disable-{component}" not in portable
+            or f"--enable-{component}" in portable
+        ):
             raise ValueError(
-                f"unexpected FFmpeg licensing configuration: missing {option}"
+                f"unexpected FFmpeg licensing configuration: requires --disable-{component}"
+            )
+    associated = []
+    for artifact in artifacts or []:
+        if artifact.resolve() == output.resolve():
+            raise ValueError(
+                "source archive output must not overwrite its binary artifact"
+            )
+        with artifact.open("rb") as binary:
+            associated.append(
+                {
+                    "name": artifact.name,
+                    "sha256": hashlib.file_digest(binary, "sha256").hexdigest(),
+                }
             )
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
@@ -67,6 +97,8 @@ def archive(source: Path, output: Path) -> None:
                 {
                     "upstream": "https://github.com/FFmpeg/FFmpeg",
                     "revision": revision,
+                    "vestra_revision": git(ROOT, "rev-parse", "HEAD").decode().strip(),
+                    "artifacts": associated,
                     "configure_options": portable,
                 },
                 indent=2,
@@ -75,24 +107,30 @@ def archive(source: Path, output: Path) -> None:
         )
         bundle.write(ROOT / "vendor/ffmpeg-sys-next/build.rs", "vestra-build.rs")
         bundle.write(ROOT / "vendor/ffmpeg-sys-next/Cargo.toml", "bindings-Cargo.toml")
+        bundle.write(ROOT / "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md")
         bundle.writestr(
             "README.txt",
-            """Corresponding FFmpeg source for the accompanying Vestra wheel.
+            """Corresponding FFmpeg source for the Vestra artifacts identified in BUILD.json.
 FFmpeg is LGPL 2.1 or later; see ffmpeg/COPYING.LGPLv2.1 and ffmpeg/LICENSE.md.
 The ffmpeg/ tree already contains the modifications shown in CHANGES.diff.
-BUILD.json records the exact upstream revision and portable configure options.
+BUILD.json records the exact upstream/Vestra revisions, artifact filenames and
+SHA-256 digests, and portable configure options.
 Local prefix/compiler/search paths have been omitted; select your own tools.
-vestra-build.rs is the wheel's build recipe, including target-specific flags.
+vestra-build.rs is the bundled-library build recipe, including target-specific flags.
 
 To modify/rebuild: unpack this archive, edit ffmpeg/, then run ./configure with
 BUILD.json's options and a local --prefix, followed by make and make install.
-Download/unpack the matching Vestra source distribution from PyPI or GitHub.
+Download/unpack the matching Vestra source revision from GitHub, or the matching
+Python source distribution from PyPI. BUILD.json identifies the Vestra revision.
 For a modified bundled build, adapt fetch() in vendor/ffmpeg-sys-next/build.rs
 to copy your modified ffmpeg/ source into source() instead of cloning upstream,
-then rebuild Vestra with Maturin. The remaining build recipe configures and
+then rebuild the Python module with Maturin or the CLI with
+cargo build --locked --release -p vestra-cli. The remaining build recipe configures and
 links those libraries. Use a clean Cargo target directory for the rebuild.
 The source distribution includes Cargo.lock and the native module's source.
 The runtime ffmpeg/ffprobe executables are installed separately.
+This archive supplies library source material; it does not certify that all
+static-linking LGPL relinking obligations have been met. Review LGPL 2.1 section 6.
 """,
         )
     print(f"Archived corresponding FFmpeg source: {output.name} ({revision})")
@@ -100,18 +138,21 @@ The runtime ffmpeg/ffprobe executables are installed separately.
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path)
+    location = parser.add_mutually_exclusive_group()
+    location.add_argument("--source", type=Path)
+    location.add_argument("--search-root", type=Path, default=ROOT / "target")
+    parser.add_argument("--artifact", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     source = args.source
     if source is None:
-        candidates = list((ROOT / "target").glob("**/out/ffmpeg-*/ffbuild/config.mak"))
+        candidates = list(args.search_root.glob("**/out/ffmpeg-*/ffbuild/config.mak"))
         if len(candidates) != 1:
             parser.error(
                 f"expected exactly one FFmpeg build source, found {len(candidates)}"
             )
         source = candidates[0].parents[1]
-    archive(source, args.output)
+    archive(source, args.output, artifacts=args.artifact)
 
 
 if __name__ == "__main__":

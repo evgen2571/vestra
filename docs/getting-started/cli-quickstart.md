@@ -6,8 +6,9 @@ external assets, so it is easy to copy and inspect.
 
 ## Prerequisites
 
-The Python package does not install the `ve` CLI. Build the CLI separately
-from a repository checkout using the
+The Python package does not install the `ve` CLI. Download a
+[native CLI archive](installation.md#install-the-native-cli), or build it from
+a repository checkout using the
 [build-from-source instructions](installation.md#build-from-source--development).
 You also need `ffmpeg` and `ffprobe` on `PATH`.
 

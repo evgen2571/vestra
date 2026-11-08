@@ -221,6 +221,144 @@ fn cli_validates_inspects_and_renders_audio_and_video_without_ffprobe() {
 }
 
 #[test]
+fn published_audio_uses_contiguous_source_samples_despite_timestamp_gaps() {
+    let directory = TempDir::new().expect("temporary directory");
+    let source = directory.path().join("timestamp-gap.mka");
+    success(
+        Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "aevalsrc=0.125*sin(2*PI*if(lt(t\\,0.5)\\,440\\,880)*t):s=48000:d=1",
+                "-af",
+                "asetpts=PTS+gte(T\\,0.5)*5/TB",
+                "-c:a",
+                "pcm_s16le",
+            ])
+            .arg(&source),
+    );
+    for rate in [1.0, 2.0] {
+        let project_path = directory.path().join(format!("gap-{rate}.json"));
+        let output_path = directory.path().join(format!("gap-{rate}.mp4"));
+        let duration = 0.25 + 0.875 / rate;
+        let effects = if rate > 1.0 {
+            json!([{"id": "speed", "type": "playback_speed", "rate": rate}])
+        } else {
+            json!([])
+        };
+        let value = json!({
+            "schema_version": 1,
+            "output": {"path": "unused.mp4", "width": 16, "height": 16,
+                "frame_rate": "16/1", "background": "#000000", "quality": "preview",
+                "audio": true, "duration_mode": "automatic"},
+            "assets": [{"id": "source", "type": "audio", "source": source}],
+            "visual": {"clips": []},
+            "audio": {"tracks": [{"id": "music", "clips": [{
+                "id": "clip", "asset": "source", "start": 0.25, "trim_start": 0.125,
+                "effects": effects
+            }]}]}
+        });
+        write_project(&project_path, &value);
+        let output = success(
+            common::command()
+                .arg("render")
+                .arg(&project_path)
+                .arg("--output")
+                .arg(&output_path)
+                .args([
+                    "--render-backend",
+                    "cpu",
+                    "--progress",
+                    "none",
+                    "--format",
+                    "json",
+                ]),
+        );
+        let report: Value = serde_json::from_slice(&output.stdout).expect("render JSON");
+        assert_eq!(report["duration"], duration);
+        assert_eq!(report["total_frames"], (duration * 16.0) as u64);
+
+        let decoded = success(
+            Command::new("ffmpeg")
+                .args(["-v", "error", "-i"])
+                .arg(&output_path)
+                .args([
+                    "-map", "0:a:0", "-ac", "1", "-ar", "48000", "-f", "f32le", "-",
+                ]),
+        );
+        let samples: Vec<_> = decoded
+            .stdout
+            .chunks_exact(4)
+            .map(|sample| f32::from_le_bytes(sample.try_into().expect("sample")))
+            .collect();
+        let expected_samples = (duration * 48_000.0) as usize;
+        // AAC may retain one padded 1024-sample frame after the project end.
+        assert!(
+            (expected_samples..=expected_samples + 1_024).contains(&samples.len()),
+            "rate {rate}: {} decoded samples, expected {expected_samples}",
+            samples.len()
+        );
+        assert!(
+            samples[..7_200].iter().all(|sample| sample.abs() < 0.001),
+            "authored initial silence must remain"
+        );
+        for (source_time, frequency) in [(0.325, 440.0), (0.825, 880.0)] {
+            let start = ((0.25 + (source_time - 0.125) / rate) * 48_000.0) as usize;
+            let mut real = 0.0;
+            let mut imaginary = 0.0;
+            for (index, sample) in samples[start..start + 2_400].iter().enumerate() {
+                let phase = std::f64::consts::TAU * frequency * index as f64 / 48_000.0;
+                real += f64::from(*sample) * phase.cos();
+                imaginary += f64::from(*sample) * phase.sin();
+            }
+            assert!(
+                real.hypot(imaginary) / 1_200.0 > 0.04,
+                "rate {rate}: {frequency} Hz marker missing at source time {source_time}"
+            );
+        }
+
+        let timestamps = success(
+            Command::new("ffmpeg")
+                .args(["-v", "error", "-i"])
+                .arg(&output_path)
+                .args([
+                    "-map",
+                    "0:a:0",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "48000",
+                    "-c:a",
+                    "pcm_s16le",
+                    "-f",
+                    "framecrc",
+                    "-",
+                ]),
+        );
+        let timestamps = String::from_utf8(timestamps.stdout).expect("frame timestamps");
+        assert!(timestamps.contains("#tb 0: 1/48000"));
+        let mut expected_pts = 0_i64;
+        for line in timestamps
+            .lines()
+            .filter(|line| !line.starts_with('#') && !line.is_empty())
+        {
+            let fields: Vec<_> = line.split(',').map(str::trim).collect();
+            let pts: i64 = fields[2].parse().expect("frame PTS");
+            let frame_samples: i64 = fields[3].parse().expect("frame sample count");
+            assert_eq!(
+                pts, expected_pts,
+                "rate {rate}: discontinuous published audio"
+            );
+            expected_pts += frame_samples;
+        }
+        assert_eq!(expected_pts as usize, samples.len());
+    }
+}
+
+#[test]
 fn cli_rejects_invalid_source_ranges_and_missing_audio_without_ffprobe() {
     let directory = TempDir::new().expect("temporary directory");
     let bin = ffmpeg_only_path(directory.path());

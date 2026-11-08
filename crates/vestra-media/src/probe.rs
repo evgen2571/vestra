@@ -1,6 +1,7 @@
 use std::{
     path::Path,
     process::{Command, Stdio},
+    sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
 
@@ -45,7 +46,26 @@ pub fn backend_available() -> Result<(), MediaError> {
 /// Measure the first audio stream's decoded sample duration, as used by the mixer.
 /// This reads the complete source instead of trusting estimated container metadata.
 pub fn probe_audio_duration(path: &Path) -> Result<f64, MediaError> {
+    probe_audio_duration_cancellable(path, &AtomicBool::new(false))
+}
+
+/// Probe with cancellation between native packet/frame operations.
+pub fn probe_audio_duration_cancellable(
+    path: &Path,
+    cancelled: &AtomicBool,
+) -> Result<f64, MediaError> {
     let started = Instant::now();
+    let check_cancelled = || {
+        if cancelled.load(Ordering::Relaxed) {
+            Err(MediaError::AudioProbe {
+                path: path.to_path_buf(),
+                message: "audio probing cancelled".to_owned(),
+            })
+        } else {
+            Ok(())
+        }
+    };
+    check_cancelled()?;
     if path.to_str().is_none_or(|path| path.contains('\0')) {
         return Err(MediaError::AudioProbe {
             path: path.to_path_buf(),
@@ -73,6 +93,7 @@ pub fn probe_audio_duration(path: &Path) -> Result<f64, MediaError> {
     let mut samples = 0_u64;
     let mut draining = false;
     loop {
+        check_cancelled()?;
         match decoder.receive_frame(&mut frame) {
             Ok(()) => {
                 if frame.is_corrupt() {
@@ -97,6 +118,7 @@ pub fn probe_audio_duration(path: &Path) -> Result<f64, MediaError> {
             Err(error) => return Err(probe_error(error)),
         }
         loop {
+            check_cancelled()?;
             // The packet iterator discards demux errors; read directly to preserve them.
             let mut packet = ffmpeg::Packet::empty();
             match packet.read(&mut input) {

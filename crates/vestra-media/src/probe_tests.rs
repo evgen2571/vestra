@@ -217,6 +217,34 @@ fn variable_bitrate_audio_without_a_duration_header_uses_decoded_samples() {
 }
 
 #[test]
+fn positive_stream_duration_can_disagree_with_decoded_samples() {
+    let directory = tempfile::tempdir().expect("temporary media directory");
+    let path = directory.path().join("misleading.flac");
+    encode(
+        &path,
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=sample_rate=48000:duration=0.375",
+            "-c:a",
+            "flac",
+        ],
+    );
+    let mut bytes = std::fs::read(&path).expect("FLAC fixture");
+    assert_eq!(&bytes[..4], b"fLaC");
+    // STREAMINFO stores total samples in the low 36 bits of this big-endian field.
+    let field = u64::from_be_bytes(bytes[18..26].try_into().expect("STREAMINFO field"));
+    let field = (field & !((1_u64 << 36) - 1)) | 480_000;
+    bytes[18..26].copy_from_slice(&field.to_be_bytes());
+    std::fs::write(&path, bytes).expect("misleading duration metadata");
+    let input = ffmpeg_next::format::input(&path).expect("FLAC metadata");
+    let stream = input.streams().next().expect("audio stream");
+    assert_eq!(stream.duration(), 480_000);
+    assert_duration(&path, 0.375, 1e-6);
+}
+
+#[test]
 fn rejects_truncated_audio_instead_of_trusting_its_advertised_duration() {
     let directory = tempfile::tempdir().expect("temporary media directory");
     let path = directory.path().join("truncated.wav");
@@ -286,4 +314,120 @@ fn rejects_audio_whose_decoded_sample_rate_changes() {
         probe_audio_duration(&path),
         Err(crate::MediaError::InvalidAudioDuration(_))
     ));
+}
+
+#[test]
+fn cancelled_audio_probe_stops_before_opening_the_source() {
+    let cancelled = std::sync::atomic::AtomicBool::new(true);
+    let error = super::probe_audio_duration_cancellable(Path::new("missing.wav"), &cancelled)
+        .expect_err("cancel before opening missing media");
+    assert!(error.to_string().contains("cancelled"), "{error}");
+}
+
+#[test]
+#[cfg(unix)]
+fn cancels_probing_a_sparse_audio_source_larger_than_four_gib() {
+    use std::{io::Write, sync::atomic::Ordering};
+
+    let directory = tempfile::tempdir().expect("temporary media directory");
+    let path = directory.path().join("large.rf64.wav");
+    let data_bytes = 5_u64 * 1024 * 1024 * 1024;
+    let mut header = Vec::from(&b"RF64\xff\xff\xff\xffWAVEds64\x1c\0\0\0"[..]);
+    header.extend_from_slice(&(data_bytes + 72).to_le_bytes());
+    header.extend_from_slice(&data_bytes.to_le_bytes());
+    header.extend_from_slice(&(data_bytes / 2).to_le_bytes());
+    header.extend_from_slice(&0_u32.to_le_bytes());
+    header.extend_from_slice(b"fmt \x10\0\0\0\x01\0\x01\0");
+    header.extend_from_slice(&48_000_u32.to_le_bytes());
+    header.extend_from_slice(&96_000_u32.to_le_bytes());
+    header.extend_from_slice(b"\x02\0\x10\0data\xff\xff\xff\xff");
+    assert_eq!(header.len(), 80);
+    let mut file = std::fs::File::create(&path).expect("sparse fixture");
+    file.write_all(&header).expect("RF64 header");
+    file.set_len(data_bytes + 80).expect("sparse audio payload");
+    drop(file);
+
+    let cancelled = std::sync::atomic::AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        let worker = scope.spawn(|| super::probe_audio_duration_cancellable(&path, &cancelled));
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        assert!(
+            !worker.is_finished(),
+            "large probe still has work to cancel"
+        );
+        cancelled.store(true, Ordering::Relaxed);
+        let error = worker
+            .join()
+            .expect("probe worker")
+            .expect_err("cancelled probe");
+        assert!(error.to_string().contains("cancelled"), "{error}");
+    });
+}
+
+#[test]
+#[ignore = "set VESTRA_BENCH_AUDIO to an existing fixture; run with --release --ignored --nocapture"]
+fn benchmark_audio_probing() {
+    let path = std::env::var_os("VESTRA_BENCH_AUDIO").expect("VESTRA_BENCH_AUDIO fixture");
+    let path = Path::new(&path);
+    let mut records = Vec::new();
+    for method in ["previous_ffprobe", "native_metadata", "native_decode"] {
+        let mut samples_ms = Vec::new();
+        let mut duration = None;
+        for iteration in 0..6 {
+            let started = std::time::Instant::now();
+            duration = match method {
+                "previous_ffprobe" => {
+                    let output = Command::new("ffprobe")
+                        .args([
+                            "-v",
+                            "error",
+                            "-show_entries",
+                            "format=duration",
+                            "-of",
+                            "json",
+                        ])
+                        .arg(path)
+                        .output()
+                        .expect("reference ffprobe");
+                    assert!(output.status.success());
+                    let json: serde_json::Value =
+                        serde_json::from_slice(&output.stdout).expect("ffprobe JSON");
+                    Some(
+                        json["format"]["duration"]
+                            .as_str()
+                            .expect("duration")
+                            .parse::<f64>()
+                            .expect("numeric duration"),
+                    )
+                }
+                "native_metadata" => {
+                    crate::init_ffmpeg().expect("initialize native FFmpeg");
+                    let input = ffmpeg_next::format::input(path).expect("native input");
+                    let stream = input
+                        .streams()
+                        .find(|stream| {
+                            stream.parameters().medium() == ffmpeg_next::media::Type::Audio
+                        })
+                        .expect("first audio stream");
+                    (stream.duration() > 0)
+                        .then(|| stream.duration() as f64 * f64::from(stream.time_base()))
+                }
+                _ => Some(probe_audio_duration(path).expect("decoded duration")),
+            };
+            if iteration > 0 {
+                samples_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+        assert!(duration.is_none_or(|duration| duration.is_finite() && duration > 0.0));
+        records.push(serde_json::json!({
+            "method": method, "duration_seconds": duration, "samples_ms": samples_ms,
+        }));
+    }
+    println!(
+        "audio_probe_benchmark={}",
+        serde_json::json!({
+            "path": path, "bytes": std::fs::metadata(path).expect("fixture size").len(),
+            "warmups": 1, "samples": 5, "records": records,
+        })
+    );
 }

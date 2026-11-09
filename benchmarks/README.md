@@ -1,8 +1,11 @@
 # Benchmarks
 
+See [native audio inspection results](audio-probing.md) for #110's before/after
+timings, memory evidence, published-output checks and fixture details.
+
 The ignored media `benchmark_audio_probing` compares the previous ffprobe JSON
-subprocess, native first-stream duration metadata, and the production decoded
-sample count on the same existing audio file:
+subprocess, native first-stream duration metadata, production metadata-first
+inspection and strict decoded sample counting on the same existing audio file:
 
 ```bash
 mkdir -p target/benchmark-results/audio-probing
@@ -20,6 +23,67 @@ a usable metadata result. Record toolchain, linked FFmpeg and reference ffprobe
 versions, CPU and cache state. Run without concurrent compilation or benchmarks;
 compare medians and ranges. These are probe timings, excluding rendering and
 encoding; faster metadata lookup does not establish sample-duration correctness.
+
+The ignored SDK `audio_workflow_benchmark` measures complete media validation,
+CPU preparation, one-shot encoding and repeated encoding from one prepared
+project. Supply a canonical project with audio and select one operation:
+
+```bash
+VESTRA_BENCH_AUDIO_PROJECT=/absolute/path/to/project.json \
+VESTRA_BENCH_AUDIO_OPERATION=prepare \
+  cargo test --release -p vestra --test audio_workflow_benchmark \
+  -- --ignored --nocapture --test-threads=1
+```
+
+Operations are `validate`, `prepare`, `render` and `prepared_render`. Validation
+includes semantic/media checks, output readiness, FFmpeg availability and CPU
+backend readiness. Loading the project and generating media are outside the
+timed intervals. Each process retains one loaded project, records one warmup and
+five measured operations by default, and prints raw `audio_workflow_benchmark`
+JSON. Set `VESTRA_BENCH_AUDIO_SAMPLES` to a positive integer to change the count;
+use the same count for each side of a comparison. `prepare`
+prepares afresh on every operation; `prepared_render` prepares once outside its
+timed intervals. Its warmup record measures the first render, including any
+deferred exact audio verification; report this separately from later renders.
+Render records retain the actual selected backend and stage timings. Set
+`VESTRA_BENCH_AUDIO_OUTPUT=/absolute/path/output.mp4` to retain the last published
+output for independent decoding. Keep source files unchanged between repeated
+operations.
+
+Set `VESTRA_BENCH_AUDIO_STRICT=1` to measure explicit full-decode validation and
+preparation. One-shot renders already resolve exact audio durations; the flag
+also controls the preparation outside `prepared_render`'s timed intervals.
+For expensive full-length encoding checks, one warmup plus one measured output
+can establish correctness and approximate cost; it does not establish a precise
+rendering speedup. Keep repeated validation/preparation and short-clip timings
+separate from that smaller full-length protocol.
+
+Compare the same test against #109's full-decoding revision and the candidate,
+using separate worktrees and preserved executables. Copy this benchmark-only test
+into a baseline checkout that predates it; remove its
+`.with_strict_audio(strict_audio)` calls because that API does not exist there.
+Do not copy production code. Build each with
+`cargo test --release -p vestra --test audio_workflow_benchmark --no-run` and
+save the printed executable before building the other checkout. A shared Cargo
+target can otherwise replace or reuse the wrong checkout's artifacts; clear
+the changed packages with `cargo clean --release -p vestra -p vestra-media`
+between builds and verify both executable hashes and their actual duration policy.
+
+Cover short WAV/FLAC/MP3/AAC files, several long sources, multiple distinct long
+files, and a video-with-audio composition. Separate full-length output from a
+short source excerpt: the latter isolates probe overhead but cannot establish
+sustained encoding throughput. Use `trim_end` explicitly when comparing the same
+selection across reported and decoded duration policies, and verify published
+sample counts and markers in correctness tests separately from timing.
+
+For process memory, execute the preserved test directly through the existing
+`scripts.benchmark_process.measure_process` helper with `psutil` installed,
+recording its sampling interval and raw report. It samples simultaneous RSS for
+the worker and all observed descendants, including FFmpeg; summed RSS can count
+shared pages twice and short-lived processes may fall between samples. Record
+missing measurements as unavailable. Do not count compilation or fixture
+generation in operation timings, or run timing comparisons while other checks
+are compiling.
 
 The focused `row-copy-1080p` suite measures ten seconds of deterministic H.264
 with two source-sized video presentations per frame, including an integer-clipped

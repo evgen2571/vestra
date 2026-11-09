@@ -17,6 +17,13 @@ licenses; the Linux x86_64 0.6.0 binary reports GPLv3-or-later and includes
 libx264. These terms differ from the linked LGPL libraries above. Consult the
 dependency's wheel notices and its
 [binary build/source repository](https://github.com/imageio/imageio-binaries).
+The macOS Intel executable in imageio-ffmpeg 0.6.0 reports `--enable-nonfree`
+and explicitly states that it is not legally redistributable. Do not repackage
+that executable with an application. Arrange a redistributable executable and
+dependency distribution when shipping an application, and select your executable
+with `IMAGEIO_FFMPEG_EXE`; setting the override alone does not remove the
+dependency's installed binary. Linux and Windows binaries report GPLv3-or-later;
+the macOS ARM64 binary reports GPLv2-or-later.
 Vestra invokes that executable as a separate process; it is not linked into the
 extension. Anyone redistributing the dependency's binaries must review their
 corresponding-source, notice and license obligations, including enabled codecs.

@@ -182,13 +182,13 @@ wheel adds approximately 29.5 MB on Linux x86_64, 25.6 MB on Linux ARM64, 24.9 M
 on macOS Intel, 21.1 MB on macOS ARM64 and 31.2 MB on Windows x64 (decimal MB).
 The Linux x86_64 executable occupies about 79.8 MB installed. The Vestra wheel
 does not contain a second copy; normal dependency resolution downloads it once.
-The local NixOS x86_64 Vestra wheel measured 21.9 MB; portable release sizes vary
-by target and native build configuration and are recorded in the release manifest.
+The local NixOS x86_64 Vestra wheel measured 21.9 MB. Inspect the release
+artifacts for portable wheel sizes, which vary by target and build configuration.
 
 The dependency's Python wrapper is BSD-2-Clause; its FFmpeg executables include
 GPL codecs such as libx264 and have their own redistribution terms. The Linux
 x86_64 0.6.0 executable reports FFmpeg 7.0.2 and GPLv3-or-later. Inspect each
-platform's `-version`, `-L` and wheel notices when updating the dependency;
+platform's `-version`, `-L` and wheel notices when updating the dependency.
 The smoke logs record these outputs and installed executable sizes for every
 target. FFmpeg versions and enabled components differ by target. Review source and
 redistribution obligations if mirroring or repackaging dependency wheels. This
@@ -196,6 +196,18 @@ executable is separate from Vestra's statically linked LGPL build and its source
 archives; those existing obligations still apply. See
 [third-party notices](https://github.com/evgen2571/vestra/blob/develop/THIRD_PARTY_NOTICES.md) and the
 [imageio binary builds](https://github.com/imageio/imageio-binaries).
+
+The macOS Intel executable in imageio-ffmpeg 0.6.0 is a specific redistribution
+limitation: its `-version` lists `--enable-nonfree`, and `-L` says
+"This version of ffmpeg has nonfree parts compiled in. Therefore it is not
+legally redistributable." The Linux and Windows binaries report GPLv3-or-later;
+macOS ARM64 reports GPLv2-or-later. Automatic installation obtains these binaries
+from the dependency's publisher; Vestra's own wheel does not redistribute them.
+Do not mirror or bundle the macOS Intel executable with an application. For an
+application distribution, arrange a redistributable dependency/binary package
+and use `IMAGEIO_FFMPEG_EXE` to select your build. The override alone does not
+remove the installed dependency binary. Replacing the upstream build or
+maintaining our own FFmpeg distribution is outside this packaging workflow.
 
 See [NixOS troubleshooting](../troubleshooting/ffmpeg.md#nixos) for the separately
 checked executable and native-library boundary. A successful static FFmpeg run

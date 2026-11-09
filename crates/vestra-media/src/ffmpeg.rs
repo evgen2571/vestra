@@ -9,6 +9,7 @@ use std::{
     },
 };
 
+use crate::audio_verification::{AudioReadReport, collect_audio_stderr};
 use crate::{EncoderSettings, FrameSink, MediaError, SinkResult, audio_graph, effective_parent};
 
 /// Keep the generated filtergraph comfortably below common command-line
@@ -48,7 +49,7 @@ fn add_h264_video_output(command: &mut Command, settings: &EncoderSettings) {
 pub struct FfmpegSink {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
-    stderr_reader: Option<std::thread::JoinHandle<Vec<u8>>>,
+    stderr_reader: Option<std::thread::JoinHandle<AudioReadReport>>,
     progress_reader: Option<std::thread::JoinHandle<()>>,
     static_progress_frames: Option<Arc<AtomicU64>>,
     expected_frame: u64,
@@ -57,6 +58,7 @@ pub struct FfmpegSink {
     filtergraph_file: Option<TemporaryFiltergraph>,
     static_image: Option<PathBuf>,
     static_frame_count: Option<u64>,
+    audio_requirements: Vec<audio_graph::AudioSourceRequirement>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,6 +72,7 @@ impl FfmpegSink {
     pub fn start(settings: &EncoderSettings, output: &Path) -> Result<Self, MediaError> {
         let mut command = Command::new("ffmpeg");
         let mut filtergraph_file = None;
+        let mut audio_requirements = Vec::new();
         command
             .args([
                 "-hide_banner",
@@ -100,6 +103,7 @@ impl FfmpegSink {
             debug_assert_eq!(audio.clip_branch_count, audio_mix.audible_clip_count());
             filtergraph_file =
                 add_audio(&mut command, &audio, settings.maximum_audio_sources, output)?;
+            audio_requirements = audio.source_requirements;
         } else {
             command.args(["-map", "0:v:0"]);
         }
@@ -107,7 +111,7 @@ impl FfmpegSink {
         if settings.audio_mix.is_some() {
             command.args(["-c:a", "aac", "-b:a", "192k"]);
         }
-        Self::spawn(
+        let mut sink = Self::spawn(
             command,
             settings,
             output,
@@ -115,7 +119,9 @@ impl FfmpegSink {
             None,
             true,
             false,
-        )
+        )?;
+        sink.audio_requirements = audio_requirements;
+        Ok(sink)
     }
 
     pub fn start_static(
@@ -125,6 +131,7 @@ impl FfmpegSink {
     ) -> Result<Self, MediaError> {
         let mut command = Command::new("ffmpeg");
         let mut filtergraph_file = None;
+        let mut audio_requirements = Vec::new();
         command
             .args([
                 "-hide_banner",
@@ -154,6 +161,7 @@ impl FfmpegSink {
             )?;
             filtergraph_file =
                 add_audio(&mut command, &audio, settings.maximum_audio_sources, output)?;
+            audio_requirements = audio.source_requirements;
         } else {
             command.args(["-map", "0:v:0"]);
         }
@@ -161,7 +169,7 @@ impl FfmpegSink {
         if settings.audio_mix.is_some() {
             command.args(["-c:a", "aac", "-b:a", "192k"]);
         }
-        Self::spawn(
+        let mut sink = Self::spawn(
             command,
             settings,
             output,
@@ -169,7 +177,9 @@ impl FfmpegSink {
             Some(image),
             false,
             true,
-        )
+        )?;
+        sink.audio_requirements = audio_requirements;
+        Ok(sink)
     }
 
     /// Returns the latest frame count reported by FFmpeg's `-progress` stream
@@ -228,6 +238,7 @@ impl FfmpegSink {
             "encoder process spawning"
         );
         let mut child = command
+            .env("AV_LOG_FORCE_NOCOLOR", "1")
             .args(["-movflags", "+faststart"])
             .arg(output)
             .stdin(if pipe_stdin {
@@ -298,10 +309,16 @@ impl FfmpegSink {
         };
         let expected_bytes = settings.width as usize * settings.height as usize * 4;
         let static_frame_count = static_image.as_ref().map(|_| settings.frame_count);
+        let source_count = settings
+            .audio_mix
+            .as_ref()
+            .map_or(0, |mix| mix.audible_clip_count());
         Ok(Self {
             child: Some(child),
             stdin,
-            stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
+            stderr_reader: Some(std::thread::spawn(move || {
+                collect_audio_stderr(stderr, source_count)
+            })),
             progress_reader,
             static_progress_frames,
             expected_frame: 0,
@@ -310,6 +327,7 @@ impl FfmpegSink {
             filtergraph_file,
             static_image,
             static_frame_count,
+            audio_requirements: Vec::new(),
         })
     }
 
@@ -339,7 +357,7 @@ impl FfmpegSink {
         self.join_stderr().map(|_| ())
     }
 
-    fn join_stderr(&mut self) -> Result<Vec<u8>, MediaError> {
+    fn join_stderr(&mut self) -> Result<AudioReadReport, MediaError> {
         self.stderr_reader
             .take()
             .map(|reader| {
@@ -369,15 +387,15 @@ impl FfmpegSink {
     ) -> Result<SinkResult, MediaError> {
         self.child.take();
         self.join_progress()?;
-        let stderr = String::from_utf8_lossy(&self.join_stderr()?)
-            .trim()
-            .to_owned();
+        let report = self.join_stderr()?;
+        let stderr = &report.stderr;
         self.state = SinkState::Finished;
         self.cleanup_filtergraph();
         let static_frame_count = self.static_frame_count;
         let reported_static_frames = self.static_progress_frames();
         self.cleanup_static_image();
         if status.success() {
+            report.verify(&self.audio_requirements)?;
             tracing::debug!(
                 target: "vestra.encode",
                 stage = "finalize",
@@ -401,7 +419,7 @@ impl FfmpegSink {
             Err(MediaError::ProcessFailed {
                 program: "FFmpeg",
                 status,
-                stderr,
+                stderr: report.stderr,
             })
         }
     }
@@ -448,9 +466,7 @@ impl FrameSink for FfmpegSink {
                 .flatten()
             {
                 self.child.take();
-                let stderr = String::from_utf8_lossy(&self.join_stderr()?)
-                    .trim()
-                    .to_owned();
+                let stderr = self.join_stderr()?.stderr;
                 self.state = SinkState::Aborted;
                 self.cleanup_filtergraph();
                 return Err(MediaError::ProcessFailed {
@@ -529,31 +545,6 @@ fn collect_progress(stdout: impl Read, frames: &AtomicU64) {
     }
 }
 
-fn collect_stderr(mut stderr: impl Read) -> Vec<u8> {
-    const MAX_STDERR_BYTES: usize = 64 * 1024;
-    const TRUNCATED: &[u8] = b"\n[FFmpeg stderr truncated]";
-    let mut collected = Vec::new();
-    let mut truncated = false;
-    let mut chunk = [0_u8; 8192];
-    loop {
-        let read = match stderr.read(&mut chunk) {
-            Ok(0) | Err(_) => break,
-            Ok(read) => read,
-        };
-        collected.extend_from_slice(&chunk[..read]);
-        if collected.len() > MAX_STDERR_BYTES {
-            truncated = true;
-            let retained = MAX_STDERR_BYTES.saturating_sub(TRUNCATED.len());
-            let excess = collected.len() - retained;
-            collected.drain(..excess);
-        }
-    }
-    if truncated {
-        collected.extend_from_slice(TRUNCATED);
-    }
-    collected
-}
-
 fn add_audio(
     command: &mut Command,
     audio: &audio_graph::FfmpegAudioGraph,
@@ -561,8 +552,9 @@ fn add_audio(
     output: &Path,
 ) -> Result<Option<TemporaryFiltergraph>, MediaError> {
     enforce_audio_source_limit(audio, maximum_audio_sources)?;
+    command.args(["-loglevel", "info", "-nostats", "-xerror"]);
     for path in &audio.input_paths {
-        command.args(["-i"]).arg(path);
+        command.args(["-err_detect", "explode", "-i"]).arg(path);
     }
     let filtergraph_file = if audio.filter_complex.len() > FILTERGRAPH_SCRIPT_THRESHOLD_BYTES {
         let file = TemporaryFiltergraph::create(output, &audio.filter_complex)?;

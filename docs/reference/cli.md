@@ -67,9 +67,10 @@ as in the [JSON guide](../guides/json-authoring.md).
 `inspect` resolves project media without checking the render destination or
 backend readiness.
 
-Audio inspection uses native first-stream metadata by default and reports when
-its duration is estimated. Use `ve validate PROJECT --strict-audio` or
-`ve inspect PROJECT --strict-audio` to decode the whole audio source, verify
-sample duration and detect decoder errors. Missing usable metadata falls back to
-full decoding. `ve render` always resolves decoded duration before rendering;
-there is no render probing flag. See the [audio duration contract](../development/architecture/media-io.md#audio-duration).
+Audio inspection uses native first-stream metadata by default; JSON reports expose
+`duration_source` without warning merely for reported metadata. Use
+`ve validate PROJECT --strict-audio` or `ve inspect PROJECT --strict-audio` for
+full-source duration and decoder checks. Inspection falls back to decoding when
+metadata is unavailable. Rendering resolves omitted source ends exactly; explicit
+trim ends use source-bound checks integrated into actual reading. See the
+[audio duration contract](../development/architecture/media-io.md#audio-duration).

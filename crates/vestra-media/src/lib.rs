@@ -7,6 +7,7 @@
 
 mod audio_analysis;
 mod audio_graph;
+mod audio_verification;
 mod error;
 mod ffmpeg;
 mod output;
@@ -37,7 +38,8 @@ pub use ffmpeg::FfmpegSink;
 pub use output::{OutputTarget, check_output, effective_parent};
 pub use probe::{
     AudioDurationSource, AudioMediaInfo, backend_available, check_ffmpeg_available, inspect_audio,
-    inspect_audio_cancellable, probe_audio_duration, probe_audio_duration_cancellable,
+    inspect_audio_cancellable, inspect_audio_metadata_cancellable, probe_audio_duration,
+    probe_audio_duration_cancellable,
 };
 pub use sink::{FrameSink, SinkResult};
 pub use video::{

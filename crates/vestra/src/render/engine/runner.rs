@@ -484,7 +484,9 @@ where
                 RenderFailureStage::EncoderFinalization,
                 completed_frames,
                 None,
-                Diagnostic::error("VESTRA-ENCODE", Category::Render, error.to_string(), ""),
+                super::failure::audio_source_diagnostic(&error).unwrap_or_else(|| {
+                    Diagnostic::error("VESTRA-ENCODE", Category::Render, error.to_string(), "")
+                }),
             )
         })
         .map_err(|error| {

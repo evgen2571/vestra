@@ -31,12 +31,11 @@ including any further nested groups or masks.
 
 ## Audio duration precision
 
-`VESTRA-AUDIO-DURATION-REPORTED` warns that preflight used first-stream metadata
-without verifying the decoded sample count. Its pointer identifies the asset
-source; select strict audio validation for exact duration and decoder checks.
-A metadata-prepared video that requests samples beyond decoded EOF fails with
-`VESTRA-AUDIO-CLIP-SOURCE` before creating output; `related_id` identifies the
-clip. Use strict preparation to resolve its timeline from actual samples.
+Metadata-derived duration emits no warning; inspection exposes its provenance.
+`VESTRA-AUDIO-CLIP-SOURCE` identifies requested samples unavailable during actual
+reading, with the clip in `related_id`. The failure occurs before publication and
+preserves prior output. `VESTRA-ASSET-AUDIO` also covers missing/unusable source
+sample counters. Strict preflight retains full-source decoder diagnostics.
 
 ## Diagnostics, logs and progress
 

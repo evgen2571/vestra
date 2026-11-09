@@ -417,6 +417,10 @@ impl Editor {
             },
             cancelled,
             options.strict_audio,
+            matches!(
+                &options.target,
+                PreflightTarget::Preparation { .. } | PreflightTarget::Render { .. }
+            ),
         );
         if cancelled.load(Ordering::Relaxed) {
             return InternalPreflightOutcome {
@@ -586,8 +590,7 @@ impl Editor {
                     request.backend,
                     request.output.clone(),
                     request.overwrite,
-                )
-                .with_strict_audio(true),
+                ),
                 request.backend,
                 request.preview,
             ),

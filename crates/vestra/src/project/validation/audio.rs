@@ -104,20 +104,22 @@ pub(crate) fn validate(
             if assets.get(&clip.asset) != Some(&AssetType::Audio) {
                 continue;
             }
-            let Some(&source_duration) = durations.get(&clip.asset) else {
+            let source_duration = durations.get(&clip.asset).copied();
+            let Some(trim_end) = clip.trim_end.or(source_duration) else {
                 continue;
             };
-            let trim_end = clip.trim_end.unwrap_or(source_duration);
-            let exceeds_source = match (
-                vestra_media::seconds_to_samples(clip.trim_start),
-                vestra_media::seconds_to_samples(trim_end),
-                vestra_media::seconds_to_samples(source_duration),
-            ) {
-                (Ok(start), Ok(end), Ok(source)) => {
-                    start >= source || end > source.saturating_add(1)
+            let exceeds_source = source_duration.is_some_and(|duration| {
+                match (
+                    vestra_media::seconds_to_samples(clip.trim_start),
+                    vestra_media::seconds_to_samples(trim_end),
+                    vestra_media::seconds_to_samples(duration),
+                ) {
+                    (Ok(start), Ok(end), Ok(source)) => {
+                        start >= source || end > source.saturating_add(1)
+                    }
+                    _ => true,
                 }
-                _ => true,
-            };
+            });
             if exceeds_source || clip.trim_start >= trim_end {
                 errors.push(Diagnostic::error(
                     "VESTRA-AUDIO-CLIP-SOURCE",
@@ -300,6 +302,29 @@ mod tests {
                 &mut errors,
             );
             assert_eq!(errors.is_empty(), valid, "trim_end={end}: {errors:?}");
+        }
+    }
+
+    #[test]
+    fn explicit_selection_validates_effect_duration_and_fades_without_source_duration() {
+        for (fade_out, valid) in [(0.2, true), (0.6, false)] {
+            let audio: AudioTimeline = serde_json::from_value(serde_json::json!({
+                "tracks":[{"id":"track","clips":[{
+                    "id":"clip","asset":"tone","start":2,"trim_start":0.5,"trim_end":1.5,
+                    "fade_out":fade_out,
+                    "effects":[{"id":"speed","type":"playback_speed","rate":2}]
+                }]}]
+            }))
+            .expect("audio");
+            let mut errors = Vec::new();
+            let end = validate(
+                Some(&audio),
+                &BTreeMap::from([("tone".to_owned(), AssetType::Audio)]),
+                &BTreeMap::new(),
+                &mut errors,
+            );
+            assert_eq!(errors.is_empty(), valid, "{errors:?}");
+            assert_eq!(end, valid.then_some(2.5));
         }
     }
 

@@ -5,6 +5,30 @@ use vestra_media::OutputTarget;
 
 use super::types::{RenderError, RenderFailureContext, RenderFailureStage};
 
+pub(super) fn audio_source_diagnostic(error: &vestra_media::MediaError) -> Option<Diagnostic> {
+    match error {
+        vestra_media::MediaError::AudioSourceBounds { clip_id, .. } => Some(
+            Diagnostic::error(
+                "VESTRA-AUDIO-CLIP-SOURCE",
+                crate::Category::Media,
+                error.to_string(),
+                "/audio",
+            )
+            .with_related_id(clip_id),
+        ),
+        vestra_media::MediaError::AudioVerification { clip_id } => Some(
+            Diagnostic::error(
+                "VESTRA-ASSET-AUDIO",
+                crate::Category::Media,
+                error.to_string(),
+                "/audio",
+            )
+            .with_related_id(clip_id),
+        ),
+        _ => None,
+    }
+}
+
 pub(super) fn cleanup_error(
     output: &OutputTarget,
     plan: &RenderPlan,

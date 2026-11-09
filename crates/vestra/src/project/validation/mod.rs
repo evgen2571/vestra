@@ -20,6 +20,7 @@ pub(crate) fn preflight(
     options: &ValidationOptions,
     cancelled: &AtomicBool,
     strict_audio: bool,
+    execution_audio: bool,
 ) -> PreflightOutcome {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -37,6 +38,7 @@ pub(crate) fn preflight(
         &mut errors,
         cancelled,
         strict_audio,
+        execution_audio,
         canonical.audio.as_ref(),
     );
     if cancelled.load(Ordering::Relaxed) {
@@ -52,21 +54,25 @@ pub(crate) fn preflight(
             resolved: None,
         };
     }
-    for (index, asset) in canonical.assets.iter().enumerate() {
-        if assets.audio_duration_sources.get(&asset.id)
-            == Some(&vestra_media::AudioDurationSource::Reported)
-        {
-            warnings.push(Diagnostic::warning(
-                "VESTRA-AUDIO-DURATION-REPORTED",
-                format!("audio asset '{}' uses reported duration; use strict_audio to verify decoded samples and integrity", asset.id),
-                format!("/assets/{index}/source"),
-            ).with_related_id(&asset.id));
-        }
-    }
+    let exact_audio_durations;
+    let checked_audio_durations = if execution_audio {
+        exact_audio_durations = assets
+            .audio_durations
+            .iter()
+            .filter(|(id, _)| {
+                assets.audio_duration_sources.get(*id)
+                    == Some(&vestra_media::AudioDurationSource::Decoded)
+            })
+            .map(|(id, duration)| (id.clone(), *duration))
+            .collect();
+        &exact_audio_durations
+    } else {
+        &assets.audio_durations
+    };
     let audio_end = audio::validate(
         canonical.audio.as_ref(),
         &assets.kinds,
-        &assets.audio_durations,
+        checked_audio_durations,
         &mut errors,
     );
     validate_video_layers(
@@ -273,7 +279,75 @@ mod tests {
             &ValidationOptions { limits },
             &super::AtomicBool::new(false),
             true,
+            false,
         )
+    }
+
+    #[test]
+    fn metadata_inspection_preserves_provenance_without_warning() {
+        let project = audio_project(0.0, "8/1");
+        let validation = crate::Editor::new().validate(&project);
+        let outcome = preflight(
+            &project,
+            &validation,
+            &ValidationOptions::default(),
+            &super::AtomicBool::new(false),
+            false,
+            false,
+        );
+        assert!(outcome.diagnostics.is_empty(), "{:?}", outcome.diagnostics);
+        let resolved = outcome.resolved.expect("inspection");
+        assert_eq!(
+            resolved.audio_duration_sources["tone"],
+            vestra_media::AudioDurationSource::Reported
+        );
+    }
+
+    #[test]
+    fn execution_defers_reported_source_bounds_but_strict_keeps_checks() {
+        let source_duration = vestra_media::inspect_audio(std::path::Path::new(&tone_path()))
+            .expect("tone metadata")
+            .duration_seconds;
+        let project = Project::from_value(
+            json!({
+                "schema_version":1,
+                "output":{"path":"out.mp4","width":2,"height":2,"frame_rate":"8/1",
+                    "background":"#000000","quality":"preview","audio":true,
+                    "duration_mode":"explicit","duration":0.25},
+                "assets":[{"id":"tone","type":"audio","source":tone_path()}],
+                "visual":{"clips":[]},
+                "audio":{"tracks":[{"id":"track","clips":[{
+                    "id":"clip","asset":"tone","start":0,"trim_start":0,
+                    "trim_end":source_duration+0.1
+                }]}]}
+            }),
+            ".",
+        )
+        .expect("project");
+        let validation = crate::Editor::new().validate(&project);
+        for strict in [false, true] {
+            let outcome = preflight(
+                &project,
+                &validation,
+                &ValidationOptions::default(),
+                &super::AtomicBool::new(false),
+                strict,
+                true,
+            );
+            assert_eq!(
+                outcome.resolved.is_some(),
+                !strict,
+                "{:?}",
+                outcome.diagnostics
+            );
+            assert_eq!(
+                outcome
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == "VESTRA-AUDIO-CLIP-SOURCE"),
+                strict
+            );
+        }
     }
 
     #[test]

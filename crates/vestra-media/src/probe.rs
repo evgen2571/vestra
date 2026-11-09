@@ -72,7 +72,25 @@ pub fn inspect_audio_cancellable(
     path: &Path,
     cancelled: &AtomicBool,
 ) -> Result<AudioMediaInfo, MediaError> {
-    probe_audio(path, cancelled, true)
+    probe_audio(path, cancelled, AudioProbeMode::MetadataFirst)?
+        .ok_or(MediaError::MissingAudioDuration)
+}
+
+/// Read first-stream metadata without scanning when duration is unavailable.
+/// Bounded execution verifies the selected samples in its actual audio reader.
+pub fn inspect_audio_metadata_cancellable(
+    path: &Path,
+    cancelled: &AtomicBool,
+) -> Result<Option<f64>, MediaError> {
+    probe_audio(path, cancelled, AudioProbeMode::MetadataOnly)
+        .map(|info| info.map(|info| info.duration_seconds))
+}
+
+#[derive(Clone, Copy)]
+enum AudioProbeMode {
+    MetadataOnly,
+    MetadataFirst,
+    Decode,
 }
 
 /// Measure the first audio stream's decoded sample duration, as used by the mixer.
@@ -86,22 +104,24 @@ pub fn probe_audio_duration_cancellable(
     path: &Path,
     cancelled: &AtomicBool,
 ) -> Result<f64, MediaError> {
-    probe_audio(path, cancelled, false).map(|info| info.duration_seconds)
+    probe_audio(path, cancelled, AudioProbeMode::Decode)?
+        .map(|info| info.duration_seconds)
+        .ok_or(MediaError::MissingAudioDuration)
 }
 
 fn probe_audio(
     path: &Path,
     cancelled: &AtomicBool,
-    metadata_first: bool,
-) -> Result<AudioMediaInfo, MediaError> {
+    mode: AudioProbeMode,
+) -> Result<Option<AudioMediaInfo>, MediaError> {
     let started = Instant::now();
-    let info = read_audio(path, cancelled, metadata_first)?;
+    let info = read_audio(path, cancelled, mode)?;
     tracing::debug!(
         target: "vestra.media.audio",
         asset_path = %path.display(),
         asset_type = "audio",
-        duration_ms = (info.duration_seconds * 1_000.0) as u64,
-        duration_source = ?info.duration_source,
+        duration_ms = ?info.map(|info| (info.duration_seconds * 1_000.0) as u64),
+        duration_source = ?info.map(|info| info.duration_source),
         elapsed_ms = crate::trace_milliseconds(started.elapsed()),
         "audio media probe completed"
     );
@@ -111,8 +131,8 @@ fn probe_audio(
 fn read_audio(
     path: &Path,
     cancelled: &AtomicBool,
-    metadata_first: bool,
-) -> Result<AudioMediaInfo, MediaError> {
+    mode: AudioProbeMode,
+) -> Result<Option<AudioMediaInfo>, MediaError> {
     let check_cancelled = || {
         if cancelled.load(Ordering::Relaxed) {
             Err(MediaError::AudioProbe {
@@ -149,7 +169,7 @@ fn read_audio(
     check_cancelled()?;
     let time_base = stream.time_base();
     let reported_duration = stream.duration() as f64 * f64::from(time_base);
-    if metadata_first
+    if !matches!(mode, AudioProbeMode::Decode)
         && stream.duration() > 0
         && time_base.numerator() > 0
         && time_base.denominator() > 0
@@ -157,10 +177,13 @@ fn read_audio(
         && reported_duration.is_finite()
         && reported_duration > 0.0
     {
-        return Ok(AudioMediaInfo {
+        return Ok(Some(AudioMediaInfo {
             duration_seconds: reported_duration,
             duration_source: AudioDurationSource::Reported,
-        });
+        }));
+    }
+    if matches!(mode, AudioProbeMode::MetadataOnly) {
+        return Ok(None);
     }
     let mut frame = ffmpeg::frame::Audio::empty();
     let mut sample_rate = None;
@@ -216,8 +239,8 @@ fn read_audio(
     let rate = sample_rate
         .filter(|_| samples > 0)
         .ok_or(MediaError::MissingAudioDuration)?;
-    Ok(AudioMediaInfo {
+    Ok(Some(AudioMediaInfo {
         duration_seconds: samples as f64 / f64::from(rate),
         duration_source: AudioDurationSource::Decoded,
-    })
+    }))
 }

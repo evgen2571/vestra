@@ -167,6 +167,14 @@ fn missing_stream_duration_and_nonzero_timestamps_do_not_inflate_audio() {
     assert_eq!(stream.time_base(), ffmpeg_next::Rational(1, 1000));
     assert_eq!(stream.start_time(), 5000);
     assert_duration(&path, 0.375, 1e-6);
+    assert_eq!(
+        super::inspect_audio_metadata_cancellable(
+            &path,
+            &std::sync::atomic::AtomicBool::new(false)
+        )
+        .expect("bounded metadata inspection"),
+        None,
+    );
     let info = inspect_audio(&path).expect("missing metadata falls back to decoding");
     assert_eq!(info.duration_source, AudioDurationSource::Decoded);
     assert!((info.duration_seconds - 0.375).abs() < 1e-6);

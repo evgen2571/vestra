@@ -1,6 +1,6 @@
 use std::{
     io::Read,
-    process::{ChildStderr, Command, Stdio},
+    process::{Command, Stdio},
     thread,
 };
 
@@ -9,6 +9,7 @@ use vestra_core::plan_audio::{AudioMixPlan, MASTER_AUDIO_SAMPLE_RATE};
 use crate::{
     MediaError,
     audio_graph::{self, AudioGraphCompileOptions},
+    audio_verification::collect_audio_stderr,
     ffmpeg::{
         FILTERGRAPH_SCRIPT_THRESHOLD_BYTES, TemporaryFiltergraph, enforce_audio_source_limit,
     },
@@ -20,7 +21,6 @@ use super::CHANNELS;
 use super::record_master_decode_invocation;
 
 const PCM_READ_BYTES: usize = 32 * 1024;
-const STDERR_LIMIT_BYTES: usize = 64 * 1024;
 
 /// Fixed format of the timeline Master stream supplied to analysis processors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,9 +71,10 @@ pub fn consume_master_pcm(
     };
 
     let mut command = Command::new("ffmpeg");
-    command.args(["-hide_banner", "-loglevel", "error"]);
+    command.env("AV_LOG_FORCE_NOCOLOR", "1");
+    command.args(["-hide_banner", "-loglevel", "info", "-nostats", "-xerror"]);
     for path in &graph.input_paths {
-        command.arg("-i").arg(path);
+        command.args(["-err_detect", "explode", "-i"]).arg(path);
     }
     let filtergraph_file = (graph.filter_complex.len() > FILTERGRAPH_SCRIPT_THRESHOLD_BYTES)
         .then(|| TemporaryFiltergraph::create_in(&std::env::temp_dir(), &graph.filter_complex))
@@ -99,7 +100,8 @@ pub fn consume_master_pcm(
         Some(stderr) => stderr,
         None => return reap_failed_child(child, MediaError::MissingErrorOutput),
     };
-    let stderr_reader = thread::spawn(move || collect_bounded_stderr(stderr));
+    let source_count = graph.input_paths.len();
+    let stderr_reader = thread::spawn(move || collect_audio_stderr(stderr, source_count));
     let mut stdout = match child.stdout.take() {
         Some(stdout) => stdout,
         None => {
@@ -138,10 +140,11 @@ pub fn consume_master_pcm(
         return Err(MediaError::ProcessFailed {
             program: "ffmpeg",
             status,
-            stderr,
+            stderr: stderr.stderr,
         });
     }
     result?;
+    stderr.verify(&graph.source_requirements)?;
     tracing::debug!(
         target: "vestra.media.audio",
         asset_type = "audio",
@@ -270,23 +273,6 @@ impl PcmDecoder {
             ))
         }
     }
-}
-
-fn collect_bounded_stderr(stderr: ChildStderr) -> String {
-    let mut reader = std::io::BufReader::new(stderr);
-    let mut bytes = Vec::new();
-    let mut buffer = [0_u8; 4_096];
-    while let Ok(read) = reader.read(&mut buffer) {
-        if read == 0 {
-            break;
-        }
-        bytes.extend_from_slice(&buffer[..read]);
-        if bytes.len() > STDERR_LIMIT_BYTES {
-            let excess = bytes.len() - STDERR_LIMIT_BYTES;
-            bytes.drain(..excess);
-        }
-    }
-    String::from_utf8_lossy(&bytes).trim().to_owned()
 }
 
 #[cfg(test)]

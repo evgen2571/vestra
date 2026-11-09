@@ -51,7 +51,6 @@ pub(crate) struct PreparedRender {
     preparation_warnings: Vec<Diagnostic>,
     preparation_timings: PreparationTimings,
     plan_compile_elapsed_ms: u128,
-    verify_audio: bool,
 }
 
 /// Result fields retained from validation. Keeping this narrow avoids cloning
@@ -175,57 +174,6 @@ impl PreparedRender {
     }
 }
 
-fn verify_audio_sources(
-    mix: &vestra_core::plan_audio::AudioMixPlan,
-    cancelled: &AtomicBool,
-) -> Result<(), Diagnostic> {
-    let mut durations = std::collections::BTreeMap::new();
-    for track in &mix.tracks {
-        if track.mute || track.gain == 0.0 {
-            continue;
-        }
-        for clip in &track.clips {
-            if clip.mute || clip.gain == 0.0 {
-                continue;
-            }
-            let duration = durations.entry(&clip.path).or_insert_with(|| {
-                vestra_media::probe_audio_duration_cancellable(&clip.path, cancelled)
-            });
-            if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-                return Err(Diagnostic::error(
-                    "VESTRA-CANCELLED",
-                    crate::Category::Cancellation,
-                    "render cancelled",
-                    "",
-                ));
-            }
-            let duration = duration.as_ref().map_err(|error| {
-                Diagnostic::error(
-                    "VESTRA-ASSET-AUDIO",
-                    crate::Category::Media,
-                    format!("invalid audio source '{}': {error}", clip.path.display()),
-                    "/audio",
-                )
-                .with_related_id(&clip.id)
-            })?;
-            // Match mixer rounding; a single sample allows resampling edge rounding.
-            let required =
-                vestra_media::seconds_to_samples(clip.trim_start + clip.selected_duration);
-            let available = vestra_media::seconds_to_samples(*duration);
-            let start = vestra_media::seconds_to_samples(clip.trim_start);
-            if !matches!((start, required, available), (Ok(start), Ok(required), Ok(available)) if start < available && required <= available.saturating_add(1))
-            {
-                return Err(Diagnostic::error(
-                    "VESTRA-AUDIO-CLIP-SOURCE", crate::Category::Media,
-                    format!("audio clip '{}' exceeds decoded source duration ({duration:.6}s); prepare with strict_audio to resolve exact duration", clip.id),
-                    "/audio",
-                ).with_related_id(&clip.id));
-            }
-        }
-    }
-    Ok(())
-}
-
 pub(crate) fn prepare_project(
     validated: ValidatedProject,
     request: &RenderRequest,
@@ -259,22 +207,6 @@ pub(crate) fn prepare_project(
         total_frames = validated.frame_count,
         "render plan compilation completed"
     );
-    let verify_audio = validated
-        .audio_duration_sources
-        .values()
-        .any(|source| *source == vestra_media::AudioDurationSource::Reported);
-    if verify_audio && !plan.audio_analysis_requirements.is_empty() {
-        verify_audio_sources(&plan.audio_mix, &request.cancelled).map_err(|diagnostic| {
-            ApplicationRenderError::Plan {
-                diagnostic,
-                plan_compile_elapsed_ms,
-            }
-        })?;
-    }
-    // Analysis has already verified sources; otherwise defer until audio is encoded.
-    let verify_audio = verify_audio
-        && plan.audio_analysis_requirements.is_empty()
-        && plan.encoder.audio_mix.is_some();
     let prepared = prepare_for_video(
         plan,
         request.backend_preference,
@@ -317,7 +249,6 @@ pub(crate) fn prepare_project(
     let renderer_preparation_timings = prepared.preparation_timings();
     let audio_analysis_ms = prepared.audio_analysis_duration().as_millis();
     Ok(PreparedRender {
-        verify_audio,
         metadata,
         prepared,
         preparation_warnings,
@@ -336,19 +267,6 @@ pub(crate) fn render_prepared_project(
     request: RenderRequest,
     lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, ApplicationRenderError> {
-    if prepared.verify_audio {
-        verify_audio_sources(prepared.prepared.audio_mix(), &request.cancelled).map_err(
-            |diagnostic| ApplicationRenderError::Render {
-                error: Box::new(crate::render::engine_audio_error(
-                    &prepared.prepared,
-                    diagnostic,
-                )),
-                plan_compile_elapsed_ms: prepared.plan_compile_elapsed_ms,
-            },
-        )?;
-        // Prepared sources must stay unchanged, just as after strict preparation.
-        prepared.verify_audio = false;
-    }
     let summary = render_prepared_with_lifecycle(
         &mut prepared.prepared,
         &RenderOptions {

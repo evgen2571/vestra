@@ -25,6 +25,7 @@ pub(crate) fn validate(
     errors: &mut Vec<Diagnostic>,
     cancelled: &AtomicBool,
     strict_audio: bool,
+    execution_audio: bool,
     audio: Option<&crate::project::AudioTimeline>,
 ) -> ValidatedAssets {
     let mut paths = BTreeMap::new();
@@ -56,20 +57,55 @@ pub(crate) fn validate(
                         }
                     }
                     AssetType::Audio => {
+                        let needs_exact = strict_audio
+                            || (execution_audio
+                                && audio
+                                    .into_iter()
+                                    .flat_map(|timeline| &timeline.tracks)
+                                    .flat_map(|track| &track.clips)
+                                    .any(|clip| clip.asset == asset.id && clip.trim_end.is_none()));
+                        let decode_audio = || {
+                            probe_audio_duration_cancellable(&resolved, cancelled).map(
+                                |duration_seconds| {
+                                    Some(vestra_media::AudioMediaInfo {
+                                        duration_seconds,
+                                        duration_source: vestra_media::AudioDurationSource::Decoded,
+                                    })
+                                },
+                            )
+                        };
                         let result = audio_probes.entry(resolved.clone()).or_insert_with(|| {
-                            let info = if strict_audio {
-                                vestra_media::AudioMediaInfo {
-                                    duration_seconds: probe_audio_duration_cancellable(
-                                        &resolved, cancelled,
-                                    )?,
-                                    duration_source: vestra_media::AudioDurationSource::Decoded,
-                                }
+                            if needs_exact {
+                                decode_audio()
+                            } else if execution_audio {
+                                vestra_media::inspect_audio_metadata_cancellable(
+                                    &resolved, cancelled,
+                                )
+                                .map(|duration| {
+                                    duration.map(|duration_seconds| vestra_media::AudioMediaInfo {
+                                        duration_seconds,
+                                        duration_source:
+                                            vestra_media::AudioDurationSource::Reported,
+                                    })
+                                })
                             } else {
-                                vestra_media::inspect_audio_cancellable(&resolved, cancelled)?
-                            };
-                            Ok::<_, vestra_media::MediaError>(info)
+                                vestra_media::inspect_audio_cancellable(&resolved, cancelled)
+                                    .map(Some)
+                            }
                         });
-                        if let Ok(info) = result {
+                        if needs_exact
+                            && result.as_ref().is_ok_and(|info| {
+                                info.is_none_or(|info| {
+                                    info.duration_source
+                                        != vestra_media::AudioDurationSource::Decoded
+                                })
+                            })
+                        {
+                            *result = decode_audio();
+                        }
+                        if let Ok(Some(info)) = result
+                            && !execution_audio
+                        {
                             let exceeds_reported = audio
                                 .into_iter()
                                 .flat_map(|timeline| &timeline.tracks)
@@ -84,11 +120,7 @@ pub(crate) fn validate(
                             if info.duration_source == vestra_media::AudioDurationSource::Reported
                                 && exceeds_reported
                             {
-                                *result = probe_audio_duration_cancellable(&resolved, cancelled)
-                                    .map(|duration_seconds| vestra_media::AudioMediaInfo {
-                                        duration_seconds,
-                                        duration_source: vestra_media::AudioDurationSource::Decoded,
-                                    });
+                                *result = decode_audio();
                             }
                         }
                     }
@@ -155,10 +187,11 @@ pub(crate) fn validate(
             continue;
         };
         match result {
-            Ok(info) => {
+            Ok(Some(info)) => {
                 audio_durations.insert(asset.id.clone(), info.duration_seconds);
                 audio_duration_sources.insert(asset.id.clone(), info.duration_source);
             }
+            Ok(None) => {}
             Err(error) => errors.push(
                 Diagnostic::error(
                     "VESTRA-ASSET-AUDIO",
@@ -216,6 +249,8 @@ mod tests {
         .expect("assets");
         let probes = Arc::new(AtomicUsize::new(0));
         let writer_probes = Arc::clone(&probes);
+        // Keep parallel callers from caching this scoped subscriber's callsite as disabled.
+        let _other_dispatch = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
         let subscriber = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::DEBUG)
             .with_writer(move || CountAudioProbes(Arc::clone(&writer_probes)))
@@ -230,6 +265,7 @@ mod tests {
                 )),
                 &mut errors,
                 &AtomicBool::new(false),
+                false,
                 false,
                 None,
             )
@@ -260,6 +296,7 @@ mod tests {
             directory.path(),
             &mut errors,
             &AtomicBool::new(false),
+            false,
             false,
             None,
         );
@@ -314,13 +351,54 @@ mod metadata_bounds_tests {
         ]}]}))
         .expect("audio");
         let mut errors = Vec::new();
+        let bounded = validate(
+            &assets,
+            directory.path(),
+            &mut errors,
+            &AtomicBool::new(false),
+            false,
+            true,
+            Some(&audio),
+        );
+        assert!(errors.is_empty(), "{errors:?}");
+        for id in ["first", "second"] {
+            assert_eq!(bounded.audio_durations[id], 0.125);
+            assert_eq!(
+                bounded.audio_duration_sources[id],
+                vestra_media::AudioDurationSource::Reported
+            );
+        }
         let validated = validate(
             &assets,
             directory.path(),
             &mut errors,
             &AtomicBool::new(false),
             false,
+            false,
             Some(&audio),
+        );
+        assert!(errors.is_empty(), "{errors:?}");
+        for id in ["first", "second"] {
+            assert_eq!(validated.audio_durations[id], 0.375);
+            assert_eq!(
+                validated.audio_duration_sources[id],
+                vestra_media::AudioDurationSource::Decoded
+            );
+        }
+        let open_ended = serde_json::from_value(serde_json::json!({"tracks":[{
+            "id":"track", "mute":true, "clips":[
+                {"id":"clip","asset":"second","start":0,"trim_start":0}
+            ]
+        }]}))
+        .expect("open-ended audio");
+        let validated = validate(
+            &assets,
+            directory.path(),
+            &mut errors,
+            &AtomicBool::new(false),
+            false,
+            true,
+            Some(&open_ended),
         );
         assert!(errors.is_empty(), "{errors:?}");
         for id in ["first", "second"] {
@@ -336,6 +414,7 @@ mod metadata_bounds_tests {
             &mut errors,
             &AtomicBool::new(false),
             false,
+            false,
             None,
         );
         assert_eq!(validated.audio_durations["first"], 0.125);
@@ -350,9 +429,69 @@ mod metadata_bounds_tests {
             &mut errors,
             &AtomicBool::new(false),
             false,
+            false,
             None,
         );
         assert!(validated.audio_durations.is_empty());
         assert_eq!(errors.len(), 2);
+    }
+
+    #[test]
+    fn bounded_execution_does_not_invent_duration_when_metadata_is_absent() {
+        let directory = tempfile::tempdir().expect("directory");
+        let path = directory.path().join("source.mka");
+        let output = std::process::Command::new("ffmpeg")
+            .args([
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=sample_rate=48000:duration=0.375",
+                "-af",
+                "asetpts=PTS+5/TB",
+                "-c:a",
+                "pcm_s16le",
+            ])
+            .arg(&path)
+            .output()
+            .expect("encode fixture");
+        assert!(output.status.success());
+        let assets: Vec<Asset> = serde_json::from_value(serde_json::json!([
+            {"id":"tone","type":"audio","source":"source.mka"}
+        ]))
+        .expect("assets");
+        let audio = serde_json::from_value(serde_json::json!({"tracks":[{"id":"track","clips":[
+            {"id":"clip","asset":"tone","start":0,"trim_start":0,"trim_end":0.25}
+        ]}]}))
+        .expect("audio");
+        let mut errors = Vec::new();
+        let bounded = validate(
+            &assets,
+            directory.path(),
+            &mut errors,
+            &AtomicBool::new(false),
+            false,
+            true,
+            Some(&audio),
+        );
+        assert!(errors.is_empty(), "{errors:?}");
+        assert!(bounded.audio_durations.is_empty());
+        assert!(bounded.audio_duration_sources.is_empty());
+        let strict = validate(
+            &assets,
+            directory.path(),
+            &mut errors,
+            &AtomicBool::new(false),
+            true,
+            true,
+            Some(&audio),
+        );
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(strict.audio_durations["tone"], 0.375);
+        assert_eq!(
+            strict.audio_duration_sources["tone"],
+            vestra_media::AudioDurationSource::Decoded
+        );
     }
 }

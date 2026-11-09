@@ -253,14 +253,17 @@ pub fn compile(
                 .clips
                 .iter()
                 .map(|clip| {
-                    let duration = *audio_durations.get(&clip.asset).ok_or_else(|| {
-                        Diagnostic::error(
-                            "VESTRA-PLAN-AUDIO",
-                            Category::Internal,
-                            "validated audio duration is missing",
-                            "",
-                        )
-                    })?;
+                    let trim_end = clip
+                        .trim_end
+                        .or_else(|| audio_durations.get(&clip.asset).copied())
+                        .ok_or_else(|| {
+                            Diagnostic::error(
+                                "VESTRA-PLAN-AUDIO",
+                                Category::Internal,
+                                "validated audio duration is missing",
+                                "",
+                            )
+                        })?;
                     let path = asset_paths.get(&clip.asset).ok_or_else(|| {
                         Diagnostic::error(
                             "VESTRA-PLAN-AUDIO",
@@ -269,7 +272,7 @@ pub fn compile(
                             "",
                         )
                     })?;
-                    let selected_duration = clip.trim_end.unwrap_or(duration) - clip.trim_start;
+                    let selected_duration = trim_end - clip.trim_start;
                     let selected_samples =
                         seconds_to_samples(selected_duration).ok_or_else(|| {
                             Diagnostic::error(
@@ -553,6 +556,28 @@ mod tests {
     #[test]
     fn empty_mix_has_no_authored_material() {
         assert!(!super::AudioMixPlan::default().has_authored_material());
+    }
+
+    #[test]
+    fn explicit_trim_compiles_without_source_duration_but_omitted_end_requires_it() {
+        let mut timeline = AudioTimeline {
+            effects: Vec::new(),
+            tracks: vec![AudioTrack {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                effects: Vec::new(),
+                clips: vec![clip("clip", "tone", 0.0)],
+            }],
+        };
+        let paths = BTreeMap::from([("tone".to_owned(), PathBuf::from("tone.wav"))]);
+        let durations = BTreeMap::new();
+        let plan = compile(Some(&timeline), &paths, &durations).expect("bounded plan");
+        assert_eq!(plan.tracks[0].clips[0].selected_duration, 1.0);
+        assert_eq!(plan.tracks[0].clips[0].processed_duration, 1.0);
+        timeline.tracks[0].clips[0].trim_end = None;
+        let error = compile(Some(&timeline), &paths, &durations).expect_err("source end needed");
+        assert_eq!(error.code, "VESTRA-PLAN-AUDIO");
     }
 
     #[test]

@@ -321,7 +321,7 @@ def test_strict_audio_resolves_decoded_duration_across_python_surfaces(tmp_path:
     assert decoded.audio.tracks[0].clips[0].duration_source == "decoded"
     with pytest.raises(AttributeError):
         reported.audio.tracks[0].clips[0].duration_source = "decoded"  # type: ignore[misc]
-    assert authored.prepare(backend="cpu").preparation_report.duration_seconds == 10
+    assert authored.prepare(backend="cpu").preparation_report.duration_seconds == 0.375
     assert authored.prepare(backend="cpu", strict_audio=True).preparation_report.duration_seconds == 0.375
 
     clip.trim_end = 0.75

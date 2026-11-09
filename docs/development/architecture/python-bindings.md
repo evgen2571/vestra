@@ -12,6 +12,15 @@ high-level Python editing graph
 
 ## Native operations and prepared state
 
+Python resolves FFmpeg lazily in `vestra._ffmpeg` using the automatically
+installed `imageio-ffmpeg` dependency or `IMAGEIO_FFMPEG_EXE`. The binding passes
+an absolute path through an SDK editor clone; preparation retains it for master
+analysis and every raw/static video operation. No environment mutation or
+process-wide native configuration is used. Import, semantic validation and media
+inspection continue to use only the native libraries. Rust/CLI editors retain
+their default PATH lookup unless explicitly configured with
+`Editor::with_ffmpeg_executable`.
+
 `vestra-python` is a thin PyO3 boundary over `vestra`. It converts paths, enums, JSON-like mappings, diagnostics, reports, frames, events and errors. `ProjectSnapshot` is immutable and supports loading/serialization. `Editor` owns semantic validation, preflight, inspection, preparation and one-shot render. `PreparedProject` keeps prepared native resources and exposes frame and video methods.
 
 ## Progress, logging and callback failures

@@ -115,8 +115,8 @@ or GPUs. Native Windows/macOS PR smoke checks run for non-documentation changes;
 full artifact checks run for release/packaging changes and manual CI runs.
 
 Wheels and CLI executables statically link a bundled LGPL FFmpeg build for media
-probing and video decoding. Encoding and audio processing still need `ffmpeg`
-on PATH; that executable is not bundled. `ffprobe` is optional for independent
+probing and video decoding. Python encoding and audio processing use the executable installed by the
+`imageio-ffmpeg>=0.6,<0.7` dependency. CLI encoding still needs `ffmpeg` on PATH. `ffprobe` is optional for independent
 media verification. Source builds need Rust, a C toolchain, libclang, `make`,
 Git and NASM. The vendored `ffmpeg-sys-next` build recipe removes `-march=native`
 and fixes MSVC dependency parsing/archive response files.
@@ -166,3 +166,37 @@ Upstream references: [FFmpeg licensing](https://ffmpeg.org/legal.html),
 [Maturin stable ABI](https://pyo3.rs/v0.29.0/building-and-distribution#py_limited_apiabi3),
 [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/)
 and [GitHub release uploads](https://cli.github.com/manual/gh_release_upload).
+
+## Python executable dependency
+
+Release-wheel smoke tests run on every target and Python version above, before
+installing CLI runtime tools. The verifier imports the installed extension in a
+child process with an empty PATH, no FFmpeg override and no development library
+search paths. It checks audio/video encoding, AAC decoding and tone timing,
+native media loading, master analysis, both encoder paths, an explicit executable
+with spaces in its path and prepared-session selection retention. FFprobe is not
+used. Codec failures fail the artifact gate rather than becoming support claims.
+
+imageio-ffmpeg 0.6.0 publishes wheels for all five Vestra targets. Its compressed
+wheel adds approximately 29.5 MB on Linux x86_64, 25.6 MB on Linux ARM64, 24.9 MB
+on macOS Intel, 21.1 MB on macOS ARM64 and 31.2 MB on Windows x64 (decimal MB).
+The Linux x86_64 executable occupies about 79.8 MB installed. The Vestra wheel
+does not contain a second copy; normal dependency resolution downloads it once.
+The local NixOS x86_64 Vestra wheel measured 21.9 MB; portable release sizes vary
+by target and native build configuration and are recorded in the release manifest.
+
+The dependency's Python wrapper is BSD-2-Clause; its FFmpeg executables include
+GPL codecs such as libx264 and have their own redistribution terms. The Linux
+x86_64 0.6.0 executable reports FFmpeg 7.0.2 and GPLv3-or-later. Inspect each
+platform's `-version`, `-L` and wheel notices when updating the dependency;
+The smoke logs record these outputs and installed executable sizes for every
+target. FFmpeg versions and enabled components differ by target. Review source and
+redistribution obligations if mirroring or repackaging dependency wheels. This
+executable is separate from Vestra's statically linked LGPL build and its source
+archives; those existing obligations still apply. See
+[third-party notices](https://github.com/evgen2571/vestra/blob/develop/THIRD_PARTY_NOTICES.md) and the
+[imageio binary builds](https://github.com/imageio/imageio-binaries).
+
+See [NixOS troubleshooting](../troubleshooting/ffmpeg.md#nixos) for the separately
+checked executable and native-library boundary. A successful static FFmpeg run
+does not establish that a manylinux extension loads on an arbitrary NixOS host.

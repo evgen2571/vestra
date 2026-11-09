@@ -1,7 +1,8 @@
 # Install Vestra
 
 Install Vestra into a Python project with uv or pip. The Python wheel includes
-the native engine.
+the native engine, and the `imageio-ffmpeg` dependency supplies an FFmpeg executable.
+No separate FFmpeg or FFprobe installation is needed on the supported wheel targets.
 
 ## Install into a Python project with uv
 
@@ -30,20 +31,25 @@ Run the same quickstart with `python quickstart.py`. Wheel users do not need
 Rust, a C compiler or NASM. If no wheel matches your platform/interpreter,
 pip may attempt a source build, which needs the tools below.
 
-## Install the FFmpeg runtime
+## Choose a different FFmpeg executable
 
-Install FFmpeg with your platform's package manager. The `ffmpeg` executable
-must be available on `PATH` in the shell that runs Vestra for encoding and
-audio processing:
+Python uses the executable packaged by `imageio-ffmpeg`, even when a system
+FFmpeg is on `PATH`. To use your own build, set `IMAGEIO_FFMPEG_EXE` before
+preparing or rendering:
 
 ```bash
-ffmpeg -version
+export IMAGEIO_FFMPEG_EXE=/absolute/path/to/ffmpeg
 ```
 
-This executable is required even though wheels bundle the native FFmpeg
-libraries used for media probing and video decoding. A working Python import
-does not check it. `ffprobe` is optional for independent media verification;
-Vestra does not invoke it at runtime.
+In PowerShell, use `$env:IMAGEIO_FFMPEG_EXE = 'C:\tools\ffmpeg.exe'`.
+Paths with spaces, relative paths and command names on `PATH` are accepted;
+an absolute path is recommended. Invalid overrides fail instead of silently
+selecting another executable. Prepared projects retain their selected path.
+Your build must support H.264 via `libx264`, AAC and Vestra's audio filters.
+
+The extension separately bundles native FFmpeg libraries for probing and video
+decoding. `ffprobe` is optional for independent media verification; Vestra does
+not invoke it at runtime. Import and semantic validation do not run FFmpeg.
 For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
 
 ## Supported Python versions and platforms
@@ -108,8 +114,8 @@ For contribution guidance, see [Contributing](https://github.com/evgen2571/vestr
 A source build compiles the Rust engine and bundled FFmpeg libraries. It needs
 Rust, Python 3.11–3.14, uv, a C compiler, libclang, `make`, `git`, and NASM,
 plus network access for the initial FFmpeg source fetch. The first build can
-take a while. Runtime encoding and audio processing still need the `ffmpeg`
-executable above.
+take a while. Python installs its FFmpeg executable dependency automatically;
+native CLI tests and developer media tools still use `ffmpeg` on `PATH`.
 
 Cargo builds the Rust workspace. Maturin, configured in `pyproject.toml`, builds
 the Python extension from `crates/vestra-python`; uv invokes it when installing

@@ -10,7 +10,10 @@ mod spectrum;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{BTreeMap, VecDeque};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    path::Path,
+};
 
 use vestra_core::{
     plan::{
@@ -74,15 +77,20 @@ pub fn analyze_master_audio(
     mix: &AudioMixPlan,
     project_duration: f64,
     maximum_audio_sources: usize,
+    executable: Option<&Path>,
 ) -> Result<BTreeMap<AudioAnalysisRequirement, PreparedScalarSignal>, MediaError> {
     if requirements.is_empty() {
         return Ok(BTreeMap::new());
     }
     let project_frames = audio_graph::seconds_to_samples(project_duration)?;
     let mut coordinator = MasterAnalysisCoordinator::new(requirements, project_frames)?;
-    consume_master_pcm(mix, project_duration, maximum_audio_sources, |samples| {
-        coordinator.push(samples)
-    })?;
+    pcm::consume_master_pcm_with_executable(
+        mix,
+        project_duration,
+        maximum_audio_sources,
+        executable,
+        |samples| coordinator.push(samples),
+    )?;
     coordinator.finish()
 }
 

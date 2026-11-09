@@ -93,7 +93,10 @@ pub(crate) fn render_prepared_with_lifecycle(
     {
         return render_static_ffmpeg(prepared, options, lifecycle);
     }
-    render_raw(prepared, options, lifecycle, FfmpegSink::start)
+    let executable = prepared.ffmpeg_executable.clone();
+    render_raw(prepared, options, lifecycle, |settings, output| {
+        FfmpegSink::start_with_executable(settings, output, executable.as_deref())
+    })
 }
 
 #[expect(
@@ -230,26 +233,30 @@ fn render_static_ffmpeg_inner(
         total_frames = plan.frame_count
     )
     .entered();
-    let mut encoder =
-        match FfmpegSink::start_static(&plan.encoder, &output.temporary_path, image_path.clone()) {
-            Ok(encoder) => encoder,
-            Err(error) => {
-                let _ = std::fs::remove_file(&image_path);
-                return Err(cleanup_error(
-                    &output,
-                    &plan,
-                    RenderFailureStage::EncoderStartup,
-                    0,
-                    None,
-                    Diagnostic::error(
-                        "VESTRA-BACKEND-START",
-                        Category::Backend,
-                        error.to_string(),
-                        "",
-                    ),
-                ));
-            }
-        };
+    let mut encoder = match FfmpegSink::start_static(
+        &plan.encoder,
+        &output.temporary_path,
+        image_path.clone(),
+        prepared.ffmpeg_executable.as_deref(),
+    ) {
+        Ok(encoder) => encoder,
+        Err(error) => {
+            let _ = std::fs::remove_file(&image_path);
+            return Err(cleanup_error(
+                &output,
+                &plan,
+                RenderFailureStage::EncoderStartup,
+                0,
+                None,
+                Diagnostic::error(
+                    "VESTRA-BACKEND-START",
+                    Category::Backend,
+                    error.to_string(),
+                    "",
+                ),
+            ));
+        }
+    };
     let finalize_started = Instant::now();
     let result = loop {
         if options.cancelled.load(std::sync::atomic::Ordering::Relaxed) {

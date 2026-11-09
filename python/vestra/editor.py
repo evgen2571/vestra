@@ -858,7 +858,8 @@ class Project:
         with ``overwrite=True``. ``preview=True`` caps the longest side at
         640 px. A progress bar is shown on interactive terminals unless
         ``show_progress=False``; ``on_progress`` receives ``RenderEvent``
-        values instead. Encoding and audio processing require ``ffmpeg`` on ``PATH``.
+        values instead. FFmpeg is installed automatically; set
+        ``IMAGEIO_FFMPEG_EXE`` to select a different executable.
         """
         request = _native.RenderRequest(
             _path(output, "output"),

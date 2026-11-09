@@ -154,15 +154,6 @@ jobs:
         with:
           name: release-${{ matrix.platform.target }}
           path: dist
-      - name: Install runtime tools (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
-      - name: Install runtime tools (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ffmpeg
-      - name: Install runtime tools (Windows)
-        if: runner.os == 'Windows'
-        run: choco install ffmpeg -y
       - name: Install the same wheel in a fresh environment and smoke test
         shell: bash
         env:
@@ -175,6 +166,15 @@ jobs:
           verifier="$PWD/scripts/verify-wheel.py"
           cd "$RUNNER_TEMP"
           "$python" "$verifier" --expected-version "$VERSION"
+      - name: Install CLI runtime tools (Linux)
+        if: matrix.python == '3.11' && runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+      - name: Install CLI runtime tools (macOS)
+        if: matrix.python == '3.11' && runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Install CLI runtime tools (Windows)
+        if: matrix.python == '3.11' && runner.os == 'Windows'
+        run: choco install ffmpeg -y
       - name: Smoke test extracted CLI without an installed SDK
         if: matrix.python == '3.11'
         shell: bash

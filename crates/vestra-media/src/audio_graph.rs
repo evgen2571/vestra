@@ -26,6 +26,23 @@ pub(crate) struct FfmpegAudioGraph {
     pub(crate) input_paths: Vec<PathBuf>,
     pub(crate) filter_complex: String,
     pub(crate) clip_branch_count: usize,
+    pub(crate) source_requirements: Vec<AudioSourceRequirement>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AudioSourceRequirement {
+    pub(crate) source_index: usize,
+    pub(crate) clip_id: String,
+    pub(crate) trim_start: u64,
+    pub(crate) required_end: u64,
+    pub(crate) selected_end: u64,
+    pub(crate) transformed_output: Option<AudioOutputRequirement>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AudioOutputRequirement {
+    pub(crate) clip_index: usize,
+    pub(crate) required_samples: u64,
 }
 
 /// Convert non-negative timeline seconds to the nearest 48 kHz sample. Ties
@@ -94,7 +111,7 @@ pub(crate) fn compile_with_options(
             if clip.mute || clip.gain == 0.0 {
                 continue;
             }
-            clips.push(graph.clip(clip)?);
+            clips.push(graph.clip(clip, project_samples)?);
         }
         let Some(track_mix) = graph.mix(&clips, "track") else {
             continue;
@@ -112,7 +129,7 @@ pub(crate) fn compile_with_options(
     })?;
     let master_effects = graph.apply_effect_chain(master, &mix.effects)?;
     graph.filters.push(format!(
-        "[{master_effects}]apad=whole_len={project_samples},atrim=end_sample={project_samples}[audio]"
+        "[{master_effects}]apad=whole_len={project_samples},atrim=end_sample={project_samples},asetpts=N/SR/TB[audio]"
     ));
     Ok(FfmpegAudioGraph {
         input_paths: graph
@@ -122,6 +139,7 @@ pub(crate) fn compile_with_options(
             .collect(),
         filter_complex: graph.filters.join(";"),
         clip_branch_count: graph.clip_branch_count,
+        source_requirements: graph.source_requirements,
     })
 }
 
@@ -132,6 +150,7 @@ struct GraphBuilder {
     filters: Vec<String>,
     label_number: usize,
     clip_branch_count: usize,
+    source_requirements: Vec<AudioSourceRequirement>,
 }
 
 struct Source {
@@ -150,6 +169,7 @@ impl GraphBuilder {
             filters: Vec::new(),
             label_number: 0,
             clip_branch_count: 0,
+            source_requirements: Vec::new(),
         }
     }
 
@@ -179,7 +199,7 @@ impl GraphBuilder {
             let input_index = self.first_audio_input_index + source_index;
             let normalized = self.label("source");
             self.filters.push(format!(
-                "[{input_index}:a]aformat=sample_rates={MIX_SAMPLE_RATE}:sample_fmts=fltp:channel_layouts=stereo[{normalized}]"
+                "[{input_index}:a]aformat=sample_rates={MIX_SAMPLE_RATE}:sample_fmts=fltp:channel_layouts=stereo,astats@vestra_source_{source_index}=metadata=0:reset=0:measure_perchannel=none:measure_overall=Number_of_samples[{normalized}]"
             ));
             let branch_count = self.sources[source_index].branch_count;
             let branches = if branch_count == 1 {
@@ -201,7 +221,7 @@ impl GraphBuilder {
         }
     }
 
-    fn next_branch(&mut self, path: &PathBuf) -> Result<String, MediaError> {
+    fn next_branch(&mut self, path: &PathBuf) -> Result<(usize, String), MediaError> {
         let source_index = *self.source_indexes.get(path).ok_or_else(|| {
             MediaError::InvalidAudioTiming("audio source was not registered".to_owned())
         })?;
@@ -217,11 +237,12 @@ impl GraphBuilder {
             })?;
         source.next_branch += 1;
         self.clip_branch_count += 1;
-        Ok(branch)
+        Ok((source_index, branch))
     }
 
-    fn clip(&mut self, clip: &AudioClipPlan) -> Result<String, MediaError> {
-        let source_branch = self.next_branch(&clip.path)?;
+    fn clip(&mut self, clip: &AudioClipPlan, project_samples: u64) -> Result<String, MediaError> {
+        let (source_index, source_branch) = self.next_branch(&clip.path)?;
+        let clip_index = self.clip_branch_count - 1;
         let trim_start = seconds_to_samples(clip.trim_start)?;
         let trim_end = seconds_to_samples(clip.trim_start + clip.selected_duration)?;
         let selected = trim_end.checked_sub(trim_start).ok_or_else(|| {
@@ -236,6 +257,37 @@ impl GraphBuilder {
         }
         let timeline_start = seconds_to_samples(clip.start)?;
         let processed = seconds_to_samples(clip.processed_duration)?;
+        let remaining = project_samples.saturating_sub(timeline_start);
+        let transforms_duration = clip.effects.has_duration_transform();
+        let visible = remaining.min(if transforms_duration {
+            processed
+        } else {
+            selected
+        });
+        if visible > 0 {
+            let required_selected = if !transforms_duration {
+                visible
+            } else if visible == processed {
+                selected
+            } else {
+                required_input_prefix(&clip.effects, selected, visible)?
+            };
+            self.source_requirements.push(AudioSourceRequirement {
+                source_index,
+                clip_id: clip.id.clone(),
+                trim_start,
+                required_end: trim_start.checked_add(required_selected).ok_or_else(|| {
+                    MediaError::InvalidAudioTiming(
+                        "required audio source prefix overflows".to_owned(),
+                    )
+                })?,
+                selected_end: trim_end,
+                transformed_output: transforms_duration.then_some(AudioOutputRequirement {
+                    clip_index,
+                    required_samples: visible,
+                }),
+            });
+        }
         // Semantic validation works in seconds. Independent edge rounding can
         // make two exactly-fitting fades exceed the selected interval by one
         // sample, so preserve fade-in first and shorten fade-out only enough
@@ -249,9 +301,13 @@ impl GraphBuilder {
         ));
         let effected = self.apply_effect_chain(normalized, &clip.effects)?;
         let effected = if clip.effects.has_duration_transform() {
+            let counted = self.label("coverage");
+            self.filters.push(format!(
+                "[{effected}]astats@vestra_clip_{clip_index}=metadata=0:reset=0:measure_perchannel=none:measure_overall=Number_of_samples[{counted}]"
+            ));
             let output = self.label("duration");
             self.filters.push(format!(
-                "[{effected}]apad,atrim=end_sample={processed},asetpts=PTS-STARTPTS[{output}]"
+                "[{counted}]apad,atrim=end_sample={processed},asetpts=PTS-STARTPTS[{output}]"
             ));
             output
         } else {
@@ -336,6 +392,28 @@ impl GraphBuilder {
             }
         }
     }
+}
+
+fn required_input_prefix(
+    effects: &AudioEffectPassPlan,
+    selected: u64,
+    required_output: u64,
+) -> Result<u64, MediaError> {
+    // Preserve rounding at each ordered speed operation instead of multiplying rates.
+    let mut lower = 1;
+    let mut upper = selected;
+    while lower < upper {
+        let middle = lower + (upper - lower) / 2;
+        let processed = effects.transform_duration_samples(middle).map_err(|_| {
+            MediaError::InvalidAudioTiming("audio effect duration cannot be represented".to_owned())
+        })?;
+        if processed < required_output {
+            lower = middle + 1;
+        } else {
+            upper = middle;
+        }
+    }
+    Ok(lower)
 }
 
 fn decompose_atempo(rate: f64) -> Result<Vec<f64>, MediaError> {

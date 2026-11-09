@@ -823,22 +823,30 @@ class Project:
         return _native.Editor(resource_limits=self._resource_limits).validate(self.snapshot())
 
     def prepare(
-        self, *, backend: str | _native.BackendPreference = "auto"
+        self, *, backend: str | _native.BackendPreference = "auto", strict_audio: bool = False
     ) -> _native.PreparedProject:
-        """Decode media and initialize a renderer for repeated frame or video renders."""
+        """Prepare media and a renderer for repeated frame or video renders.
+
+        Omitted audio trim ends resolve decoded duration with the rendering FFmpeg
+        executable. Explicit ends
+        allow bounded reading; video rendering checks required source samples
+        before publication. ``strict_audio=True`` audits complete audio sources.
+        """
         return _native.Editor(resource_limits=self._resource_limits).prepare(
-            self.snapshot(), _native.PrepareOptions(backend=_backend(backend))
+            self.snapshot(),
+            _native.PrepareOptions(backend=_backend(backend), strict_audio=strict_audio),
         )
 
     def render_frame(
-        self, seconds: float, *, backend: str | _native.BackendPreference = "auto"
+        self, seconds: float, *, backend: str | _native.BackendPreference = "auto",
+        strict_audio: bool = False,
     ) -> _native.Frame:
         """Render one RGBA frame at ``seconds``.
 
         This prepares the project on every call; call ``prepare()`` once and
         reuse the result to render many frames.
         """
-        return self.prepare(backend=backend).render_frame_seconds(seconds)
+        return self.prepare(backend=backend, strict_audio=strict_audio).render_frame_seconds(seconds)
 
     def render(
         self,

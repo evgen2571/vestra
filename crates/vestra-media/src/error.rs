@@ -70,6 +70,16 @@ pub enum MediaError {
     VideoFrameByteOverflow,
     #[error("invalid deterministic audio timing: {0}")]
     InvalidAudioTiming(String),
+    #[error(
+        "audio clip '{clip_id}' requires source sample {required}, but only {available} samples were decoded"
+    )]
+    AudioSourceBounds {
+        clip_id: String,
+        required: u64,
+        available: u64,
+    },
+    #[error("FFmpeg did not report usable decoded sample coverage for audio clip '{clip_id}'")]
+    AudioVerification { clip_id: String },
     #[error("unique executable audio sources ({actual}) exceed the supported limit ({maximum})")]
     AudioSourceLimit { actual: usize, maximum: usize },
     #[error("Master audio analysis requires authored audio material")]

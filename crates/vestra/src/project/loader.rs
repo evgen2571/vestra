@@ -13,6 +13,8 @@ pub(crate) fn load_and_validate(
         &validation,
         options,
         &std::sync::atomic::AtomicBool::new(false),
+        false,
+        false,
     );
     outcome
         .resolved

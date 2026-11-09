@@ -291,3 +291,44 @@ def test_public_audio_imports() -> None:
         vestra.audio.AudioTrack,
         vestra.audio.AudioEffectStack,
     )
+
+
+def test_strict_audio_resolves_decoded_duration_across_python_surfaces(tmp_path: Path) -> None:
+    source = tmp_path / "misleading.flac"
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+            "sine=sample_rate=48000:duration=0.375", "-c:a", "flac", str(source),
+        ],
+        check=True,
+    )
+    data = bytearray(source.read_bytes())
+    assert data[:4] == b"fLaC"
+    field = int.from_bytes(data[18:26], "big")
+    data[18:26] = ((field & ~((1 << 36) - 1)) | 480_000).to_bytes(8, "big")
+    source.write_bytes(data)
+    authored = vestra.Project(size=(2, 2), fps=8, base_directory=tmp_path)
+    clip = authored.audio.track("music").add(source.name)
+    snapshot = authored.snapshot()
+    editor = vestra.Editor()
+
+    reported = editor.inspect(snapshot)
+    decoded = editor.inspect(snapshot, strict_audio=True)
+    assert reported.output.duration == 10
+    assert decoded.output.duration == 0.375
+    assert reported.audio is not None and decoded.audio is not None
+    assert reported.audio.tracks[0].clips[0].duration_source == "reported"
+    assert decoded.audio.tracks[0].clips[0].duration_source == "decoded"
+    with pytest.raises(AttributeError):
+        reported.audio.tracks[0].clips[0].duration_source = "decoded"  # type: ignore[misc]
+    assert authored.prepare(backend="cpu").preparation_report.duration_seconds == 0.375
+    assert authored.prepare(backend="cpu", strict_audio=True).preparation_report.duration_seconds == 0.375
+
+    clip.trim_end = 0.75
+    snapshot = authored.snapshot()
+    assert editor.preflight(snapshot, vestra.PreflightOptions.for_inspection()).is_valid
+    strict = editor.preflight(snapshot, vestra.PreflightOptions.for_inspection(strict_audio=True))
+    assert not strict.is_valid
+    assert any(item.code == "VESTRA-AUDIO-CLIP-SOURCE" for item in strict.errors)
+    with pytest.raises(vestra.PreparationError):
+        authored.render_frame(0, backend="cpu", strict_audio=True)

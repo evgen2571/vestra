@@ -133,8 +133,8 @@ snapshot.save(path)
 ## Preparation and rendering
 
 ```text title="High-level rendering signatures"
-project.prepare(*, backend="auto") -> PreparedProject
-project.render_frame(seconds, *, backend="auto") -> Frame
+project.prepare(*, backend="auto", strict_audio=False) -> PreparedProject
+project.render_frame(seconds, *, backend="auto", strict_audio=False) -> Frame
 project.render(output, *, backend="auto", overwrite=False, preview=False,
                show_progress=True, on_progress=None,
                cancellation=None) -> RenderResult
@@ -149,14 +149,14 @@ video renders. Backend preferences are `"auto"`, `"cpu"`, `"wgpu"` or
 Editor(*, resource_limits=None)
 editor.validate(project)
 editor.preflight(project, options)
-editor.inspect(project, *, preview=False)
+editor.inspect(project, *, preview=False, strict_audio=False)
 editor.prepare(project, options=None)
 editor.render(project, request, *, show_progress=True, on_progress=None, cancellation=None)
 ```
 
 | Options/request type | Construction and purpose |
 | --- | --- |
-| `PrepareOptions` | `PrepareOptions(*, backend=None)` selects preparation backend. |
+| `PrepareOptions` | `PrepareOptions(*, backend=None, strict_audio=False)` selects the backend and audio validation policy. |
 | `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False)` for one-shot `Editor.render`. |
 | `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False)` for prepared video rendering. |
 
@@ -165,10 +165,23 @@ for the additional operational checks below; backend arguments use `BackendPrefe
 
 | `PreflightOptions` constructor | Additional checks |
 | --- | --- |
-| `for_validation()` | Media, tools, configured output with overwrite disabled, and Auto backend readiness; matches `ve validate`. |
-| `for_inspection()` | Media, without output/backend checks. |
-| `for_preparation(backend)` | Media and requested backend readiness. |
-| `for_render(backend, output, *, overwrite=False)` | Media, backend, supplied destination and render policy. |
+| `for_validation(*, strict_audio=False)` | Media, tools, configured output with overwrite disabled, and Auto backend readiness; matches `ve validate`. |
+| `for_inspection(*, strict_audio=False)` | Media, without output/backend checks. |
+| `for_preparation(backend, *, strict_audio=False)` | Media and requested backend readiness. |
+| `for_render(backend, output, *, overwrite=False, strict_audio=False)` | Media, backend, supplied destination and render policy. |
+
+`strict_audio=True` audits complete audio sources for decoded duration and decoder
+errors. Inspection normally uses reported first-stream duration, falling back to
+decoding when unavailable. Reported metadata is normal and produces no warning.
+`PreflightOptions.strict_audio` and `PrepareOptions.strict_audio` are read-only.
+Inspected clips expose read-only `duration_source`, either `"reported"` or
+`"decoded"`.
+
+One-shot/default/strict preparation resolve omitted audio trim ends from decoded
+EOF with the installed `ffmpeg` reader, preserving consistent automatic timelines. Explicit trim ends allow bounded
+execution without a full scan; actual reading verifies only output-visible source
+samples before publication. Strict validation may reject corruption outside that
+examined region. See the [audio duration contract](../development/architecture/media-io.md#audio-duration).
 
 ```text title="Prepared frame and video signatures"
 prepared.render_frame_number(frame_number)

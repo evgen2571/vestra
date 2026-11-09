@@ -60,7 +60,7 @@ fn test_sink(script: &str) -> FfmpegSink {
     FfmpegSink {
         child: Some(child),
         stdin: Some(stdin),
-        stderr_reader: Some(std::thread::spawn(move || collect_stderr(stderr))),
+        stderr_reader: Some(std::thread::spawn(move || collect_audio_stderr(stderr, 0))),
         progress_reader: None,
         static_progress_frames: None,
         expected_frame: 0,
@@ -69,6 +69,7 @@ fn test_sink(script: &str) -> FfmpegSink {
         filtergraph_file: None,
         static_image: None,
         static_frame_count: None,
+        audio_requirements: Vec::new(),
     }
 }
 
@@ -372,6 +373,7 @@ fn large_filtergraph_uses_and_cleans_a_script_file() {
     let output = directory.path().join("output.mp4");
     let audio = audio_graph::FfmpegAudioGraph {
         input_paths: vec![],
+        source_requirements: Vec::new(),
         filter_complex: "a".repeat(FILTERGRAPH_SCRIPT_THRESHOLD_BYTES + 1),
         clip_branch_count: 0,
     };
@@ -394,6 +396,7 @@ fn unique_audio_source_limit_accepts_the_exact_boundary() {
         input_paths: (0..4)
             .map(|index| PathBuf::from(format!("{index}.wav")))
             .collect(),
+        source_requirements: Vec::new(),
         filter_complex: "anull".to_owned(),
         clip_branch_count: 4,
     };
@@ -406,6 +409,7 @@ fn unique_audio_source_limit_rejects_one_over_the_boundary() {
         input_paths: (0..5)
             .map(|index| PathBuf::from(format!("{index}.wav")))
             .collect(),
+        source_requirements: Vec::new(),
         filter_complex: "anull".to_owned(),
         clip_branch_count: 5,
     };
@@ -740,8 +744,8 @@ fn writes_borrowed_rgba_slices_without_retaining_the_buffer() {
 
 #[test]
 fn bounds_stderr_collection() {
-    let collected = collect_stderr(std::io::Cursor::new(vec![b'x'; 65 * 1024]));
-    assert!(collected.len() <= 64 * 1024);
+    let collected = collect_audio_stderr(std::io::Cursor::new(vec![b'x'; 65 * 1024]), 0);
+    assert!(collected.stderr.len() <= 64 * 1024);
 }
 
 #[test]
@@ -758,6 +762,7 @@ fn finished_sink_rejects_further_writes_and_finishes() {
         filtergraph_file: None,
         static_image: None,
         static_frame_count: None,
+        audio_requirements: Vec::new(),
     };
     assert!(sink.write_frame(0, &[0; 4]).is_err());
     assert!(sink.finish().is_err());

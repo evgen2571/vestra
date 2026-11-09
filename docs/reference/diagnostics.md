@@ -29,6 +29,14 @@ Owned video masks point to `/masks/{index}/input/source` under their owning clip
 Children of owned Group masks continue through `/input/source/clips/{index}`,
 including any further nested groups or masks.
 
+## Audio duration precision
+
+Metadata-derived duration emits no warning; inspection exposes its provenance.
+`VESTRA-AUDIO-CLIP-SOURCE` identifies requested samples unavailable during actual
+reading, with the clip in `related_id`. The failure occurs before publication and
+preserves prior output. `VESTRA-ASSET-AUDIO` also covers missing/unusable source
+sample counters. Strict preflight retains full-source decoder diagnostics.
+
 ## Diagnostics, logs and progress
 
 Tracing/logging is operational observability. `RenderEvent` progress describes

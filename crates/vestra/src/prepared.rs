@@ -81,12 +81,26 @@ const fn gcd(mut left: u64, mut right: u64) -> u64 {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PrepareOptions {
     backend: RenderBackendPreference,
+    strict_audio: bool,
 }
 
 impl PrepareOptions {
     #[must_use]
     pub const fn new(backend: RenderBackendPreference) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            strict_audio: false,
+        }
+    }
+    /// Choose decoded audio duration and full integrity validation during preparation.
+    #[must_use]
+    pub const fn with_strict_audio(mut self, strict_audio: bool) -> Self {
+        self.strict_audio = strict_audio;
+        self
+    }
+    #[must_use]
+    pub const fn strict_audio(&self) -> bool {
+        self.strict_audio
     }
     #[must_use]
     pub const fn backend(&self) -> RenderBackendPreference {

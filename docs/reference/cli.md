@@ -8,8 +8,8 @@ verbosity flags provide the CLI's default filter when it is unset.
 
 | Command | Arguments and options |
 | --- | --- |
-| `validate PROJECT` | `--format human\|json`, default `human`. Loads the project and runs the validation preflight target. |
-| `inspect PROJECT` | `--preview`; `--format human\|json`, default `human`. |
+| `validate PROJECT` | `--strict-audio`; `--format human\|json`, default `human`. Loads the project and runs the validation preflight target. |
+| `inspect PROJECT` | `--strict-audio`; `--preview`; `--format human\|json`, default `human`. |
 | `render PROJECT` | Options below. |
 | `generate-schema` | `--output PATH`, default `schemas/project.schema.json`. |
 | `version` | Prints the Vestra version. |
@@ -66,3 +66,11 @@ unused and render to a separate file with `render --output preview.mp4 --overwri
 as in the [JSON guide](../guides/json-authoring.md).
 `inspect` resolves project media without checking the render destination or
 backend readiness.
+
+Audio inspection uses native first-stream metadata by default; JSON reports expose
+`duration_source` without warning merely for reported metadata. Use
+`ve validate PROJECT --strict-audio` or `ve inspect PROJECT --strict-audio` for
+full-source duration and decoder checks. Inspection falls back to decoding when
+metadata is unavailable. Rendering resolves omitted source ends exactly; explicit
+trim ends use source-bound checks integrated into actual reading. See the
+[audio duration contract](../development/architecture/media-io.md#audio-duration).

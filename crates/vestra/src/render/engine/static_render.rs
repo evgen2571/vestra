@@ -276,7 +276,9 @@ fn render_static_ffmpeg_inner(
                     &output,
                     &plan,
                     reported_frames,
-                    Diagnostic::error("VESTRA-ENCODE", Category::Render, error.to_string(), ""),
+                    super::failure::audio_source_diagnostic(&error).unwrap_or_else(|| {
+                        Diagnostic::error("VESTRA-ENCODE", Category::Render, error.to_string(), "")
+                    }),
                 );
                 // Match the generic path: a write-stage failure invalidates
                 // prepared backend state, while encoder finalization happens

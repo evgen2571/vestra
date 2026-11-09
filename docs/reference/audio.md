@@ -31,15 +31,34 @@ or `hold` interpolation. `trim_end` must follow `trim_start`; validation also
 checks ids, assets, timing, automation order/duration, effect scope, and media
 availability during preflight.
 
-Preflight measures the first audio stream's decoded samples using the bundled
-FFmpeg libraries; `ffprobe` is not required. An omitted `trim_end` uses that
-duration, excluding other streams and timestamp offsets. Probing reads the full
-source, so long audio takes longer to validate or prepare. Codec padding can
-make the result differ slightly from container metadata. Assets sharing a resolved
-path are probed once per preflight. One-shot render cancellation is checked
-between native packet/frame operations. See
-[audio probing](../development/architecture/media-io.md#audio-duration) for
-failure cases and native path restrictions.
+Inspection exposes each clip's `duration_source` as `reported` or `decoded`.
+Reported metadata is normal and emits no warning. Inspection falls back to full
+decoding when stream duration is unavailable.
+
+One-shot and prepared rendering use the same duration policy. Omitted
+`trim_end` values resolve decoded EOF before compilation, preserving automatic
+duration and end-relative fades under the rendering reader's padding policy. Explicit trim ends allow fast
+preparation even with missing or inaccurate metadata. Source reading verifies
+only the prefix needed for output, with codec/filter lookahead; it does not
+establish full-source integrity. Logical clip durations stay unchanged when an
+explicit output clips their physical reading.
+
+Use `project.prepare(strict_audio=True)` or strict SDK preflight options to audit
+complete sources. CLI `ve inspect --strict-audio` and `ve validate --strict-audio`
+provide the same strict audit. Unused-tail corruption can fail strict validation
+while a bounded ordinary render succeeds. Early EOF within the required region
+fails before publication, cleans temporary files and preserves prior output.
+Verified bounds allow one 48 kHz sample of end rounding; starts rounding to EOF
+are errors.
+
+Inspection uses bundled FFmpeg libraries. Exact render duration and strict
+preparation use the installed `ffmpeg` reader, matching actual audio execution.
+Different FFmpeg versions can apply different AAC padding policies; the three
+rendering modes agree for a fixed executable. No runtime `ffprobe` is required.
+Other streams and timestamp origins/gaps do not extend source-local audio.
+Paths are reused within preflight and graph execution; later operations observe
+edits. See [audio probing](../development/architecture/media-io.md#audio-duration)
+for duration, execution coverage, cancellation and failure behavior.
 
 ## Effects
 

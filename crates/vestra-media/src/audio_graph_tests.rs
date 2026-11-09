@@ -1,8 +1,8 @@
 use crate::test_support::{write_mono_wav, write_mono_wav_samples};
 
 use super::{
-    AudioGraphCompileOptions, automation_expression, compile, compile_with_options,
-    seconds_to_samples,
+    AudioGraphCompileOptions, AudioSourceRequirement, automation_expression, compile,
+    compile_with_options, seconds_to_samples,
 };
 use std::{
     fs,
@@ -20,6 +20,224 @@ fn rounds_seconds_to_nearest_mixer_sample() {
         5926
     );
     assert_eq!(seconds_to_samples(0.5 / 48_000.0).expect("half sample"), 1);
+}
+
+#[test]
+fn source_requirements_bound_visible_clips_without_moving_envelopes() {
+    let mut first = automation_test_clip();
+    first.id = "first".to_owned();
+    first.trim_start = 0.25;
+    first.selected_duration = 10.0;
+    first.processed_duration = 10.0;
+    first.fade_out = 1.0;
+    let mut shared = first.clone();
+    shared.id = "shared".to_owned();
+    shared.start = 0.5;
+    shared.trim_start = 2.0;
+    let mut late = first.clone();
+    late.id = "late".to_owned();
+    late.path = PathBuf::from("later.wav");
+    late.start = 1.0;
+    let mut muted = first.clone();
+    muted.id = "muted".to_owned();
+    muted.mute = true;
+    let mut silent = first.clone();
+    silent.id = "silent".to_owned();
+    silent.gain = 0.0;
+    let mix = AudioMixPlan {
+        tracks: vec![AudioTrackPlan {
+            id: "track".to_owned(),
+            mute: false,
+            gain: 1.0,
+            clips: vec![first, shared, late, muted, silent],
+            effects: AudioEffectPassPlan::default(),
+        }],
+        effects: AudioEffectPassPlan::default(),
+    };
+
+    let graph = compile(&mix, 1.0).expect("output-clipped graph");
+    assert_eq!(
+        graph.source_requirements,
+        vec![
+            AudioSourceRequirement {
+                source_index: 0,
+                clip_id: "first".to_owned(),
+                trim_start: 12_000,
+                required_end: 60_000,
+                selected_end: 492_000,
+                transformed_output: None,
+            },
+            AudioSourceRequirement {
+                source_index: 0,
+                clip_id: "shared".to_owned(),
+                trim_start: 96_000,
+                required_end: 120_000,
+                selected_end: 576_000,
+                transformed_output: None,
+            },
+        ]
+    );
+    assert_eq!(
+        graph.input_paths,
+        vec![PathBuf::from("source.wav"), PathBuf::from("later.wav")]
+    );
+    assert_eq!(
+        graph
+            .filter_complex
+            .matches("astats@vestra_source_0=")
+            .count(),
+        1
+    );
+    let counter = graph
+        .filter_complex
+        .find("astats@vestra_source_0=")
+        .expect("source counter");
+    let split = graph
+        .filter_complex
+        .find("asplit=2")
+        .expect("shared branches");
+    assert!(counter < split);
+    assert!(
+        graph
+            .filter_complex
+            .contains("measure_perchannel=none:measure_overall=Number_of_samples")
+    );
+    assert!(
+        graph
+            .filter_complex
+            .contains("atrim=start_sample=12000:end_sample=492000")
+    );
+    assert!(
+        graph
+            .filter_complex
+            .contains("(t-9.00000000000000000)/1.00000000000000000")
+    );
+}
+
+#[test]
+fn source_requirements_invert_ordered_speed_rounding_for_partial_outputs() {
+    for rates in [[2.0, 0.5], [0.5, 2.0], [1.5, 0.75]] {
+        let effects = AudioEffectPassPlan {
+            operations: rates
+                .into_iter()
+                .map(|rate| AudioEffectOperation::PlaybackSpeed { rate })
+                .collect(),
+        };
+        for selected in 1..=15 {
+            let processed = effects
+                .transform_duration_samples(selected)
+                .expect("duration");
+            let mut clip = automation_test_clip();
+            clip.trim_start = 0.25;
+            clip.selected_duration = selected as f64 / 48_000.0;
+            clip.processed_duration = processed as f64 / 48_000.0;
+            clip.effects = effects.clone();
+            let mix = AudioMixPlan {
+                tracks: vec![AudioTrackPlan {
+                    id: "track".to_owned(),
+                    mute: false,
+                    gain: 1.0,
+                    clips: vec![clip],
+                    effects: AudioEffectPassPlan::default(),
+                }],
+                effects: AudioEffectPassPlan::default(),
+            };
+            for visible in 1..=processed {
+                let graph = compile(&mix, visible as f64 / 48_000.0).expect("speed graph");
+                let expected = if visible == processed {
+                    selected
+                } else {
+                    (1..=selected)
+                        .find(|&input| {
+                            effects.transform_duration_samples(input).expect("duration") >= visible
+                        })
+                        .expect("source prefix")
+                };
+                assert_eq!(
+                    graph.source_requirements[0].required_end,
+                    12_000 + expected,
+                    "rates={rates:?}, selected={selected}, visible={visible}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn source_requirements_use_independently_rounded_trim_edges() {
+    let mut clip = automation_test_clip();
+    clip.trim_start = 0.6 / 48_000.0;
+    clip.selected_duration = 1.6 / 48_000.0;
+    clip.processed_duration = 2.0 / 48_000.0;
+    let mix = AudioMixPlan {
+        tracks: vec![AudioTrackPlan {
+            id: "track".to_owned(),
+            mute: false,
+            gain: 1.0,
+            clips: vec![clip],
+            effects: AudioEffectPassPlan::default(),
+        }],
+        effects: AudioEffectPassPlan::default(),
+    };
+    let graph = compile(&mix, 1.0).expect("rounded graph");
+    assert_eq!(graph.source_requirements[0].trim_start, 1);
+    assert_eq!(graph.source_requirements[0].required_end, 2);
+}
+
+#[test]
+fn slowed_partial_source_must_produce_the_visible_prefix_before_padding() {
+    let directory = tempfile::tempdir().expect("fixtures");
+    for (source_samples, selected_samples, valid) in [
+        (3_000, 96_000, false),
+        (144_000, 96_000, true),
+        (3_000, 3_000, true),
+    ] {
+        let path = directory.path().join(format!("{source_samples}.wav"));
+        let samples: Vec<_> = (0..source_samples)
+            .map(|sample| (sample as f32 * std::f32::consts::TAU * 440.0 / 48_000.0).sin() * 0.1)
+            .collect();
+        write_mono_wav_samples(&path, 48_000, &samples);
+        let clip = AudioClipPlan {
+            path,
+            selected_duration: selected_samples as f64 / 48_000.0,
+            processed_duration: selected_samples as f64 / 24_000.0,
+            effects: AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::PlaybackSpeed { rate: 0.5 }],
+            },
+            ..automation_test_clip()
+        };
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![clip],
+                effects: AudioEffectPassPlan::default(),
+            }],
+            effects: AudioEffectPassPlan::default(),
+        };
+        let mut output = Vec::new();
+        let result = crate::consume_master_pcm(&mix, 0.125, 1, |samples| {
+            output.extend_from_slice(samples);
+            Ok(())
+        });
+        assert_eq!(
+            result.is_ok(),
+            valid,
+            "{source_samples}/{selected_samples}: {result:?}"
+        );
+        if !valid {
+            assert!(matches!(
+                result,
+                Err(crate::MediaError::AudioSourceBounds { .. })
+            ));
+        } else {
+            assert_eq!(output.len(), 6_000 * 2);
+            if source_samples > selected_samples {
+                assert!(output[5_000 * 2..].iter().any(|sample| sample.abs() > 0.01));
+            }
+        }
+    }
 }
 
 #[test]

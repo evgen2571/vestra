@@ -104,10 +104,31 @@ pub(crate) fn validate(
             if assets.get(&clip.asset) != Some(&AssetType::Audio) {
                 continue;
             }
-            let Some(&source_duration) = durations.get(&clip.asset) else {
+            let source_duration = durations.get(&clip.asset).copied();
+            let Some(trim_end) = clip.trim_end.or(source_duration) else {
                 continue;
             };
-            let trim_end = clip.trim_end.unwrap_or(source_duration);
+            let exceeds_source = source_duration.is_some_and(|duration| {
+                match (
+                    vestra_media::seconds_to_samples(clip.trim_start),
+                    vestra_media::seconds_to_samples(trim_end),
+                    vestra_media::seconds_to_samples(duration),
+                ) {
+                    (Ok(start), Ok(end), Ok(source)) => {
+                        start >= source || end > source.saturating_add(1)
+                    }
+                    _ => true,
+                }
+            });
+            if exceeds_source || clip.trim_start >= trim_end {
+                errors.push(Diagnostic::error(
+                    "VESTRA-AUDIO-CLIP-SOURCE",
+                    Category::Semantic,
+                    "audio clip trim exceeds source duration",
+                    &path,
+                ));
+                continue;
+            }
             let selected_duration = trim_end - clip.trim_start;
             let selected_samples = match vestra_media::seconds_to_samples(selected_duration) {
                 Ok(samples) => samples,
@@ -128,15 +149,12 @@ pub(crate) fn validate(
                 };
             let processed_duration =
                 processed_samples as f64 / vestra_core::plan_audio::MASTER_AUDIO_SAMPLE_RATE as f64;
-            if trim_end > source_duration + 0.02
-                || clip.trim_start >= trim_end
-                || clip.fade_in + clip.fade_out > processed_duration + 1e-9
-            {
+            if clip.fade_in + clip.fade_out > processed_duration + 1e-9 {
                 errors.push(Diagnostic::error(
                     "VESTRA-AUDIO-CLIP-SOURCE",
                     Category::Semantic,
-                    "audio clip trim exceeds source duration or fades exceed processed clip duration",
-                    path,
+                    "audio fades exceed processed clip duration",
+                    &path,
                 ));
                 continue;
             }
@@ -185,6 +203,8 @@ pub(crate) fn validate(
 #[cfg(test)]
 mod tests {
     use super::validate;
+    use crate::project::AssetType;
+    use std::collections::BTreeMap;
     use vestra_core::project::{AudioEffect, AudioTimeline};
 
     fn check(effect: AudioEffect) -> Vec<crate::Diagnostic> {
@@ -262,5 +282,88 @@ mod tests {
                 .count(),
             3
         );
+    }
+
+    #[test]
+    fn source_bounds_allow_sample_rounding_but_reject_missing_audio() {
+        for (end, valid) in [
+            (0.375, true),
+            (0.375 + 1.0 / 48_000.0, true),
+            (0.385, false),
+        ] {
+            let audio: AudioTimeline = serde_json::from_value(serde_json::json!({
+                "tracks": [{"id":"track", "clips":[{"id":"clip", "asset":"tone", "start":0, "trim_start":0, "trim_end":end}]}]
+            })).expect("audio");
+            let mut errors = Vec::new();
+            validate(
+                Some(&audio),
+                &BTreeMap::from([("tone".to_owned(), AssetType::Audio)]),
+                &BTreeMap::from([("tone".to_owned(), 0.375)]),
+                &mut errors,
+            );
+            assert_eq!(errors.is_empty(), valid, "trim_end={end}: {errors:?}");
+        }
+    }
+
+    #[test]
+    fn explicit_selection_validates_effect_duration_and_fades_without_source_duration() {
+        for (fade_out, valid) in [(0.2, true), (0.6, false)] {
+            let audio: AudioTimeline = serde_json::from_value(serde_json::json!({
+                "tracks":[{"id":"track","clips":[{
+                    "id":"clip","asset":"tone","start":2,"trim_start":0.5,"trim_end":1.5,
+                    "fade_out":fade_out,
+                    "effects":[{"id":"speed","type":"playback_speed","rate":2}]
+                }]}]
+            }))
+            .expect("audio");
+            let mut errors = Vec::new();
+            let end = validate(
+                Some(&audio),
+                &BTreeMap::from([("tone".to_owned(), AssetType::Audio)]),
+                &BTreeMap::new(),
+                &mut errors,
+            );
+            assert_eq!(errors.is_empty(), valid, "{errors:?}");
+            assert_eq!(end, valid.then_some(2.5));
+        }
+    }
+
+    #[test]
+    fn omitted_trim_end_rejects_source_start_at_or_beyond_eof() {
+        for start in [0.375, 0.5] {
+            let audio: AudioTimeline = serde_json::from_value(serde_json::json!({
+                "tracks": [{"id":"track", "clips":[{"id":"clip", "asset":"tone", "start":0, "trim_start":start}]}]
+            })).expect("audio");
+            let mut errors = Vec::new();
+            validate(
+                Some(&audio),
+                &BTreeMap::from([("tone".to_owned(), AssetType::Audio)]),
+                &BTreeMap::from([("tone".to_owned(), 0.375)]),
+                &mut errors,
+            );
+            assert!(
+                errors.iter().any(|d| d.code == "VESTRA-AUDIO-CLIP-SOURCE"),
+                "trim_start={start}: {errors:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sample_rounding_tolerance_does_not_allow_a_selection_starting_at_eof() {
+        for start in [0.375, 0.375 - 0.25 / 48_000.0] {
+            let audio: AudioTimeline = serde_json::from_value(serde_json::json!({
+                "tracks": [{"id":"track", "clips":[{"id":"clip", "asset":"tone", "start":0,
+                    "trim_start":start,"trim_end":start + 1.0 / 48_000.0}]}]
+            }))
+            .expect("audio");
+            let mut errors = Vec::new();
+            validate(
+                Some(&audio),
+                &BTreeMap::from([("tone".to_owned(), AssetType::Audio)]),
+                &BTreeMap::from([("tone".to_owned(), 0.375)]),
+                &mut errors,
+            );
+            assert!(errors.iter().any(|d| d.code == "VESTRA-AUDIO-CLIP-SOURCE"));
+        }
     }
 }

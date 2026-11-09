@@ -661,7 +661,8 @@ fn analysis_error(
 ) -> RenderError {
     let code = "VESTRA-AUDIO-ANALYSIS";
     RenderError {
-        diagnostic: Diagnostic::error(code, Category::Media, error.to_string(), ""),
+        diagnostic: super::failure::audio_source_diagnostic(&error)
+            .unwrap_or_else(|| Diagnostic::error(code, Category::Media, error.to_string(), "")),
         warnings: Vec::new(),
         temporary_removed: true,
         context: RenderFailureContext::before_render(RenderFailureStage::AssetPreparation, plan),

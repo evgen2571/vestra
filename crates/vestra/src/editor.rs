@@ -76,6 +76,7 @@ pub enum PreflightTarget {
 #[derive(Clone, Debug)]
 pub struct PreflightOptions {
     target: PreflightTarget,
+    strict_audio: bool,
 }
 
 impl PreflightOptions {
@@ -83,18 +84,21 @@ impl PreflightOptions {
     pub fn for_inspection() -> Self {
         Self {
             target: PreflightTarget::Inspect,
+            strict_audio: false,
         }
     }
     #[must_use]
     pub fn for_validation() -> Self {
         Self {
             target: PreflightTarget::Validate,
+            strict_audio: false,
         }
     }
     #[must_use]
     pub fn for_preparation(backend: RenderBackendPreference) -> Self {
         Self {
             target: PreflightTarget::Preparation { backend },
+            strict_audio: false,
         }
     }
     #[must_use]
@@ -109,7 +113,20 @@ impl PreflightOptions {
                 output,
                 overwrite,
             },
+            strict_audio: false,
         }
+    }
+
+    /// Fully decode audio to verify sample duration and decoder integrity.
+    #[must_use]
+    pub const fn with_strict_audio(mut self, strict_audio: bool) -> Self {
+        self.strict_audio = strict_audio;
+        self
+    }
+
+    #[must_use]
+    pub const fn strict_audio(&self) -> bool {
+        self.strict_audio
     }
 }
 impl Default for PreflightOptions {
@@ -399,6 +416,11 @@ impl Editor {
                 limits: self.limits,
             },
             cancelled,
+            options.strict_audio,
+            matches!(
+                &options.target,
+                PreflightTarget::Preparation { .. } | PreflightTarget::Render { .. }
+            ),
         );
         if cancelled.load(Ordering::Relaxed) {
             return InternalPreflightOutcome {
@@ -478,11 +500,22 @@ impl Editor {
         project: &Project,
         preview: bool,
     ) -> Result<InspectionReport, EditorError> {
+        self.inspect_with_strict_audio(project, preview, false)
+    }
+
+    /// Inspect using reported audio durations, or decoded durations in strict mode.
+    #[expect(clippy::result_large_err, reason = "inspection retains diagnostics")]
+    pub fn inspect_with_strict_audio(
+        &self,
+        project: &Project,
+        preview: bool,
+        strict_audio: bool,
+    ) -> Result<InspectionReport, EditorError> {
         let validation = self.validate(project);
         let outcome = self.run_preflight(
             project,
             &validation,
-            &PreflightOptions::for_inspection(),
+            &PreflightOptions::for_inspection().with_strict_audio(strict_audio),
             &AtomicBool::new(false),
         );
         let validated = outcome.resolved.ok_or_else(|| {
@@ -547,7 +580,8 @@ impl Editor {
         let preflight_started = Instant::now();
         let (options, backend, preview) = match target {
             InternalPreparationTarget::Public(options) => (
-                PreflightOptions::for_preparation(options.backend()),
+                PreflightOptions::for_preparation(options.backend())
+                    .with_strict_audio(options.strict_audio()),
                 options.backend(),
                 false,
             ),

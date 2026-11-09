@@ -12,6 +12,7 @@ mod ffmpeg;
 mod output;
 mod probe;
 mod sink;
+mod still;
 mod video;
 
 static FFMPEG_INIT: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
@@ -40,6 +41,7 @@ pub use probe::{
     probe_audio_duration_cancellable,
 };
 pub use sink::{FrameSink, SinkResult};
+pub use still::save_frame;
 pub use video::{
     DecodedVideoFrame, MediaRational, VideoDecoder, VideoDecoderOptions, VideoMediaInfo,
     VideoTimestamp, probe_video,

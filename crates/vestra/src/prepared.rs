@@ -224,6 +224,24 @@ impl Frame {
     pub fn into_bytes(self) -> Vec<u8> {
         self.pixels
     }
+
+    /// Saves PNG, JPEG (over black), or lossless static WebP, selected by
+    /// extension. An existing destination requires `overwrite`.
+    #[expect(clippy::result_large_err, reason = "frame failures retain diagnostics")]
+    pub fn save(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        overwrite: bool,
+    ) -> Result<(), EditorError> {
+        vestra_media::save_frame(
+            path.as_ref(),
+            self.width,
+            self.height,
+            &self.pixels,
+            overwrite,
+        )
+        .map_err(|error| simple_error("VESTRA-FRAME-OUTPUT", &error.to_string()))
+    }
 }
 
 /// Stable facts captured during preparation, without renderer implementation

@@ -3,6 +3,9 @@ from os import PathLike
 from pathlib import Path
 from typing import Callable, ClassVar, final
 
+import numpy as np
+from numpy.typing import NDArray
+
 __all__ = [
     "BackendPreference", "BackendKind", "BackendFallback", "AdapterDeviceType", "AdapterInfo", "GraphicsBackend", "PixelFormat", "Category", "Diagnostic", "Editor", "InspectAssets", "configure_logging",
     "InspectAudio", "InspectAudioClip", "InspectAudioEffect", "InspectAudioGainKeyframe", "InspectAudioTrack", "InspectOutput", "InspectionReport", "PreflightOptions",
@@ -398,6 +401,8 @@ class Frame:
     def pixel_format(self) -> PixelFormat: ...
     def to_bytes(self) -> bytes: ...
     def __bytes__(self) -> bytes: ...
+    def to_numpy(self) -> NDArray[np.uint8]: ...
+    def save(self, output: str | PathLike[str], *, overwrite: bool = False) -> None: ...
 
 @final
 class PreparedProject:

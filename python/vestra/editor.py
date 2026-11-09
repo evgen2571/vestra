@@ -943,6 +943,8 @@ class Project:
         backend: str | _native.BackendPreference = "auto",
         overwrite: bool = False,
         preview: bool = False,
+        start: float = 0,
+        end: float | None = None,
         show_progress: bool = True,
         on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
@@ -954,7 +956,9 @@ class Project:
         with ``overwrite=True``. ``preview=True`` caps the longest side at
         640 px. A progress bar is shown on interactive terminals unless
         ``show_progress=False``; ``on_progress`` receives ``RenderEvent``
-        values instead. FFmpeg is installed automatically; set
+        values instead. ``start``/``end`` select project sample times in
+        ``[start, end)``; the encoded clip and trimmed audio start at zero.
+        An omitted end uses the project duration. FFmpeg is installed automatically; set
         ``IMAGEIO_FFMPEG_EXE`` to select a different executable.
         """
         request = _native.RenderRequest(
@@ -962,6 +966,8 @@ class Project:
             backend=_backend(backend),
             overwrite=overwrite,
             preview=preview,
+            start=start,
+            end=end,
         )
         return _native.Editor(resource_limits=self._resource_limits).render(
             self.snapshot(output=output),

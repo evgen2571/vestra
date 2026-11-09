@@ -29,6 +29,41 @@ an earlier milestone.
 Requesting WGPU alone does not prove hardware rendering: inspect the selected
 backend and adapter information in the result. See [backends](../../reference/backends.md).
 
+## Export part of the timeline
+
+```python
+result = project.render("clip.mp4", start=0.5, end=1.0, overwrite=True)
+```
+
+`start` defaults to zero and an omitted `end` uses the project duration. Both
+bounds are seconds on the original project timeline. The half-open interval
+`[start, end)` selects frames whose sample times fall inside it: both boundaries
+round up to frame indices at the project's rational FPS. A range must satisfy
+`0 <= start < end <= duration` and contain at least one sampled frame.
+
+For example, at 10 FPS, `[0.25, 0.68)` selects project frames 3–6. The output
+contains four frames at timestamps 0, 0.1, 0.2 and 0.3 seconds, with a duration
+of 0.4 seconds. Effects, transitions, source selection and audio-driven visuals
+keep their original project time. Earlier output frames are not composed.
+
+Audio is mixed with the original effects and automation, then trimmed from the
+first selected frame's project time and rebased to zero. Audio boundaries round
+to the nearest 48 kHz mixer sample. A final frame can extend beyond the authored
+duration by less than one frame; the corresponding audio tail is silence.
+Progress counts selected frames; failure frame indices refer to the project.
+Range selection leaves the authored project unchanged.
+
+The same selection works with reusable preparation:
+
+```python
+from vestra import PreparedVideoRenderRequest
+
+prepared = project.prepare(backend="cpu")
+result = prepared.render_video(
+    PreparedVideoRenderRequest("prepared-clip.mp4", start=0.5, end=1.0, overwrite=True)
+)
+```
+
 ## Validate before rendering
 
 ```python

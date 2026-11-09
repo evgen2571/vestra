@@ -97,6 +97,7 @@ fn static_settings(frame_count: u64) -> EncoderSettings {
         frame_rate: (30, 1),
         frame_count,
         duration: frame_count as f64 / 30.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 128,
         audio_mix: None,
@@ -143,6 +144,7 @@ fn large_graph_settings(mix: AudioMixPlan) -> EncoderSettings {
         frame_rate: (1, 1),
         frame_count: 1,
         duration: 1.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 1,
         audio_mix: Some(mix),
@@ -179,6 +181,7 @@ fn multi_input_mix_muxes_aac_audio_with_raw_video() {
         frame_rate: (30, 1),
         frame_count: 30,
         duration: 1.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 128,
         audio_mix: Some(AudioMixPlan {
@@ -260,6 +263,7 @@ fn production_aac_decodes_automation_and_equal_power_crossfade() {
         frame_rate: (30, 1),
         frame_count: 60,
         duration: 2.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 128,
         audio_mix: Some(AudioMixPlan {
@@ -603,6 +607,7 @@ fn missing_operation_time_audio_source_reports_ffmpeg_failure_without_output() {
         frame_rate: (1, 1),
         frame_count: 1,
         duration: 1.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 128,
         audio_mix: Some(AudioMixPlan {

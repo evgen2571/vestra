@@ -16,11 +16,18 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct RenderOptions {
     pub output_override: Option<PathBuf>,
+    pub frame_range: Option<std::ops::Range<u64>>,
     pub overwrite: bool,
     pub cancelled: Arc<AtomicBool>,
     /// Test-only factory selection; production operations cannot select a backend.
     #[cfg(test)]
     pub backend_preference: RenderBackendPreference,
+}
+
+impl RenderOptions {
+    pub(super) fn frames(&self, plan: &crate::plan::RenderPlan) -> std::ops::Range<u64> {
+        self.frame_range.clone().unwrap_or(0..plan.frame_count)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]

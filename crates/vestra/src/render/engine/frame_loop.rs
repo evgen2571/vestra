@@ -67,6 +67,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
             static_template,
         );
     }
+    let frames = options.frames(plan);
     let capacity = backend.capacity();
     // WGPU submission runs on this thread; overlap it with the blocking pipe
     // write. CPU workers already compose concurrently, without another writer.
@@ -76,14 +77,14 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
     let mut schedule_cursor = schedule.cursor();
     let mut active = Vec::new();
     let mut ready_frames = BTreeMap::new();
-    let mut next_frame_to_submit = 0;
-    let mut next_frame_to_write = 0;
+    let mut next_frame_to_submit = frames.start;
+    let mut next_frame_to_write = frames.start;
     let mut frame_composition = Duration::ZERO;
     let mut track_evaluation = Duration::ZERO;
     let mut encoder_write = Duration::ZERO;
     let mut completed_frames = 0;
 
-    while next_frame_to_submit < plan.frame_count {
+    while next_frame_to_submit < frames.end {
         if options.cancelled.load(Ordering::Relaxed) {
             return cancellation(
                 backend,
@@ -95,7 +96,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
             );
         }
 
-        while next_frame_to_submit < plan.frame_count
+        while next_frame_to_submit < frames.end
             && backend.in_flight() < capacity
             && ready_frames.len() < ready_limit
         {
@@ -166,7 +167,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
                 &mut ready_frames,
                 completed,
                 next_frame_to_write,
-                plan.frame_count,
+                frames.end,
             ) {
                 backend.abort();
                 let cleanup = abort_sink(encoder);
@@ -184,10 +185,10 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
         }
 
         let written_before_poll = next_frame_to_write;
-        let can_overlap_encoder = overlap_encoder && next_frame_to_submit < plan.frame_count;
+        let can_overlap_encoder = overlap_encoder && next_frame_to_submit < frames.end;
         let mut submit_during_write =
             |backend: &mut dyn RenderBackend, performance: &mut PreparationStats| {
-                if next_frame_to_submit < plan.frame_count
+                if next_frame_to_submit < frames.end
                     && backend.in_flight() < capacity
                     && !options.cancelled.load(Ordering::Relaxed)
                 {
@@ -258,7 +259,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
             output,
             plan,
             completed_frames,
-            plan.frame_count.checked_sub(1),
+            frames.end.checked_sub(1),
         );
     }
     // Drain through the cancellation-aware staged polling path. Once there are
@@ -272,14 +273,14 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
                 output,
                 plan,
                 completed_frames,
-                plan.frame_count.checked_sub(1),
+                frames.end.checked_sub(1),
             );
         }
         match backend.poll_completed_cancellable(PollMode::WaitForOne, &options.cancelled) {
             Ok(Some(_frame)) if options.cancelled.load(Ordering::Relaxed) => {
                 let attempted_frame = backend
                     .failed_frame_number()
-                    .or_else(|| plan.frame_count.checked_sub(1));
+                    .or_else(|| frames.end.checked_sub(1));
                 return cancellation(
                     backend,
                     encoder,
@@ -297,7 +298,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
                     output,
                     plan,
                     completed_frames,
-                    plan.frame_count.checked_sub(1),
+                    frames.end.checked_sub(1),
                 );
             }
             Ok(None) => {
@@ -308,7 +309,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
                     plan,
                     RenderFailureStage::FrameComposition,
                     completed_frames,
-                    plan.frame_count.checked_sub(1),
+                    frames.end.checked_sub(1),
                     with_encoder_cleanup(
                         Diagnostic::error(
                             "VESTRA-POLL-STALLED",
@@ -331,7 +332,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
                     completed_frames,
                     backend
                         .failed_frame_number()
-                        .or_else(|| plan.frame_count.checked_sub(1)),
+                        .or_else(|| frames.end.checked_sub(1)),
                     diagnostic,
                 ));
             }
@@ -350,7 +351,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
                 completed_frames,
                 backend
                     .failed_frame_number()
-                    .or_else(|| plan.frame_count.checked_sub(1)),
+                    .or_else(|| frames.end.checked_sub(1)),
                 diagnostic,
             ));
         }
@@ -362,7 +363,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
             &mut ready_frames,
             completed,
             next_frame_to_write,
-            plan.frame_count,
+            frames.end,
         ) {
             backend.abort();
             let cleanup = abort_sink(encoder);
@@ -372,7 +373,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
                 plan,
                 RenderFailureStage::FrameComposition,
                 completed_frames,
-                plan.frame_count.checked_sub(1),
+                frames.end.checked_sub(1),
                 diagnostic,
             ));
         }
@@ -395,10 +396,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
         backend.abort();
         return Err(error);
     }
-    if next_frame_to_write != plan.frame_count
-        || !ready_frames.is_empty()
-        || backend.in_flight() != 0
-    {
+    if next_frame_to_write != frames.end || !ready_frames.is_empty() || backend.in_flight() != 0 {
         backend.abort();
         let cleanup = abort_sink(encoder);
         let diagnostic = with_encoder_cleanup(
@@ -407,7 +405,8 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
                 Category::Render,
                 format!(
                     "staged render drained with {} of {} frames written",
-                    next_frame_to_write, plan.frame_count
+                    completed_frames,
+                    frames.end - frames.start
                 ),
                 "",
             ),
@@ -418,7 +417,7 @@ pub(super) fn run<S: FrameSink + Send + ?Sized>(
             plan,
             RenderFailureStage::FrameComposition,
             completed_frames,
-            plan.frame_count.checked_sub(1),
+            frames.end.checked_sub(1),
             diagnostic,
         ));
     }
@@ -455,6 +454,8 @@ fn run_static<S: FrameSink + ?Sized>(
     emit: &mut LifecycleEmitter<'_>,
     template: &mut Option<std::sync::Arc<[u8]>>,
 ) -> Result<FrameLoopResult, RenderError> {
+    let frames = options.frames(plan);
+    let total_frames = frames.end - frames.start;
     let mut composition = Duration::ZERO;
     let mut evaluation = Duration::ZERO;
     let mut write = Duration::ZERO;
@@ -467,30 +468,31 @@ fn run_static<S: FrameSink + ?Sized>(
     let cache_eligible = bytes as u64 <= plan.limits.maximum_cache_bytes;
     let mut budget_bypasses = 0;
     let rgba = if let Some(template) = template.as_ref() {
-        hits = plan.frame_count;
+        hits = total_frames;
         template.clone()
     } else {
-        let active = schedule.active_at(plan, 0);
-        let time = frame_time_nanos(0, plan.frame_rate.0, plan.frame_rate.1).map_err(|_| {
-            static_error(
-                output,
-                plan,
-                0,
-                Diagnostic::error(
-                    "VESTRA-TIMELINE-OVERFLOW",
-                    Category::Render,
-                    "frame timestamp cannot be represented",
-                    "",
-                ),
-            )
-        })?;
+        let active = schedule.active_at(plan, frames.start);
+        let time =
+            frame_time_nanos(frames.start, plan.frame_rate.0, plan.frame_rate.1).map_err(|_| {
+                static_error(
+                    output,
+                    plan,
+                    frames.start,
+                    Diagnostic::error(
+                        "VESTRA-TIMELINE-OVERFLOW",
+                        Category::Render,
+                        "frame timestamp cannot be represented",
+                        "",
+                    ),
+                )
+            })?;
         let started = Instant::now();
         let context = EvaluationContext::new(scalar_signals);
         let frame = evaluate_with_context(plan, &active, time, &context).map_err(|error| {
             static_error(
                 output,
                 plan,
-                0,
+                frames.start,
                 Diagnostic::error(
                     "VESTRA-EVALUATION",
                     Category::Internal,
@@ -503,16 +505,16 @@ fn run_static<S: FrameSink + ?Sized>(
         performance.evaluated_track_count += frame.evaluated_track_count;
         let started = Instant::now();
         backend
-            .submit_frame(0, &frame)
-            .map_err(|diagnostic| static_error(output, plan, 0, diagnostic))?;
+            .submit_frame(frames.start, &frame)
+            .map_err(|diagnostic| static_error(output, plan, frames.start, diagnostic))?;
         let completed = backend
             .poll_completed(PollMode::WaitForOne)
-            .map_err(|diagnostic| static_error(output, plan, 0, diagnostic))?
+            .map_err(|diagnostic| static_error(output, plan, frames.start, diagnostic))?
             .ok_or_else(|| {
                 static_error(
                     output,
                     plan,
-                    0,
+                    frames.start,
                     Diagnostic::error(
                         "VESTRA-FRAME-COMPLETION",
                         Category::Backend,
@@ -523,12 +525,12 @@ fn run_static<S: FrameSink + ?Sized>(
             })?;
         let extras = backend
             .flush()
-            .map_err(|diagnostic| static_error(output, plan, 0, diagnostic))?;
+            .map_err(|diagnostic| static_error(output, plan, frames.start, diagnostic))?;
         if !extras.is_empty() || completed.rgba.len() != bytes {
             return Err(static_error(
                 output,
                 plan,
-                0,
+                frames.start,
                 Diagnostic::error(
                     "VESTRA-BACKEND-CONTRACT",
                     Category::Backend,
@@ -547,7 +549,7 @@ fn run_static<S: FrameSink + ?Sized>(
         }
         rgba
     };
-    for frame_number in 0..plan.frame_count {
+    for frame_number in 0..total_frames {
         if options.cancelled.load(Ordering::Relaxed) {
             return cancellation(
                 backend,
@@ -555,7 +557,7 @@ fn run_static<S: FrameSink + ?Sized>(
                 output,
                 plan,
                 frame_number,
-                Some(frame_number),
+                Some(frames.start + frame_number),
             );
         }
         let started = Instant::now();
@@ -572,7 +574,7 @@ fn run_static<S: FrameSink + ?Sized>(
                     plan,
                     RenderFailureStage::FrameWrite,
                     frame_number,
-                    Some(frame_number),
+                    Some(frames.start + frame_number),
                     with_encoder_cleanup(
                         Diagnostic::error(
                             "VESTRA-RENDER-WRITE",
@@ -586,25 +588,24 @@ fn run_static<S: FrameSink + ?Sized>(
             })?;
         drop(frame);
         write += started.elapsed();
-        backend.record_written(frame_number);
+        backend.record_written(frames.start + frame_number);
         performance.rendered_frame_count = frame_number + 1;
-        if emit_progress(frame_number + 1, plan.frame_count, emit) == RenderObserverControl::Cancel
-        {
+        if emit_progress(frame_number + 1, total_frames, emit) == RenderObserverControl::Cancel {
             return cancellation(
                 backend,
                 encoder,
                 output,
                 plan,
                 frame_number + 1,
-                Some(frame_number),
+                Some(frames.start + frame_number),
             );
         }
     }
     if misses > 0 {
-        hits = plan.frame_count.saturating_sub(1);
+        hits = total_frames.saturating_sub(1);
     }
     Ok(FrameLoopResult {
-        completed_frames: plan.frame_count,
+        completed_frames: total_frames,
         frame_composition: composition,
         track_evaluation: evaluation,
         encoder_write: write,
@@ -612,7 +613,7 @@ fn run_static<S: FrameSink + ?Sized>(
         static_visual_misses: misses,
         // Preserve the template copy for each generic sink write, including frame
         // zero, so extraction keeps the existing allocation and metric behavior.
-        static_visual_copy_bytes: plan.frame_count.saturating_mul(bytes as u64),
+        static_visual_copy_bytes: total_frames.saturating_mul(bytes as u64),
         static_visual_budget_bypasses: budget_bypasses,
     })
 }
@@ -620,15 +621,15 @@ fn run_static<S: FrameSink + ?Sized>(
 fn static_error(
     output: &OutputTarget,
     plan: &RenderPlan,
-    completed: u64,
+    frame_number: u64,
     diagnostic: Diagnostic,
 ) -> RenderError {
     cleanup_error(
         output,
         plan,
         RenderFailureStage::FrameComposition,
-        completed,
-        Some(completed),
+        0,
+        Some(frame_number),
         diagnostic,
     )
 }
@@ -736,6 +737,7 @@ type SubmitDuringWrite<'a> =
 fn write_with_overlap<S: FrameSink + Send + ?Sized>(
     encoder: &mut S,
     frame: &CompletedFrame,
+    encoder_frame_number: u64,
     work: impl FnOnce(),
 ) -> Result<Duration, MediaError> {
     std::thread::scope(|scope| {
@@ -746,7 +748,7 @@ fn write_with_overlap<S: FrameSink + Send + ?Sized>(
                 let _entered = span.enter();
                 let started = Instant::now();
                 encoder
-                    .write_frame(frame.frame_number, &frame.rgba)
+                    .write_frame(encoder_frame_number, &frame.rgba)
                     .map(|()| started.elapsed())
             })
             .map_err(MediaError::FrameWrite)?;
@@ -802,13 +804,13 @@ fn write_ready_frames<S: FrameSink + Send + ?Sized>(
         let write_result = if let Some(submit) = submit_during_write.as_deref_mut()
             && backend.in_flight() < backend.capacity()
         {
-            write_with_overlap(encoder, &frame, || {
+            write_with_overlap(encoder, &frame, *completed_frames, || {
                 submission_error = submit(backend, performance).err();
             })
         } else {
             let started = Instant::now();
             encoder
-                .write_frame(frame.frame_number, &frame.rgba)
+                .write_frame(*completed_frames, &frame.rgba)
                 .map(|()| started.elapsed())
         };
         let write_duration = match write_result {
@@ -839,7 +841,11 @@ fn write_ready_frames<S: FrameSink + Send + ?Sized>(
         *completed_frames += 1;
         *next_frame_to_write += 1;
         performance.rendered_frame_count = *completed_frames;
-        if emit_progress(*completed_frames, plan.frame_count, emit) == RenderObserverControl::Cancel
+        if emit_progress(
+            *completed_frames,
+            options.frames(plan).end - options.frames(plan).start,
+            emit,
+        ) == RenderObserverControl::Cancel
         {
             return cancellation(
                 backend,

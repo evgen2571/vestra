@@ -205,6 +205,7 @@ pub fn compile(
             frame_rate: validated.frame_rate,
             frame_count: validated.frame_count,
             duration: validated.duration,
+            audio_range: None,
             quality_crf: project.output.quality.crf(),
             maximum_audio_sources: validated.limits.maximum_audio_sources,
             audio_mix: encoder_audio_mix,

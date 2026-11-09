@@ -553,6 +553,7 @@ fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations()
         .expect("later random-access frame");
     let output = directory.path().join("prepared-reuse.mp4");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1061,6 +1062,115 @@ impl RenderBackend for MockStagedBackend {
 mod async_encoder_tests;
 
 #[test]
+fn selected_range_submits_absolute_frames_and_writes_only_rebased_pixels() {
+    for static_visual in [false, true] {
+        let mut plan = super::example_plan();
+        if static_visual {
+            plan.visual_dependency = TemporalDependency::Static;
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let backend_written = Arc::clone(&written);
+        let pixels = Arc::new(Mutex::new(Vec::new()));
+        let sink_pixels = Arc::clone(&pixels);
+        let options = RenderOptions {
+            frame_range: Some(3..6),
+            output_override: Some(directory.path().join("selected.mp4")),
+            overwrite: false,
+            cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            backend_preference: RenderBackendPreference::Wgpu,
+        };
+        let summary = render_with_backend_builder_and_sink(
+            &plan,
+            &options,
+            &mut |_| RenderObserverControl::Continue,
+            |_, _, _| {
+                Ok((
+                    Box::new(MockStagedBackend::new(
+                        3,
+                        if static_visual {
+                            vec![3]
+                        } else {
+                            vec![5, 3, 4]
+                        },
+                        backend_written,
+                    )) as Box<dyn RenderBackend>,
+                    None,
+                ))
+            },
+            |settings, path| {
+                assert_eq!(settings.frame_count, 3);
+                let seconds = plan.frame_rate.1 as f64 / plan.frame_rate.0 as f64;
+                assert_eq!(settings.audio_range, Some(3.0 * seconds..6.0 * seconds));
+                Ok(PixelSink {
+                    frames: sink_pixels,
+                    temporary_path: path.to_owned(),
+                })
+            },
+        )
+        .expect("selected render");
+        assert_eq!(summary.frame_count, 3);
+        assert_eq!(
+            summary.performance.submitted_frames,
+            if static_visual { 1 } else { 3 }
+        );
+        assert_eq!(*written.lock().unwrap(), vec![3, 4, 5]);
+        assert_eq!(
+            pixels
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|frame| frame[0])
+                .collect::<Vec<_>>(),
+            if static_visual {
+                vec![3; 3]
+            } else {
+                vec![3, 4, 5]
+            }
+        );
+    }
+}
+#[test]
+fn selected_range_raw_cpu_pixels_match_full_render_and_allow_another_operation() {
+    let plan = super::example_plan();
+    let directory = tempfile::tempdir().unwrap();
+    let mut prepared = prepare(&plan, RenderBackendPreference::Cpu, |_, plan, decoded| {
+        Ok((
+            Box::new(CpuBackend::new(plan, Arc::clone(decoded))) as Box<dyn RenderBackend>,
+            None,
+        ))
+    })
+    .unwrap();
+    let mut render = |range: Option<std::ops::Range<u64>>, name: &str| {
+        let pixels = Arc::new(Mutex::new(Vec::new()));
+        let sink_pixels = Arc::clone(&pixels);
+        render_prepared_with_sink(
+            &mut prepared,
+            &RenderOptions {
+                frame_range: range,
+                output_override: Some(directory.path().join(name)),
+                overwrite: false,
+                cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                backend_preference: RenderBackendPreference::Cpu,
+            },
+            &mut |_| RenderObserverControl::Continue,
+            |_, path| {
+                Ok(PixelSink {
+                    frames: sink_pixels,
+                    temporary_path: path.to_owned(),
+                })
+            },
+        )
+        .unwrap();
+        Arc::try_unwrap(pixels).unwrap().into_inner().unwrap()
+    };
+    let full = render(None, "full.mp4");
+    let range = 21..29;
+    assert_eq!(render(Some(range.clone()), "clip.mp4"), full[21..29]);
+    assert_eq!(render(Some(0..2), "beginning.mp4"), full[0..2]);
+}
+
+#[test]
 fn engine_writes_out_of_order_mock_completions_in_frame_order() {
     let plan = super::example_plan();
     let output_dir = tempfile::tempdir().expect("temporary output directory");
@@ -1072,6 +1182,7 @@ fn engine_writes_out_of_order_mock_completions_in_frame_order() {
         .collect::<Vec<_>>();
     let backend_written = Arc::clone(&written);
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output_dir.path().join("mock.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1114,6 +1225,7 @@ fn cpu_frame_render_timing_comes_from_backend_work_duration() {
     let total_frames = plan.frame_count;
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output_dir.path().join("timing.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1173,6 +1285,7 @@ fn wgpu_frame_request_uses_the_shared_staged_completion_contract() {
     assert_eq!(frame.frame_number, 0);
     let workspace = tempfile::tempdir().expect("temporary output directory");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(workspace.path().join("still-usable.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1272,6 +1385,7 @@ fn prepared_state_reuses_one_backend_for_two_video_operations() {
 
     for name in ["first.mp4", "second.mp4"] {
         let options = RenderOptions {
+            frame_range: None,
             output_override: Some(workspace.path().join(name)),
             overwrite: true,
             cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1313,6 +1427,7 @@ fn idle_failure_prevents_publication_and_invalidates_prepared_state() {
     })
     .expect("prepared state");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1383,6 +1498,7 @@ fn already_cancelled_operation_keeps_prepared_backend_reusable() {
     })
     .expect("preparation succeeds");
     let cancelled = RenderOptions {
+        frame_range: None,
         output_override: Some(workspace.path().join("cancelled.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -1403,6 +1519,7 @@ fn already_cancelled_operation_keeps_prepared_backend_reusable() {
     assert_eq!(error.diagnostic.code, "VESTRA-CANCELLED");
     assert_eq!(aborts.load(Ordering::Relaxed), 0);
     let fresh = RenderOptions {
+        frame_range: None,
         output_override: Some(workspace.path().join("fresh.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1449,6 +1566,7 @@ fn prepared_state_rejects_reuse_after_submission_failure() {
     })
     .expect("preparation succeeds before submission");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(workspace.path().join("failed.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1500,6 +1618,7 @@ fn output_precheck_failure_leaves_prepared_state_ready() {
     })
     .expect("preparation succeeds without an output path or encoder");
     let invalid = RenderOptions {
+        frame_range: None,
         output_override: Some(workspace.path().join("missing-parent/out.mp4")),
         overwrite: false,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1517,6 +1636,7 @@ fn output_precheck_failure_leaves_prepared_state_ready() {
     assert_eq!(error.diagnostic.code, "VESTRA-OUTPUT-PREPARE");
 
     let corrected = RenderOptions {
+        frame_range: None,
         output_override: Some(workspace.path().join("recovered.mp4")),
         ..invalid
     };
@@ -1551,6 +1671,7 @@ fn encoder_startup_failure_leaves_prepared_state_ready() {
     })
     .expect("preparation succeeds");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(workspace.path().join("recovered.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1620,6 +1741,7 @@ fn prepared_visual_snapshot_ignores_later_source_file_changes() {
         let captured = Arc::new(Mutex::new(Vec::new()));
         let sink_pixels = Arc::clone(&captured);
         let options = RenderOptions {
+            frame_range: None,
             output_override: Some(output),
             overwrite: true,
             cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1671,6 +1793,7 @@ fn preparation_fallback_is_retained_on_successful_render() {
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let total_frames = plan.frame_count;
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output_dir.path().join("fallback-success.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1715,6 +1838,7 @@ fn preparation_fallback_is_retained_on_later_render_failure() {
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let total_frames = plan.frame_count;
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output_dir.path().join("fallback-failure.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1765,6 +1889,7 @@ fn engine_rejects_a_sink_frame_count_mismatch_before_publication() {
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let output = output_dir.path().join("mismatch.mp4");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1803,6 +1928,7 @@ fn run_failure_case(mode: MockMode) -> crate::render::RenderError {
     let total_frames = plan.frame_count;
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output_dir.path().join("mock-failure.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1835,6 +1961,7 @@ fn final_drain_cpu_failure_reports_the_worker_frame_not_the_last_project_frame()
     let total_frames = plan.frame_count;
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output_dir.path().join("final-drain-failure.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1882,6 +2009,7 @@ fn run_failure_with_recording_sink(
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let output = output_dir.path().join("recording-sink-failure.mp4");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1944,6 +2072,7 @@ fn asynchronous_backend_failure_uses_the_backend_frame_identity() {
     let total_frames = plan.frame_count;
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output_dir.path().join("frame-identity.mp4")),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -2006,6 +2135,7 @@ fn cancellation_aborts_the_sink_and_keeps_cleanup_failure_as_a_hint() {
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let output = output_dir.path().join("recording-sink-cancel.mp4");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -2077,6 +2207,7 @@ fn engine_cancellation_stops_before_mock_submission() {
     let output_dir = tempfile::tempdir().expect("temporary output directory");
     let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(true));
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output_dir.path().join("mock-cancel.mp4")),
         overwrite: true,
         cancelled,
@@ -2109,6 +2240,7 @@ fn engine_cancellation_after_submission_discards_in_flight_work() {
     let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let written = Arc::new(Mutex::new(Vec::new()));
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::clone(&cancelled),
@@ -2143,6 +2275,7 @@ fn engine_cancellation_during_final_drain_discards_polled_frame() {
     let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let written = Arc::new(Mutex::new(Vec::new()));
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::clone(&cancelled),
@@ -2185,6 +2318,7 @@ fn observer_cancellation_stops_ready_queue_drain_before_another_frame_write() {
     let sink_probe_for_start = sink_probe.clone();
     let capacity = usize::try_from(plan.frame_count).expect("frame count fits usize");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -2238,6 +2372,7 @@ fn callback_token_cancellation_stops_ready_queue_drain_before_another_frame_writ
     let sink_probe_for_start = sink_probe.clone();
     let capacity = usize::try_from(plan.frame_count).expect("frame count fits usize");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled,
@@ -2287,6 +2422,7 @@ fn cancellation_after_frame_loop_stops_before_encoder_finalization() {
     let sink_probe_for_start = sink_probe.clone();
     let total_frames = plan.frame_count;
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::clone(&cancelled),

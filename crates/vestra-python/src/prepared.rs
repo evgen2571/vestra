@@ -769,7 +769,7 @@ fn duration_from_ns(value: u128) -> PyResult<Duration> {
         .map_err(|_| PyValueError::new_err("timestamp_ns is outside the native duration range"))?;
     Ok(Duration::new(seconds, nanos))
 }
-fn duration_from_seconds(value: &Bound<'_, PyAny>) -> PyResult<Duration> {
+pub(crate) fn duration_from_seconds(value: &Bound<'_, PyAny>) -> PyResult<Duration> {
     if value.is_instance_of::<PyBool>() {
         return Err(PyTypeError::new_err(
             "seconds must be a finite float, not bool",

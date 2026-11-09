@@ -37,7 +37,10 @@ if TYPE_CHECKING:
     options = PrepareOptions(backend=vestra.BackendPreference.CPU)
     prepared = Editor().prepare(project, options)
     token = vestra.CancellationToken()
-    request = vestra.PreparedVideoRenderRequest("out.mp4")
+    request = vestra.PreparedVideoRenderRequest("out.mp4", start=0, end=1)
+    range_start: float = request.start
+    range_end: float | None = request.end
+    assert range_start == 0 and range_end == 1
 
     def on_progress(event: vestra.RenderEvent) -> object:
         print(event.fraction)
@@ -58,6 +61,7 @@ if TYPE_CHECKING:
         directory=Path("frames"), indices=[1, 0], format="png"
     )
     assert array_channel or sequence_count
+    high_level_project.render("clip.mp4", start=0.25, end=0.75)
     device: AdapterDeviceType | None = (
         preparation_report.adapter.device_type
         if preparation_report.adapter is not None

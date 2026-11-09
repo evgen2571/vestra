@@ -2,7 +2,7 @@ use std::{
     fmt,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 #[cfg(test)]
@@ -642,6 +642,7 @@ impl Editor {
         context: PreparationContext,
     ) -> Result<application::PreparedRender, EditorError> {
         let request = RenderRequest {
+            frame_range: None,
             output_override: None,
             overwrite: false,
             preview,
@@ -765,7 +766,7 @@ impl Editor {
         let operation_started = Instant::now();
         let operation_id = OperationId::new();
         let output_path = Self::render_output_path(project, &request);
-        let total_frames = Self::estimated_total_frames(project);
+        let total_frames = Self::estimated_total_frames(project, &request);
         let render_span = tracing::info_span!(
             target: "vestra.render",
             "render",
@@ -868,7 +869,24 @@ impl Editor {
                 return Err(error);
             }
         };
+        let metadata = coordinated.prepared.result_metadata();
+        let frame_range = match crate::prepared::resolve_frame_range(
+            request.start,
+            request.end,
+            metadata.duration,
+            crate::FrameRate::new(metadata.frame_rate_ratio.0, metadata.frame_rate_ratio.1)
+                .expect("validated frame rate"),
+            metadata.frame_count,
+        ) {
+            Ok(range) => range,
+            Err(error) => {
+                lifecycle.failed();
+                return Err(error);
+            }
+        };
         let render_request = RenderRequest {
+            frame_range: (request.start != Duration::ZERO || request.end.is_some())
+                .then_some(frame_range),
             output_override: request.output,
             overwrite: request.overwrite,
             preview: request.preview,
@@ -995,12 +1013,22 @@ impl Editor {
             }
         })
     }
-    fn estimated_total_frames(project: &Project) -> Option<u64> {
+    fn estimated_total_frames(project: &Project, request: &SdkRenderRequest) -> Option<u64> {
         let output = &project.canonical().output;
         let duration = output.duration?;
         let duration_nanos = vestra_core::timeline::seconds_to_nanos(duration)?;
         let (numerator, denominator) = output.frame_rate.rational().ok()?;
-        vestra_core::timeline::frame_count(duration_nanos, numerator, denominator).ok()
+        let total =
+            vestra_core::timeline::frame_count(duration_nanos, numerator, denominator).ok()?;
+        let range = crate::prepared::resolve_frame_range(
+            request.start,
+            request.end,
+            Duration::try_from_secs_f64(duration).ok()?,
+            crate::FrameRate::new(numerator, denominator).ok()?,
+            total,
+        )
+        .ok()?;
+        Some(range.end - range.start)
     }
     fn cancelled_editor_error(
         operation_started: Instant,
@@ -1223,9 +1251,26 @@ pub struct SdkRenderRequest {
     pub preview: bool,
     pub backend: RenderBackendPreference,
     pub progress_mode: ProgressMode,
+    /// Select project samples in the half-open interval `[start, end)`.
+    pub start: Duration,
+    pub end: Option<Duration>,
 }
 
 impl SdkRenderRequest {
+    #[must_use]
+    pub const fn start(&self) -> Duration {
+        self.start
+    }
+    #[must_use]
+    pub const fn end(&self) -> Option<Duration> {
+        self.end
+    }
+    #[must_use]
+    pub const fn with_range(mut self, start: Duration, end: Option<Duration>) -> Self {
+        self.start = start;
+        self.end = end;
+        self
+    }
     #[must_use]
     pub fn output(&self) -> Option<&Path> {
         self.output.as_deref()

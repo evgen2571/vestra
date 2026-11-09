@@ -37,7 +37,7 @@ decoding when stream duration is unavailable.
 
 One-shot and prepared rendering use the same duration policy. Omitted
 `trim_end` values resolve decoded EOF before compilation, preserving automatic
-duration, end-relative fades and AAC padding. Explicit trim ends allow fast
+duration and end-relative fades under the rendering reader's padding policy. Explicit trim ends allow fast
 preparation even with missing or inaccurate metadata. Source reading verifies
 only the prefix needed for output, with codec/filter lookahead; it does not
 establish full-source integrity. Logical clip durations stay unchanged when an
@@ -51,7 +51,10 @@ fails before publication, cleans temporary files and preserves prior output.
 Verified bounds allow one 48 kHz sample of end rounding; starts rounding to EOF
 are errors.
 
-Probing uses bundled FFmpeg libraries without a runtime `ffprobe` requirement.
+Inspection uses bundled FFmpeg libraries. Exact render duration and strict
+preparation use the installed `ffmpeg` reader, matching actual audio execution.
+Different FFmpeg versions can apply different AAC padding policies; the three
+rendering modes agree for a fixed executable. No runtime `ffprobe` is required.
 Other streams and timestamp origins/gaps do not extend source-local audio.
 Paths are reused within preflight and graph execution; later operations observe
 edits. See [audio probing](../development/architecture/media-io.md#audio-duration)

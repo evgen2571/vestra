@@ -31,11 +31,15 @@ fn audio_workflow_benchmark() {
         .map_or_else(|| directory.path().join("output.mp4"), PathBuf::from);
     let prepare_options =
         PrepareOptions::new(BackendPreference::Cpu).with_strict_audio(strict_audio);
+    let preparation_started = Instant::now();
     let mut prepared = (operation == "prepared_render").then(|| {
         editor
             .prepare(&project, prepare_options)
             .expect("prepare reusable benchmark project")
     });
+    let preparation_wall_ms = prepared
+        .as_ref()
+        .map(|_| preparation_started.elapsed().as_secs_f64() * 1000.0);
     let mut records = Vec::new();
     for iteration in 0..=measured_samples {
         let started = Instant::now();
@@ -117,6 +121,6 @@ fn audio_workflow_benchmark() {
     }
     println!(
         "audio_workflow_benchmark={}",
-        json!({"project": path, "operation": operation, "strict_audio": strict_audio, "warmups": 1, "measured_samples": measured_samples, "samples": records}),
+        json!({"project": path, "operation": operation, "strict_audio": strict_audio, "preparation_wall_ms": preparation_wall_ms, "warmups": 1, "measured_samples": measured_samples, "samples": records}),
     );
 }

@@ -827,7 +827,8 @@ class Project:
     ) -> _native.PreparedProject:
         """Prepare media and a renderer for repeated frame or video renders.
 
-        Omitted audio trim ends resolve exact decoded duration. Explicit ends
+        Omitted audio trim ends resolve decoded duration with the rendering FFmpeg
+        executable. Explicit ends
         allow bounded reading; video rendering checks required source samples
         before publication. ``strict_audio=True`` audits complete audio sources.
         """

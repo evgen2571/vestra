@@ -65,14 +65,21 @@ pub(crate) fn validate(
                                     .flat_map(|track| &track.clips)
                                     .any(|clip| clip.asset == asset.id && clip.trim_end.is_none()));
                         let decode_audio = || {
-                            probe_audio_duration_cancellable(&resolved, cancelled).map(
-                                |duration_seconds| {
-                                    Some(vestra_media::AudioMediaInfo {
-                                        duration_seconds,
-                                        duration_source: vestra_media::AudioDurationSource::Decoded,
-                                    })
-                                },
-                            )
+                            let duration = if execution_audio {
+                                vestra_media::probe_audio_reader_duration_cancellable(
+                                    &resolved,
+                                    Path::new("ffmpeg"),
+                                    cancelled,
+                                )
+                            } else {
+                                probe_audio_duration_cancellable(&resolved, cancelled)
+                            };
+                            duration.map(|duration_seconds| {
+                                Some(vestra_media::AudioMediaInfo {
+                                    duration_seconds,
+                                    duration_source: vestra_media::AudioDurationSource::Decoded,
+                                })
+                            })
                         };
                         let result = audio_probes.entry(resolved.clone()).or_insert_with(|| {
                             if needs_exact {

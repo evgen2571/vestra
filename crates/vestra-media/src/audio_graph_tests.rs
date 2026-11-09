@@ -63,13 +63,17 @@ fn source_requirements_bound_visible_clips_without_moving_envelopes() {
                 source_index: 0,
                 clip_id: "first".to_owned(),
                 trim_start: 12_000,
-                required_end: 60_000
+                required_end: 60_000,
+                selected_end: 492_000,
+                transformed_output: None,
             },
             AudioSourceRequirement {
                 source_index: 0,
                 clip_id: "shared".to_owned(),
                 trim_start: 96_000,
-                required_end: 120_000
+                required_end: 120_000,
+                selected_end: 576_000,
+                transformed_output: None,
             },
         ]
     );
@@ -178,6 +182,62 @@ fn source_requirements_use_independently_rounded_trim_edges() {
     let graph = compile(&mix, 1.0).expect("rounded graph");
     assert_eq!(graph.source_requirements[0].trim_start, 1);
     assert_eq!(graph.source_requirements[0].required_end, 2);
+}
+
+#[test]
+fn slowed_partial_source_must_produce_the_visible_prefix_before_padding() {
+    let directory = tempfile::tempdir().expect("fixtures");
+    for (source_samples, selected_samples, valid) in [
+        (3_000, 96_000, false),
+        (144_000, 96_000, true),
+        (3_000, 3_000, true),
+    ] {
+        let path = directory.path().join(format!("{source_samples}.wav"));
+        let samples: Vec<_> = (0..source_samples)
+            .map(|sample| (sample as f32 * std::f32::consts::TAU * 440.0 / 48_000.0).sin() * 0.1)
+            .collect();
+        write_mono_wav_samples(&path, 48_000, &samples);
+        let clip = AudioClipPlan {
+            path,
+            selected_duration: selected_samples as f64 / 48_000.0,
+            processed_duration: selected_samples as f64 / 24_000.0,
+            effects: AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::PlaybackSpeed { rate: 0.5 }],
+            },
+            ..automation_test_clip()
+        };
+        let mix = AudioMixPlan {
+            tracks: vec![AudioTrackPlan {
+                id: "track".to_owned(),
+                mute: false,
+                gain: 1.0,
+                clips: vec![clip],
+                effects: AudioEffectPassPlan::default(),
+            }],
+            effects: AudioEffectPassPlan::default(),
+        };
+        let mut output = Vec::new();
+        let result = crate::consume_master_pcm(&mix, 0.125, 1, |samples| {
+            output.extend_from_slice(samples);
+            Ok(())
+        });
+        assert_eq!(
+            result.is_ok(),
+            valid,
+            "{source_samples}/{selected_samples}: {result:?}"
+        );
+        if !valid {
+            assert!(matches!(
+                result,
+                Err(crate::MediaError::AudioSourceBounds { .. })
+            ));
+        } else {
+            assert_eq!(output.len(), 6_000 * 2);
+            if source_samples > selected_samples {
+                assert!(output[5_000 * 2..].iter().any(|sample| sample.abs() > 0.01));
+            }
+        }
+    }
 }
 
 #[test]

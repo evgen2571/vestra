@@ -724,7 +724,7 @@ fn bounded_preparation_rejects_early_eof_and_exact_ends_match_strict_rendering()
 }
 
 #[test]
-fn prepared_aac_default_and_strict_both_include_exact_padding() {
+fn prepared_aac_default_and_strict_match_the_rendering_reader() {
     use vestra::{CancellationToken, PreparedVideoRenderRequest};
     let directory = TempDir::new().expect("directory");
     success(
@@ -741,6 +741,17 @@ fn prepared_aac_default_and_strict_both_include_exact_padding() {
             ])
             .arg(directory.path().join("source.m4a")),
     );
+    let source_pcm = success(
+        Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(directory.path().join("source.m4a"))
+            .args([
+                "-map", "0:a:0", "-ac", "1", "-ar", "48000", "-f", "f32le", "-",
+            ]),
+    );
+    // FFmpeg 9 discards MOV/AAC trailing padding that FFmpeg 8 decodes.
+    let expected_duration = source_pcm.stdout.len() as f64 / 4.0 / 48_000.0 - 0.25 + 0.125;
+    let expected_frames = (expected_duration * 8.0).ceil() as u64;
     let mut value = project(true);
     value["visual"]["clips"] = json!([]);
     value["assets"] = json!([{"id":"tone", "type":"audio", "source":"source.m4a"}]);
@@ -757,10 +768,10 @@ fn prepared_aac_default_and_strict_both_include_exact_padding() {
             .expect("prepare AAC");
         let duration = prepared.preparation_report().duration().as_secs_f64();
         assert!(
-            duration > 1.125 && duration < 1.15,
-            "decoded padding: {duration}"
+            (duration - expected_duration).abs() <= 1e-9,
+            "reader duration: expected {expected_duration}, got {duration}"
         );
-        assert_eq!(prepared.preparation_report().frame_count(), 10);
+        assert_eq!(prepared.preparation_report().frame_count(), expected_frames);
         let path = directory.path().join(format!("aac-{strict}.mp4"));
         prepared
             .render_video(
@@ -820,7 +831,7 @@ fn prepared_aac_default_and_strict_both_include_exact_padding() {
             &CancellationToken::new(),
         )
         .expect("one-shot exact AAC");
-    assert_eq!(result.total_frames, 10);
+    assert_eq!(result.total_frames, expected_frames);
     let decoded = success(
         Command::new("ffmpeg")
             .args(["-v", "error", "-i"])

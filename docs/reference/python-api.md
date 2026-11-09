@@ -178,7 +178,7 @@ Inspected clips expose read-only `duration_source`, either `"reported"` or
 `"decoded"`.
 
 One-shot/default/strict preparation resolve omitted audio trim ends from decoded
-EOF, preserving automatic timelines and padding. Explicit trim ends allow bounded
+EOF with the installed `ffmpeg` reader, preserving consistent automatic timelines. Explicit trim ends allow bounded
 execution without a full scan; actual reading verifies only output-visible source
 samples before publication. Strict validation may reject corruption outside that
 examined region. See the [audio duration contract](../development/architecture/media-io.md#audio-duration).

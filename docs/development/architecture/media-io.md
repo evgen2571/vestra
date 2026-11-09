@@ -28,7 +28,7 @@ One-shot and reusable preparation share the same execution policy. An explicit
 source metadata may be unavailable or inaccurate; actual reading verifies the
 output-visible selection. Preparation does not scan merely because a bound
 exceeds reported metadata. An omitted `trim_end` requires exact EOF resolution
-before compilation, including AAC decoded padding. This also applies to muted
+before compilation. This also applies to muted
 or disabled-output audio because it contributes structural automatic duration.
 
 Exact open-ended timelines fundamentally require reaching EOF: a FLAC reporting
@@ -37,12 +37,29 @@ end-relative fades and automatic duration. Late recompilation would invalidate
 prepared frame access and resources. Therefore open-ended preparation retains a
 full scan; author an explicit trim end for bounded preparation and rendering.
 
+Execution resolves exact ends by counting the installed `ffmpeg` reader's
+48 kHz normalized samples, using the same decoding/error policy as the audio
+graph. Strict preparation uses this reader for its full audit too. This requires
+the executable during exact preparation, even for frame-only or muted projects.
+Metadata inspection and strict inspection remain in-process through bundled
+libraries. No `ffprobe` process is used.
+
+Using the execution reader matters when the two FFmpeg versions differ. For an
+identical 1.25-second M4A, FFmpeg 8 decodes 60,416 samples while FFmpeg 9 honors
+416 samples of trailing discard metadata and delivers 60,000. Every rendering
+mode uses the selected reader's EOF, so preparation cannot silently select a
+different timeline. Decoded inspection duration can differ from execution when
+these decoder policies differ. Prepared sources and the executable must remain
+unchanged throughout the snapshot's lifetime.
+
 Select `PreflightOptions::with_strict_audio(true)` or
 `PrepareOptions::with_strict_audio(true)` to audit all complete audio sources.
 Python accepts `strict_audio=True`; CLI validation/inspection accept
-`--strict-audio`. Strict decoding counts per-channel samples, rejects reported
+`--strict-audio`. Native strict inspection counts per-channel samples and rejects reported
 demux/decode errors, corrupt packets/frames, empty audio and zero/changing sample
-rates. It establishes decoded sample duration, not a checksum or proof that a
+rates. Execution rejects decoder errors and empty audio and counts the normalized
+reader output. Full decoding establishes the selected reader's sample duration,
+not a checksum or proof that a
 source was never truncated before Vestra received it. Pure project validation
 still performs no I/O.
 
@@ -52,7 +69,10 @@ The production FFmpeg audio graph shares each source input across clip branches.
 A named `astats` counter after 48 kHz normalization records samples consumed by
 that same read. Bounds checks use the output-visible prefix, mapping clip speed
 transforms back to source samples; logical clip durations, fades and automation
-remain unchanged. Reading is sequential, preserving priming and source-local
+remain unchanged. Speed-transformed branches also count samples before padding:
+a partial source must actually produce the visible transformed prefix. Complete
+authored selections retain their existing speed-duration normalization.
+Reading is sequential, preserving priming and source-local
 sample trimming across nonzero/gapped timestamps. Later offsets may therefore
 require decoding the preceding prefix. Codec/filter lookahead may read beyond
 the exact requested endpoint.
@@ -79,13 +99,16 @@ strict-prepared output agree for valid selections; strict validation can still
 reject corruption outside a bounded ordinary render's examined region.
 
 Successful and failed native probes are reused by resolved path within preflight;
-subsequent operations observe source edits. Metadata inspection retains an input
-and decoder; exact scanning additionally retains one packet/frame at a time.
+subsequent operations observe source edits. Native metadata inspection retains an input
+and decoder; native strict inspection additionally retains one packet/frame at a time.
+Execution end resolution drains a bounded diagnostic tail and sample counters,
+without retaining PCM.
 FFmpeg buffers and indexes depend on format. There is no persistent global cache.
 
 Rendering cancellation still aborts/reaps the owned encoder and cleans temporary
-files. Native exact scans check cancellation between assets and packet/frame
-operations; stalled filesystem I/O cannot be preempted. Standalone preparation
+files. Native inspection checks cancellation between assets and packet/frame
+operations; stalled native filesystem I/O cannot be preempted. Execution end
+resolution polls cancellation and kills/reaps its owned reader. Standalone preparation
 and validation remain synchronous. Native paths must be UTF-8 without NUL bytes;
 unsupported paths produce diagnostics.
 

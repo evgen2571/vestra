@@ -1,7 +1,8 @@
 # Benchmarks
 
-See [native audio inspection results](audio-probing.md) for #110's before/after
-timings, memory evidence, published-output checks and fixture details.
+See [bounded audio execution results](audio-probing.md) for #110's three-way
+comparison against #109 and the original #111, memory evidence, published-output
+checks and fixture details.
 
 The ignored media `benchmark_audio_probing` compares the previous ffprobe JSON
 subprocess, native first-stream duration metadata, production metadata-first
@@ -43,31 +44,40 @@ five measured operations by default, and prints raw `audio_workflow_benchmark`
 JSON. Set `VESTRA_BENCH_AUDIO_SAMPLES` to a positive integer to change the count;
 use the same count for each side of a comparison. `prepare`
 prepares afresh on every operation; `prepared_render` prepares once outside its
-timed intervals. Its warmup record measures the first render, including any
-deferred exact audio verification; report this separately from later renders.
+encode intervals and records that time as `preparation_wall_ms` (`null` for other
+operations). Its warmup record measures the first render, including any deferred
+audio work. Report preparation, first encode and their sum separately from the
+five later encodes; the first two are single observations, not medians.
 Render records retain the actual selected backend and stage timings. Set
 `VESTRA_BENCH_AUDIO_OUTPUT=/absolute/path/output.mp4` to retain the last published
 output for independent decoding. Keep source files unchanged between repeated
 operations.
 
 Set `VESTRA_BENCH_AUDIO_STRICT=1` to measure explicit full-decode validation and
-preparation. One-shot renders already resolve exact audio durations; the flag
-also controls the preparation outside `prepared_render`'s timed intervals.
+preparation. The flag also controls the preparation before `prepared_render`'s
+encode intervals; it does not change `render`'s one-shot request. Default one-shot
+and reusable preparation resolve omitted source ends exactly. Explicit trim ends
+allow bounded execution, which verifies the consumed source region without
+claiming full-source integrity.
 For expensive full-length encoding checks, one warmup plus one measured output
 can establish correctness and approximate cost; it does not establish a precise
 rendering speedup. Keep repeated validation/preparation and short-clip timings
 separate from that smaller full-length protocol.
 
-Compare the same test against #109's full-decoding revision and the candidate,
-using separate worktrees and preserved executables. Copy this benchmark-only test
-into a baseline checkout that predates it; remove its
+Compare the same test against #109's full-decoding revision, original #111 and the
+candidate, using separate worktrees and preserved executables. Copy this
+benchmark-only test into a baseline checkout that predates it; remove its
 `.with_strict_audio(strict_audio)` calls because that API does not exist there.
 Do not copy production code. Build each with
 `cargo test --release -p vestra --test audio_workflow_benchmark --no-run` and
 save the printed executable before building the other checkout. A shared Cargo
 target can otherwise replace or reuse the wrong checkout's artifacts; clear
-the changed packages with `cargo clean --release -p vestra -p vestra-media`
-between builds and verify both executable hashes and their actual duration policy.
+the changed packages with
+`cargo clean --release -p vestra-core -p vestra-media -p vestra` between builds.
+Record revision, benchmark source/executable hashes and the actual linked FFmpeg
+build-script output; matching the external `ffmpeg --version` is insufficient.
+Verify the executables' duration policies with the misleading FLAC and automatic
+AAC controls described in the report.
 
 Cover short WAV/FLAC/MP3/AAC files, several long sources, multiple distinct long
 files, and a video-with-audio composition. Separate full-length output from a

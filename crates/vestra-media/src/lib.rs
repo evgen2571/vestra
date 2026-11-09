@@ -7,6 +7,7 @@
 
 mod audio_analysis;
 mod audio_graph;
+mod audio_reader_probe;
 mod audio_verification;
 mod error;
 mod ffmpeg;
@@ -33,6 +34,7 @@ mod test_support;
 
 pub use audio_analysis::{MasterPcmSpec, analyze_master_audio, consume_master_pcm};
 pub use audio_graph::seconds_to_samples;
+pub use audio_reader_probe::probe_audio_reader_duration_cancellable;
 pub use error::{AudioAnalysisError, MediaError};
 pub use ffmpeg::FfmpegSink;
 pub use output::{OutputTarget, check_output, effective_parent};

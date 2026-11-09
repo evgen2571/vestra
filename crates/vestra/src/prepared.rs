@@ -458,6 +458,27 @@ impl PreparedProject {
         self.render_frame_number(frame)
     }
 
+    /// Resolves `[start, end)` on the original rational frame grid. Both bounds
+    /// round up; omitted `end` uses the timeline end. Empty or out-of-range
+    /// selections are rejected without rendering a frame.
+    #[expect(
+        clippy::result_large_err,
+        reason = "range failures retain SDK diagnostics"
+    )]
+    pub fn frame_range(
+        &self,
+        start: Duration,
+        end: Option<Duration>,
+    ) -> Result<std::ops::Range<u64>, EditorError> {
+        resolve_frame_range(
+            start,
+            end,
+            self.report.duration,
+            self.report.frame_rate,
+            self.report.frame_count,
+        )
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "render failures retain diagnostics"
@@ -725,6 +746,44 @@ fn preparation_report_warnings(
         warnings.push(crate::render::backend_fallback_warning(fallback));
     }
     crate::editor::Editor::operation_warnings(&warnings)
+}
+
+#[expect(
+    clippy::result_large_err,
+    reason = "range failures retain SDK diagnostics"
+)]
+pub(crate) fn resolve_frame_range(
+    start: Duration,
+    end: Option<Duration>,
+    duration: Duration,
+    rate: FrameRate,
+    frame_count: u64,
+) -> Result<std::ops::Range<u64>, EditorError> {
+    let end = end.unwrap_or(duration);
+    if start >= end || end > duration {
+        return Err(simple_error(
+            "VESTRA-RENDER-RANGE",
+            "range must satisfy 0 <= start < end <= project duration",
+        ));
+    }
+    let boundary = |time: Duration| {
+        vestra_core::timeline::frame_count(time.as_nanos(), rate.numerator(), rate.denominator())
+            .map_err(|_| {
+                simple_error(
+                    "VESTRA-RENDER-RANGE",
+                    "range boundary overflows the frame index",
+                )
+            })
+    };
+    let first = boundary(start)?;
+    let stop = boundary(end)?.min(frame_count);
+    if first >= stop {
+        return Err(simple_error(
+            "VESTRA-RENDER-RANGE",
+            "range contains no project frames",
+        ));
+    }
+    Ok(first..stop)
 }
 
 fn simple_error(code: &str, message: &str) -> EditorError {

@@ -916,23 +916,9 @@ class Project:
                     raise ValueError("index is outside the project timeline")
             count = len(indices)
         else:
-            duration = report.duration_ns / 1_000_000_000
-            start_seconds = 0.0 if start is None else _real(start, "start")
-            end_seconds = duration if end is None else _real(end, "end")
-            if not 0 <= start_seconds < end_seconds <= duration:
-                raise ValueError("range must satisfy 0 <= start < end <= project duration")
-            start_ns = int(start_seconds * 1_000_000_000)
-            end_ns = report.duration_ns if end is None else int(end_seconds * 1_000_000_000)
-            if not 0 <= start_ns < end_ns <= report.duration_ns:
-                raise ValueError("range must satisfy 0 <= start < end <= project duration")
-            rate = report.frame_rate
-            divisor = rate.denominator * 1_000_000_000
-            first = (start_ns * rate.numerator + divisor - 1) // divisor
-            stop = min((end_ns * rate.numerator + divisor - 1) // divisor, report.frame_count)
+            first, stop = prepared._frame_range_seconds(0 if start is None else start, end)
             indices = range(first, stop)
             count = len(indices)
-            if not count:
-                raise ValueError("range contains no project frames")
         if not overwrite:
             for number in range(count):
                 path = target / f"frame_{number:06d}.{format}"

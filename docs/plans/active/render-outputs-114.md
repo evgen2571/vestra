@@ -77,6 +77,13 @@ environments honestly; do not claim them from local Linux evidence.
   `WGPU device_request failed: Parent device is lost`. Strict software and
   hardware adapter validation remain unverified; investigate the established
   Nix software environment before treating this as a blocker.
+- `ced4ba5` committed the verified frame/still/sequence/NumPy slice.
+- Shared range groundwork: added SDK `PreparedProject::frame_range`, using
+  checked core rational frame counting, and routed Python continuous sequences
+  through it. New SDK boundary/fractional-rate tests were observed failing
+  before implementation and then passed. Post-change verification: full Python
+  suite 1,470 passed, 42 skipped; 10 focused prepared SDK tests passed;
+  all-target SDK/binding Clippy, mypy, Ruff, formatting and docs links passed.
 
 ## Decisions and discoveries
 - 2026-11-09: isolated evaluation, random access, owned pixels and preview
@@ -87,9 +94,21 @@ environments honestly; do not claim them from local Linux evidence.
 - Next: resolve video intervals on the original rational frame grid, zero-base
   only encoder indices/audio, and share range boundary rules with sequences.
   Keep prepared state and existing staged rendering/publication paths.
+- 2026-11-09: confirmed an existing preview geometry defect with actual CPU
+  MP4 output: a 640×360 rectangle in a 1280×720 project occupies half the
+  canvas at full resolution but the entire 640×360 preview. At normalized
+  `(0.125, 0.5)`, full output is `[0, 0, 0]`, preview `[253, 0, 0]`.
+  Evidence is under `target/preview-scale-baseline-114/`. Resolution overrides
+  must preserve authored layout using the shared geometry infrastructure;
+  reducing `plan.canvas` dimensions alone is insufficient.
 
 ## Completion / handoff
-Frame export slice verified and ready to commit. Video ranges/overrides,
+Frame export slice committed as `ced4ba5`. Shared range validation implemented
+and verified. Next wire `start`/`end` through SDK/native requests and operation
+options into the existing staged frame loop. Keep backend/evaluation frame
+numbers absolute while writing encoder frames from zero; preserve original
+audio-effect time and trim the final mix in sync with the resolved first frame.
+Video ranges/overrides,
 preview improvements, animated images, performance/memory measurements,
 strict adapter checks, supported wheels, final contributor gate, issue update
 and PR remain. No issue checkboxes updated or PR opened yet.

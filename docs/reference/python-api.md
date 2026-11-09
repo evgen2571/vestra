@@ -134,7 +134,11 @@ snapshot.save(path)
 
 ```text title="High-level rendering signatures"
 project.prepare(*, backend="auto") -> PreparedProject
-project.render_frame(seconds, *, backend="auto") -> Frame
+project.render_frame(seconds=None, output=None, *, frame_number=None,
+                     backend="auto", overwrite=False) -> Frame
+project.get_frame(seconds=None, *, frame_number=None, backend="auto") -> NDArray[uint8]
+project.render_frames(*, directory, times=None, indices=None, start=None,
+                      end=None, format="png", backend="auto", overwrite=False) -> int
 project.render(output, *, backend="auto", overwrite=False, preview=False,
                show_progress=True, on_progress=None,
                cancellation=None) -> RenderResult
@@ -144,6 +148,22 @@ project.render(output, *, backend="auto", overwrite=False, preview=False,
 video renders. Backend preferences are `"auto"`, `"cpu"`, `"wgpu"` or
 `BackendPreference` values; see [backends](backends.md). Existing outputs require
 `overwrite=True`.
+
+Single-frame methods require exactly one of `seconds` or `frame_number`.
+Times select the containing frame; frame indices are zero-based.
+`render_frames()` accepts a sequence of times, a sequence of indices, or a
+continuous range, with the whole timeline as the default. It saves
+`frame_000000.ext`, … in request order and returns a count. Ranges are half-open,
+round both boundaries up to frame indices, and reject empty/out-of-range
+requests. The formats are `png`, `jpg`, `jpeg`, and lossless static `webp`.
+See [still images, sequences and arrays](../guides/python/rendering-and-preparation.md#save-a-still-image-or-sequence)
+for publication, memory and alpha semantics.
+
+`Frame.save(output, *, overwrite=False)` encodes the same formats by extension.
+`Frame.to_numpy()` and `Project.get_frame()` require the `numpy` extra and
+return independent writable contiguous `uint8` arrays shaped `(height, width, 4)`.
+Pixels are top-to-bottom straight-alpha RGBA8; byte strides are `(width * 4, 4, 1)`.
+`Frame.to_bytes()` remains available without NumPy.
 
 ```text title="Native Editor signatures (project is a ProjectSnapshot)"
 Editor(*, resource_limits=None)

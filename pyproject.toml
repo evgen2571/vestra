@@ -33,8 +33,10 @@ Repository = "https://github.com/evgen2571/vestra"
 Issues = "https://github.com/evgen2571/vestra/issues"
 
 [project.optional-dependencies]
-test = ["jsonschema==4.26.0", "mypy>=1.13", "pytest>=8"]
-dev = ["jsonschema==4.26.0", "maturin>=1.14,<2", "mypy>=1.13", "pytest>=8", "ruff>=0.12,<0.13"]
+numpy = ["numpy>=1.26"]
+# Keep dependency stubs compatible with the Python 3.11 mypy target.
+test = ["jsonschema==4.26.0", "mypy>=1.13", "numpy>=1.26,<2.5", "pytest>=8"]
+dev = ["jsonschema==4.26.0", "maturin>=1.14,<2", "mypy>=1.13", "numpy>=1.26,<2.5", "pytest>=8", "ruff>=0.12,<0.13"]
 
 benchmark = ["moviepy==2.2.1", "psutil==7.2.2", "pillow==11.3.0", "imageio-ffmpeg==0.6.0", "maturin==1.14.1", "vestra"]
 

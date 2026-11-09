@@ -49,6 +49,15 @@ if TYPE_CHECKING:
     preparation_report = prepared.preparation_report
     frame: Frame = prepared.render_frame_number(0)
     pixels: bytes = frame.to_bytes()
+    image_frame: Frame = high_level_project.render_frame(0.5, "poster.png")
+    image_frame.save("poster.webp", overwrite=True)
+    pixel_array = image_frame.to_numpy()
+    array_channel: int = int(pixel_array[0, 0, 0])
+    pixel_array = high_level_project.get_frame(frame_number=0)
+    sequence_count: int = high_level_project.render_frames(
+        directory=Path("frames"), indices=[1, 0], format="png"
+    )
+    assert array_channel or sequence_count
     device: AdapterDeviceType | None = (
         preparation_report.adapter.device_type
         if preparation_report.adapter is not None

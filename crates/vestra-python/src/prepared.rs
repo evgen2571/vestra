@@ -1,4 +1,5 @@
 use std::{
+    path::PathBuf,
     sync::{Condvar, Mutex, OnceLock, TryLockError},
     time::Duration,
 };
@@ -476,6 +477,21 @@ impl PyFrame {
     }
     fn __bytes__<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
         self.to_bytes(py)
+    }
+    fn to_numpy<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        PyModule::import(py, "numpy")?
+            .call_method1("frombuffer", (self.to_bytes(py), "uint8"))?
+            .call_method1("reshape", ((self.inner.height(), self.inner.width(), 4),))?
+            .call_method0("copy")
+    }
+    #[pyo3(signature = (output, *, overwrite = false))]
+    #[expect(
+        clippy::result_large_err,
+        reason = "frame output retains SDK diagnostics"
+    )]
+    fn save(&self, py: Python<'_>, output: PathBuf, overwrite: bool) -> PyResult<()> {
+        py.detach(|| self.inner.save(output, overwrite))
+            .or_else(|error| frame_error(py, error))
     }
 }
 impl From<NativeFrame> for PyFrame {

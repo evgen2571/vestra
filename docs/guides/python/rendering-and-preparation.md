@@ -56,6 +56,68 @@ prepare again to include them. For one quick inspection,
 `project.render_frame(0.5, backend="cpu")` is convenient, but every call prepares
 again. Neither route encodes video or verifies output publication.
 
+## Save a still image or sequence
+
+```python
+frame = project.render_frame(0.5, "poster.png", backend="cpu", overwrite=True)
+frame.save("poster.webp", overwrite=True)
+project.render_frame(frame_number=0, output="first.jpg", overwrite=True)
+```
+
+The extension selects PNG, JPEG (`.jpg` or `.jpeg`), or lossless static WebP.
+PNG and WebP retain alpha; JPEG composites transparent pixels over black.
+Still export uses built-in encoders and does not require the FFmpeg executable.
+Each file is published after encoding succeeds, with the same overwrite
+protection as video output.
+
+For several images, share preparation automatically:
+
+```python
+count = project.render_frames(
+    times=[0.5, 0, 0.5], directory="selected-frames", format="webp", overwrite=True,
+)
+count = project.render_frames(
+    directory="sequence", start=0, end=0.5, overwrite=True,
+)
+```
+
+`indices=[12, 0, 12]` selects exact project frame numbers instead of times.
+Selection order and duplicates are retained. Files are named `frame_000000.webp`,
+`frame_000001.webp`, and so on; the number refers to selection order. A continuous
+sequence defaults to the whole timeline and includes frames whose rational
+project times lie in `[start, end)`. Both boundaries round up to a frame index.
+Invalid, empty or out-of-timeline ranges are refused. An explicitly empty list
+writes nothing and returns zero. Existing numbered files are checked before
+writing, and each file is published independently. A later encoding or I/O
+failure leaves earlier completed images available.
+
+Only one frame is encoded at a time. The return value is a count, so Vestra
+does not retain a list of frames or output paths as the sequence grows.
+
+## Use frames with NumPy
+
+Install the optional extra with `pip install 'vestra[numpy]'`:
+
+```python
+pixels = project.get_frame(0.5, backend="cpu")
+print(pixels.shape, pixels.dtype)  # (height, width, 4), uint8
+pixels = frame.to_numpy()
+```
+
+Arrays contain RGBA8 with straight (unpremultiplied) alpha, top row first, in
+contiguous row-major order. Their byte strides are `(width * 4, 4, 1)`. Each call
+returns an independent writable copy that owns its memory, remains valid after
+the frame or prepared project is released, and cannot alter the renderer.
+Use `frame.to_bytes()` when NumPy is unnecessary. The existing `Frame` result
+also records the selected project frame number and timestamp.
+
+The [complete frame export example](../../assets/examples/frame_exports.py)
+creates a project, stills, selected frames, a sequence and an array. Run it with
+`python frame_exports.py` after installing `vestra[numpy]`. It replaces its
+outputs inside `frame-exports/` on each run.
+
+## Render videos from prepared state
+
 A prepared runtime can also produce several videos without rebuilding it:
 
 ```python

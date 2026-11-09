@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
+
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
 
 from . import _native
 from .authoring.builder import ProjectBuilder
@@ -831,14 +835,120 @@ class Project:
         )
 
     def render_frame(
-        self, seconds: float, *, backend: str | _native.BackendPreference = "auto"
+        self,
+        seconds: float | None = None,
+        output: str | os.PathLike[str] | None = None,
+        *,
+        frame_number: int | None = None,
+        backend: str | _native.BackendPreference = "auto",
+        overwrite: bool = False,
     ) -> _native.Frame:
-        """Render one RGBA frame at ``seconds``.
+        """Render one frame by time or index, optionally saving PNG/JPEG/WebP.
 
-        This prepares the project on every call; call ``prepare()`` once and
-        reuse the result to render many frames.
+        Times select the containing project frame. Supply exactly one of
+        ``seconds`` and ``frame_number``. Use ``prepare()`` or ``render_frames()``
+        to share preparation across multiple frames.
         """
-        return self.prepare(backend=backend).render_frame_seconds(seconds)
+        if (seconds is None) == (frame_number is None):
+            raise ValueError("supply exactly one of seconds or frame_number")
+        prepared = self.prepare(backend=backend)
+        if seconds is not None:
+            frame = prepared.render_frame_seconds(seconds)
+        else:
+            assert frame_number is not None
+            frame = prepared.render_frame_number(frame_number)
+        if output is not None:
+            frame.save(_path(output, "output"), overwrite=overwrite)
+        return frame
+
+    def get_frame(
+        self,
+        seconds: float | None = None,
+        *,
+        frame_number: int | None = None,
+        backend: str | _native.BackendPreference = "auto",
+    ) -> NDArray[np.uint8]:
+        """Return an owned writable ``uint8[height, width, 4]`` RGBA array.
+
+        Install ``vestra[numpy]``. Rows run top to bottom, with straight alpha
+        and strides ``(width * 4, 4, 1)``. Changing the array cannot change
+        another frame or prepared renderer.
+        """
+        return self.render_frame(seconds, frame_number=frame_number, backend=backend).to_numpy()
+
+    def render_frames(
+        self,
+        *,
+        directory: str | os.PathLike[str],
+        times: Sequence[float] | None = None,
+        indices: Sequence[int] | None = None,
+        start: float | None = None,
+        end: float | None = None,
+        format: str = "png",
+        backend: str | _native.BackendPreference = "auto",
+        overwrite: bool = False,
+    ) -> int:
+        """Save ``frame_000000.ext``, … and return the number of images.
+
+        Supply ``times``, ``indices``, or a continuous ``[start, end)`` range
+        (the whole timeline by default). Selection order and duplicates are
+        retained. Range boundaries round up to the next project frame. Frames
+        are rendered and saved one at a time using one preparation.
+        """
+        if times is not None and indices is not None:
+            raise ValueError("supply times or indices, not both")
+        if (times is not None or indices is not None) and (start is not None or end is not None):
+            raise ValueError("start/end cannot be combined with times or indices")
+        if not isinstance(format, str) or format.lower() not in {"png", "jpg", "jpeg", "webp"}:
+            raise ValueError("format must be png, jpg, jpeg or webp")
+        format = format.lower()
+        target = Path(_path(directory, "directory"))
+        prepared = self.prepare(backend=backend)
+        report = prepared.preparation_report
+        if times is not None:
+            for seconds in times:
+                if _real(seconds, "time") >= report.duration_ns / 1_000_000_000:
+                    raise ValueError("time is outside the project timeline")
+            count = len(times)
+        elif indices is not None:
+            for index in indices:
+                if not 0 <= _integer(index, "index") < report.frame_count:
+                    raise ValueError("index is outside the project timeline")
+            count = len(indices)
+        else:
+            duration = report.duration_ns / 1_000_000_000
+            start_seconds = 0.0 if start is None else _real(start, "start")
+            end_seconds = duration if end is None else _real(end, "end")
+            if not 0 <= start_seconds < end_seconds <= duration:
+                raise ValueError("range must satisfy 0 <= start < end <= project duration")
+            start_ns = int(start_seconds * 1_000_000_000)
+            end_ns = report.duration_ns if end is None else int(end_seconds * 1_000_000_000)
+            if not 0 <= start_ns < end_ns <= report.duration_ns:
+                raise ValueError("range must satisfy 0 <= start < end <= project duration")
+            rate = report.frame_rate
+            divisor = rate.denominator * 1_000_000_000
+            first = (start_ns * rate.numerator + divisor - 1) // divisor
+            stop = min((end_ns * rate.numerator + divisor - 1) // divisor, report.frame_count)
+            indices = range(first, stop)
+            count = len(indices)
+            if not count:
+                raise ValueError("range contains no project frames")
+        if not overwrite:
+            for number in range(count):
+                path = target / f"frame_{number:06d}.{format}"
+                if path.exists():
+                    raise FileExistsError(path)
+        if count:
+            target.mkdir(parents=True, exist_ok=True)
+        for number in range(count):
+            if times is not None:
+                frame = prepared.render_frame_seconds(times[number])
+            else:
+                assert indices is not None
+                frame = prepared.render_frame_number(indices[number])
+            frame.save(target / f"frame_{number:06d}.{format}", overwrite=overwrite)
+            del frame
+        return count
 
     def render(
         self,

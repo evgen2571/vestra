@@ -104,6 +104,8 @@ impl PrepareOptions {
 pub struct PreparedVideoRenderRequest {
     output: PathBuf,
     overwrite: bool,
+    start: Duration,
+    end: Option<Duration>,
     progress_mode: vestra_progress::ProgressMode,
 }
 
@@ -113,6 +115,8 @@ impl PreparedVideoRenderRequest {
         Self {
             output: output.into(),
             overwrite: false,
+            start: Duration::ZERO,
+            end: None,
             progress_mode: vestra_progress::ProgressMode::Auto,
         }
     }
@@ -120,6 +124,20 @@ impl PreparedVideoRenderRequest {
     pub const fn with_overwrite(mut self, overwrite: bool) -> Self {
         self.overwrite = overwrite;
         self
+    }
+    #[must_use]
+    pub const fn with_range(mut self, start: Duration, end: Option<Duration>) -> Self {
+        self.start = start;
+        self.end = end;
+        self
+    }
+    #[must_use]
+    pub const fn start(&self) -> Duration {
+        self.start
+    }
+    #[must_use]
+    pub const fn end(&self) -> Option<Duration> {
+        self.end
     }
     #[must_use]
     pub fn output(&self) -> &std::path::Path {
@@ -571,6 +589,8 @@ impl PreparedProject {
         // and failure context are captured per execution below.
         let operation_started = Instant::now();
         let output_path = request.output.clone();
+        let frame_range = self.frame_range(request.start, request.end)?;
+        let total_frames = frame_range.end - frame_range.start;
         let operation_id = OperationId::new();
         let render_span = tracing::info_span!(
             target: "vestra.render",
@@ -592,7 +612,7 @@ impl PreparedProject {
             actual_backend = self.report.selected_backend.as_str(),
             "render started"
         );
-        if lifecycle.started(Some(self.report.frame_count), &output_path)
+        if lifecycle.started(Some(total_frames), &output_path)
             == crate::RenderObserverControl::Cancel
             || cancellation.is_cancelled()
         {
@@ -606,7 +626,7 @@ impl PreparedProject {
             );
             return Err(prepared_cancelled_error(
                 operation_started,
-                self.report.frame_count,
+                total_frames,
                 output_path,
             ));
         }
@@ -623,11 +643,13 @@ impl PreparedProject {
             );
             return Err(prepared_cancelled_error(
                 operation_started,
-                self.report.frame_count,
+                total_frames,
                 output_path,
             ));
         }
         let render_request = application::RenderRequest {
+            frame_range: (request.start != Duration::ZERO || request.end.is_some())
+                .then_some(frame_range),
             output_override: Some(request.output),
             overwrite: request.overwrite,
             preview: false,

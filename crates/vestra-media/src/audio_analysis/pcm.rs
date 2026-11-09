@@ -178,6 +178,7 @@ fn master_pcm_execution(
         mix,
         project_duration,
         AudioGraphCompileOptions {
+            output_range: None,
             first_audio_input_index: 0,
         },
     )?;

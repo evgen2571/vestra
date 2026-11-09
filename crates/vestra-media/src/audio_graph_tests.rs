@@ -14,6 +14,68 @@ use vestra_core::plan_audio::{
 };
 
 #[test]
+fn selected_audio_pads_after_project_end_and_rebases_exact_sample_bounds() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("constant.wav");
+    write_mono_wav_samples(&path, 48_000, &vec![0.25; 9_600]);
+    let mut clip = automation_test_clip();
+    clip.path = path;
+    clip.gain_automation = None;
+    let mix = AudioMixPlan {
+        tracks: vec![AudioTrackPlan {
+            id: "track".into(),
+            mute: false,
+            gain: 1.0,
+            clips: vec![clip],
+            effects: AudioEffectPassPlan::default(),
+        }],
+        effects: AudioEffectPassPlan::default(),
+    };
+    let graph = compile_with_options(
+        &mix,
+        0.1,
+        AudioGraphCompileOptions {
+            first_audio_input_index: 0,
+            output_range: Some((0.09, 0.1001)),
+        },
+    )
+    .unwrap();
+    let output = Command::new("ffmpeg")
+        .args(["-v", "error", "-i"])
+        .arg(&graph.input_paths[0])
+        .args([
+            "-filter_complex",
+            &graph.filter_complex,
+            "-map",
+            "[audio]",
+            "-ac",
+            "1",
+            "-f",
+            "f32le",
+            "-",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let samples: Vec<_> = output
+        .stdout
+        .chunks_exact(4)
+        .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap()))
+        .collect();
+    assert_eq!(samples.len(), 485);
+    assert!(
+        samples[..480]
+            .iter()
+            .all(|sample| (*sample - 0.25).abs() < 0.0001)
+    );
+    assert_eq!(&samples[480..], &[0.0; 5]);
+}
+
+#[test]
 fn rounds_seconds_to_nearest_mixer_sample() {
     assert_eq!(
         seconds_to_samples(0.12345).expect("sample conversion"),
@@ -252,6 +314,7 @@ fn configurable_input_base_shifts_only_source_references() {
         &mix,
         2.0,
         AudioGraphCompileOptions {
+            output_range: None,
             first_audio_input_index: 1,
         },
     )
@@ -260,6 +323,7 @@ fn configurable_input_base_shifts_only_source_references() {
         &mix,
         2.0,
         AudioGraphCompileOptions {
+            output_range: None,
             first_audio_input_index: 0,
         },
     )

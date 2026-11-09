@@ -140,7 +140,7 @@ project.get_frame(seconds=None, *, frame_number=None, backend="auto") -> NDArray
 project.render_frames(*, directory, times=None, indices=None, start=None,
                       end=None, format="png", backend="auto", overwrite=False) -> int
 project.render(output, *, backend="auto", overwrite=False, preview=False,
-               show_progress=True, on_progress=None,
+               start=0, end=None, show_progress=True, on_progress=None,
                cancellation=None) -> RenderResult
 ```
 
@@ -148,6 +148,13 @@ project.render(output, *, backend="auto", overwrite=False, preview=False,
 video renders. Backend preferences are `"auto"`, `"cpu"`, `"wgpu"` or
 `BackendPreference` values; see [backends](backends.md). Existing outputs require
 `overwrite=True`.
+
+Video `start` and `end` select original project sample times in `[start, end)`.
+Both boundaries round up at rational FPS; an omitted end uses project duration.
+Reversed, out-of-timeline and zero-sample intervals raise `VESTRA-RENDER-RANGE`.
+The clip's timestamps begin at zero and its duration is selected frames / FPS.
+Effects retain project time; the final audio mix is trimmed and rebased with
+sample rounding at 48 kHz. See [selected video ranges](../guides/python/rendering-and-preparation.md#export-part-of-the-timeline).
 
 Single-frame methods require exactly one of `seconds` or `frame_number`.
 Times select the containing frame; frame indices are zero-based.
@@ -177,8 +184,11 @@ editor.render(project, request, *, show_progress=True, on_progress=None, cancell
 | Options/request type | Construction and purpose |
 | --- | --- |
 | `PrepareOptions` | `PrepareOptions(*, backend=None)` selects preparation backend. |
-| `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False)` for one-shot `Editor.render`. |
-| `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False)` for prepared video rendering. |
+| `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False, start=None, end=None)` for one-shot `Editor.render`. |
+| `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False, start=None, end=None)` for prepared video rendering. |
+
+Native request `start=None` means zero. Both request types expose read-only
+`start` (seconds, default `0.0`) and `end` (seconds or `None`) properties.
 
 `Editor.validate()` checks canonical semantics only. Choose a preflight target
 for the additional operational checks below; backend arguments use `BackendPreference`.

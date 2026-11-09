@@ -42,8 +42,10 @@ codec/container additions.
 ## Milestones
 - [x] Still image export, NumPy access, selected frames and numbered sequences;
   verify exact/lossy pixel contracts, alpha, ownership and random-access timing.
-- [ ] Selected ranges, resolution/FPS/quality overrides and preview preset;
-  verify boundaries, full-render agreement and audio synchronization.
+- [x] Selected video ranges; verify boundaries, full-render agreement and audio
+  synchronization.
+- [ ] Resolution/FPS/quality overrides and preview preset; preserve layout and
+  effects while reducing actual rendering work.
 - [ ] GIF and animated WebP through bounded streaming media output;
   verify palettes, transparency, availability, timing and cleanup.
 - [ ] Backend/output regression coverage, representative performance/memory
@@ -84,6 +86,26 @@ environments honestly; do not claim them from local Linux evidence.
   before implementation and then passed. Post-change verification: full Python
   suite 1,470 passed, 42 skipped; 10 focused prepared SDK tests passed;
   all-target SDK/binding Clippy, mypy, Ruff, formatting and docs links passed.
+- Selected video ranges now flow through public SDK/native/Python requests into
+  the staged loop. Original frame/time evaluation and audio automation are
+  retained; sink indices and trimmed final audio start at zero. Static visuals
+  reuse one cached frame; default full static MP4 still uses its FFmpeg image
+  loop. Ranged static output currently uses the cached raw-frame loop.
+- Independent review reproduced two range bugs before fixes: fresh static
+  ranges submitted frame zero, and FFmpeg's `-frames:v` truncated audio for a
+  final partial frame at 30000/1001 FPS. Regression tests failed before each
+  fix, then passed. Selected rawvideo uses pipe EOF to bound video, allowing
+  final audio padding to complete. The reviewer verified both corrections.
+- Range verification: 1,492 Python tests passed, 42 skipped, plus compileall;
+  full SDK/media tests 291 passed, 7 ignored; scoped all-target/all-feature
+  Clippy, formatting, Ruff, public typing and docs checks passed. Exact raw CPU
+  selected pixels match full output, reordered staged completions retain
+  absolute indices, and audio sample/tail/automation/PTS tests pass. A direct
+  whole-package mypy check reports the same 86 diagnostics as unchanged
+  develop (sorted diagnostic sets match); public typing checks pass.
+- Inspected actual CPU reference/decoded frames for a 24-frame selected clip:
+  ffprobe confirms H.264, 320×180, 24/1 FPS, 24 frames, 1.0 seconds, PTS zero.
+  Evidence: `target/range-visual-114/`; verification logs: `target/range-*-114.log`.
 
 ## Decisions and discoveries
 - 2026-11-09: isolated evaluation, random access, owned pixels and preview
@@ -103,12 +125,9 @@ environments honestly; do not claim them from local Linux evidence.
   reducing `plan.canvas` dimensions alone is insufficient.
 
 ## Completion / handoff
-Frame export slice committed as `ced4ba5`. Shared range validation implemented
-and verified. Next wire `start`/`end` through SDK/native requests and operation
-options into the existing staged frame loop. Keep backend/evaluation frame
-numbers absolute while writing encoder frames from zero; preserve original
-audio-effect time and trim the final mix in sync with the resolved first frame.
-Video ranges/overrides,
-preview improvements, animated images, performance/memory measurements,
+Frame export slice committed as `ced4ba5`; shared range validation as `2771468`.
+Selected video ranges implemented and verified. Next implement runtime
+resolution/FPS/quality overrides and correct preview geometry through the shared
+CPU/WGPU geometry machinery. Preview improvements, animated images, performance/memory measurements,
 strict adapter checks, supported wheels, final contributor gate, issue update
 and PR remain. No issue checkboxes updated or PR opened yet.

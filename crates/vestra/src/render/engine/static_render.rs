@@ -88,8 +88,10 @@ pub(crate) fn render_prepared_with_lifecycle(
     options: &RenderOptions,
     lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, RenderError> {
+    // shortcut: ranged static video uses cached raw frames; add image-loop ranges if pipe writes dominate benchmarks.
     if prepared.plan.visual_dependency == vestra_core::plan::TemporalDependency::Static
         && !prepared.plan.canvas.preview
+        && options.frame_range.is_none()
     {
         return render_static_ffmpeg(prepared, options, lifecycle);
     }

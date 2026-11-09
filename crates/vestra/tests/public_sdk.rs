@@ -760,6 +760,8 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
         .render(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(directory.path().join("output.mp4")),
                 overwrite: true,
                 preview: false,
@@ -945,6 +947,8 @@ fn observer_cancellation_at_encoding_prevents_publication() {
         .render_with_observer(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
@@ -994,6 +998,8 @@ fn observer_cancellation_at_finalizing_prevents_publication() {
         .render_with_observer(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
@@ -1038,6 +1044,8 @@ fn static_render_does_not_report_ffmpeg_progress_as_rendering_progress() {
         .render(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: false,
@@ -1107,6 +1115,8 @@ fn observer_cancellation_at_encoding_removes_temporary_output_and_prevents_publi
         .render_with_observer(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
@@ -1168,6 +1178,8 @@ fn token_cancellation_from_progress_prevents_publication() {
         .render(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
@@ -1203,6 +1215,8 @@ fn multi_frame_progress_is_strictly_pre_completion_and_completed_is_post_publica
         .render(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
@@ -1239,6 +1253,8 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
         .render_with_observer(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: false,
@@ -1268,9 +1284,13 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
 #[test]
 fn request_getters_expose_the_configured_values() {
     let output = PathBuf::from("nested/output.mp4");
-    let prepared = PreparedVideoRenderRequest::new(&output).with_overwrite(true);
+    let prepared = PreparedVideoRenderRequest::new(&output)
+        .with_overwrite(true)
+        .with_range(Duration::from_millis(500), Some(Duration::from_secs(1)));
     assert_eq!(prepared.output(), output.as_path());
     assert!(prepared.overwrite());
+    assert_eq!(prepared.start(), Duration::from_millis(500));
+    assert_eq!(prepared.end(), Some(Duration::from_secs(1)));
 
     let request = RenderRequest {
         output: Some(output.clone()),
@@ -1278,12 +1298,16 @@ fn request_getters_expose_the_configured_values() {
         preview: true,
         backend: BackendPreference::Cpu,
         progress_mode: vestra::ProgressMode::Disabled,
-    };
+        ..RenderRequest::default()
+    }
+    .with_range(Duration::from_millis(500), None);
     assert_eq!(request.output(), Some(output.as_path()));
     assert!(request.overwrite());
     assert!(request.preview());
     assert_eq!(request.backend(), BackendPreference::Cpu);
     assert_eq!(request.progress_mode(), vestra::ProgressMode::Disabled);
+    assert_eq!(request.start(), Duration::from_millis(500));
+    assert_eq!(request.end(), None);
     assert_eq!(
         RenderRequest::default().progress_mode(),
         vestra::ProgressMode::Auto

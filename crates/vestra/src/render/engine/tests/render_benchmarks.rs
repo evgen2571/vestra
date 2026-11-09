@@ -119,6 +119,7 @@ fn null_sink_measures_renderer_without_pixel_copies() {
     .expect("CPU backend prepares");
     let directory = tempfile::tempdir().expect("temporary output directory");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(directory.path().join("null.rgba")),
         overwrite: true,
         cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -942,6 +943,7 @@ fn measure_random_access(
 
 fn render_options(output: PathBuf) -> RenderOptions {
     RenderOptions {
+        frame_range: None,
         output_override: Some(output),
         overwrite: true,
         cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),

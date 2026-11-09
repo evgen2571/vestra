@@ -179,6 +179,7 @@ pub(crate) fn prepare_project(
     request: &RenderRequest,
     preparation_warnings: Vec<Diagnostic>,
     preparation_timings: PreparationTimings,
+    ffmpeg_executable: Option<PathBuf>,
 ) -> Result<PreparedRender, ApplicationRenderError> {
     trace_execution_objects(&validated.project);
     let _compile_span = tracing::debug_span!(
@@ -211,6 +212,7 @@ pub(crate) fn prepare_project(
         plan,
         request.backend_preference,
         validated.video_metadata.clone(),
+        ffmpeg_executable,
     )
     .map_err(|error| ApplicationRenderError::Render {
         error: Box::new(error),
@@ -465,6 +467,7 @@ mod tests {
             &request,
             Vec::new(),
             PreparationTimings::default(),
+            None,
         )
         .expect("one private preparation succeeds");
         let workspace = tempfile::tempdir().expect("temporary output directory");
@@ -516,6 +519,7 @@ mod tests {
             &request,
             Vec::new(),
             PreparationTimings::default(),
+            None,
         )
         .expect("prepare CPU");
         let workspace = tempfile::tempdir().expect("temporary output directory");
@@ -620,6 +624,7 @@ mod tests {
             &request,
             Vec::new(),
             PreparationTimings::default(),
+            None,
         )
         .expect("prepare CPU");
         let random = prepared.render_frame(0).expect("random frame");
@@ -666,6 +671,7 @@ mod tests {
             &request,
             Vec::new(),
             PreparationTimings::default(),
+            None,
         )
         .expect("prepare CPU");
         let workspace = tempfile::tempdir().expect("temporary output directory");

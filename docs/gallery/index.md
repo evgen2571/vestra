@@ -103,7 +103,8 @@ it uses this checkout and does not fetch a separate documentation branch.
 If you don't use Nix, follow the
 [source-build installation instructions](../getting-started/installation.md#build-from-source--development)
 for your platform. Building from the checkout needs Rust and native build tools;
-encoding and audio processing also need `ffmpeg` on `PATH`. The captured revision
+developer media tools also need `ffmpeg` on `PATH`. Current Python installs its
+FFmpeg executable automatically. The captured revision
 above also uses `ffprobe` for audio probing. Current Vestra probes media through
 bundled libraries and does not require that executable.
 

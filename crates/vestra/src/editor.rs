@@ -47,6 +47,7 @@ impl fmt::Display for EditorErrorKind {
 #[derive(Clone, Debug, Default)]
 pub struct Editor {
     limits: crate::ResourceLimits,
+    ffmpeg_executable: Option<PathBuf>,
 }
 
 /// Builder for persistent SDK resource configuration.
@@ -337,6 +338,14 @@ impl Editor {
     pub fn builder() -> EditorBuilder {
         EditorBuilder::default()
     }
+
+    /// Selects the executable used for encoding and audio analysis by this editor
+    /// and its prepared projects. The default is `ffmpeg` on PATH.
+    #[must_use]
+    pub fn with_ffmpeg_executable(mut self, executable: impl Into<PathBuf>) -> Self {
+        self.ffmpeg_executable = Some(executable.into());
+        self
+    }
     #[expect(
         clippy::result_large_err,
         reason = "load diagnostics retain operation timings for CLI report output"
@@ -445,11 +454,17 @@ impl Editor {
                     "/output/path",
                 ));
             }
-            if let Err(error) = vestra_media::check_ffmpeg_available(None) {
+            if let Err(error) =
+                vestra_media::check_ffmpeg_available(self.ffmpeg_executable.as_deref())
+            {
+                let message = self.ffmpeg_executable.as_ref().map_or_else(
+                    || format!("FFmpeg is unavailable: {error}"),
+                    |path| format!("FFmpeg is unavailable ({}): {error}", path.display()),
+                );
                 diagnostics.push(Diagnostic::error(
                     "VESTRA-ENCODER-UNAVAILABLE",
                     crate::Category::Backend,
-                    format!("FFmpeg is unavailable: {error}"),
+                    message,
                     "",
                 ));
             }
@@ -638,6 +653,7 @@ impl Editor {
             &request,
             context.warnings.clone(),
             context.timings,
+            self.ffmpeg_executable.clone(),
         )
         .map_err(|error| {
             Self::render_error(
@@ -1193,6 +1209,7 @@ impl EditorBuilder {
     pub fn build(self) -> Result<Editor, EditorError> {
         Ok(Editor {
             limits: self.limits,
+            ffmpeg_executable: None,
         })
     }
 }

@@ -1,5 +1,6 @@
 use std::{
     io::Read,
+    path::Path,
     process::{ChildStderr, Command, Stdio},
     thread,
 };
@@ -47,6 +48,16 @@ pub fn consume_master_pcm(
     mix: &AudioMixPlan,
     project_duration: f64,
     maximum_audio_sources: usize,
+    consume: impl FnMut(&[f32]) -> Result<(), MediaError>,
+) -> Result<MasterPcmSpec, MediaError> {
+    consume_master_pcm_with_executable(mix, project_duration, maximum_audio_sources, None, consume)
+}
+
+pub(super) fn consume_master_pcm_with_executable(
+    mix: &AudioMixPlan,
+    project_duration: f64,
+    maximum_audio_sources: usize,
+    executable: Option<&Path>,
     mut consume: impl FnMut(&[f32]) -> Result<(), MediaError>,
 ) -> Result<MasterPcmSpec, MediaError> {
     tracing::debug!(
@@ -70,7 +81,7 @@ pub fn consume_master_pcm(
         return Ok(spec);
     };
 
-    let mut command = Command::new("ffmpeg");
+    let mut command = Command::new(executable.unwrap_or_else(|| Path::new("ffmpeg")));
     command.args(["-hide_banner", "-loglevel", "error"]);
     for path in &graph.input_paths {
         command.arg("-i").arg(path);

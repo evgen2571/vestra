@@ -10,9 +10,18 @@ Binary wheels and native CLI executables statically link libraries from [FFmpeg]
 licensed under the GNU Lesser General Public License version 2.1 or later.
 The [LGPL text](licenses/FFmpeg-LGPL-2.1.txt) accompanies Vestra distributions.
 The normal build disables GPL, nonfree and version-3-only components and
-external-library autodetection. The runtime `ffmpeg` executable and optional
-`ffprobe` verification tool are installed separately and may have different
-build configurations.
+external-library autodetection. The Python runtime executable is installed
+through [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg), whose Python
+code is BSD-2-Clause. Its FFmpeg binaries have separate build configurations and
+licenses; the Linux x86_64 0.6.0 binary reports GPLv3-or-later and includes
+libx264. These terms differ from the linked LGPL libraries above. Consult the
+dependency's wheel notices and its
+[binary build/source repository](https://github.com/imageio/imageio-binaries).
+Vestra invokes that executable as a separate process; it is not linked into the
+extension. Anyone redistributing the dependency's binaries must review their
+corresponding-source, notice and license obligations, including enabled codecs.
+The CLI executable and optional `ffprobe` verification tool remain separately
+installed.
 
 Release builds preserve the exact FFmpeg checkout used by each wheel and CLI build in a
 separate source archive, including source modifications, revision and configure

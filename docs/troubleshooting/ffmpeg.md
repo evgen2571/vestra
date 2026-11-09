@@ -12,10 +12,31 @@ The repository Nix development shell supplies the build tools.
 
 ## `ffmpeg` is missing at runtime
 
-Encoding and audio processing require `ffmpeg` on `PATH`, separately from
-native linking. Run `ffmpeg -version` in the same shell that runs Vestra. On
-Linux/macOS, use `command -v ffmpeg` to find the executable; on Windows, use
-`where.exe ffmpeg`. Keep the executable path and version in a bug report.
+Python installs FFmpeg through `imageio-ffmpeg` and uses its packaged executable.
+If Vestra reports that FFmpeg is unavailable, reinstall that dependency in the
+same environment. The diagnostic includes the selected executable path. Check
+whether `IMAGEIO_FFMPEG_EXE` selects a missing or incompatible build; unset it
+to restore the packaged default. A bare system `ffmpeg` is never a silent fallback.
+
+To select a different build, set `IMAGEIO_FFMPEG_EXE` to its executable path
+before preparation or rendering. It must provide `libx264`, AAC and the audio
+filters needed by your project. Keep the path, `-version` output and native
+error in a bug report. Prepared projects keep the executable selected during
+preparation; prepare again after changing the override.
+
+The separate native CLI and developer media tools still require `ffmpeg` on
+`PATH`. Run `ffmpeg -version` in the shell running those tools.
+
+### NixOS
+
+The imageio-ffmpeg 0.6.0 Linux x86_64 executable is static and was verified on
+NixOS 26.05. An installed Vestra wheel built on NixOS was also checked with
+`PATH` empty and `LD_LIBRARY_PATH` unset. This does not prove that a published
+manylinux extension loads on every NixOS configuration: native dynamic runtime
+dependencies remain separate from the FFmpeg executable. If your installation
+reports a missing ELF interpreter or shared library, use the repository's Nix
+development environment for a source build. You can select Nix's FFmpeg with
+`IMAGEIO_FFMPEG_EXE` if the packaged executable cannot run on your system.
 
 Media probing uses bundled FFmpeg libraries and does not require `ffprobe`.
 Some optional developer checks use `ffprobe` to verify output independently;

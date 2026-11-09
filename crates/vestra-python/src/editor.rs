@@ -77,6 +77,17 @@ pub(crate) struct PyEditor {
     inner: NativeEditor,
 }
 
+impl PyEditor {
+    fn runtime_editor(&self, py: Python<'_>) -> PyResult<NativeEditor> {
+        let executable: PathBuf = py
+            .import("vestra._ffmpeg")?
+            .getattr("resolve_ffmpeg")?
+            .call0()?
+            .extract()?;
+        Ok(self.inner.clone().with_ffmpeg_executable(executable))
+    }
+}
+
 #[pymethods]
 impl PyEditor {
     #[new]
@@ -98,10 +109,15 @@ impl PyEditor {
         py: Python<'_>,
         project: &PyProject,
         options: &PyPreflightOptions,
-    ) -> PyPreflightReport {
-        PyPreflightReport::from(
-            py.detach(|| self.inner.preflight(&project.inner, options.inner.clone())),
-        )
+    ) -> PyResult<PyPreflightReport> {
+        let editor = if options.kind == "inspection" {
+            self.inner.clone()
+        } else {
+            self.runtime_editor(py)?
+        };
+        Ok(PyPreflightReport::from(py.detach(|| {
+            editor.preflight(&project.inner, options.inner.clone())
+        })))
     }
     #[pyo3(signature = (project, *, preview = false))]
     #[expect(
@@ -131,12 +147,13 @@ impl PyEditor {
         project: &PyProject,
         options: Option<&prepared::PyPrepareOptions>,
     ) -> PyResult<prepared::PyPreparedProject> {
+        let editor = self.runtime_editor(py)?;
         let options = options.map_or_else(vestra::PrepareOptions::default, |value| value.inner);
         match py.detach(|| {
             if !prepared::wait_for_test_barrier() {
                 return Err(None);
             }
-            self.inner.prepare(&project.inner, options).map_err(Some)
+            editor.prepare(&project.inner, options).map_err(Some)
         }) {
             Ok(value) => Ok(prepared::PyPreparedProject::new(value)),
             Err(Some(error)) => prepared::preparation_error(py, error),
@@ -156,9 +173,10 @@ impl PyEditor {
         on_progress: Option<Py<PyAny>>,
         cancellation: Option<&render::PyCancellationToken>,
     ) -> PyResult<render::PyRenderResult> {
+        let editor = self.runtime_editor(py)?;
         render::render_one_shot(
             py,
-            &self.inner,
+            &editor,
             &project.inner,
             request,
             show_progress,

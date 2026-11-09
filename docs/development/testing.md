@@ -133,7 +133,10 @@ Use `just schema-check` for schema validation and generated-schema freshness.
 CLI changes also need current help (`just cli-smoke`) and CLI integration tests.
 Public Python contract changes need the rebuilt extension and relevant typing,
 serialization and validation tests. Media tests require native FFmpeg development
-libraries; encoding and audio workflows also need `ffmpeg` on `PATH`. Optional
+libraries; Rust/CLI tests and developer media tools also need `ffmpeg` on `PATH`.
+Python installs its executable through `imageio-ffmpeg`. `just wheel-smoke` runs
+the installed package with an empty PATH and no development library search paths,
+including audio, native decoding, master analysis and an explicit override. Optional
 independent media verification may use `ffprobe`; Vestra's native probing does
 not require that executable.
 

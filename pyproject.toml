@@ -8,6 +8,7 @@ dynamic = ["version"]
 description = "Native video composition and rendering engine with Python authoring and a Rust core"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
+dependencies = ["imageio-ffmpeg>=0.6,<0.7"]
 license = "MIT"
 license-files = ["LICENSE", "licenses/*.txt"]
 keywords = ["video editing", "video rendering", "video compositing", "motion graphics", "ffmpeg", "wgpu"]

@@ -4,7 +4,9 @@
 
 The crate uses `ffmpeg-next` for native media probing, video decoding and
 software scaling. Encoding and audio processing use the separate `ffmpeg`
-executable; runtime probing does not invoke `ffprobe`. The native dependency
+executable; Python supplies an absolute path selected from `imageio-ffmpeg` or
+its explicit override, while Rust/CLI callers default to PATH. Runtime probing
+does not invoke `ffprobe`. The native dependency
 builds bundled FFmpeg libraries from source; wheel users do not need the C/Rust
 build toolchain. A source build can fail when its compiler, NASM or source fetch
 is unavailable, while encoding or audio execution can fail when `ffmpeg` or a

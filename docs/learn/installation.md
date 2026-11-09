@@ -1,12 +1,12 @@
 ---
-description: Install Vestra and FFmpeg, check the environment, and review supported Python versions and platforms.
+description: Install Vestra, check the environment, and review supported Python versions and platforms.
 ---
 
 # Installation
 
-You need **Python 3.11–3.14**, Vestra, and the **`ffmpeg` executable**.
-The Python package includes the Rust engine. A matching wheel means you can
-start without installing Rust or a compiler.
+You need **Python 3.11–3.14** and Vestra. The Python package includes the Rust
+engine and installs FFmpeg automatically through `imageio-ffmpeg`. A matching
+wheel means you can start without installing Rust, a compiler or system FFmpeg.
 
 ## 1. Create a Python project
 
@@ -50,57 +50,20 @@ project's environment.
 
     Use `python` wherever the tutorials say `uv run python`.
 
-## 2. Install FFmpeg
+<span id="3-check-the-environment"></span>
 
-Vestra uses the `ffmpeg` executable for video encoding and audio processing.
-**It must be on `PATH` in the terminal running your script.** A successful
-`import vestra` does not check this. Media probing uses bundled FFmpeg libraries;
-the `ffprobe` executable is optional for independent output inspection.
+## 2. Check the environment
 
-=== "macOS"
-
-    With [Homebrew](https://brew.sh/):
-
-    ```bash
-    brew install ffmpeg
-    ```
-
-=== "Ubuntu / Debian"
-
-    ```bash
-    sudo apt update
-    sudo apt install ffmpeg
-    ```
-
-    Other Linux distributions provide FFmpeg through their package manager.
-
-=== "Windows"
-
-    With [WinGet](https://learn.microsoft.com/windows/package-manager/winget/):
-
-    ```powershell
-    winget install --id Gyan.FFmpeg --exact
-    ```
-
-    Open a **new terminal** after installation so it picks up changes to
-    `PATH`. You can also install a Windows build linked from
-    [FFmpeg's download page](https://ffmpeg.org/download.html) and add the
-    directory containing `ffmpeg.exe` to `PATH` yourself.
-
-The executable is separate from the native FFmpeg libraries bundled in the
-Vestra wheel; you need it even when you installed a wheel.
-
-## 3. Check the environment
-
-Run both commands from your project directory:
+Run this command from your project directory:
 
 ```bash
 uv run python -c "import vestra; print('Vestra', vestra.__version__)"
-ffmpeg -version
 ```
 
-You should see a Vestra version and FFmpeg version information. The next
-tutorial checks the whole pipeline by encoding an actual MP4.
+You should see a Vestra version. The next tutorial checks the whole pipeline
+by encoding an actual MP4. No separate `ffmpeg` or `ffprobe` installation is
+needed. If you need your own FFmpeg build, see the
+[optional executable override](../getting-started/installation.md#choose-a-different-ffmpeg-executable).
 
 !!! tip "CPU rendering"
 
@@ -142,7 +105,7 @@ builds need more than the FFmpeg executable.
 | What you see | What to check |
 | --- | --- |
 | `No module named vestra` | Run with the environment where you installed it; use `uv run python` inside your project. |
-| `ffmpeg` not found | Reopen the terminal, check `PATH`, and run `ffmpeg -version` again. |
+| Cannot run FFmpeg | Reinstall `imageio-ffmpeg` in this environment and check any `IMAGEIO_FFMPEG_EXE` override. |
 | A native import or wheel error | Check CPython version/architecture, then [Python troubleshooting](../troubleshooting/python.md). |
 | FFmpeg fails while encoding | Keep the error output and follow [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md). |
 

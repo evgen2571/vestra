@@ -68,7 +68,15 @@ enum SinkState {
 
 impl FfmpegSink {
     pub fn start(settings: &EncoderSettings, output: &Path) -> Result<Self, MediaError> {
-        let mut command = Command::new("ffmpeg");
+        Self::start_with_executable(settings, output, None)
+    }
+
+    pub fn start_with_executable(
+        settings: &EncoderSettings,
+        output: &Path,
+        executable: Option<&Path>,
+    ) -> Result<Self, MediaError> {
+        let mut command = Command::new(executable.unwrap_or_else(|| Path::new("ffmpeg")));
         let mut filtergraph_file = None;
         command
             .args([
@@ -122,8 +130,9 @@ impl FfmpegSink {
         settings: &EncoderSettings,
         output: &Path,
         image: PathBuf,
+        executable: Option<&Path>,
     ) -> Result<Self, MediaError> {
-        let mut command = Command::new("ffmpeg");
+        let mut command = Command::new(executable.unwrap_or_else(|| Path::new("ffmpeg")));
         let mut filtergraph_file = None;
         command
             .args([

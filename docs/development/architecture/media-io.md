@@ -16,74 +16,81 @@ Preflight resolves the project-relative asset paths once, probes relevant media,
 
 ### Audio duration
 
-Ordinary inspection and reusable preparation open the first audio stream through
-linked FFmpeg libraries and use its positive stream duration when available.
-`AudioMediaInfo::duration_source` distinguishes **reported** metadata from
-**decoded** sample duration; neither container duration nor another stream can
-extend the selected audio. Missing or invalid stream duration falls back to full
-decoding. Opening the decoder also rejects unsupported codecs. Explicit source
-bounds beyond the reported duration trigger decoding before rejecting the range,
-so underestimated metadata does not reject a valid selection.
+Inspection opens the first audio stream through linked FFmpeg libraries and uses
+its positive stream duration when available. `AudioMediaInfo::duration_source`
+and inspected clips distinguish **reported** metadata from **decoded** sample
+duration. Metadata use alone emits no warning. Inspection falls back to full
+decoding when duration is missing; container duration and other streams never
+extend the selected audio.
 
-Reported duration is provisional: it cannot prove sample availability, integrity,
-or a constant sample rate. Preflight/preparation reports include
-`VESTRA-AUDIO-DURATION-REPORTED` for each such asset; inspected audio clips expose
-`duration_source: "reported" | "decoded"`. Omitted trim ends and automatic
-prepared timelines use the chosen duration. For exact duration and full-stream
-decoder checks, select `PreflightOptions::with_strict_audio(true)` or
-`PrepareOptions::with_strict_audio(true)`; Python accepts `strict_audio=True`, and
-CLI validation/inspection accept `--strict-audio`. Pure project validation still
-performs no I/O.
+One-shot and reusable preparation share the same execution policy. An explicit
+`trim_end` defines a bounded selection without needing source duration. Its
+source metadata may be unavailable or inaccurate; actual reading verifies the
+output-visible selection. Preparation does not scan merely because a bound
+exceeds reported metadata. An omitted `trim_end` requires exact EOF resolution
+before compilation, including AAC decoded padding. This also applies to muted
+or disabled-output audio because it contributes structural automatic duration.
 
-Strict probing counts decoded per-channel samples and divides by sample rate.
-It rejects reported demux/decode errors, corrupt packets/frames, empty audio, and
-zero or changing decoded sample rates. Codec priming/padding follows FFmpeg's
-decoded output, which may differ from metadata. Full decoding establishes the
-samples actually returned by the decoder, not a checksum or proof that a source
-was never truncated before it reached Vestra.
+Exact open-ended timelines fundamentally require reaching EOF: a FLAC reporting
+10 seconds may decode to 0.375 seconds. Using metadata would change frame counts,
+end-relative fades and automatic duration. Late recompilation would invalidate
+prepared frame access and resources. Therefore open-ended preparation retains a
+full scan; author an explicit trim end for bounded preparation and rendering.
+
+Select `PreflightOptions::with_strict_audio(true)` or
+`PrepareOptions::with_strict_audio(true)` to audit all complete audio sources.
+Python accepts `strict_audio=True`; CLI validation/inspection accept
+`--strict-audio`. Strict decoding counts per-channel samples, rejects reported
+demux/decode errors, corrupt packets/frames, empty audio and zero/changing sample
+rates. It establishes decoded sample duration, not a checksum or proof that a
+source was never truncated before Vestra received it. Pure project validation
+still performs no I/O.
 
 ### Audio execution and discrepancies
 
-One-shot rendering resolves decoded durations before compilation, preserving
-sample-based omitted trim ends, automatic output duration and AAC padding from
-#109. This intentionally retains full-source probing cost during rendering;
-metadata is sufficient for inspection, but cannot establish render correctness.
+The production FFmpeg audio graph shares each source input across clip branches.
+A named `astats` counter after 48 kHz normalization records samples consumed by
+that same read. Bounds checks use the output-visible prefix, mapping clip speed
+transforms back to source samples; logical clip durations, fades and automation
+remain unchanged. Reading is sequential, preserving priming and source-local
+sample trimming across nonzero/gapped timestamps. Later offsets may therefore
+require decoding the preceding prefix. Codec/filter lookahead may read beyond
+the exact requested endpoint.
 
-A reusable project prepared from metadata retains its fixed prepared timeline.
-Before audio analysis or video encoding, Vestra fully decodes each participating
-source once and checks that its selected samples exist (one 48 kHz sample is
-allowed for edge rounding). Early EOF or decode errors fail before output
-creation; mixer padding must not conceal missing source samples. Surplus decoded
-samples lie outside the prepared trim and are discarded. Prepare with strict
-audio to include the exact source end initially. Explicit bounded excerpts that
-fit the decoded source remain valid even if unused metadata is misleading.
+Source counters are checked after analysis or encoder finalization and before
+accepting features or publishing output. Padding cannot conceal unavailable
+samples. A missing, malformed or reset counter fails closed. Bounds allow one
+48 kHz sample of end rounding, but starts rounding to EOF fail. Errors clean up
+temporary output and preserve an existing destination. Counters describe consumed
+coverage only: corruption beyond that region may remain unexamined, while strict
+validation audits the entire source. Prefix coverage never becomes `decoded`
+duration provenance.
 
-After sample trimming, the audio graph rebuilds contiguous source-local timestamps
-before effects and authored timeline placement. Nonzero timestamp origins and
-source gaps cannot discard samples or shift authored silence. Source trim,
-playback speed and output synchronization retain the same execution pipeline.
-Keep prepared sources available and unchanged throughout their lifetime.
+The counter uses FFmpeg's named `astats` summary format, retained independently
+of the bounded diagnostic tail. This implementation dependency is covered by
+parser tests and actual native CI, including Windows/macOS. It avoids a separate
+verification decode, PCM spooling and duration-proportional cached storage.
+Repeated outputs read the needed samples again; clips sharing a path reuse the
+same decoder within each graph. Keep prepared sources unchanged and available.
 
-Successful and failed probes are reused by resolved path within an operation;
-subsequent preflight/preparation operations probe again. There is no persistent
-cross-operation cache. The first audio-consuming operation on a provisional prepared snapshot verifies
-its sources; subsequent outputs reuse that verification under the same unchanged-
-source lifetime rule as strict preparation. Visual-only outputs without analysis
-do not need an audio verification scan. Metadata inspection retains one input/decoder;
-full decoding additionally retains one packet/frame at a time. FFmpeg's own
-buffers and indexes depend on format.
+After trimming and authored delay, and after final master padding, the graph
+rebuilds contiguous sample-based timestamps. One-shot, default-prepared and
+strict-prepared output agree for valid selections; strict validation can still
+reject corruption outside a bounded ordinary render's examined region.
 
-One-shot cancellation is checked between assets and native packet/frame operations,
-as is prepared video's verification. A native open/read/decode already in progress
-must return first; stalled filesystem I/O cannot be preempted. Standalone
-validation/preparation remain synchronous. Native paths must be valid UTF-8
-without NUL bytes; failures are diagnostics rather than panics.
+Successful and failed native probes are reused by resolved path within preflight;
+subsequent operations observe source edits. Metadata inspection retains an input
+and decoder; exact scanning additionally retains one packet/frame at a time.
+FFmpeg buffers and indexes depend on format. There is no persistent global cache.
 
-Packet counts, limited decode windows and seeking cannot establish full-stream
-integrity or retained AAC samples. Parallel probing and persistent caches are not
-required for the measured metadata path; they would add resource limits and file
-invalidation policy without improving its duration guarantees. See the focused
-[benchmark procedure](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md).
+Rendering cancellation still aborts/reaps the owned encoder and cleans temporary
+files. Native exact scans check cancellation between assets and packet/frame
+operations; stalled filesystem I/O cannot be preempted. Standalone preparation
+and validation remain synchronous. Native paths must be UTF-8 without NUL bytes;
+unsupported paths produce diagnostics.
+
+See the [benchmark protocol and results](https://github.com/evgen2571/vestra/blob/develop/benchmarks/audio-probing.md)
+for preparation-plus-first-render costs, repeated output and memory evidence.
 
 ## Frame writes and publication
 

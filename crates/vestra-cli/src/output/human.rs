@@ -69,10 +69,20 @@ pub fn inspect(result: &InspectionReport) -> String {
         Some(audio) => {
             let _ = write!(
                 text,
-                "\n  audio    {}, {}, ends at {}",
+                "\n  audio    {}, {}, ends at {}{}",
                 count(audio.track_count, "track"),
                 count(audio.clip_count, "clip"),
                 seconds(audio.end),
+                if audio
+                    .tracks
+                    .iter()
+                    .flat_map(|track| &track.clips)
+                    .any(|clip| clip.duration_source == vestra::AudioDurationSource::Reported)
+                {
+                    " (reported source duration)"
+                } else {
+                    ""
+                },
             );
         }
         None => text.push_str("\n  audio    none"),

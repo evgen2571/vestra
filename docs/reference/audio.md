@@ -31,27 +31,31 @@ or `hold` interpolation. `trim_end` must follow `trim_start`; validation also
 checks ids, assets, timing, automation order/duration, effect scope, and media
 availability during preflight.
 
-Inspection and reusable preparation use the first audio stream's reported duration
-by default, with decoded-sample fallback when stream metadata is unavailable.
-An omitted `trim_end` and automatic prepared duration use that result. Reported
-durations produce `VESTRA-AUDIO-DURATION-REPORTED`; inspection exposes each audio
-clip's `duration_source` as `reported` or `decoded`. Metadata does not prove sample
-availability or source integrity. Explicit bounds beyond metadata trigger a scan
-before a source-range error is returned. Verified bounds allow one 48 kHz sample
-for edge rounding; a source offset at or beyond EOF is an error.
+Inspection exposes each clip's `duration_source` as `reported` or `decoded`.
+Reported metadata is normal and emits no warning. Inspection falls back to full
+decoding when stream duration is unavailable.
 
-Use `project.prepare(strict_audio=True)` or the SDK's strict preflight options for
-full decoding and exact sample duration. CLI `ve inspect --strict-audio` and
-`ve validate --strict-audio` provide the same policy. One-shot rendering always
-resolves exact duration. A metadata-prepared video keeps its prepared timeline,
-verifies selected sample bounds before encoding, rejects early EOF, and discards
-samples beyond its prepared trim; strict preparation includes decoded padding.
+One-shot and prepared rendering use the same duration policy. Omitted
+`trim_end` values resolve decoded EOF before compilation, preserving automatic
+duration, end-relative fades and AAC padding. Explicit trim ends allow fast
+preparation even with missing or inaccurate metadata. Source reading verifies
+only the prefix needed for output, with codec/filter lookahead; it does not
+establish full-source integrity. Logical clip durations stay unchanged when an
+explicit output clips their physical reading.
+
+Use `project.prepare(strict_audio=True)` or strict SDK preflight options to audit
+complete sources. CLI `ve inspect --strict-audio` and `ve validate --strict-audio`
+provide the same strict audit. Unused-tail corruption can fail strict validation
+while a bounded ordinary render succeeds. Early EOF within the required region
+fails before publication, cleans temporary files and preserves prior output.
+Verified bounds allow one 48 kHz sample of end rounding; starts rounding to EOF
+are errors.
 
 Probing uses bundled FFmpeg libraries without a runtime `ffprobe` requirement.
-Other streams and source timestamp origins/gaps do not extend source-local audio.
-Paths are reused within each preflight, while later operations observe edits.
-See [audio probing](../development/architecture/media-io.md#audio-duration) for
-precision, execution checks, cancellation and failure behavior.
+Other streams and timestamp origins/gaps do not extend source-local audio.
+Paths are reused within preflight and graph execution; later operations observe
+edits. See [audio probing](../development/architecture/media-io.md#audio-duration)
+for duration, execution coverage, cancellation and failure behavior.
 
 ## Effects
 

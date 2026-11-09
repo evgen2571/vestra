@@ -170,17 +170,18 @@ for the additional operational checks below; backend arguments use `BackendPrefe
 | `for_preparation(backend, *, strict_audio=False)` | Media and requested backend readiness. |
 | `for_render(backend, output, *, overwrite=False, strict_audio=False)` | Media, backend, supplied destination and render policy. |
 
-`strict_audio=True` fully decodes audio to verify duration and detect decoder
-errors. The default uses reported first-stream duration when available and
-falls back to decoding otherwise. Reported durations are estimates; automatic
-output duration and omitted audio trim ends may differ from strict results.
+`strict_audio=True` audits complete audio sources for decoded duration and decoder
+errors. Inspection normally uses reported first-stream duration, falling back to
+decoding when unavailable. Reported metadata is normal and produces no warning.
 `PreflightOptions.strict_audio` and `PrepareOptions.strict_audio` are read-only.
-Inspected audio clips expose read-only `duration_source`, either `"reported"`
-or `"decoded"`, identifying how the source duration was obtained.
-One-shot video rendering always resolves decoded duration. Prepared video
-rendering checks actual source bounds while keeping its prepared timeline fixed;
-prepare with `strict_audio=True` when that timeline must use exact audio duration.
-See the [audio duration contract](../development/architecture/media-io.md#audio-duration).
+Inspected clips expose read-only `duration_source`, either `"reported"` or
+`"decoded"`.
+
+One-shot/default/strict preparation resolve omitted audio trim ends from decoded
+EOF, preserving automatic timelines and padding. Explicit trim ends allow bounded
+execution without a full scan; actual reading verifies only output-visible source
+samples before publication. Strict validation may reject corruption outside that
+examined region. See the [audio duration contract](../development/architecture/media-io.md#audio-duration).
 
 ```text title="Prepared frame and video signatures"
 prepared.render_frame_number(frame_number)

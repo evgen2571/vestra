@@ -827,9 +827,9 @@ class Project:
     ) -> _native.PreparedProject:
         """Prepare media and a renderer for repeated frame or video renders.
 
-        Audio uses reported duration by default. ``strict_audio=True`` fully
-        decodes audio to verify its sample duration and integrity. Video rendering
-        always checks decoded source bounds before encoding.
+        Omitted audio trim ends resolve exact decoded duration. Explicit ends
+        allow bounded reading; video rendering checks required source samples
+        before publication. ``strict_audio=True`` audits complete audio sources.
         """
         return _native.Editor(resource_limits=self._resource_limits).prepare(
             self.snapshot(),

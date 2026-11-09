@@ -892,6 +892,41 @@ fn extraction_preserves_clip_placement_and_project_padding() {
 }
 
 #[test]
+fn master_pcm_checks_visible_source_bounds_before_accepting_padded_audio() {
+    let directory = tempfile::tempdir().expect("directory");
+    let path = directory.path().join("short.wav");
+    write_mono_wav(&path, 48_000, 480, 0.1);
+    let mut selected = clip(&path, 1.0);
+    selected.selected_duration = 0.1;
+    selected.processed_duration = 0.1;
+    let mix = AudioMixPlan {
+        tracks: vec![AudioTrackPlan {
+            id: "track".into(),
+            mute: false,
+            gain: 1.0,
+            clips: vec![selected],
+            effects: Default::default(),
+        }],
+        effects: Default::default(),
+    };
+    assert!(matches!(
+        consume_master_pcm(&mix, 0.02, 1, |_| Ok(())),
+        Err(MediaError::AudioSourceBounds {
+            required: 960,
+            available: 480,
+            ..
+        })
+    ));
+    let mut count = 0;
+    consume_master_pcm(&mix, 0.005, 1, |samples| {
+        count += samples.len();
+        Ok(())
+    })
+    .expect("only the visible prefix is required");
+    assert_eq!(count, 240 * 2);
+}
+
+#[test]
 fn extraction_matches_the_production_graph_for_an_overlapping_fade() {
     let directory = tempfile::tempdir().expect("temporary directory");
     let first = directory.path().join("first.wav");

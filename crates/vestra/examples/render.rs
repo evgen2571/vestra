@@ -12,6 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             preview: false,
             backend: BackendPreference::Auto,
             progress_mode: vestra::ProgressMode::Disabled,
+            ..RenderRequest::default()
         },
         &mut |event| println!("{event:?}"),
         &CancellationToken::new(),

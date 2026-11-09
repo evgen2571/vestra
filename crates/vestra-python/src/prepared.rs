@@ -649,6 +649,25 @@ impl PyPreparedProject {
     fn supports_single_frame_rendering(&self) -> bool {
         self.report.supports_single_frame_rendering
     }
+    #[pyo3(signature = (start, end = None))]
+    #[expect(
+        clippy::result_large_err,
+        reason = "the Python bridge preserves native range diagnostics"
+    )]
+    fn _frame_range_seconds(
+        &self,
+        py: Python<'_>,
+        start: &Bound<'_, PyAny>,
+        end: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<(u64, u64)> {
+        let start = duration_from_seconds(start)?;
+        let end = end.map(duration_from_seconds).transpose()?;
+        match self.operation(py, move |prepared| prepared.frame_range(start, end)) {
+            Ok(Ok(range)) => Ok((range.start, range.end)),
+            Ok(Err(error)) => frame_error(py, error),
+            Err(error) => Err(slot_error(py, error)?),
+        }
+    }
     #[expect(
         clippy::result_large_err,
         reason = "the Python bridge preserves native frame diagnostics"
@@ -750,7 +769,7 @@ fn duration_from_ns(value: u128) -> PyResult<Duration> {
         .map_err(|_| PyValueError::new_err("timestamp_ns is outside the native duration range"))?;
     Ok(Duration::new(seconds, nanos))
 }
-fn duration_from_seconds(value: &Bound<'_, PyAny>) -> PyResult<Duration> {
+pub(crate) fn duration_from_seconds(value: &Bound<'_, PyAny>) -> PyResult<Duration> {
     if value.is_instance_of::<PyBool>() {
         return Err(PyTypeError::new_err(
             "seconds must be a finite float, not bool",

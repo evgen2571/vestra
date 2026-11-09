@@ -53,6 +53,7 @@ fn async_encoder_submits_one_frame_during_write_and_joins_before_cancellation() 
     backend.submit_signal = Some(submitted_tx);
     let caller = std::thread::current().id();
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: true,
         cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -112,6 +113,7 @@ fn async_encoder_error_precedence_preserves_acknowledged_progress() {
         let aborted = backend.abort_count();
         let caller = std::thread::current().id();
         let options = RenderOptions {
+            frame_range: None,
             output_override: Some(output.clone()),
             overwrite: true,
             cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -177,6 +179,7 @@ fn async_encoder_partial_drains_bound_all_live_frames_including_writer() {
         let probe = SinkProbe::default();
         let sink_probe = probe.clone();
         let options = RenderOptions {
+            frame_range: None,
             output_override: Some(output.clone()),
             overwrite: true,
             cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),

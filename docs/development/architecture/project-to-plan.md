@@ -77,6 +77,14 @@ Accumulating floating-point frame steps, rounding rational FPS to an integer,
 or clamping arithmetic overflow changes boundary behavior. Surface overflow
 errors instead.
 
+Runtime video ranges use the same rational ceiling helper as continuous image
+sequences. The SDK resolves `[start, end)` to an absolute frame range against
+prepared metadata. The staged loop evaluates/submits only those project frame
+indices and writes sink indices from zero. The reusable plan stays unchanged.
+The encoder's final audio mix retains project-time effects before trimming and
+rebasing; nearest-sample rounding uses the 48 kHz mixer grid. See
+[output range behavior](../../guides/python/rendering-and-preparation.md#export-part-of-the-timeline).
+
 ## Duration resolution and validation authority
 
 The canonical model supports `automatic` and `explicit` duration:

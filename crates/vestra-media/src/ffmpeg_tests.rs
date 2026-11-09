@@ -679,7 +679,7 @@ fn static_sink_reports_progress_finishes_nonblocking_and_removes_image() {
     write_test_ppm(&image);
     let settings = static_settings(12);
     let mut sink =
-        FfmpegSink::start_static(&settings, &output, image.clone()).expect("static FFmpeg");
+        FfmpegSink::start_static(&settings, &output, image.clone(), None).expect("static FFmpeg");
     let result = loop {
         match sink.try_finish_static().expect("polls static FFmpeg") {
             Some(result) => break result,
@@ -700,7 +700,7 @@ fn aborting_static_sink_removes_static_input() {
     write_test_ppm(&image);
     let settings = static_settings(3_000);
     let mut sink =
-        FfmpegSink::start_static(&settings, &output, image.clone()).expect("static FFmpeg");
+        FfmpegSink::start_static(&settings, &output, image.clone(), None).expect("static FFmpeg");
     sink.abort().expect("aborts static FFmpeg");
     assert!(!image.exists(), "static input is cleaned after abort");
 }

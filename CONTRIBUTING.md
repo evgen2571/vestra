@@ -48,7 +48,8 @@ Choose the environment for your change:
   ```
 
   Without Nix, follow [native installation](docs/getting-started/installation.md#build-from-source--development).
-  Encoding and audio processing also need `ffmpeg` on `PATH`. Some optional
+  Native CLI tests and developer media tools need `ffmpeg` on `PATH`; Python
+  installs its executable through `imageio-ffmpeg`. Some optional
   media verification workflows use `ffprobe` as an independent reference.
 
 Run `just` to list commands. Coding agents should read [AGENTS.md](AGENTS.md);

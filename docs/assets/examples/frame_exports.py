@@ -24,3 +24,6 @@ print(f"Saved {count} sequence frames")
 
 pixels = project.get_frame(frame_number=12)
 print(pixels.shape, pixels.dtype, pixels.strides)
+
+result = project.render(output / "clip.mp4", start=0.5, end=1, overwrite=True)
+print(f"Saved {result.total_frames} selected video frames")

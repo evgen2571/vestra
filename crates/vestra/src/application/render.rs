@@ -24,6 +24,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct RenderRequest {
     pub output_override: Option<PathBuf>,
+    pub frame_range: Option<std::ops::Range<u64>>,
     pub overwrite: bool,
     pub preview: bool,
     pub cancelled: Arc<AtomicBool>,
@@ -272,6 +273,7 @@ pub(crate) fn render_prepared_project(
     let summary = render_prepared_with_lifecycle(
         &mut prepared.prepared,
         &RenderOptions {
+            frame_range: request.frame_range,
             output_override: request.output_override,
             overwrite: request.overwrite,
             cancelled: request.cancelled,
@@ -313,6 +315,7 @@ where
     let summary = crate::render::render_prepared_with_sink(
         &mut prepared.prepared,
         &RenderOptions {
+            frame_range: request.frame_range,
             output_override: request.output_override,
             overwrite: request.overwrite,
             cancelled: request.cancelled,
@@ -456,6 +459,7 @@ mod tests {
         let validated =
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
+            frame_range: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -479,6 +483,7 @@ mod tests {
             let summary = render_prepared_project_with_sink(
                 &mut prepared,
                 RenderRequest {
+                    frame_range: None,
                     output_override: Some(output.clone()),
                     ..request.clone()
                 },
@@ -508,6 +513,7 @@ mod tests {
         let validated =
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
+            frame_range: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -531,6 +537,7 @@ mod tests {
             let summary = render_prepared_project_with_sink(
                 &mut prepared,
                 RenderRequest {
+                    frame_range: None,
                     output_override: Some(workspace.path().join(name)),
                     ..request.clone()
                 },
@@ -613,6 +620,7 @@ mod tests {
         let validated =
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
+            frame_range: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -635,6 +643,7 @@ mod tests {
         render_prepared_project_with_sink(
             &mut prepared,
             RenderRequest {
+                frame_range: None,
                 output_override: Some(output),
                 ..request
             },
@@ -660,6 +669,7 @@ mod tests {
         let validated =
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
+            frame_range: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -680,6 +690,7 @@ mod tests {
         render_prepared_project_with_sink(
             &mut prepared,
             RenderRequest {
+                frame_range: None,
                 output_override: Some(workspace.path().join("parity.mp4")),
                 ..request
             },

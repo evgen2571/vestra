@@ -84,12 +84,35 @@ pub(crate) struct PyPreparedVideoRenderRequest {
 
 #[pymethods]
 impl PyPreparedVideoRenderRequest {
+    #[getter]
+    fn start(&self) -> f64 {
+        self.inner.start().as_secs_f64()
+    }
+    #[getter]
+    fn end(&self) -> Option<f64> {
+        self.inner.end().map(|time| time.as_secs_f64())
+    }
+
     #[new]
-    #[pyo3(signature = (output, *, overwrite = false))]
-    fn new(output: &Bound<'_, PyAny>, overwrite: bool) -> PyResult<Self> {
+    #[pyo3(signature = (output, *, overwrite = false, start = None, end = None))]
+    fn new(
+        output: &Bound<'_, PyAny>,
+        overwrite: bool,
+        start: Option<&Bound<'_, PyAny>>,
+        end: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
         let output = conversion::path_from_python(output)?;
         Ok(Self {
-            inner: NativePreparedRequest::new(output.clone()).with_overwrite(overwrite),
+            inner: NativePreparedRequest::new(output.clone())
+                .with_overwrite(overwrite)
+                .with_range(
+                    start
+                        .map(crate::prepared::duration_from_seconds)
+                        .transpose()?
+                        .unwrap_or_default(),
+                    end.map(crate::prepared::duration_from_seconds)
+                        .transpose()?,
+                ),
             output,
             overwrite,
         })
@@ -121,13 +144,24 @@ pub(crate) struct PyRenderRequest {
 
 #[pymethods]
 impl PyRenderRequest {
+    #[getter]
+    fn start(&self) -> f64 {
+        self.inner.start().as_secs_f64()
+    }
+    #[getter]
+    fn end(&self) -> Option<f64> {
+        self.inner.end().map(|time| time.as_secs_f64())
+    }
+
     #[new]
-    #[pyo3(signature = (output, *, backend = None, overwrite = false, preview = false))]
+    #[pyo3(signature = (output, *, backend = None, overwrite = false, preview = false, start = None, end = None))]
     fn new(
         output: &Bound<'_, PyAny>,
         backend: Option<&PyBackendPreference>,
         overwrite: bool,
         preview: bool,
+        start: Option<&Bound<'_, PyAny>>,
+        end: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let output = conversion::path_from_python(output)?;
         let backend = backend.copied().unwrap_or(PyBackendPreference::Auto);
@@ -138,6 +172,13 @@ impl PyRenderRequest {
                 preview,
                 backend: backend.native(),
                 progress_mode: vestra::ProgressMode::Auto,
+                start: start
+                    .map(crate::prepared::duration_from_seconds)
+                    .transpose()?
+                    .unwrap_or_default(),
+                end: end
+                    .map(crate::prepared::duration_from_seconds)
+                    .transpose()?,
             },
             output,
             backend,

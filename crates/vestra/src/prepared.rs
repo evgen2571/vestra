@@ -104,6 +104,8 @@ impl PrepareOptions {
 pub struct PreparedVideoRenderRequest {
     output: PathBuf,
     overwrite: bool,
+    start: Duration,
+    end: Option<Duration>,
     progress_mode: vestra_progress::ProgressMode,
 }
 
@@ -113,6 +115,8 @@ impl PreparedVideoRenderRequest {
         Self {
             output: output.into(),
             overwrite: false,
+            start: Duration::ZERO,
+            end: None,
             progress_mode: vestra_progress::ProgressMode::Auto,
         }
     }
@@ -120,6 +124,20 @@ impl PreparedVideoRenderRequest {
     pub const fn with_overwrite(mut self, overwrite: bool) -> Self {
         self.overwrite = overwrite;
         self
+    }
+    #[must_use]
+    pub const fn with_range(mut self, start: Duration, end: Option<Duration>) -> Self {
+        self.start = start;
+        self.end = end;
+        self
+    }
+    #[must_use]
+    pub const fn start(&self) -> Duration {
+        self.start
+    }
+    #[must_use]
+    pub const fn end(&self) -> Option<Duration> {
+        self.end
     }
     #[must_use]
     pub fn output(&self) -> &std::path::Path {
@@ -458,6 +476,27 @@ impl PreparedProject {
         self.render_frame_number(frame)
     }
 
+    /// Resolves `[start, end)` on the original rational frame grid. Both bounds
+    /// round up; omitted `end` uses the timeline end. Empty or out-of-range
+    /// selections are rejected without rendering a frame.
+    #[expect(
+        clippy::result_large_err,
+        reason = "range failures retain SDK diagnostics"
+    )]
+    pub fn frame_range(
+        &self,
+        start: Duration,
+        end: Option<Duration>,
+    ) -> Result<std::ops::Range<u64>, EditorError> {
+        resolve_frame_range(
+            start,
+            end,
+            self.report.duration,
+            self.report.frame_rate,
+            self.report.frame_count,
+        )
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "render failures retain diagnostics"
@@ -550,6 +589,8 @@ impl PreparedProject {
         // and failure context are captured per execution below.
         let operation_started = Instant::now();
         let output_path = request.output.clone();
+        let frame_range = self.frame_range(request.start, request.end)?;
+        let total_frames = frame_range.end - frame_range.start;
         let operation_id = OperationId::new();
         let render_span = tracing::info_span!(
             target: "vestra.render",
@@ -571,7 +612,7 @@ impl PreparedProject {
             actual_backend = self.report.selected_backend.as_str(),
             "render started"
         );
-        if lifecycle.started(Some(self.report.frame_count), &output_path)
+        if lifecycle.started(Some(total_frames), &output_path)
             == crate::RenderObserverControl::Cancel
             || cancellation.is_cancelled()
         {
@@ -585,7 +626,7 @@ impl PreparedProject {
             );
             return Err(prepared_cancelled_error(
                 operation_started,
-                self.report.frame_count,
+                total_frames,
                 output_path,
             ));
         }
@@ -602,11 +643,13 @@ impl PreparedProject {
             );
             return Err(prepared_cancelled_error(
                 operation_started,
-                self.report.frame_count,
+                total_frames,
                 output_path,
             ));
         }
         let render_request = application::RenderRequest {
+            frame_range: (request.start != Duration::ZERO || request.end.is_some())
+                .then_some(frame_range),
             output_override: Some(request.output),
             overwrite: request.overwrite,
             preview: false,
@@ -725,6 +768,44 @@ fn preparation_report_warnings(
         warnings.push(crate::render::backend_fallback_warning(fallback));
     }
     crate::editor::Editor::operation_warnings(&warnings)
+}
+
+#[expect(
+    clippy::result_large_err,
+    reason = "range failures retain SDK diagnostics"
+)]
+pub(crate) fn resolve_frame_range(
+    start: Duration,
+    end: Option<Duration>,
+    duration: Duration,
+    rate: FrameRate,
+    frame_count: u64,
+) -> Result<std::ops::Range<u64>, EditorError> {
+    let end = end.unwrap_or(duration);
+    if start >= end || end > duration {
+        return Err(simple_error(
+            "VESTRA-RENDER-RANGE",
+            "range must satisfy 0 <= start < end <= project duration",
+        ));
+    }
+    let boundary = |time: Duration| {
+        vestra_core::timeline::frame_count(time.as_nanos(), rate.numerator(), rate.denominator())
+            .map_err(|_| {
+                simple_error(
+                    "VESTRA-RENDER-RANGE",
+                    "range boundary overflows the frame index",
+                )
+            })
+    };
+    let first = boundary(start)?;
+    let stop = boundary(end)?.min(frame_count);
+    if first >= stop {
+        return Err(simple_error(
+            "VESTRA-RENDER-RANGE",
+            "range contains no project frames",
+        ));
+    }
+    Ok(first..stop)
 }
 
 fn simple_error(code: &str, message: &str) -> EditorError {

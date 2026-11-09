@@ -27,6 +27,17 @@ supplying a `ProgressSink`, and `render_with_observer(...)` for an observer that
 also needs cancellation control. `Editor::render(...)` is the callback-oriented
 entry point.
 
+### Selected video ranges
+
+Both `RenderRequest` and `PreparedVideoRenderRequest` support
+`.with_range(start: Duration, end: Option<Duration>)`. The default starts at zero
+and uses the project duration. `PreparedProject::frame_range(start, end)` returns
+the corresponding half-open frame-index range without rendering.
+
+Bounds round up on the rational project frame grid. Evaluation keeps absolute
+project time, encoded timestamps start at zero, and audio is trimmed after
+mixing and effects. See [range timing and errors](../guides/python/rendering-and-preparation.md#export-part-of-the-timeline).
+
 ## Authoring visual effects through JSON values
 
 Visual effects use the canonical JSON/value route. With a mutable

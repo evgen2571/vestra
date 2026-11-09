@@ -31,9 +31,11 @@ fn x264_preset_for_crf(quality_crf: u8) -> &'static str {
 }
 
 fn add_h264_video_output(command: &mut Command, settings: &EncoderSettings) {
+    // Rawvideo EOF bounds selected clips; -frames:v can cut a padded audio tail short.
+    if settings.audio_range.is_none() {
+        command.args(["-frames:v", &settings.frame_count.to_string()]);
+    }
     command.args([
-        "-frames:v",
-        &settings.frame_count.to_string(),
         "-c:v",
         "libx264",
         "-preset",
@@ -102,6 +104,10 @@ impl FfmpegSink {
                 audio_mix,
                 settings.duration,
                 audio_graph::AudioGraphCompileOptions {
+                    output_range: settings
+                        .audio_range
+                        .as_ref()
+                        .map(|range| (range.start, range.end)),
                     first_audio_input_index: 1,
                 },
             )?;
@@ -158,6 +164,10 @@ impl FfmpegSink {
                 audio_mix,
                 settings.duration,
                 audio_graph::AudioGraphCompileOptions {
+                    output_range: settings
+                        .audio_range
+                        .as_ref()
+                        .map(|range| (range.start, range.end)),
                     first_audio_input_index: 1,
                 },
             )?;
@@ -165,6 +175,9 @@ impl FfmpegSink {
                 add_audio(&mut command, &audio, settings.maximum_audio_sources, output)?;
         } else {
             command.args(["-map", "0:v:0"]);
+        }
+        if settings.audio_range.is_some() {
+            command.args(["-frames:v", &settings.frame_count.to_string()]);
         }
         add_h264_video_output(&mut command, settings);
         if settings.audio_mix.is_some() {

@@ -62,6 +62,7 @@ pub(super) fn run(
                     preview,
                     backend: backend_preference,
                     progress_mode,
+                    ..RenderRequest::default()
                 },
                 sink,
                 &cancellation,

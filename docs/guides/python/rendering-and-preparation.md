@@ -56,7 +56,9 @@ prepare again to include them. For one quick inspection,
 `project.render_frame(0.5, backend="cpu")` is convenient, but every call prepares
 again. Neither route encodes video or verifies output publication.
 
-Audio preparation resolves omitted source ends exactly, including AAC padding.
+Audio preparation resolves omitted source ends with the installed `ffmpeg`
+reader, including its codec-padding policy. Exact and strict preparation require
+that executable; metadata inspection stays native.
 For fast excerpts, author explicit source trim ends: actual rendering verifies
 only the samples needed for output, without a separate whole-source scan. The
 same project produces equivalent one-shot and prepared output. Choose

@@ -6,9 +6,14 @@ use crate::{MediaError, audio_graph::AudioSourceRequirement};
 pub(crate) struct AudioReadReport {
     pub(crate) stderr: String,
     samples: BTreeMap<usize, Option<u64>>,
+    output_samples: BTreeMap<usize, Option<u64>>,
 }
 
 impl AudioReadReport {
+    pub(crate) fn source_samples(&self, source_index: usize) -> Option<u64> {
+        self.samples.get(&source_index).copied().flatten()
+    }
+
     pub(crate) fn verify(&self, requirements: &[AudioSourceRequirement]) -> Result<(), MediaError> {
         for requirement in requirements {
             let available = self
@@ -28,6 +33,27 @@ impl AudioReadReport {
                     available,
                 });
             }
+            if requirement.selected_end > available.saturating_add(1)
+                && let Some(output) = &requirement.transformed_output
+            {
+                let produced = self
+                    .output_samples
+                    .get(&output.clip_index)
+                    .copied()
+                    .flatten()
+                    .ok_or_else(|| MediaError::AudioVerification {
+                        clip_id: requirement.clip_id.clone(),
+                    })?;
+                // At EOF atempo can emit less than its ideal duration transform.
+                // Only complete authored selections may use duration-normalizing padding.
+                if output.required_samples > produced.saturating_add(1) {
+                    return Err(MediaError::AudioSourceBounds {
+                        clip_id: requirement.clip_id.clone(),
+                        required: requirement.selected_end,
+                        available,
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -36,9 +62,14 @@ impl AudioReadReport {
         let Ok(line) = std::str::from_utf8(line) else {
             return;
         };
-        let Some(line) = line.strip_prefix("[astats@vestra_source_") else {
-            return;
-        };
+        let (line, samples, index_limit) =
+            if let Some(line) = line.strip_prefix("[astats@vestra_source_") {
+                (line, &mut self.samples, Some(source_count))
+            } else if let Some(line) = line.strip_prefix("[astats@vestra_clip_") {
+                (line, &mut self.output_samples, None)
+            } else {
+                return;
+            };
         let Some((source, line)) = line.split_once(" @ ") else {
             return;
         };
@@ -48,10 +79,10 @@ impl AudioReadReport {
         let Some((_, count)) = line.split_once("] Number of samples: ") else {
             return;
         };
-        if source < source_count {
+        if index_limit.is_none_or(|limit| source < limit) {
             let count = count.trim().parse::<u64>().ok();
             // Reinitialized source filters reset their counts; do not accept a partial total.
-            self.samples
+            samples
                 .entry(source)
                 .and_modify(|count| *count = None)
                 .or_insert(count);
@@ -108,6 +139,8 @@ mod tests {
             clip_id: "clip".into(),
             trim_start: start,
             required_end: end,
+            selected_end: end,
+            transformed_output: None,
         }
     }
 
@@ -144,6 +177,42 @@ mod tests {
         let bytes = b"[astats@vestra_source_0 @ 0x123] Number of samples: 1000\n[astats@vestra_source_0 @ 0x456] Number of samples: 2000\n";
         assert!(matches!(
             collect_audio_stderr(&bytes[..], 1).verify(&[requirement(0, 1)]),
+            Err(MediaError::AudioVerification { .. })
+        ));
+    }
+
+    #[test]
+    fn partial_speed_sources_require_real_output_but_complete_selections_allow_padding() {
+        let mut requirement = requirement(0, 100);
+        requirement.selected_end = 1_000;
+        requirement.transformed_output = Some(crate::audio_graph::AudioOutputRequirement {
+            clip_index: 2,
+            required_samples: 200,
+        });
+        for (count, valid) in [("199", true), ("198", false), ("NaN", false)] {
+            let bytes = format!(
+                "[astats@vestra_clip_2 @ 0x1] Number of samples: {count}\n[astats@vestra_source_0 @ 0x2] Number of samples: 150\n"
+            );
+            assert_eq!(
+                collect_audio_stderr(bytes.as_bytes(), 1)
+                    .verify(std::slice::from_ref(&requirement))
+                    .is_ok(),
+                valid
+            );
+        }
+        for (source_count, valid) in [(150, false), (999, true), (1_000, true)] {
+            let bytes =
+                format!("[astats@vestra_source_0 @ 0x2] Number of samples: {source_count}\n");
+            assert_eq!(
+                collect_audio_stderr(bytes.as_bytes(), 1)
+                    .verify(std::slice::from_ref(&requirement))
+                    .is_ok(),
+                valid
+            );
+        }
+        let bytes = b"[astats@vestra_source_0 @ 0x2] Number of samples: 150\n[astats@vestra_clip_2 @ 0x1] Number of samples: 200\n[astats@vestra_clip_2 @ 0x3] Number of samples: 200\n";
+        assert!(matches!(
+            collect_audio_stderr(&bytes[..], 1).verify(&[requirement]),
             Err(MediaError::AudioVerification { .. })
         ));
     }

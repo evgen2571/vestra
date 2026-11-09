@@ -35,6 +35,14 @@ pub(crate) struct AudioSourceRequirement {
     pub(crate) clip_id: String,
     pub(crate) trim_start: u64,
     pub(crate) required_end: u64,
+    pub(crate) selected_end: u64,
+    pub(crate) transformed_output: Option<AudioOutputRequirement>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AudioOutputRequirement {
+    pub(crate) clip_index: usize,
+    pub(crate) required_samples: u64,
 }
 
 /// Convert non-negative timeline seconds to the nearest 48 kHz sample. Ties
@@ -234,6 +242,7 @@ impl GraphBuilder {
 
     fn clip(&mut self, clip: &AudioClipPlan, project_samples: u64) -> Result<String, MediaError> {
         let (source_index, source_branch) = self.next_branch(&clip.path)?;
+        let clip_index = self.clip_branch_count - 1;
         let trim_start = seconds_to_samples(clip.trim_start)?;
         let trim_end = seconds_to_samples(clip.trim_start + clip.selected_duration)?;
         let selected = trim_end.checked_sub(trim_start).ok_or_else(|| {
@@ -272,6 +281,11 @@ impl GraphBuilder {
                         "required audio source prefix overflows".to_owned(),
                     )
                 })?,
+                selected_end: trim_end,
+                transformed_output: transforms_duration.then_some(AudioOutputRequirement {
+                    clip_index,
+                    required_samples: visible,
+                }),
             });
         }
         // Semantic validation works in seconds. Independent edge rounding can
@@ -287,9 +301,13 @@ impl GraphBuilder {
         ));
         let effected = self.apply_effect_chain(normalized, &clip.effects)?;
         let effected = if clip.effects.has_duration_transform() {
+            let counted = self.label("coverage");
+            self.filters.push(format!(
+                "[{effected}]astats@vestra_clip_{clip_index}=metadata=0:reset=0:measure_perchannel=none:measure_overall=Number_of_samples[{counted}]"
+            ));
             let output = self.label("duration");
             self.filters.push(format!(
-                "[{effected}]apad,atrim=end_sample={processed},asetpts=PTS-STARTPTS[{output}]"
+                "[{counted}]apad,atrim=end_sample={processed},asetpts=PTS-STARTPTS[{output}]"
             ));
             output
         } else {

@@ -22,6 +22,70 @@ fn background_project(directory: &std::path::Path) -> vestra::Project {
 }
 
 #[test]
+fn prepared_ranges_resolve_on_the_original_half_open_frame_grid() {
+    let directory = tempdir().expect("temporary directory");
+    let prepared = Editor::new()
+        .prepare(
+            &background_project(directory.path()),
+            PrepareOptions::new(BackendPreference::Cpu),
+        )
+        .expect("prepare");
+    assert_eq!(prepared.frame_range(Duration::ZERO, None).unwrap(), 0..30);
+    assert_eq!(
+        prepared
+            .frame_range(Duration::from_millis(26), Some(Duration::from_millis(101)))
+            .unwrap(),
+        1..4
+    );
+    assert_eq!(
+        prepared
+            .frame_range(Duration::from_millis(100), Some(Duration::from_millis(200)))
+            .unwrap(),
+        3..6
+    );
+    for (start, end) in [
+        (Duration::ZERO, Some(Duration::ZERO)),
+        (Duration::from_secs(1), None),
+        (Duration::ZERO, Some(Duration::from_secs(2))),
+        (Duration::from_millis(1), Some(Duration::from_millis(2))),
+        (Duration::MAX, None),
+    ] {
+        let error = prepared.frame_range(start, end).expect_err("invalid range");
+        assert_eq!(error.diagnostics()[0].code, "VESTRA-RENDER-RANGE");
+    }
+}
+
+#[test]
+fn prepared_ranges_keep_fractional_fps_boundaries_exact() {
+    let directory = tempdir().expect("temporary directory");
+    let project = vestra::Project::from_json(
+        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        directory.path(),
+    ).expect("project");
+    let prepared = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .unwrap();
+    assert_eq!(
+        prepared
+            .frame_range(
+                Duration::from_nanos(33_366_666),
+                Some(Duration::from_nanos(66_733_333))
+            )
+            .unwrap(),
+        1..2
+    );
+    assert_eq!(
+        prepared
+            .frame_range(
+                Duration::from_nanos(33_366_667),
+                Some(Duration::from_nanos(66_733_334))
+            )
+            .unwrap(),
+        2..3
+    );
+}
+
+#[test]
 fn configurable_group_resource_limits_reach_validation_preflight_and_cpu_preparation() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_value(serde_json::json!({

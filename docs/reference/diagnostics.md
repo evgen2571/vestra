@@ -34,6 +34,9 @@ including any further nested groups or masks.
 Still-image saving reports `VESTRA-FRAME-OUTPUT` through Python's
 `FrameRenderError` when the extension, destination, encoding or final write
 fails. An existing destination is preserved if encoding or writing fails.
+Continuous frame selections report `VESTRA-RENDER-RANGE` for reversed,
+out-of-timeline or empty frame ranges. These checks use the prepared rational
+frame grid before producing output.
 
 Tracing/logging is operational observability. `RenderEvent` progress describes
 operation state. Diagnostics and errors are structured, actionable failures;

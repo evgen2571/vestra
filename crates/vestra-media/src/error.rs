@@ -20,6 +20,14 @@ pub enum AudioAnalysisError {
 
 #[derive(Debug, Error)]
 pub enum MediaError {
+    #[error("still images require a .png, .jpg, .jpeg or .webp extension")]
+    UnsupportedStillFormat,
+    #[error("invalid RGBA image dimensions or byte count")]
+    InvalidImageLayout,
+    #[error("cannot encode still image: {0}")]
+    ImageEncoding(#[from] image::ImageError),
+    #[error("cannot write still image: {0}")]
+    ImageWrite(#[source] io::Error),
     #[error(transparent)]
     AudioAnalysis(#[from] AudioAnalysisError),
     #[error("cannot start {program}: {source}")]

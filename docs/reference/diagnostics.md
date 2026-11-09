@@ -31,6 +31,10 @@ including any further nested groups or masks.
 
 ## Diagnostics, logs and progress
 
+Still-image saving reports `VESTRA-FRAME-OUTPUT` through Python's
+`FrameRenderError` when the extension, destination, encoding or final write
+fails. An existing destination is preserved if encoding or writing fails.
+
 Tracing/logging is operational observability. `RenderEvent` progress describes
 operation state. Diagnostics and errors are structured, actionable failures;
 JSON progress is not a diagnostics stream and does not carry warnings.

@@ -1,5 +1,6 @@
 """Observable contracts for the external comparison (no native build required)."""
 
+import argparse
 import importlib.util
 import json
 import sys
@@ -19,6 +20,17 @@ def comparison():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_default_comparison_uses_bundled_shared_inputs():
+    parser = argparse.ArgumentParser()
+    comparison().add_arguments(parser)
+    for command in (
+        ["run", "--output", "target/test"],
+        ["verify", "target/test", "--output", "target/verify"],
+    ):
+        args = parser.parse_args(command)
+        assert args.inputs == ROOT / "assets/footage"
 
 
 def test_missing_assets_are_actionable(tmp_path):

@@ -1,7 +1,42 @@
-//! Deterministic moving footage for an editorial timeline and decoder workload.
+//! Shared repository footage for editorial timelines and decoder workloads.
 
 use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
+
+pub(super) fn prepare_video(
+    path: &Path,
+    name: &str,
+    width: u32,
+    height: u32,
+    frame_rate: u32,
+    duration: &str,
+    codec: &[&str],
+) {
+    let source =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../assets/footage/{name}.mp4"));
+    let status = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-nostdin", "-i"])
+        .arg(source)
+        .args([
+            "-vf",
+            &format!("fps={frame_rate},scale={width}:{height}:flags=bicubic,setsar=1"),
+            "-t",
+            duration,
+        ])
+        .args(codec)
+        .args([
+            "-map_metadata",
+            "-1",
+            "-fflags",
+            "+bitexact",
+            "-flags",
+            "+bitexact",
+        ])
+        .arg(path)
+        .status()
+        .expect("prepare bundled benchmark footage");
+    assert!(status.success(), "prepare {}", path.display());
+}
 
 pub(super) fn generate(path: &Path, filter: &str, duration: &str, codec: &[&str]) {
     let status = Command::new("ffmpeg")
@@ -19,9 +54,12 @@ pub(super) fn generate(path: &Path, filter: &str, duration: &str, codec: &[&str]
 /// Matched ten-second controls: source-sized opaque video and a clipped overlay.
 pub(super) fn row_copy_project(scenario: &str, directory: &Path, width: u32, height: u32) -> Value {
     let footage = directory.join("opaque.mkv");
-    generate(
+    prepare_video(
         &footage,
-        &format!("testsrc2=size={width}x{height}:rate=30"),
+        "forest",
+        width,
+        height,
+        30,
         "10",
         &[
             "-an",
@@ -78,10 +116,13 @@ pub(super) fn project(scenario: &str, directory: &Path, width: u32, height: u32)
             .expect("production fixture"),
     )
     .expect("production JSON");
-    for (name, hue) in [("footage-a.mkv", 0), ("footage-b.mkv", 90)] {
-        generate(
+    for (name, source) in [("footage-a.mkv", "forest"), ("footage-b.mkv", "valley")] {
+        prepare_video(
             &directory.join(name),
-            &format!("testsrc2=size={width}x{height}:rate=30,hue=h={hue}"),
+            source,
+            width,
+            height,
+            30,
             "6",
             &["-an", "-c:v", "ffv1"],
         );

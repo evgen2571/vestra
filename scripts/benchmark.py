@@ -36,6 +36,7 @@ def source_identity() -> str:
                     "python/",
                     "benchmarks/comparisons/",
                     "benchmarks/collector/",
+                    "assets/footage/",
                 )
             )
             or name

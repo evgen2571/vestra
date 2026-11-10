@@ -1,5 +1,5 @@
 {
-  "suite_version": 1,
+  "suite_version": 2,
   "scenarios": [
     "single_video",
     "mixed_dynamic",
@@ -230,7 +230,7 @@
         "oklab_palette_video"
       ]
     },
-    "community-v1": {
+    "community-v2": {
       "width": 640,
       "height": 360,
       "warmups": 1,

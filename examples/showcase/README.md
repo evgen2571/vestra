@@ -8,7 +8,7 @@ GIF preview directly on GitHub; the MP4 link opens the full video file for downl
   <tr>
     <td width="50%" align="center" valign="top">
       <strong>Video editing</strong><br><br>
-      <a href="real-media-edit/render.mp4"><img src="real-media-edit/preview.gif" width="400" alt="Shanghai footage with animated framing, colour grading and dissolves"></a>
+      <a href="real-media-edit/render.mp4"><img src="real-media-edit/preview.gif" width="400" alt="Forest and valley footage with animated framing, colour grading and dissolves"></a>
       <p>Three video clips with animated framing and dissolves.<br><a href="real-media-edit/main.py">Python source</a></p>
     </td>
     <td width="50%" align="center" valign="top">
@@ -36,7 +36,7 @@ GIF preview directly on GitHub; the MP4 link opens the full video file for downl
 | README demo | [Watch](readme-demo/render.mp4) | [10 seconds: keyframes, masked footage and audio-driven motion](readme-demo/README.md) |
 | README quickstart | [Watch](quickstart/render.mp4) | [3 seconds: an asset-free animated rectangle](quickstart/README.md) |
 | Effects lookbook | [Watch](lookbook/render.mp4) | [6 seconds: one photo, halftone and ASCII](lookbook/README.md) |
-| Video editing | [Watch](real-media-edit/render.mp4) | [14 seconds: a silent day-to-night Shanghai edit](real-media-edit/README.md) |
+| Video editing | [Watch](real-media-edit/render.mp4) | [14 seconds: a silent forest, valley and water-drop edit](real-media-edit/README.md) |
 | Audio + spectrum | [Watch](audio-visualizer/render.mp4) | [12 seconds: spectrum, audio signals and particles](audio-visualizer/README.md) |
 | Masks + groups | [Watch](compositing/render.mp4) | [8 seconds: photo cutouts, masks and grouped animation](compositing/README.md) |
 
@@ -62,11 +62,9 @@ to `target/showcase-smoke/`. The smoke command deliberately substitutes generate
 video fixtures in a temporary directory; it never overwrites the licensed inputs
 or committed previews. Full rendering uses the real bundled footage.
 
-`just showcase-assets` reproduces the source selections and synthesized audio.
-It downloads a checksum-verified original into an ignored cache. A network
-connection is only needed to reproduce the original footage, not to render the
-checkout. The larger scenes accept `--smoke` and `--output PATH`; the small
-quickstart uses fixed settings and writes to the current directory.
+`just showcase-assets` verifies the shared bundled footage and regenerates the
+synthesized audio. The larger scenes accept `--smoke` and `--output PATH`; the
+small quickstart uses fixed settings and writes to the current directory.
 
 Inspect full videos before refreshing committed results. The renderer/probe
 checks verify dimensions, frame counts, durations and audio streams; visual
@@ -106,16 +104,12 @@ with it rather than substituting an external link.
 
 ## Prepare shared inputs
 
-The bundled inputs are sufficient to render offline. To regenerate footage and
-synthesized audio, run `just showcase-assets` from the repository root. It verifies
-the downloaded original by checksum, keeps the larger source under
-`target/showcase-sources/`, and replaces the three footage selections and audio
-under `assets/`. To regenerate only the synth, use
+The [shared footage](../../assets/footage/README.md) is used by showcases and
+benchmarks. The bundled inputs are sufficient to render offline. Run
+`just showcase-assets` to verify their checksums and regenerate synthesized audio.
+To regenerate only the synth, use
 `uv run python examples/showcase/prepare-assets.py --audio-only`.
 
-The [video edit](real-media-edit/README.md#footage-source) records footage terms,
-selection times and the original checksum. The [photo cutouts](compositing/README.md#photo-source)
-record the photograph and its preparation; the [audio visualizer](audio-visualizer/README.md#credits)
-records the original synth dedication. The preparation script fails on a missing
-or changed source, a checksum mismatch or an FFmpeg error. Encoding bytes can vary
-with FFmpeg versions.
+The [photo cutouts](compositing/README.md#photo-source) record the photograph and
+its preparation; the [audio visualizer](audio-visualizer/README.md#credits)
+records the original synth dedication. Encoding bytes can vary with FFmpeg versions.

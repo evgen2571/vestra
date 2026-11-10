@@ -9,6 +9,7 @@ from vestra.effects import Saturation, Vignette
 from vestra.sources import Rectangle, Text, Video
 
 SHOWCASE = Path(__file__).resolve().parents[1]
+FOOTAGE = SHOWCASE.parents[1] / "assets/footage"
 FONT = "assets/Manrope.ttf"
 
 
@@ -26,9 +27,11 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     # Five-second shots overlap by half a second on the project timeline.
     shots = []
     shot_starts = (0, 4.5, 9)
-    for number, start in enumerate(shot_starts, 1):
+    for number, (start, name) in enumerate(
+        zip(shot_starts, ("forest", "valley", "tear")), 1
+    ):
         shot = project.root.add(
-            Video(f"assets/city-{number}.mp4", sizing="cover"),
+            Video(str(FOOTAGE / f"{name}.mp4"), sizing="cover"),
             start=start,
             duration=5,
             z=number,
@@ -73,18 +76,6 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     )
     rule.transform.position = (0.5, 0.57)
 
-    credit = project.root.add(
-        Text(
-            "Footage: Yigang Yu · CC0",
-            font=FONT,
-            font_size=20 * resolution_scale,
-            fill="#f0ece4",
-        ),
-        start=11.5,
-        duration=2.5,
-        z=6,
-    )
-    credit.transform.position = (0.5, 0.91)
     # Opening and closing fades use the first and last shot's local time.
     shots[0].opacity.keyframe(0, 0)
     shots[0].opacity.keyframe(0.6, 1)

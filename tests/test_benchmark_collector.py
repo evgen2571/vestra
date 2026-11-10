@@ -189,7 +189,7 @@ def test_missing_git_preflight_still_produces_archive(monkeypatch, tmp_path):
 
 def test_community_suite_preserves_canonical():
     manifest = json.loads((ROOT / "benchmarks/suites.json").read_text())
-    settings, names = suite_configuration(manifest, "community-v1")
+    settings, names = suite_configuration(manifest, "community-v2")
     assert settings["samples"] == 3 and settings["warmups"] == 1
     assert {
         "single_video",
@@ -257,7 +257,14 @@ def test_portable_generation_and_hash_gate(monkeypatch, tmp_path):
     fixtures.portable_inputs(inputs, width=128, height=72)
     manifest = load_inputs(inputs)
     assert len(manifest["prepared"]) == 3
-    assert all("testsrc2=" in " ".join(map(str, command)) for command in calls)
+    assert all("-i" in command and "-f" not in command for command in calls)
+    assert {Path(command[command.index("-i") + 1]).name for command in calls} == {
+        "forest.mp4",
+        "valley.mp4",
+        "tear.mp4",
+    }
+    assert manifest["generator_version"] == 2
+    assert all(item["sha256"] for item in manifest["sources"].values())
     (inputs / "forest.mp4").write_bytes(b"changed")
     with pytest.raises(ValueError, match="changed"):
         load_inputs(inputs)
@@ -363,6 +370,90 @@ def test_partial_failure_and_zip(monkeypatch, tmp_path):
         assert any(n.endswith("summary.md") for n in archive.namelist())
         report = json.loads(archive.read(collection.directory.name + "/manifest.json"))
         assert report["status"] == "failed"
+
+
+def test_collection_reports_task_duration_and_handoff(tmp_path, capsys):
+    collection = collect.Collection(
+        collect.parser().parse_args(["--output", str(tmp_path)])
+    )
+    collection.task("cpu-smoke", lambda: True, validation="full decode")
+    collection.skip("hardware-wgpu", "no eligible adapter", unsupported=True)
+    assert collection.finish() == 0
+    assert collection.manifest["tasks"][0]["elapsed_seconds"] >= 0
+    terminal = capsys.readouterr().out
+    assert "Completed cpu-smoke" in terminal
+    assert "Send this file:" in terminal
+    assert "1 passed" in terminal and "1 unsupported" in terminal
+    summary = (collection.directory / "summary.md").read_text(encoding="utf-8")
+    assert "Revision" in summary
+    assert "NOT VERIFIED" in summary
+    assert "no eligible adapter" in summary
+
+
+def test_long_command_shows_activity_and_stops_after_failure(
+    monkeypatch, tmp_path, capsys
+):
+    import threading
+
+    monkeypatch.setattr(collect, "ACTIVITY_INTERVAL", 0.02, raising=False)
+    collection = collect.Collection(
+        collect.parser().parse_args(["--output", str(tmp_path)])
+    )
+    with pytest.raises(ValueError, match="command failed"):
+        collection.execute(
+            [
+                sys.executable,
+                "-u",
+                "-c",
+                "import time; print('Building native package'); time.sleep(.2); raise SystemExit(1)",
+            ],
+            collection.diagnostics / "build.log",
+        )
+    terminal = capsys.readouterr().out
+    assert "Still working" in terminal and "Building native package" in terminal
+    assert not any(t.name == "benchmark-activity" for t in threading.enumerate())
+
+
+@pytest.mark.parametrize(
+    "smoke,visual", [(True, "passed"), (False, "failed"), (False, "passed")]
+)
+def test_summary_comparison_requires_visual_evidence(tmp_path, smoke, visual):
+    folder = tmp_path / "moviepy/cpu"
+    folder.mkdir(parents=True)
+    (folder / "comparison.json").write_text(
+        json.dumps(
+            dict(
+                records=[
+                    dict(
+                        scenario="editing",
+                        engine=engine,
+                        summary=dict(
+                            wall_ms=dict(median=wall, min=wall, max=wall),
+                            effective_fps=dict(median=360000 / wall),
+                            peak_tree_rss_bytes=None,
+                        ),
+                    )
+                    for engine, wall in [("moviepy-cpu", 4000), ("vestra-cpu", 2000)]
+                ]
+            )
+        )
+    )
+    reporting.summarize(
+        tmp_path,
+        dict(
+            profile="default",
+            smoke=smoke,
+            status="passed",
+            revision="abc123",
+            tasks=[dict(name="moviepy-visual", status=visual)],
+        ),
+        {},
+    )
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert "lower is better" in summary
+    assert "abc123" in summary
+    assert ("2.00× faster" in summary) == (not smoke and visual == "passed")
+    assert "unavailable" in summary
 
 
 def test_archive_privacy_and_media_exclusion(tmp_path):
@@ -531,7 +622,33 @@ def test_sustained_summary_does_not_reuse_sparse_samples(tmp_path):
     reporting.summarize(
         tmp_path, dict(profile="all", smoke=True, status="passed", tasks=[]), {}
     )
-    assert "1.000 / unavailable / 3.000" in (tmp_path / "summary.md").read_text()
+    assert "1.000 / unavailable / 3.000" in (tmp_path / "summary.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_sustained_summary_identifies_actual_gpu(tmp_path):
+    folder = tmp_path / "sustained/hardware-wgpu"
+    folder.mkdir(parents=True)
+    (folder / "result.json").write_text(
+        json.dumps(
+            dict(
+                status="passed",
+                duration=3600,
+                frames=108000,
+                measurement=dict(wall_ms=1000),
+                render_result=dict(
+                    render_backend="wgpu",
+                    adapter=dict(adapter_name="Apple M2", graphics_backend="metal"),
+                ),
+            )
+        )
+    )
+    reporting.summarize(
+        tmp_path, dict(profile="sustained", smoke=False, status="passed", tasks=[]), {}
+    )
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert "hardware-wgpu | wgpu | Apple M2 | metal" in summary
 
 
 def test_long_source_rejects_successful_probe_with_decode_errors(monkeypatch, tmp_path):

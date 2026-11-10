@@ -167,12 +167,77 @@ def jsonl_rows(data):
 
 
 def summarize(directory, manifest, system):
+    tasks = {row["name"]: row for row in manifest["tasks"]}
+    visual = tasks.get("moviepy-visual", {}).get("status") == "passed"
+    comparative = visual and not manifest["smoke"] and manifest["status"] == "passed"
+    captures = []
+    for path, data in documents(
+        [
+            *directory.glob("vestra/**/suite.json"),
+            *directory.glob("moviepy/**/comparison.json"),
+        ]
+    ):
+        for row in data["records"]:
+            for sample in row.get("samples", []):
+                captures.append(
+                    (
+                        row.get(
+                            "engine",
+                            data.get("definition", {}).get("backend", "unavailable"),
+                        ),
+                        sample.get("result", {}),
+                    )
+                )
+    for path, data in documents(directory.glob("sustained/*/result.json")):
+        if data.get("render_result"):
+            captures.append((path.parent.name, data["render_result"]))
+    selections = set()
+    for requested, result in captures:
+        adapter = result.get("adapter") or {}
+        selections.add(
+            (
+                requested,
+                result.get("render_backend", "unavailable"),
+                adapter.get("adapter_name", "none"),
+                adapter.get("graphics_backend", "none"),
+            )
+        )
     lines = [
         "# Vestra benchmark collection",
         "",
-        f"Profile: {manifest['profile']}; smoke: {manifest['smoke']}. Overall: **{manifest['status']}**.",
+        f"Collection: **{manifest['status'].upper()}**. "
+        + (
+            "**SMOKE — execution checks only.**"
+            if manifest["smoke"]
+            else f"Profile: {manifest['profile']}."
+        ),
+        "",
+        f"Revision: `{manifest.get('revision') or 'unavailable'}`. Started: {manifest.get('started_at', 'unavailable')}.",
+        "",
+        f"MoviePy visual equivalence: **{'PASSED' if visual else 'NOT VERIFIED'}**. "
+        "Timings are comparable only for matching workloads on this host.",
         "",
         f"Hardware: {system.get('cpu', 'unavailable')}; {system.get('machine')}; {system.get('platform')}; logical CPUs {system.get('logical_cpus')}; RAM {number(system.get('memory_bytes'), 2**30)} GiB.",
+        "",
+        "Render times below are median seconds; **lower is better**. "
+        "Ranges show individual samples, not confidence intervals.",
+        "",
+        "[Raw capture manifest](manifest.json). Workload previews and setup instructions are in the checkout's benchmark documentation.",
+        "",
+        "## Hardware selection",
+        "",
+        "Requested run | Actual renderer | Adapter | Graphics API",
+        "--- | --- | --- | ---",
+        *[
+            " | ".join(
+                str(value).replace("|", "/").replace("\n", " ") for value in selection
+            )
+            for selection in sorted(selections)
+        ],
+        "",
+        "See checks below for failed, skipped or unsupported hardware attempts.",
+        "",
+        "## Checks",
         "",
         "Task | Execution | Validation | Detail",
         "--- | --- | --- | ---",
@@ -188,7 +253,28 @@ def summarize(directory, manifest, system):
         )
     lines += [
         "",
-        "## Vestra samples",
+        "## Vestra CPU and GPU",
+        "",
+        "Each row uses the suite's own timing scope and resolution. GPU means verified hardware WGPU; decoding and H.264 encoding still run on CPU.",
+        "",
+        "Suite / workload | CPU seconds | Hardware GPU seconds",
+        "--- | ---: | ---:",
+    ]
+    workloads = {}
+    for _, data in documents(directory.glob("vestra/**/suite.json")):
+        for row in data["records"]:
+            walls = [s["wall_ms"] / 1000 for s in row["samples"]]
+            workloads.setdefault((data["definition"]["name"], row["scenario"]), {})[
+                data["definition"]["backend"]
+            ] = f"{median(walls):.3f} ({min(walls):.3f}–{max(walls):.3f})"
+    for (suite, scenario), backends in workloads.items():
+        lines.append(
+            f"{suite} / {scenario} | {backends.get('cpu', 'unavailable')} | {backends.get('hardware-wgpu', 'unavailable')}"
+        )
+    lines += [
+        "",
+        "<details>",
+        "<summary>Individual backend samples and effective FPS</summary>",
         "",
         "Suite/backend/scenario | Median wall s | Range s | Effective FPS",
         "--- | ---: | ---: | ---:",
@@ -205,12 +291,15 @@ def summarize(directory, manifest, system):
             )
     lines += [
         "",
+        "</details>",
+        "",
         "## MoviePy comparison",
         "",
-        "Scenario/engine | Median wall s | Range s | FPS | Tree RSS MiB",
-        "--- | ---: | ---: | ---: | ---:",
+        "Workload | MoviePy CPU s | Vestra CPU s | Vestra GPU s",
+        "--- | ---: | ---: | ---:",
     ]
     timings = {}
+    details = []
     for path, data in documents(directory.glob("moviepy/**/comparison.json")):
         for row in data["records"]:
             if not row.get("summary"):
@@ -219,16 +308,46 @@ def summarize(directory, manifest, system):
             timings[(row["scenario"], row["engine"])] = s["wall_ms"]["median"]
             wall = s["wall_ms"]
             rss = s["peak_tree_rss_bytes"]
-            lines.append(
+            details.append(
                 f"{row['scenario']}/{row['engine']} | {wall['median'] / 1000:.3f} | {wall['min'] / 1000:.3f}–{wall['max'] / 1000:.3f} | {s['effective_fps']['median']:.2f} | {number(rss['median'] if rss else None, 2**20)}"
             )
+    for scenario in dict.fromkeys(scenario for scenario, _ in timings):
+        values = [
+            number(timings.get((scenario, engine)), 1000)
+            for engine in ("moviepy-cpu", "vestra-cpu", "hardware-wgpu")
+        ]
+        lines.append(f"{scenario} | " + " | ".join(values))
+    lines += [
+        "",
+        "<details>",
+        "<summary>Sample ranges, effective FPS and process memory</summary>",
+        "",
+        "Scenario/engine | Median wall s | Range s | FPS | Tree RSS MiB",
+        "--- | ---: | ---: | ---: | ---:",
+        *details,
+        "",
+        "</details>",
+        "",
+    ]
     for (scenario, engine), wall in sorted(timings.items()):
         reference = timings.get((scenario, "moviepy-cpu"))
-        if engine != "moviepy-cpu" and reference:
+        if comparative and engine != "moviepy-cpu" and reference and wall > 0:
+            comparison = (
+                f"{reference / wall:.2f}× faster"
+                if wall < reference
+                else f"{wall / reference:.2f}× slower"
+                if wall > reference
+                else "equal wall time"
+            )
             lines += [
                 "",
-                f"{scenario}/{engine}: {wall / reference:.3f}× MoviePy worker wall time on this host. Read validation status above before interpreting this ratio.",
+                f"{scenario}/{engine}: **{comparison}** than MoviePy CPU on this host.",
             ]
+    if not comparative:
+        lines += [
+            "",
+            "Comparative speed claims withheld: smoke, failed/incomplete collection, or missing visual verification. Raw timings remain diagnostic evidence.",
+        ]
     for _, data in documents([directory / "cache/results.json"]):
         lines += [
             "",
@@ -247,8 +366,10 @@ def summarize(directory, manifest, system):
             "",
             "Ratios describe this request sequence only. Sequential access often benefits from cursor retention without LRU hits. MoviePy public get_frame timings and RSS are recorded separately; it exposes no equivalent native cache counters.",
         ]
-    lines += ["", "## Sustained rendering", ""]
-    for path, result in documents(directory.glob("sustained/*/result.json")):
+    sustained_results = list(documents(directory.glob("sustained/*/result.json")))
+    if sustained_results:
+        lines += ["", "## Sustained rendering", ""]
+    for path, result in sustained_results:
         wall_ms = result.get("measurement", {}).get("wall_ms")
         fps = result.get("frames", 0) / (wall_ms / 1000) if wall_ms else None
         lines.append(
@@ -281,7 +402,8 @@ def summarize(directory, manifest, system):
             )
     lines += [
         "",
-        "## Methodology and limits",
+        "<details>",
+        "<summary>Methodology, resource accounting and sharing limits</summary>",
         "",
         "Builds, fixture preparation, validation and report generation are outside render timings. Vestra canonical wall samples time each one-shot render; MoviePy comparison wall includes full worker startup/imports. Decoder access times exclude opens and correctness scans. Internal engine stages overlap and are not interchangeable with MoviePy write_videofile timings.",
         "",
@@ -292,6 +414,8 @@ def summarize(directory, manifest, system):
         "Use the established comparator only for compatible captures on the same machine. Cross-machine results describe hosts and cannot establish a code regression. Sources and OS page caches can be warm. Inspect distributions and repeat small differences.",
         "",
         "The ZIP excludes media, images and local scratch and sanitizes private paths and credentials. Original logs/media may remain locally; do not share the whole result folder. No telemetry or upload occurs.",
+        "",
+        "</details>",
         "",
     ]
     (directory / "summary.md").write_text(sanitize("\n".join(lines)), encoding="utf-8")

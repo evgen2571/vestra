@@ -425,9 +425,12 @@ fn create_stylization_benchmark_project(
     use serde_json::json;
 
     let footage = directory.join("stylization.mkv");
-    production::generate(
+    production::prepare_video(
         &footage,
-        &format!("testsrc2=size={width}x{height}:rate=30"),
+        "valley",
+        width,
+        height,
+        30,
         "3",
         &["-an", "-c:v", "ffv1"],
     );
@@ -563,9 +566,25 @@ fn create_video_benchmark_project(
     height: u32,
 ) -> serde_json::Value {
     let video_a = directory.join("video-a.mkv");
-    create_color_video(&video_a, "0x18304f", width, height, 15);
+    production::prepare_video(
+        &video_a,
+        "forest",
+        width,
+        height,
+        15,
+        "3",
+        &["-an", "-c:v", "ffv1"],
+    );
     let unused_video = directory.join("video-unused.mkv");
-    create_color_video(&unused_video, "0x442244", width, height, 15);
+    production::prepare_video(
+        &unused_video,
+        "tear",
+        width,
+        height,
+        15,
+        "3",
+        &["-an", "-c:v", "ffv1"],
+    );
     let font = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/assets/VestraTest-Regular.ttf")
         .canonicalize()
@@ -606,7 +625,15 @@ fn create_video_benchmark_project(
 
     let transitions = if scenario == "mixed_dynamic" {
         let video_b = directory.join("video-b.mkv");
-        create_color_video(&video_b, "0x613b20", width, height, 15);
+        production::prepare_video(
+            &video_b,
+            "valley",
+            width,
+            height,
+            15,
+            "3",
+            &["-an", "-c:v", "ffv1"],
+        );
         assets.push(serde_json::json!({
             "id": "video-b", "type": "video", "source": video_b.canonicalize().expect("video b")
         }));
@@ -635,32 +662,6 @@ fn create_video_benchmark_project(
         "output": {"path": "benchmark.mp4", "width": width, "height": height, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 3},
         "assets": assets, "visual": {"clips": clips, "transitions": transitions, "flashes": [], "post_effects": []}
     })
-}
-
-fn create_color_video(path: &Path, colour: &str, width: u32, height: u32, frame_rate: u32) {
-    let size = format!("{width}x{height}");
-    let status = Command::new("ffmpeg")
-        .args(["-y", "-v", "error", "-f", "lavfi", "-i"])
-        .arg(format!("color=c={colour}:s={size}:r={frame_rate}"))
-        .args([
-            "-t",
-            "3",
-            "-an",
-            "-c:v",
-            "ffv1",
-            "-fflags",
-            "+bitexact",
-            "-flags:v",
-            "+bitexact",
-        ])
-        .arg(path)
-        .status()
-        .expect("run ffmpeg for benchmark video");
-    assert!(
-        status.success(),
-        "ffmpeg failed to create {}",
-        path.display()
-    );
 }
 
 fn env_usize(name: &str, default: usize) -> usize {

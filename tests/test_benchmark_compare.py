@@ -16,17 +16,20 @@ benchmark = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(benchmark)
 
 
-def test_effect_fixture_changes_invalidate_benchmark_source_identity(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize(
+    "name", ["examples/effects/ascii.json", "assets/footage/forest.mp4"]
+)
+def test_fixture_changes_invalidate_benchmark_source_identity(
+    tmp_path, monkeypatch, name
 ):
-    fixture = tmp_path / "examples/effects/ascii.json"
+    fixture = tmp_path / name
     fixture.parent.mkdir(parents=True)
     fixture.write_text('{"cell_width":8}')
     monkeypatch.setattr(benchmark, "ROOT", tmp_path)
     monkeypatch.setattr(
         benchmark.subprocess,
         "check_output",
-        lambda *args, **kwargs: b"examples/effects/ascii.json\0",
+        lambda *args, **kwargs: (name + "\0").encode(),
     )
     before = benchmark.source_identity()
     fixture.write_text('{"cell_width":12}')

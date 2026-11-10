@@ -21,7 +21,7 @@ def definition(duration, width=640, height=360):
             "duration must be positive, at most 7200s, and a whole number of frames"
         )
     result = workload("layered", width, height)
-    result.update(name="sustained-v1", duration=duration)
+    result.update(name="sustained-v2", duration=duration)
     # Two moving placements with a transform, opacity, and animated position.
     # Both read the same long source; no static-frame or encoded-video shortcut.
     result["clips"] = result["clips"][:2]

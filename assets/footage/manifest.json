@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "ffmpeg": "ffmpeg version 8.1.3 Copyright (c) 2000-2026 the FFmpeg developers",
+  "settings": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration": 12,
+    "codec": "libx264",
+    "crf": 23,
+    "preset": "slow",
+    "pixel_format": "yuv420p",
+    "audio": false
+  },
+  "prepared": {
+    "forest": {
+      "filename": "forest.mp4",
+      "sha256": "f9e5f8aff8e1dcc68b74ad0f9bd963377aa70d1d748346e3406c9cdef97bde9d",
+      "validation": {
+        "status": "ok",
+        "width": 1280,
+        "height": 720,
+        "fps": "30/1",
+        "duration": 12.0,
+        "frames": 360,
+        "size_bytes": 8525636,
+        "sha256": "f9e5f8aff8e1dcc68b74ad0f9bd963377aa70d1d748346e3406c9cdef97bde9d",
+        "full_decode": true
+      }
+    },
+    "valley": {
+      "filename": "valley.mp4",
+      "sha256": "5eaba1e79111975faa3738bb1aa70b95c907ac5b354f893935852a1e9ff63ace",
+      "validation": {
+        "status": "ok",
+        "width": 1280,
+        "height": 720,
+        "fps": "30/1",
+        "duration": 12.0,
+        "frames": 360,
+        "size_bytes": 7545342,
+        "sha256": "5eaba1e79111975faa3738bb1aa70b95c907ac5b354f893935852a1e9ff63ace",
+        "full_decode": true
+      }
+    },
+    "tear": {
+      "filename": "tear.mp4",
+      "sha256": "3df3ea5087e41d542f4de7274107d3e82628d1bd62e2546f9c29f7c6309adef0",
+      "validation": {
+        "status": "ok",
+        "width": 1280,
+        "height": 720,
+        "fps": "30/1",
+        "duration": 12.0,
+        "frames": 360,
+        "size_bytes": 2973047,
+        "sha256": "3df3ea5087e41d542f4de7274107d3e82628d1bd62e2546f9c29f7c6309adef0",
+        "full_decode": true
+      }
+    }
+  }
+}

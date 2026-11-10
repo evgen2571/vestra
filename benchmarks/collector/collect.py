@@ -10,12 +10,16 @@ import platform
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import traceback
 
 from benchmarks.collector import host, reporting
 from benchmarks.comparisons.moviepy.comparison import digest, write_json
 from scripts.benchmark import ROOT, source_identity
 from scripts.benchmark_process import measure_process
+
+ACTIVITY_INTERVAL = 15
 
 
 def parser():
@@ -39,7 +43,7 @@ def parser():
     )
     result.add_argument(
         "--suite",
-        default="community-v1",
+        default="community-v2",
         choices=tuple(
             json.loads((ROOT / "benchmarks/suites.json").read_text())["suites"]
         ),
@@ -235,13 +239,40 @@ class Collection:
         write_json(self.directory / "manifest.json", self.manifest)
 
     def execute(self, command, log, *, timeout=None, env=None, **kwargs):
-        measurement = measure_process(
-            command,
-            log,
-            timeout=timeout or self.args.timeout,
-            env=env or self.environment,
-            **kwargs,
+        started = time.monotonic()
+        stopped = threading.Event()
+
+        def activity():
+            while not stopped.wait(ACTIVITY_INTERVAL):
+                latest = "waiting for worker output"
+                try:
+                    with Path(log).open("rb") as stream:
+                        stream.seek(max(0, stream.seek(0, 2) - 2048))
+                        lines = stream.read().decode(errors="replace").splitlines()
+                    if lines:
+                        latest = " ".join(lines[-1].split())[-240:]
+                except OSError:
+                    pass  # The worker may not have created its log yet.
+                print(
+                    f"  Still working: {Path(log).stem}, {time.monotonic() - started:.0f}s; {reporting.sanitize(latest)}",
+                    flush=True,
+                )
+
+        monitor = threading.Thread(
+            target=activity, name="benchmark-activity", daemon=True
         )
+        monitor.start()
+        try:
+            measurement = measure_process(
+                command,
+                log,
+                timeout=timeout or self.args.timeout,
+                env=env or self.environment,
+                **kwargs,
+            )
+        finally:
+            stopped.set()
+            monitor.join()
         write_json(Path(log).with_suffix(".measurement.json"), measurement)
         if (
             measurement["returncode"]
@@ -262,7 +293,8 @@ class Collection:
         )
         self.manifest["tasks"].append(row)
         self.save()
-        print(f"Starting {name}", flush=True)
+        started = time.monotonic()
+        print(f"\nStarting {name} (step {len(self.manifest['tasks'])})", flush=True)
         try:
             result = function()
             row.update(
@@ -283,6 +315,13 @@ class Collection:
             row.update(status="incomplete", error="cancelled by user")
             self.save()
             raise
+        finally:
+            row["elapsed_seconds"] = round(time.monotonic() - started, 3)
+            self.save()
+            print(
+                f"Completed {name}: {row['status'].upper()} in {row['elapsed_seconds']:.1f}s",
+                flush=True,
+            )
 
     def skip(self, name, reason, *, unsupported=False):
         self.manifest["tasks"].append(
@@ -460,6 +499,13 @@ class Collection:
         args = self.args
         chosen = selected(args)
         if not args.prepared_directory:
+            print(
+                f"Vestra benchmark collection: {args.profile}{' (SMOKE: execution checks only)' if args.smoke else ''}\n"
+                f"Revision: {self.manifest['revision']}\n"
+                "First build can take tens of minutes. Activity is reported every 15 seconds.\n"
+                "Stages: check tools -> build -> render -> validate -> package ZIP\n",
+                flush=True,
+            )
             preflight = host.preflight(self.directory)
             write_json(self.directory / "preflight.json", preflight)
             print("Vestra benchmark preflight", flush=True)
@@ -773,7 +819,22 @@ class Collection:
         for task in tasks:
             print(f"{task['name']:<28} {task['status'].upper()}", flush=True)
         print(
-            f"\nArchive:\n{archive}\n\nSend this ZIP archive to the maintainer.",
+            "; ".join(
+                f"{sum(t['status'] == status for t in tasks)} {status}"
+                for status in (
+                    "passed",
+                    "failed",
+                    "incomplete",
+                    "skipped",
+                    "unsupported",
+                )
+            ),
+            flush=True,
+        )
+        print(
+            f"\nSend this file:\n{archive}\n\n"
+            "Open summary.md inside the ZIP for results and validation status.\n"
+            "Send the ZIP even if a task failed; it contains diagnostics. No upload occurs.",
             flush=True,
         )
         return 130 if cancelled else 1 if failed else 0

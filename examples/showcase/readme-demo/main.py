@@ -19,6 +19,8 @@ from vestra.sources import (
 
 SHOWCASE = Path(__file__).resolve().parents[1]
 DURATION = 10
+FOOTAGE = SHOWCASE.parents[1] / "assets/footage"
+
 BACKGROUND, PAPER, MINT = "#101c24", "#f1efe5", "#b8e3bc"
 
 
@@ -151,7 +153,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
 
     media = scene(3.2, 3.6, "Video + masks + palette effects")
     clip = media.group(duration=3.6)
-    footage = clip.add(Video("assets/city-2.mp4", sizing="cover"))
+    footage = clip.add(Video(str(FOOTAGE / "valley.mp4"), sizing="cover"))
     # The footage zoom and the group mask are independent; the group rotates both.
     footage.transform.scale = 0.46
     window = Rectangle(

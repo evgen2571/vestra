@@ -74,6 +74,7 @@ def discover(assets):
                 f"missing asset {name}; supply --assets DIRECTORY (default ~/drive/Assets)"
             )
         data = probe(p)
+        data["format"]["filename"] = name
         video = next((s for s in data["streams"] if s["codec_type"] == "video"), None)
         if (
             not video
@@ -151,8 +152,8 @@ def prepare(args):
             fps=30,
             duration=12,
             codec="libx264",
-            crf=18,
-            preset="veryfast",
+            crf=23,
+            preset="slow",
             pixel_format="yuv420p",
             audio=False,
         ),
@@ -178,13 +179,19 @@ def prepare(args):
             "-c:v",
             "libx264",
             "-crf",
-            "18",
+            "23",
             "-preset",
-            "veryfast",
+            "slow",
             "-pix_fmt",
             "yuv420p",
             "-threads",
             "2",
+            "-g",
+            "60",
+            "-sc_threshold",
+            "0",
+            "-movflags",
+            "+faststart",
             "-map_metadata",
             "-1",
             "-fflags",
@@ -557,7 +564,7 @@ def add_arguments(parser):
             )
         if name == "verify":
             p.add_argument("--output", type=Path, required=True)
-            p.add_argument("--inputs", type=Path, default=Path("target/moviepy-inputs"))
+            p.add_argument("--inputs", type=Path, default=ROOT / "assets/footage")
     prep = commands.add_parser(
         "prepare", help="prepare shared silent 720p30 input clips"
     )
@@ -579,7 +586,7 @@ def add_arguments(parser):
     run_parser.add_argument("--samples", type=int, default=5)
     run_parser.add_argument("--timeout", type=float, default=900)
     for p in (run_parser, commands.add_parser("worker", help=argparse.SUPPRESS)):
-        p.add_argument("--inputs", type=Path, default=Path("target/moviepy-inputs"))
+        p.add_argument("--inputs", type=Path, default=ROOT / "assets/footage")
         p.add_argument("--output", type=Path, required=True)
         p.add_argument("--width", type=int, default=1920)
         p.add_argument("--height", type=int, default=1080)

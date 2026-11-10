@@ -39,7 +39,9 @@ def prepare_offline(directory: Path) -> None:
     for name in ("Manrope.ttf", "landscape.jpg"):
         shutil.copyfile(SHOWCASE / "assets" / name, assets / name)
     load(SHOWCASE / "prepare-assets.py").write_audio(assets / "synth.wav")
-    for number in range(1, 4):
+    footage = directory / "footage"
+    footage.mkdir()
+    for number, name in enumerate(("forest", "valley", "tear"), 1):
         run(
             "ffmpeg",
             "-v",
@@ -54,7 +56,7 @@ def prepare_offline(directory: Path) -> None:
             "-pix_fmt",
             "yuv420p",
             "-y",
-            str(assets / f"city-{number}.mp4"),
+            str(footage / f"{name}.mp4"),
         )
 
 
@@ -136,6 +138,9 @@ def main() -> None:
         for name, duration in SCENES.items():
             module = load(SHOWCASE / name / "main.py")
             module.SHOWCASE = base
+            module.FOOTAGE = (
+                base / "footage" if args.offline else ROOT / "assets/footage"
+            )
             scene_size, scene_fps = size, fps
             if name == "quickstart":
                 project = module.project

@@ -43,7 +43,7 @@ def parser():
     )
     result.add_argument(
         "--suite",
-        default="community-v2",
+        default="community",
         choices=tuple(
             json.loads((ROOT / "benchmarks/suites.json").read_text())["suites"]
         ),
@@ -56,7 +56,7 @@ def parser():
     result.add_argument(
         "--timeout",
         type=float,
-        default=900,
+        default=7200,
         help="per short suite/worker timeout in seconds",
     )
     result.add_argument("--build-timeout", type=float, default=7200)
@@ -478,9 +478,9 @@ class Collection:
                 "--engines",
                 engine,
                 "--width",
-                "640",
+                "1920",
                 "--height",
-                "360",
+                "1080",
                 "--warmups",
                 "0" if self.args.smoke else "1",
                 "--samples",
@@ -671,18 +671,18 @@ class Collection:
                     "moviepy-visual", "requires at least two successful engine captures"
                 )
         if chosen & {"cache", "sustained"}:
-            long_inputs = inputs.parent / "long-inputs" if args.smoke else inputs
+            long_inputs = inputs.parent / "long-inputs"
             source = long_inputs / "long.mp4"
 
             def prepare_long():
                 from benchmarks.collector.fixtures import long_source, portable_inputs
 
-                if args.smoke:
-                    portable_inputs(long_inputs, width=128, height=72)
-                    shutil.copy2(
-                        long_inputs / "manifest.json",
-                        self.directory / "long-input-manifest.json",
-                    )
+                size = (128, 72) if args.smoke else (640, 360)
+                portable_inputs(long_inputs, width=size[0], height=size[1], fps=30)
+                shutil.copy2(
+                    long_inputs / "manifest.json",
+                    self.directory / "long-input-manifest.json",
+                )
                 settings = json.loads((long_inputs / "manifest.json").read_text())[
                     "settings"
                 ]

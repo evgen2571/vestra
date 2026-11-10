@@ -27,14 +27,14 @@ def command(args, timeout=300):
     return result.stdout
 
 
-def portable_inputs(directory, *, width=640, height=360):
+def portable_inputs(directory, *, width=1920, height=1080, fps=60):
     bundled = ROOT / "assets/footage"
     source_manifest = load_inputs(bundled)
     directory.mkdir(parents=True, exist_ok=False)
-    settings = dict(width=width, height=height, fps=30, duration=12)
+    settings = dict(width=width, height=height, fps=fps, duration=12)
     manifest = dict(
         schema_version=1,
-        generator_version=2,
+        generator_version=1,
         ffmpeg=version(["ffmpeg", "-version"]),
         settings=settings,
         sources={},
@@ -43,7 +43,7 @@ def portable_inputs(directory, *, width=640, height=360):
     for key, source in source_manifest["prepared"].items():
         source_path = bundled / source["filename"]
         output = directory / f"{key}.mp4"
-        video_filter = f"scale={width}:{height}:flags=bicubic,setsar=1"
+        video_filter = f"fps={fps},scale={width}:{height}:flags=bicubic,setsar=1"
         args = [
             "ffmpeg",
             "-v",
@@ -56,7 +56,7 @@ def portable_inputs(directory, *, width=640, height=360):
             video_filter,
             "-an",
             "-frames:v",
-            "360",
+            str(12 * fps),
             "-c:v",
             "libx264",
             "-crf",
@@ -68,7 +68,7 @@ def portable_inputs(directory, *, width=640, height=360):
             "-threads",
             "2",
             "-g",
-            "60",
+            str(2 * fps),
             "-sc_threshold",
             "0",
             "-map_metadata",

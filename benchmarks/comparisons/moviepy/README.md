@@ -2,7 +2,7 @@
 
 This extends [the existing benchmark runner](../../../scripts/benchmark.py).
 It compares three silent video timelines through the normal Python APIs, with
-1920×1080 / 30 fps output. It measures complete worker processes, including
+1920×1080 / 60 fps output. It measures complete worker processes, including
 Python startup/imports, project construction, media decoding, rendering,
 libx264 encoding, finalization and publication. Input preparation and output
 verification happen outside the measured intervals. These are editing workloads,
@@ -62,7 +62,7 @@ use [the collector](../../COLLECTING.md).
 ## Inputs and equivalent operations
 
 Preparation uses the first 12 seconds of forest, valley and tear, center-cropped
-to 1280×720, CFR 30 fps, silent H.264/yuv420p, CRF 23 / slow, two encoder
+to 1920×1080, CFR 60 fps, silent H.264/yuv420p, CRF 23 / slow, two encoder
 threads, bicubic FFmpeg scaling and stripped metadata/bitexact flags. Resizing
 from these shared inputs is part of each engine's workload. `manifest.json`
 records checksums, frame counts and encoding settings. Runs reject changed

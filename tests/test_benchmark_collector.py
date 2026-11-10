@@ -187,10 +187,11 @@ def test_missing_git_preflight_still_produces_archive(monkeypatch, tmp_path):
         ]
 
 
-def test_community_suite_preserves_canonical():
+def test_maintained_suites_use_full_hd_60fps():
     manifest = json.loads((ROOT / "benchmarks/suites.json").read_text())
-    settings, names = suite_configuration(manifest, "community-v2")
+    settings, names = suite_configuration(manifest, "community")
     assert settings["samples"] == 3 and settings["warmups"] == 1
+    assert (settings["width"], settings["height"], settings["fps"]) == (1920, 1080, 60)
     assert {
         "single_video",
         "mixed_dynamic",
@@ -200,8 +201,12 @@ def test_community_suite_preserves_canonical():
         "production_edit",
     } == set(names)
     assert suite_configuration(manifest, "canonical")[0] == dict(
-        width=1280, height=720, warmups=1, samples=5
+        width=1920, height=1080, fps=60, quality="high", warmups=1, samples=5
     )
+
+
+def test_default_timeout_allows_full_hd_suites():
+    assert collect.parser().parse_args([]).timeout == 7200
 
 
 def test_moviepy_smoke_keeps_comparison_canvas(monkeypatch, tmp_path):
@@ -213,8 +218,8 @@ def test_moviepy_smoke_keeps_comparison_canvas(monkeypatch, tmp_path):
     )
     collection.moviepy("vestra-cpu", tmp_path / "inputs")
     command = commands[0]
-    assert command[command.index("--width") + 1] == "640"
-    assert command[command.index("--height") + 1] == "360"
+    assert command[command.index("--width") + 1] == "1920"
+    assert command[command.index("--height") + 1] == "1080"
     assert command[command.index("--samples") + 1] == "1"
     assert command[command.index("--warmups") + 1] == "0"
 
@@ -263,7 +268,9 @@ def test_portable_generation_and_hash_gate(monkeypatch, tmp_path):
         "valley.mp4",
         "tear.mp4",
     }
-    assert manifest["generator_version"] == 2
+    assert manifest["generator_version"] == 1
+    assert manifest["settings"]["fps"] == 60
+    assert all(command[command.index("-frames:v") + 1] == "720" for command in calls)
     assert all(item["sha256"] for item in manifest["sources"].values())
     (inputs / "forest.mp4").write_bytes(b"changed")
     with pytest.raises(ValueError, match="changed"):
@@ -568,7 +575,7 @@ def test_native_libclang_probe_handles_python_abi_mismatch(monkeypatch):
 )
 def test_real_portable_fixture_validation(tmp_path):
     inputs = tmp_path / "inputs"
-    fixtures.portable_inputs(inputs, width=128, height=72)
+    fixtures.portable_inputs(inputs, width=128, height=72, fps=30)
     assert load_inputs(inputs)["prepared"]["forest"]["validation"]["frames"] == 360
     long = fixtures.long_source(
         inputs / "forest.mp4", inputs / "long.mp4", duration=24, width=128, height=72

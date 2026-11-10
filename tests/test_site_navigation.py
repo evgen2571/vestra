@@ -6,7 +6,20 @@ import re
 import subprocess
 import tomllib
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("page", ["", "vestra-vs-moviepy"])
+def test_benchmark_measurements_render_as_tables(page: str) -> None:
+    generated = ROOT / "site/benchmarks" / page / "index.html"
+    if not generated.is_file():
+        pytest.skip("requires just docs-build; included in just site-check")
+    html = generated.read_text(encoding="utf-8")
+    assert "<th>Timeline</th>" in html
+    assert "<td>Basic export</td>" in html
+    assert "<p>| Timeline" not in html
 
 
 def pages(items: list[dict]) -> list[str]:

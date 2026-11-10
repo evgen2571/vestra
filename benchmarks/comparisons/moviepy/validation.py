@@ -12,9 +12,9 @@ from benchmarks.comparisons.moviepy.workloads import workload
 from scripts.benchmark import ROOT, require_backend
 
 FRAMES = {
-    "basic": [0, 1, 150, 299],
-    "editing": [0, 113, 114, 123, 131, 132, 150, 227, 228, 237, 245, 246, 300, 359],
-    "layered": [0, 29, 30, 89, 90, 180, 269, 270, 299],
+    "basic": [0, 1, 300, 599],
+    "editing": [0, 227, 228, 246, 263, 264, 300, 455, 456, 474, 491, 492, 600, 719],
+    "layered": [0, 59, 60, 179, 180, 360, 539, 540, 599],
 }
 # Quarter-size RGB smooths bilinear/Lanczos detail differences; retain full-size raw errors.
 MAX_RGB_MAE = 8
@@ -141,7 +141,9 @@ def active_clips(definition, frame):
     return [
         c
         for c in definition["clips"]
-        if round(c["start"] * 30) <= frame < round((c["start"] + c["duration"]) * 30)
+        if round(c["start"] * definition["fps"])
+        <= frame
+        < round((c["start"] + c["duration"]) * definition["fps"])
     ]
 
 
@@ -150,7 +152,7 @@ def source_reference(sources, definition, frame, output):
     w, h = definition["width"], definition["height"]
     canvas = Image.new("RGB", (w, h))
     for clip in active_clips(definition, frame):
-        local_frame = frame - round(clip["start"] * 30)
+        local_frame = frame - round(clip["start"] * definition["fps"])
         with Image.open(sources[clip["asset"]][local_frame]) as image:
             image = image.convert("RGB").resize((w, h), Image.Resampling.BICUBIC)
         image = image.point(
@@ -165,7 +167,7 @@ def source_reference(sources, definition, frame, output):
         image, mask = (
             im.resize(size, Image.Resampling.BICUBIC) for im in (image, mask)
         )
-        local = local_frame / 30
+        local = local_frame / definition["fps"]
         opacity = clip["opacity"] * (
             min(1, local / clip["fade_in"]) if clip["fade_in"] else 1
         )
@@ -209,7 +211,9 @@ def verify(
         with Image.open(reference) as a, Image.open(candidate) as b:
             areas = [("full", (0, 0, a.width, a.height))]
             for clip in active_clips(definition, metadata["frame"])[1:]:
-                t = (metadata["frame"] / 30 - clip["start"]) / clip["duration"]
+                t = (metadata["frame"] / definition["fps"] - clip["start"]) / clip[
+                    "duration"
+                ]
                 x, y = clip["x"] + (clip["end_x"] - clip["x"]) * t, clip["y"]
                 for radius in (0.3, 0.5) if clip["ellipse"] else (0.3,):
                     dx = radius * clip["scale"]
@@ -250,7 +254,7 @@ def verify(
         definition = next(iter(entries.values()))[1]
         for frame in FRAMES[name]:
             for clip in active_clips(definition, frame):
-                local_frame = frame - round(clip["start"] * 30)
+                local_frame = frame - round(clip["start"] * definition["fps"])
                 requests.setdefault(clip["asset"], set()).add(local_frame)
     sources = {
         asset: extract_frames(

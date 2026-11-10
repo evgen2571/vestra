@@ -4,7 +4,7 @@ import os
 import time
 
 
-def workload(name, width=1920, height=1080):
+def workload(name, width=1920, height=1080, *, fps=60):
     def clip(asset, start, duration, **values):
         return dict(
             asset=asset,
@@ -45,7 +45,7 @@ def workload(name, width=1920, height=1080):
         name=name,
         width=width,
         height=height,
-        fps=30,
+        fps=fps,
         duration=duration,
         clips=clips,
         encoding=dict(
@@ -65,7 +65,7 @@ def vestra_project(definition, inputs):
 
     p = Project(
         size=(definition["width"], definition["height"]),
-        fps=30,
+        fps=definition["fps"],
         duration=definition["duration"],
         output_audio=False,
     )
@@ -236,7 +236,7 @@ def render_moviepy(definition, inputs, output, *, progress=None):
         built = time.perf_counter()
         final.write_videofile(
             str(output),
-            fps=30,
+            fps=definition["fps"],
             codec="libx264",
             audio=False,
             preset="veryfast",

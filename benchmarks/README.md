@@ -22,7 +22,8 @@ available. It validates the outputs and writes results under
 `target/benchmark-results/`. Each run includes a readable `summary.md`,
 machine/revision information, raw samples and diagnostics.
 
-The first build can take tens of minutes. Hour-long endurance and decoder-cache
+The first build can take tens of minutes; repeated 1080p60 measurements can take
+an hour or more. Hour-long endurance and decoder-cache
 experiments are optional; they are not part of the default collection. Windows
 and macOS need native build tools: the single command does not install those.
 

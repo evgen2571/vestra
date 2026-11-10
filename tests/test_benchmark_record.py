@@ -14,7 +14,8 @@ import pytest
     "VESTRA_BENCH_EXECUTABLE" not in os.environ, reason="requires release executable"
 )
 @pytest.mark.parametrize(
-    "suite_name,expected_count", [("smoke", 10), ("stylization-smoke", 3), ("stylized-effects-smoke", 8)]
+    "suite_name,expected_count",
+    [("smoke", 10), ("stylization-smoke", 3), ("stylized-effects-smoke", 8)],
 )
 def test_smoke_suite_records_every_workload(
     tmp_path: Path, suite_name: str, expected_count: int
@@ -41,14 +42,22 @@ def test_smoke_suite_records_every_workload(
     assert len(suite["provenance"]["executable_sha256"]) == 64
     assert len(suite["provenance"]["source_sha256"]) == 64
     assert len(suite["records"]) == expected_count
-    assert all(record["validation"]["status"] == "passed" for record in suite["records"])
+    assert all(
+        record["validation"]["status"] == "passed" for record in suite["records"]
+    )
     expected = (
         {"masks", "mattes", "particles", "nested_groups"}
         if suite_name == "smoke"
         else {"stylization_baseline", "palette_video", "dither_video"}
     )
     if suite_name == "stylized-effects-smoke":
-        expected |= {"ascii_video", "halftone_video", "sort_horizontal_video", "sort_vertical_video", "crt_video"}
+        expected |= {
+            "ascii_video",
+            "halftone_video",
+            "sort_horizontal_video",
+            "sort_vertical_video",
+            "crt_video",
+        }
     assert {item["scenario"] for item in suite["records"]} >= expected
     result = subprocess.run(
         [
@@ -104,7 +113,9 @@ def test_benchmark_records_all_samples(tmp_path: Path) -> None:
 @pytest.mark.skipif(
     "VESTRA_BENCH_EXECUTABLE" not in os.environ, reason="requires release executable"
 )
-def test_preview_request_is_measured_and_changes_workload_identity(tmp_path: Path) -> None:
+def test_preview_request_is_measured_and_changes_workload_identity(
+    tmp_path: Path,
+) -> None:
     records = []
     for preview in (False, True):
         report = tmp_path / f"preview-{preview}.json"
@@ -123,7 +134,9 @@ def test_preview_request_is_measured_and_changes_workload_identity(tmp_path: Pat
         environment.pop("VESTRA_BENCH_PREVIEW", None)
         if preview:
             environment["VESTRA_BENCH_PREVIEW"] = "1"
-        subprocess.run([os.environ["VESTRA_BENCH_EXECUTABLE"]], env=environment, check=True)
+        subprocess.run(
+            [os.environ["VESTRA_BENCH_EXECUTABLE"]], env=environment, check=True
+        )
         record = json.loads(report.read_text())
         assert record["runtime_request"] == {"preview": preview}
         assert record["workload"]["output"]["quality"] == "high"
@@ -183,8 +196,12 @@ def test_modern_workloads_render(tmp_path: Path, scenario: str, frames: int) -> 
         assert result["audio_present"] is True
     if scenario == "static_colour":
         assert result["performance"]["static_visual_ffmpeg_fast_path_used"] is True
-        assert result["performance"]["static_visual_frame_cache_population_renders"] == 1
-        assert result["performance"]["encoder_video_input_mode"] == "looped_static_image"
+        assert (
+            result["performance"]["static_visual_frame_cache_population_renders"] == 1
+        )
+        assert (
+            result["performance"]["encoder_video_input_mode"] == "looped_static_image"
+        )
         assert result["performance"]["encoder_video_frames_pushed_from_rust"] == 0
 
 
@@ -258,3 +275,33 @@ def test_stylization_workloads_share_only_the_same_moving_video(tmp_path: Path) 
         records[2]["workload"]["visual"]["clips"][0]["effects"][0]["type"]
         == "ordered_dither"
     )
+
+
+@pytest.mark.skipif(
+    "VESTRA_BENCH_EXECUTABLE" not in os.environ, reason="requires release executable"
+)
+def test_requested_output_fps_is_rendered_and_validated(tmp_path):
+    report = tmp_path / "fps.json"
+    subprocess.run(
+        [os.environ["VESTRA_BENCH_EXECUTABLE"]],
+        check=True,
+        env={
+            **os.environ,
+            "VESTRA_BENCH_BACKEND": "cpu",
+            "VESTRA_BENCH_SCENARIO": "short_sequence",
+            "VESTRA_BENCH_WIDTH": "64",
+            "VESTRA_BENCH_HEIGHT": "64",
+            "VESTRA_BENCH_FPS": "60",
+            "VESTRA_BENCH_QUALITY": "high",
+            "VESTRA_BENCH_WARMUPS": "0",
+            "VESTRA_BENCH_SAMPLES": "1",
+            "VESTRA_BENCH_REPORT": str(report),
+            "VESTRA_BENCH_VALIDATE": "1",
+        },
+    )
+    record = json.loads(report.read_text())
+    result = record["samples"][0]["result"]
+    assert result["total_frames"] == 60
+    assert Fraction(result["frame_rate"]) == 60
+    assert record["workload"]["output"]["quality"] == "high"
+    assert record["validation"]["status"] == "passed"

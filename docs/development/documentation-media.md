@@ -145,10 +145,10 @@ It uses the bundled footage shared with the showcases. It does not collect
 benchmark baselines or run the endurance workload.
 
 Original MP4s, temporary projects and diagnostic records remain under the chosen
-ignored output directory. Commit only three silent 640 × 360 MP4s and their WebP
-posters (`editing`, `layered`, `production_edit`), one effect contact sheet, the
+ignored output directory. Commit only three silent 1920 × 1080 / 60 fps MP4s and
+their WebP posters (`editing`, `layered`, `production_edit`), one effect contact sheet, the
 gallery page and `docs/assets/benchmarks/previews.json`. The 640 × 864 contact
-sheet combines frame 54 (1.8 seconds) from eight 1080p CPU renders, with labels
+sheet combines frame 108 (1.8 seconds) from eight 1080p CPU renders, with labels
 drawn using the bundled Manrope font. Intermediate frames remain local. The manifest
 records the source revision/hashes, executable, FFmpeg, original checksums and
 dimensions, backend, poster time, preview duration and delivery hashes. Fine
@@ -160,11 +160,11 @@ native dependencies. It runs in `just site-check` too. Inspect the contact sheet
 at desktop and mobile sizes, and beginning/middle/end frames, transitions and
 masks in the three videos before accepting regenerated media.
 
-The historical charts are derived from the retained Markdown tables:
+The measurement charts are derived from the published Markdown tables:
 
 ```bash
 uv run --no-project --with matplotlib==3.10.7 python scripts/render-benchmark-charts.py
 ```
 
 Keep the numerical tables, date, hardware context and chart labels together.
-Regenerating a chart does not turn historical data into current measurements.
+Regenerating a chart does not collect new measurements.

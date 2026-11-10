@@ -1,8 +1,8 @@
 # Shared footage
 
 `forest.mp4`, `valley.mp4` and `tear.mp4` are the shared video inputs for the
-showcases and benchmarks. Each is a silent 12-second, 1280×720, 30 fps H.264 clip
-with yuv420p pixels and a two-second GOP. All three together are about 19 MiB.
+showcases and benchmarks. Each is a silent 12-second, 1920×1080, 60 fps H.264 clip
+with yuv420p pixels and a two-second GOP. The CFR conversion repeats source frames from the original 24–25 fps footage.
 
 The [manifest](manifest.json) records encoding settings, decoded frame counts
 and SHA-256 checksums. `just showcase-assets` verifies the bundled checksums.

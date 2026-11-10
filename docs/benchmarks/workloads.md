@@ -14,7 +14,7 @@ Three representative CPU renders show editing, compositing and a production time
 
 ## Shared footage
 
-These three inputs are included in the checkout and also used by the showcases. Each is a silent 12-second, 1280 × 720, 30 fps clip; the collector resizes them before measurement.
+These three inputs are included in the checkout and also used by the showcases. Each is a silent 12-second, 1920 × 1080, 60 fps clip; the collector resizes them before measurement.
 
 | Clip | Used by | Repository file |
 | --- | --- | --- |
@@ -22,11 +22,11 @@ These three inputs are included in the checkout and also used by the showcases. 
 | Valley | Editing, layered and effect controls; masked showcase footage | [valley.mp4](https://github.com/evgen2571/vestra/blob/develop/assets/footage/valley.mp4) |
 | Tear | Editing and masked overlay | [tear.mp4](https://github.com/evgen2571/vestra/blob/develop/assets/footage/tear.mp4) |
 
-Current rendering suites use version 2 (`community-v2`); the endurance graph is `sustained-v2`. Collect a fresh baseline: older generated-pattern timings use different inputs.
+Short rendering suites use 1920 × 1080 at 60 fps. The optional endurance workload is separate.
 
-The three previews are silent 640 × 360 delivery copies at 30 fps. They explain the workloads and are not performance measurements or output evidence for the historical report.
+The three previews are silent 1920 × 1080 videos at 60 fps. Timing measurements are collected separately from these previews.
 
-Captured on CPU from revision `ff343d85cf8e2fbaa0d97041f81e622545d31f75`; worktree modified: true. The [provenance manifest](../assets/benchmarks/previews.json) identifies workload sources by content hash and records original dimensions/checksums, poster times and delivery hashes. Reproduce them with the [media instructions](../development/documentation-media.md#reproduce-benchmark-previews).
+Captured on CPU from revision `d570c38d7aacafafb183bf8657f063e00f704344`; worktree modified: true. The [provenance manifest](../assets/benchmarks/previews.json) identifies workload sources by content hash and records original dimensions/checksums, poster times and delivery hashes. Reproduce them with the [media instructions](../development/documentation-media.md#reproduce-benchmark-previews).
 
 ## Representative edits
 
@@ -36,14 +36,14 @@ Captured on CPU from revision `ff343d85cf8e2fbaa0d97041f81e622545d31f75`; worktr
 
 ### Three-shot edit {#editing}
 
-<video controls preload="metadata" playsinline width="640" height="360" poster="../../assets/benchmarks/editing.webp" aria-label="Three-shot edit: actual benchmark output">
+<video controls preload="metadata" playsinline width="1920" height="1080" poster="../../assets/benchmarks/editing.webp" aria-label="Three-shot edit: actual benchmark output">
   <source src="../assets/benchmarks/editing.mp4" type="video/mp4">
   <a href="../assets/benchmarks/editing.mp4">Download the preview</a>.
 </video>
 
 Forest, valley and tear clips overlap with 0.6-second fades, animated positioning and brightness.
 
-`editing` · 12 s · 640 × 360 original · 30 fps
+`editing` · 12 s · 1920 × 1080 original · 60 fps
 
 [Download preview](../assets/benchmarks/editing.mp4) · [Definition](https://github.com/evgen2571/vestra/blob/develop/benchmarks/comparisons/moviepy/workloads.py)
 
@@ -53,14 +53,14 @@ Forest, valley and tear clips overlap with 0.6-second fades, animated positionin
 
 ### Layered video and mask {#layered}
 
-<video controls preload="metadata" playsinline width="640" height="360" poster="../../assets/benchmarks/layered.webp" aria-label="Layered video and mask: actual benchmark output">
+<video controls preload="metadata" playsinline width="1920" height="1080" poster="../../assets/benchmarks/layered.webp" aria-label="Layered video and mask: actual benchmark output">
   <source src="../assets/benchmarks/layered.mp4" type="video/mp4">
   <a href="../assets/benchmarks/layered.mp4">Download the preview</a>.
 </video>
 
 Two translucent moving overlays sit over a background; one uses a hard ellipse mask.
 
-`layered` · 10 s · 640 × 360 original · 30 fps
+`layered` · 10 s · 1920 × 1080 original · 60 fps
 
 [Download preview](../assets/benchmarks/layered.mp4) · [Definition](https://github.com/evgen2571/vestra/blob/develop/benchmarks/comparisons/moviepy/workloads.py)
 
@@ -70,14 +70,14 @@ Two translucent moving overlays sit over a background; one uses a hard ellipse m
 
 ### Production edit {#production_edit}
 
-<video controls preload="metadata" playsinline width="640" height="360" poster="../../assets/benchmarks/production_edit.webp" aria-label="Production edit: actual benchmark output">
+<video controls preload="metadata" playsinline width="1920" height="1080" poster="../../assets/benchmarks/production_edit.webp" aria-label="Production edit: actual benchmark output">
   <source src="../assets/benchmarks/production_edit.mp4" type="video/mp4">
   <a href="../assets/benchmarks/production_edit.mp4">Download the preview</a>.
 </video>
 
 A twelve-second forest and valley edit combines dissolves, colour correction, grouped titles and audio. This web preview is silent.
 
-`production_edit` · 12 s · 1280 × 720 original · 30 fps
+`production_edit` · 12 s · 1920 × 1080 original · 60 fps
 
 [Download preview](../assets/benchmarks/production_edit.mp4) · [Definition](https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs)
 
@@ -89,7 +89,7 @@ A twelve-second forest and valley edit combines dissolves, colour correction, gr
 
 ![Valley footage at the same frame with no effect, palette mapping, Bayer dithering, blue noise, ASCII, halftone, horizontal pixel sorting and CRT.](../assets/benchmarks/effects.webp)
 
-Left to right, top to bottom: no effect, palette mapping, Bayer dither, blue noise, ASCII, halftone, horizontal pixel sort and CRT. All eight frames are sampled at frame 54 (1.8 seconds) from the actual 1080p CPU workloads. Downscaling can hide fine dither and glyph detail.
+Left to right, top to bottom: no effect, palette mapping, Bayer dither, blue noise, ASCII, halftone, horizontal pixel sort and CRT. All eight frames are sampled at frame 108 (1.8 seconds) from the actual 1080p CPU workloads. Downscaling can hide fine dither and glyph detail.
 
 [View the contact sheet at full size](../assets/benchmarks/effects.webp).
 
@@ -141,7 +141,7 @@ Every scenario remains runnable through the benchmark tools. Exact suite members
 | Workload | Measures |
 | --- | --- |
 | <span id="basic"></span>**Basic video export** (`basic`) | The forest clip is resized and encoded through each library's public API. |
-| <span id="sustained-v2"></span>**Sustained render** (`sustained-v2`) | Two moving placements read the same two-hour repeated forest source during an optional one- or two-hour render. |
+| <span id="sustained"></span>**Sustained render** (`sustained`) | Two moving placements read the same two-hour repeated forest source during an optional one- or two-hour render. |
 
 ## Decoder and preparation probes
 

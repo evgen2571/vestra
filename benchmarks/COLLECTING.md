@@ -2,7 +2,8 @@
 
 The collector builds this checkout, runs benchmarks, checks their output, and
 writes results under `target/benchmark-results/`.
-The first build may take tens of minutes. Keep the computer plugged in, use a
+The first build may take tens of minutes. Repeated 1080p60 renders can take an
+hour or more, depending on the machine. Keep the computer plugged in, use a
 consistent power mode, and close other heavy applications during measurements.
 
 ## Quick start
@@ -109,14 +110,13 @@ Replace `COMMIT` with the exact revision to measure. Use the same commit on ever
 computer in a comparison. Use a clean checkout and keep its sources unchanged
 throughout the run. `git checkout` works in the Windows developer terminal too.
 
-Default collection runs the established ten-workload CPU smoke, a versioned
-640×360 community suite (six representative workloads, one warmup and three
+Default collection runs the established ten-workload CPU smoke, a 1920×1080 / 60 fps
+community suite (six representative workloads, one warmup and three
 samples), all three MoviePy comparisons, and a separate hardware WGPU suite
 when Vestra discovers an eligible adapter. The forest, valley and tear clips
 are bundled under `assets/footage/` and resized automatically; no separate asset
-collection or download is needed. Suite version 2 (`community-v2`) and
-`sustained-v2` use these inputs. Earlier generated-pattern measurements require
-their original checkout and cannot be compared directly with the new workloads.
+collection or download is needed. The `community` and `sustained` workloads use these inputs. The optional
+endurance and decoder/cache profiles retain their separate 640×360 / 30 fps settings.
 
 Results are written under `target/benchmark-results/`. Read `summary.md` in the
 run directory for actual pass/fail/skip statuses. Failed runs retain completed
@@ -153,14 +153,15 @@ Only an actual integrated/discrete adapter qualifies. Software, virtual, unknown
 or failed WGPU results never become CPU replacements. CPU evidence is preserved.
 
 `--only cpu moviepy` selects tasks within the chosen profile; `--suite canonical`
-uses the original larger CPU suite. `--timeout` bounds each short suite/worker;
-`--build-timeout` defaults to two hours, `--sustained-timeout` to four hours per
+selects ten native workloads. `--timeout` bounds each short suite/worker and
+defaults to two hours. `--build-timeout` defaults to two hours,
+`--sustained-timeout` to four hours per
 engine. Increase them on slower computers. `--retain-media` retains validated
 inputs and completed MoviePy/sustained media locally. Canonical Rust benchmark
 outputs and the cache placement companion remain temporary. Ctrl+C terminates
 owned worker/FFmpeg trees, removes incomplete media, and preserves partial diagnostics.
 
-Smoke keeps the 640×360 MoviePy comparison canvas and reduces warmups/samples.
+Smoke keeps the 1920×1080 / 60 fps MoviePy comparison canvas and reduces warmups/samples.
 Its detailed footage makes smaller canvases overly sensitive to the engines'
 known rounding and resampling differences under the existing visual tolerance.
 Cache and sustained smoke use a separate 128×72 two-hour source to bound decoding

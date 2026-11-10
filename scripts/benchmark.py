@@ -7,6 +7,7 @@ import math
 import os
 import subprocess
 import sys
+from fractions import Fraction
 from datetime import datetime
 from pathlib import Path
 from statistics import median
@@ -269,6 +270,16 @@ def validate_settings(record: dict, settings: dict) -> None:
     for sample in record["samples"]:
         if any(sample["result"][key] != settings[key] for key in ("width", "height")):
             raise ValueError("incompatible suite resolution")
+        if (
+            "fps" in settings
+            and Fraction(sample["result"]["frame_rate"]) != settings["fps"]
+        ):
+            raise ValueError("incompatible suite frame rate")
+    if (
+        "quality" in settings
+        and record["workload"]["output"]["quality"] != settings["quality"]
+    ):
+        raise ValueError("incompatible suite quality")
 
 
 def build_benchmark(backend: str) -> Path:

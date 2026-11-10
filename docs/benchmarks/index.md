@@ -1,64 +1,45 @@
 ---
 title: Benchmarks
-description: Explore Vestra's benchmark workloads, read dated results, and collect results from your own machine.
+description: Explore benchmark workloads, measured results, and the collection workflow.
 ---
 
 # Benchmarks
 
-Rendering speed depends on the scene, resolution, CPU and graphics backend.
-Start with the scene you care about, then compare results captured on the same
-machine with the same workload.
+The scenes, resolution and frame rate matter as much as the hardware. These measurements use the shared footage at **1920 × 1080 / 60 fps**.
 
 [See the workloads](workloads.md){ .md-button }
 [Run benchmarks](collecting.md){ .md-button }
 
-## What has been measured
+## Measured on this machine
 
-The published capture is a **historical Linux run from 31 October 2026**, at
-revision `34dec665`, using a Ryzen 5 3600 and GTX 1650 SUPER with Vulkan.
-It is not a measurement of the current checkout, a Windows RTX 4070 Ti, or a Mac.
+Captured on **10 November 2026**, using a Ryzen 5 3600 and GTX 1650 SUPER with Vulkan. The report records the exact develop revision, source fingerprint, sample counts and validation.
 
-[![Historical render times for basic export, editing and layered composition, with MoviePy CPU, Vestra CPU and Vestra hardware GPU shown separately. Lower is better.](../assets/benchmarks/moviepy-times.svg)](vestra-vs-moviepy.md#matched-moviepy-v2-workloads)
-
-At 640 × 360 / 30 fps, Vestra CPU completed the three-shot edit in 1.759 s and
-MoviePy CPU in 8.652 s. Hardware GPU rendering took 1.239 s. The basic export
-shows the other side of the tradeoff: GPU startup and transfer overhead can
-outweigh the benefit of rendering a simple scene.
+<figure class="comparison" markdown="span">
+![Measured render times for basic export, editing and layered composition, with MoviePy CPU, Vestra CPU and hardware GPU shown separately. Lower is better.](../assets/benchmarks/moviepy-times.svg)
+</figure>
 
 | Timeline | MoviePy CPU | Vestra CPU | Vestra hardware GPU |
 | --- | ---: | ---: | ---: |
-| Basic export · 10 s video | 0.997 s | 0.835 s | 1.064 s |
-| Three-shot edit · 12 s video | 8.652 s | 1.759 s | 1.239 s |
-| Layered composition · 10 s video | 4.227 s | 1.789 s | 1.305 s |
+| Basic export | 14.018 s | 14.156 s | 8.649 s |
+| Three-shot edit | 122.797 s | 29.672 s | 11.680 s |
+| Layered composition | 68.349 s | 32.616 s | 13.038 s |
 
-Values are median end-to-end render times; **lower is better**. The shared
-output uses silent H.264/libx264 CRF 23, veryfast. GPU refers to WGPU rendering;
-decoding and encoding still use the CPU. These timelines do not measure every
-codec, effect or editing task.
+Values are median end-to-end render times; **lower is better**. Basic and layered produce 10-second videos; editing produces 12 seconds. All use silent H.264/libx264 CRF 23 / veryfast. GPU refers to WGPU rendering; decoding and encoding use the CPU.
 
-[Read the complete historical results, variability and limitations](vestra-vs-moviepy.md).
+[Read the measured ranges, complete native results and limitations](vestra-vs-moviepy.md).
 
 ## What each suite answers
 
-| Suite or profile | Question | Scene preview |
+| Suite or profile | Question | Workload |
 | --- | --- | --- |
-| Default collector | How does this machine handle representative rendering and matched MoviePy edits? | [Editing and layers](workloads.md#editing) |
-| Canonical · 720p | How did the engine change on this machine? | [Rendering workloads](workloads.md#rendering-suites) |
-| Focused effects · 1080p | What does a particular treatment cost over the shared control? | [Effect contact sheet](workloads.md#effects-at-a-glance) |
-| Sustained · optional | Does a one- or two-hour output finish, and how do resources behave over time? | [Endurance workload](workloads.md#sustained-v2) |
-| Decoder/cache · optional | Which frame-request sequences benefit from cache reuse? | [Probe descriptions](../development/performance-probes.md) |
+| Default collector · 1080p60 | How does this machine handle representative rendering and matched MoviePy edits? | [Editing and layers](workloads.md#editing) |
+| Canonical · 1080p60 | How did the engine change on this machine? | [Rendering workloads](workloads.md#rendering-suites) |
+| Effects · 1080p60 | What does each treatment cost over the shared control? | [Effect comparison](workloads.md#effects-at-a-glance) |
+| Sustained · optional | Does a one- or two-hour output finish, and how do resources behave over time? | [Endurance workload](workloads.md#sustained) |
+| Decoder/cache · optional | Which request patterns benefit from cache reuse? | [Probe descriptions](../development/performance-probes.md) |
 
 ## Run benchmarks
 
-Use the [collection guide](collecting.md) for one-time platform setup and one
-command for the maintained suites. Use the same pinned commit on every computer;
-present each machine and graphics backend separately. Failed or unavailable
-GPU tests remain visible in the report.
+Use the [collection guide](collecting.md) for one-time setup and one command for the maintained suites. Keep the source, input files and settings matched when comparing machines. Failed or unavailable GPU tests remain visible in the report.
 
-For an optimization, follow the [same-machine baseline procedure](../development/performance.md).
-Raw stage timings overlap and are diagnostic; they should not be stacked into
-an end-to-end total. Smoke timings only confirm execution.
-
-Current video workloads use bundled footage and suite version 2. The historical
-results above retain the earlier definitions; collect a fresh baseline before
-comparing the updated workloads.
+For an optimization, follow the [same-machine baseline procedure](../development/performance.md). Raw stage timings overlap and must not be added into an end-to-end total. Smoke timings only confirm execution.

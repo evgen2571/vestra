@@ -12,6 +12,7 @@ pub(super) fn prepare_video(
     duration: &str,
     codec: &[&str],
 ) {
+    let frame_rate = super::env_u32("VESTRA_BENCH_FPS", frame_rate);
     let source =
         Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../assets/footage/{name}.mp4"));
     let status = Command::new("ffmpeg")

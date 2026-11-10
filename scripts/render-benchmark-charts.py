@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot the historical Markdown measurements; never collect new timings.
+"""Plot the published Markdown measurements; never collect new timings.
 
 uv run --no-project --with matplotlib==3.10.7 python scripts/render-benchmark-charts.py
 """
@@ -21,19 +21,37 @@ def main():
         for line in source.splitlines()
         if line.startswith("| ")
     ]
-    plt.rcParams.update({"svg.fonttype": "none", "font.size": 10})
+    plt.rcParams.update(
+        {"svg.fonttype": "none", "svg.hashsalt": "vestra", "font.size": 11}
+    )
+    context = next(
+        line.removeprefix("<!-- Chart context: ").removesuffix(" -->")
+        for line in source.splitlines()
+        if line.startswith("<!-- Chart context: ")
+    )
     matched = [
         r for r in rows if r[0] in {"basic", "editing", "layered"} and len(r) == 12
     ]
-    effects = [r for r in rows if r[0] == "stylized-effects-1080p" and len(r) == 8]
+    effect_names = (
+        "stylization_baseline",
+        "palette_video",
+        "dither_video",
+        "ascii_video",
+        "halftone_video",
+        "sort_horizontal_video",
+        "sort_vertical_video",
+        "crt_video",
+    )
+    by_name = {r[1]: r for r in rows if len(r) == 8 and r[1] in effect_names}
+    effects = [by_name[name] for name in effect_names]
     for filename, labels, series in (
         (
             "moviepy-times",
             ["Basic export", "Three-shot edit", "Layered"],
             [
-                ("MoviePy CPU", [float(r[1]) for r in matched], "#939393", ""),
-                ("Vestra CPU", [float(r[2]) for r in matched], "#326a8d", "//"),
-                ("Vestra GPU", [float(r[4]) for r in matched], "#b35b35", ".."),
+                ("MoviePy CPU", [float(r[1]) for r in matched], "#bdc9d3", ""),
+                ("Vestra CPU", [float(r[2]) for r in matched], "#7194b3", "//"),
+                ("Vestra GPU", [float(r[4]) for r in matched], "#4e5d6a", ".."),
             ],
         ),
         (
@@ -49,8 +67,8 @@ def main():
                 "CRT",
             ],
             [
-                ("Vestra CPU", [float(r[3]) for r in effects], "#326a8d", "//"),
-                ("Vestra GPU", [float(r[5]) for r in effects], "#b35b35", ".."),
+                ("Vestra CPU", [float(r[3]) for r in effects], "#7194b3", "//"),
+                ("Vestra GPU", [float(r[5]) for r in effects], "#4e5d6a", ".."),
             ],
         ),
     ):
@@ -81,7 +99,7 @@ def main():
         ax.invert_yaxis()
         ax.set_xlim(0, maximum * 1.24)
         ax.set_xlabel("Render time (seconds) · lower is better")
-        ax.set_title("31 Oct 2026 · Ryzen 5 3600 / GTX 1650 SUPER", fontsize=10, pad=48)
+        ax.set_title(context, fontsize=10, pad=48)
         ax.legend(
             loc="lower center",
             bbox_to_anchor=(0.5, 1.02),
@@ -98,16 +116,30 @@ def main():
             target,
             metadata={
                 "Date": None,
-                "Description": "Historical medians from docs/benchmarks/vestra-vs-moviepy.md; not current performance claims.",
+                "Description": "Measured medians from docs/benchmarks/vestra-vs-moviepy.md; see that report for capture context.",
             },
         )
         plt.close(fig)
+        svg = target.read_text(encoding="utf-8")
+        palette = {
+            "#ffffff": "bg",
+            "#000000": "ink",
+            "#ededed": "line",
+            "#bdc9d3": "moviepy",
+            "#7194b3": "cpu",
+            "#4e5d6a": "gpu",
+        }
+        for color, token in palette.items():
+            svg = svg.replace(color, f"var(--{token})")
+        style = """<style>
+:root { --bg:#f0f2f4; --ink:#242b33; --line:#c9d1d9; --moviepy:#bdc9d3; --cpu:#7194b3; --gpu:#4e5d6a; }
+@media (prefers-color-scheme:dark) { :root { --bg:#292e35; --ink:#eef2f6; --line:#4e5d6a; --moviepy:#bdc9d3; --cpu:#83a5c2; --gpu:#95a7b6; } }
+text { fill:var(--ink); font-family:system-ui,sans-serif; }
+</style>
+"""
+        svg = svg.replace(" <defs>", style + " <defs>", 1)
         target.write_text(
-            "\n".join(
-                line.rstrip()
-                for line in target.read_text(encoding="utf-8").splitlines()
-            )
-            + "\n",
+            "\n".join(line.rstrip() for line in svg.splitlines()) + "\n",
             encoding="utf-8",
         )
 

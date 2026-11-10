@@ -213,10 +213,24 @@ def test_stylization_suite_selects_only_three_fullhd_workloads():
     )
     assert hasattr(benchmark, "suite_configuration")
     settings, scenarios = benchmark.suite_configuration(manifest, "stylization-1080p")
-    assert settings == {"width": 1920, "height": 1080, "warmups": 1, "samples": 3}
+    assert settings == {
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "quality": "high",
+        "warmups": 1,
+        "samples": 3,
+    }
     assert scenarios == ["stylization_baseline", "palette_video", "dither_video"]
     assert benchmark.suite_configuration(manifest, "canonical") == (
-        {"width": 1280, "height": 720, "warmups": 1, "samples": 5},
+        {
+            "width": 1920,
+            "height": 1080,
+            "fps": 60,
+            "quality": "high",
+            "warmups": 1,
+            "samples": 5,
+        },
         [
             "single_video",
             "mixed_dynamic",
@@ -238,7 +252,14 @@ def test_stylization_smoke_selects_same_workloads_at_small_resolution():
     )
     assert hasattr(benchmark, "suite_configuration")
     settings, scenarios = benchmark.suite_configuration(manifest, "stylization-smoke")
-    assert settings == {"width": 128, "height": 72, "warmups": 0, "samples": 1}
+    assert settings == {
+        "width": 128,
+        "height": 72,
+        "fps": 60,
+        "quality": "high",
+        "warmups": 0,
+        "samples": 1,
+    }
     assert scenarios == ["stylization_baseline", "palette_video", "dither_video"]
 
 
@@ -298,3 +319,10 @@ def test_hardware_suite_rejects_software_classification_even_with_hardware_devic
             },
             "hardware-wgpu",
         )
+
+
+def test_suite_rejects_output_at_wrong_frame_rate():
+    data = record()
+    settings = dict(width=1280, height=720, warmups=1, samples=2, fps=60)
+    with pytest.raises(ValueError, match="frame rate"):
+        benchmark.validate_settings(data, settings)

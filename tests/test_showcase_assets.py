@@ -17,7 +17,7 @@ def test_bundled_footage_is_shared_and_checksum_verified() -> None:
     manifest = assets.load_inputs(assets.ROOT.parents[1] / "assets/footage")
     assert set(manifest["prepared"]) == {"forest", "valley", "tear"}
     assert manifest["settings"]["duration"] == 12
-    assert manifest["settings"]["width"] == 1280
+    assert manifest["settings"]["width"] == 1920
     assert all(
         item["validation"]["full_decode"] for item in manifest["prepared"].values()
     )

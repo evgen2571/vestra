@@ -146,7 +146,7 @@ EXTERNAL = {
         "Layered video and mask",
         "Two translucent moving overlays sit over a background; one uses a hard ellipse mask.",
     ),
-    "sustained-v2": (
+    "sustained": (
         "Sustained render",
         "Two moving placements read the same two-hour repeated forest source during an optional one- or two-hour render.",
     ),
@@ -194,7 +194,7 @@ def gallery(manifest):
         "",
         "## Shared footage",
         "",
-        "These three inputs are included in the checkout and also used by the showcases. Each is a silent 12-second, 1280 × 720, 30 fps clip; the collector resizes them before measurement.",
+        "These three inputs are included in the checkout and also used by the showcases. Each is a silent 12-second, 1920 × 1080, 60 fps clip; the collector resizes them before measurement.",
         "",
         "| Clip | Used by | Repository file |",
         "| --- | --- | --- |",
@@ -202,9 +202,9 @@ def gallery(manifest):
         "| Valley | Editing, layered and effect controls; masked showcase footage | [valley.mp4](https://github.com/evgen2571/vestra/blob/develop/assets/footage/valley.mp4) |",
         "| Tear | Editing and masked overlay | [tear.mp4](https://github.com/evgen2571/vestra/blob/develop/assets/footage/tear.mp4) |",
         "",
-        "Current rendering suites use version 2 (`community-v2`); the endurance graph is `sustained-v2`. Collect a fresh baseline: older generated-pattern timings use different inputs.",
+        "Short rendering suites use 1920 × 1080 at 60 fps. The optional endurance workload is separate.",
         "",
-        "The three previews are silent 640 × 360 delivery copies at 30 fps. They explain the workloads and are not performance measurements or output evidence for the historical report.",
+        "The three previews are silent 1920 × 1080 videos at 60 fps. Timing measurements are collected separately from these previews.",
         "",
         f"Captured on CPU from revision `{manifest['revision']}`; worktree modified: {str(manifest.get('working_tree_modified', True)).lower()}. The [provenance manifest](../assets/benchmarks/previews.json) identifies workload sources by content hash and records original dimensions/checksums, poster times and delivery hashes. Reproduce them with the [media instructions](../development/documentation-media.md#reproduce-benchmark-previews).",
         "",
@@ -218,14 +218,14 @@ def gallery(manifest):
             "",
             f"### {title} {{#{scenario}}}",
             "",
-            f'<video controls preload="metadata" playsinline width="640" height="360" poster="../../assets/benchmarks/{scenario}.webp" aria-label="{title}: actual benchmark output">',
+            f'<video controls preload="metadata" playsinline width="1920" height="1080" poster="../../assets/benchmarks/{scenario}.webp" aria-label="{title}: actual benchmark output">',
             f'  <source src="../assets/benchmarks/{scenario}.mp4" type="video/mp4">',
             f'  <a href="../assets/benchmarks/{scenario}.mp4">Download the preview</a>.',
             "</video>",
             "",
             description,
             "",
-            f"`{scenario}` · {row['duration']:g} s · {row['width']} × {row['height']} original · 30 fps",
+            f"`{scenario}` · {row['duration']:g} s · {row['width']} × {row['height']} original · 60 fps",
             "",
             f"[Download preview](../assets/benchmarks/{scenario}.mp4) · [Definition]({row['definition']})",
             "",
@@ -239,7 +239,7 @@ def gallery(manifest):
         "",
         "![Valley footage at the same frame with no effect, palette mapping, Bayer dithering, blue noise, ASCII, halftone, horizontal pixel sorting and CRT.](../assets/benchmarks/effects.webp)",
         "",
-        "Left to right, top to bottom: no effect, palette mapping, Bayer dither, blue noise, ASCII, halftone, horizontal pixel sort and CRT. All eight frames are sampled at frame 54 (1.8 seconds) from the actual 1080p CPU workloads. Downscaling can hide fine dither and glyph detail.",
+        "Left to right, top to bottom: no effect, palette mapping, Bayer dither, blue noise, ASCII, halftone, horizontal pixel sort and CRT. All eight frames are sampled at frame 108 (1.8 seconds) from the actual 1080p CPU workloads. Downscaling can hide fine dither and glyph detail.",
         "",
         "[View the contact sheet at full size](../assets/benchmarks/effects.webp).",
         "",
@@ -287,7 +287,7 @@ def check():
     manifest = json.loads((ASSETS / "previews.json").read_text(encoding="utf-8"))
     assert set(manifest["workloads"]) == set(FEATURED) | set(EFFECTS)
     assert manifest["contact_sheet"]["workloads"] == list(EFFECTS)
-    assert manifest["contact_sheet"]["frame"] == 54
+    assert manifest["contact_sheet"]["frame"] == 108
     for filename, expected in manifest["inputs"].items():
         assert digest(ROOT / filename) == expected, filename
     for source, expected in manifest["sources"].items():
@@ -307,7 +307,7 @@ def deliver(original, scenario, record, manifest):
 
     info = probe(original)
     video = next(s for s in info["streams"] if s["codec_type"] == "video")
-    duration = int(video["nb_read_frames"]) / 30
+    duration = int(video["nb_read_frames"]) / 60
     seconds = duration
     poster = min(seconds * 0.6, 6)
     base = ASSETS / scenario
@@ -322,14 +322,14 @@ def deliver(original, scenario, record, manifest):
             "-t",
             str(seconds),
             "-vf",
-            "scale=640:360:flags=lanczos",
+            "scale=1920:1080:flags=lanczos",
             "-an",
             "-c:v",
             "libx264",
             "-preset",
             "slow",
             "-crf",
-            "26",
+            "20",
             "-pix_fmt",
             "yuv420p",
             "-map_metadata",
@@ -341,7 +341,8 @@ def deliver(original, scenario, record, manifest):
         check=True,
     )
     validate_output(
-        base.with_suffix(".mp4"), dict(width=640, height=360, fps=30, duration=seconds)
+        base.with_suffix(".mp4"),
+        dict(width=1920, height=1080, fps=60, duration=seconds),
     )
     subprocess.run(
         [
@@ -355,6 +356,8 @@ def deliver(original, scenario, record, manifest):
             str(base.with_suffix(".mp4")),
             "-frames:v",
             "1",
+            "-vf",
+            "scale=640:360:flags=lanczos",
             "-c:v",
             "libwebp",
             "-quality",
@@ -371,6 +374,7 @@ def deliver(original, scenario, record, manifest):
         height=video["height"],
         duration=duration,
         backend="cpu",
+        fps=60,
         original_sha256=digest(original),
         poster_seconds=poster,
         preview_seconds=seconds,
@@ -396,7 +400,7 @@ def contact_sheet(originals, output, manifest):
                 "-i",
                 str(originals[scenario]),
                 "-vf",
-                "select=eq(n\\,54),scale=320:180:flags=lanczos,pad=320:216:0:0:color=0x202020,"
+                "select=eq(n\\,108),scale=320:180:flags=lanczos,pad=320:216:0:0:color=0x202020,"
                 f"drawtext=fontfile=examples/showcase/assets/Manrope.ttf:text='{label}':fontsize=24:fontcolor=white:x=8:y=186",
                 "-frames:v",
                 "1",
@@ -434,7 +438,7 @@ def contact_sheet(originals, output, manifest):
     )
     manifest["contact_sheet"] = dict(
         workloads=list(EFFECTS),
-        frame=54,
+        frame=108,
         width=640,
         height=864,
         frame_sha256={p.stem: digest(p) for p in paths},
@@ -548,8 +552,9 @@ def main():
                 record,
                 width=settings["width"],
                 height=settings["height"],
-                duration=data["samples"][0]["result"]["total_frames"] / 30,
+                duration=data["samples"][0]["result"]["total_frames"] / 60,
                 backend="cpu",
+                fps=60,
                 original_sha256=digest(original),
             )
     contact_sheet(originals, output, manifest)
@@ -561,7 +566,7 @@ def main():
     portable_inputs(inputs)
     for scenario in ("editing", "layered"):
         print(f"Rendering {scenario}", flush=True)
-        work = workload(scenario, 640, 360)
+        work = workload(scenario, 1920, 1080)
         original = output / f"{scenario}.mp4"
         result = render_vestra(work, inputs, original, "cpu")
         require_backend(result, "cpu")

@@ -42,17 +42,17 @@ WGPU and unknown classes fail the hardware suite.
    stage improves repeatably, resource costs are acceptable and correctness
    checks pass, including actual rendered pixels.
 
-The versioned definition in `benchmarks/suites.json` fixes scenario order and
+The maintained definition in `benchmarks/suites.json` fixes scenario order and
 settings:
 
 | Suite | Resolution | Warmups / samples | Purpose |
 | --- | --- | --- | --- |
 | `smoke` | 128×72 | 0 / 1 | Execution check |
-| `canonical` | 1280×720 | 1 / 5 | End-to-end baseline |
+| `canonical` | 1920×1080 / 60 fps | 1 / 5 | End-to-end baseline |
 
 Both cover decode, concurrent moving-video layers, effects, masks/mattes, nested
 groups, seeded particles with bloom, blend modes and a twelve-second production
-edit. The edit uses deterministic synthetic footage, dissolves, correction,
+edit. The edit uses the bundled forest and valley footage, dissolves, correction,
 animated grouped titles and audio; it does not represent every camera codec.
 Media generation and hashing are outside measured intervals. FFV1/WAV fixtures
 use bit-exact output and particles use explicit seeds.
@@ -118,9 +118,9 @@ intentionally avoids preparation.
 
 The three-workload `stylization-1080p` suite uses the same bundled valley
 footage prepared as full-frame FFV1 for no effect, Palette Map and Ordered Dither: 1920×1080,
-30 fps, 90 frames, one warmup and three samples. Use `stylization-smoke` to
+60 fps, 180 frames, one warmup and three samples. Use `stylization-smoke` to
 check execution. Other effect/control suites and their exact workloads live in
-the linked benchmark reference. Report 4K correctness separately from versioned
+the linked benchmark reference. Report 4K correctness separately from maintained
 1080p measurements.
 
 ## Interpret resource changes

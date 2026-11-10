@@ -147,9 +147,9 @@ def prepare(args):
         ffmpeg=version(["ffmpeg", "-version"]),
         sources=sources,
         settings=dict(
-            width=1280,
-            height=720,
-            fps=30,
+            width=1920,
+            height=1080,
+            fps=60,
             duration=12,
             codec="libx264",
             crf=23,
@@ -173,9 +173,9 @@ def prepare(args):
             "0:v:0",
             "-an",
             "-vf",
-            "fps=30,scale=1280:720:force_original_aspect_ratio=increase:flags=bicubic,crop=1280:720,setsar=1",
+            "fps=60,scale=1920:1080:force_original_aspect_ratio=increase:flags=bicubic,crop=1920:1080,setsar=1",
             "-frames:v",
-            "360",
+            "720",
             "-c:v",
             "libx264",
             "-crf",
@@ -187,7 +187,7 @@ def prepare(args):
             "-threads",
             "2",
             "-g",
-            "60",
+            "120",
             "-sc_threshold",
             "0",
             "-movflags",
@@ -202,7 +202,7 @@ def prepare(args):
         ]
         subprocess.run(command, check=True)
         validation = validate_output(
-            output, dict(width=1280, height=720, fps=30, duration=12)
+            output, dict(width=1920, height=1080, fps=60, duration=12)
         )
         manifest["prepared"][key] = dict(
             filename=output.name,
@@ -457,7 +457,9 @@ def run(args):
                             )
                     sample["validation"] = validate_output(output, definition)
                     sample["effective_fps"] = (
-                        definition["duration"] * 30 / (sample["wall_ms"] / 1000)
+                        definition["duration"]
+                        * definition["fps"]
+                        / (sample["wall_ms"] / 1000)
                     )
                     sample["status"] = "ok"
                     write_json(report, record)
@@ -566,7 +568,7 @@ def add_arguments(parser):
             p.add_argument("--output", type=Path, required=True)
             p.add_argument("--inputs", type=Path, default=ROOT / "assets/footage")
     prep = commands.add_parser(
-        "prepare", help="prepare shared silent 720p30 input clips"
+        "prepare", help="prepare shared silent 1080p60 input clips"
     )
     prep.add_argument("--assets", type=Path, default=Path("~/drive/Assets"))
     prep.add_argument("--inputs", type=Path, default=Path("target/moviepy-inputs"))

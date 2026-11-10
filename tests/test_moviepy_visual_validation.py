@@ -39,7 +39,7 @@ def runs(tmp_path):
             "-f",
             "lavfi",
             "-i",
-            "testsrc2=size=32x18:rate=30:duration=10",
+            "testsrc2=size=32x18:rate=60:duration=10",
             "-an",
             "-c:v",
             "libx264",
@@ -101,7 +101,7 @@ def test_matching_outputs_have_per_frame_metrics_and_contact_sheet(runs, tmp_pat
     report = validator().verify([run], tmp_path / "evidence", inputs)
     assert report["status"] == "ok"
     parity = [m for m in report["frames"] if m["kind"] == "engine-parity"]
-    assert [m["frame"] for m in parity] == [0, 1, 150, 299]
+    assert [m["frame"] for m in parity] == [0, 1, 300, 599]
     assert all(m["raw"]["mae"] == 0 for m in parity)
     assert report["captures"] == [comparison.digest(run / "comparison.json")]
     assert {m["sha256"] for m in report["outputs"]} == {
@@ -123,7 +123,7 @@ def test_wrong_output_pixels_fail_with_saved_evidence(runs, tmp_path):
             "-f",
             "lavfi",
             "-i",
-            "color=black:size=32x18:rate=30:duration=10",
+            "color=black:size=32x18:rate=60:duration=10",
             "-an",
             "-c:v",
             "libx264",
@@ -152,7 +152,7 @@ def test_agreeing_engines_cannot_hide_wrong_source_selection(runs, tmp_path):
             "-f",
             "lavfi",
             "-i",
-            "color=black:size=32x18:rate=30:duration=10",
+            "color=black:size=32x18:rate=60:duration=10",
             "-an",
             "-c:v",
             "libx264",
@@ -261,7 +261,7 @@ def test_missing_mask_or_overlay_fails_local_check(runs, tmp_path, both_wrong, f
                 "-video_size",
                 "96x54",
                 "-framerate",
-                "30",
+                "60",
                 "-i",
                 "-",
                 "-an",
@@ -282,21 +282,21 @@ def test_missing_mask_or_overlay_fails_local_check(runs, tmp_path, both_wrong, f
 
     for asset, color in colors.items():
         path = inputs / f"{asset}.mp4"
-        encode(path, [Image.new("RGB", size, color)] * 300)
+        encode(path, [Image.new("RGB", size, color)] * 600)
         record["input_manifest"]["prepared"][asset]["sha256"] = comparison.digest(path)
 
     def frames(include_tear, ellipse):
-        for n in range(300):
+        for n in range(600):
             image = Image.new("RGB", size, colors["forest"])
-            if 30 <= n < 270:
-                x = int((0.30 + 0.08 * (n - 30) / 240) * 96 - 24)
+            if 60 <= n < 540:
+                x = int((0.30 + 0.08 * (n - 60) / 480) * 96 - 24)
                 image.paste(
                     Image.new("RGB", (48, 27), colors["valley"]),
                     (x, 13),
                     Image.new("L", (48, 27), int(255 * 0.85)),
                 )
-            if include_tear and 90 <= n < 270:
-                x = int((0.72 - 0.06 * (n - 90) / 180) * 96 - 18)
+            if include_tear and 180 <= n < 540:
+                x = int((0.72 - 0.06 * (n - 180) / 360) * 96 - 18)
                 mask = Image.new("L", (36, 20), 0 if ellipse else int(255 * 0.7))
                 if ellipse:
                     ImageDraw.Draw(mask).ellipse(
@@ -321,7 +321,7 @@ def test_missing_mask_or_overlay_fails_local_check(runs, tmp_path, both_wrong, f
     with pytest.raises(ValueError, match="visual equivalence"):
         validator().verify([run], tmp_path / "evidence", inputs)
     checks = json.loads((tmp_path / "evidence/metrics.json").read_text())["frames"]
-    relevant = [m for m in checks if m["scenario"] == "layered" and m["frame"] == 180]
+    relevant = [m for m in checks if m["scenario"] == "layered" and m["frame"] == 360]
     assert any(m["rgb_mae"] < 8 and not m["passed"] for m in relevant)
     if both_wrong:
         assert all(m["passed"] for m in checks if m["kind"] == "engine-parity")
@@ -340,4 +340,4 @@ def test_one_pass_extraction_preserves_requested_integer_frames(runs, tmp_path):
         assert first.size == last.size == (32, 18)
         assert first.tobytes() != last.tobytes()
     with pytest.raises(ValueError, match="missing.*frame"):
-        validator().extract_frames(inputs / "forest.mp4", [300], tmp_path / "missing")
+        validator().extract_frames(inputs / "forest.mp4", [600], tmp_path / "missing")

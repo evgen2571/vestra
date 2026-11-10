@@ -1,4 +1,4 @@
-"""Keep the public workload gallery tied to the versioned benchmark definitions."""
+"""Keep the public workload gallery tied to the maintained benchmark definitions."""
 
 import json
 from pathlib import Path
@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_catalog_covers_every_versioned_workload_once():
+def test_catalog_covers_every_maintained_workload_once():
     script = runpy.run_path(str(ROOT / "scripts/render-benchmark-previews.py"))
     suites = json.loads((ROOT / "benchmarks/suites.json").read_text())
     expected = set(suites["scenarios"])
@@ -33,6 +33,15 @@ def test_gallery_keeps_only_three_featured_videos_and_one_effect_sheet():
         if row.get("delivery_sha256")
     }
     assert videos == {"editing", "layered", "production_edit"}
+    assert all(
+        (
+            manifest["workloads"][name]["width"],
+            manifest["workloads"][name]["height"],
+            manifest["workloads"][name]["fps"],
+        )
+        == (1920, 1080, 60)
+        for name in videos
+    )
     assert page.count("<video ") == 3
     assert "effects.webp" in page
     for name in script["CATALOG"] | script["EXTERNAL"]:
@@ -68,3 +77,18 @@ def test_gallery_check_uses_utf8_on_legacy_windows_locales(monkeypatch):
 
     monkeypatch.setattr(Path, "read_text", windows_read)
     script["check"]()
+
+
+def test_measurement_charts_use_centered_theme_aware_figures():
+    for filename in ("index.md", "vestra-vs-moviepy.md"):
+        page = (ROOT / "docs/benchmarks" / filename).read_text(encoding="utf-8")
+        assert '<figure class="comparison" markdown="span">' in page
+        assert "version 2" not in page
+        assert "4070" not in page
+    for filename in ("moviepy-times.svg", "effect-times.svg"):
+        chart = (ROOT / "docs/assets/benchmarks" / filename).read_text(encoding="utf-8")
+        assert "prefers-color-scheme:dark" in chart
+        assert "var(--cpu)" in chart
+        assert "var(--gpu)" in chart
+        assert "#b35b35" not in chart
+        assert "60 fps" in chart

@@ -40,7 +40,7 @@ def test_missing_assets_are_actionable(tmp_path):
 
 def test_workloads_have_exact_timelines():
     c = comparison()
-    for name, frames in [("basic", 300), ("editing", 360), ("layered", 300)]:
+    for name, frames in [("basic", 600), ("editing", 720), ("layered", 600)]:
         workload = c.workload(name, 1920, 1080)
         assert workload["duration"] * workload["fps"] == frames
         assert (
@@ -191,6 +191,55 @@ def test_failed_render_persists_failed_record(tmp_path, monkeypatch):
     assert record["status"] == "failed"
     assert record["records"][0]["samples"][0]["status"] == "failed"
     assert record["records"][0]["summary"] is None
+
+
+def test_effective_fps_uses_the_workload_frame_rate(tmp_path, monkeypatch):
+    c = comparison()
+    monkeypatch.setattr(c, "load_inputs", lambda d: {})
+    monkeypatch.setattr(c, "source_identity", lambda: "unchanged")
+    monkeypatch.setattr(
+        c,
+        "environment",
+        lambda: dict.fromkeys(
+            (
+                "packages",
+                "native_extension_sha256",
+                "ffmpeg_executable_sha256",
+                "graphics_api",
+            )
+        ),
+    )
+
+    def measure(command, log, **kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.with_suffix(".result.json").write_text("{}")
+        return dict(
+            returncode=0,
+            timed_out=False,
+            wall_ms=2000,
+            peak_tree_rss_bytes=None,
+            cpu_percent=None,
+        )
+
+    monkeypatch.setattr(c, "measure_process", measure)
+    monkeypatch.setattr(c, "validate_output", lambda *args: {"status": "ok"})
+    args = argparse.Namespace(
+        inputs=tmp_path,
+        output=tmp_path / "run",
+        samples=1,
+        warmups=0,
+        width=1920,
+        height=1080,
+        timeout=3,
+        scenarios=["basic"],
+        engines=["moviepy-cpu"],
+    )
+    c.run(args)
+    record = json.loads((args.output / "comparison.json").read_text())
+    row = record["records"][0]
+    assert row["definition"]["fps"] == 60
+    assert row["samples"][0]["effective_fps"] == 300
+    assert row["summary"]["effective_fps"]["median"] == 300
 
 
 def test_report_rejects_failed_run(tmp_path):

@@ -81,10 +81,16 @@ just benchmark target/benchmark-results/after
 just benchmark-compare target/benchmark-results/before/suite.json target/benchmark-results/after/suite.json
 ```
 
-Use a new directory for every run. The canonical CPU suite uses 1280×720,
+Use a new directory for every run. The canonical CPU suite uses 1920×1080 at 60 fps with the high quality tier,
 one warmup and five samples per workload. Hardware WGPU needs a separate
 baseline and confirmed hardware selection for every sample. Smoke verifies
 execution and is not performance evidence.
+
+All maintained non-smoke suites render 1920×1080 at 60 fps with the high quality
+tier. The `effects` suite covers all 20 unique effect/control workloads without
+repeating the overlapping specialist subsets. The runner sets `VESTRA_BENCH_FPS`
+and `VESTRA_BENCH_QUALITY`; direct executable runs retain authored settings unless
+those controls are supplied.
 
 The comparison rejects incompatible workload identities, definitions,
 environments and backend selections. Preserve the original local baseline;
@@ -125,7 +131,7 @@ zero raw frames pushed from Rust for 300 encoded frames. Public frame counters
 describe logical output frames; keep this full-range MP4 path as a separate control.
 
 The focused color/dither suite measures a single full-frame moving FFV1 video
-at 1920×1080, 30 fps and 90 frames. It records three separate workloads:
+at 1920×1080, 60 fps and 180 frames. It records three separate workloads:
 `stylization_baseline` (no effects), `palette_video` (smooth palette mapping),
 and `dither_video` (fine Bayer8 dithering). All three use the same bundled valley
 footage prepared as FFV1; no titles, shapes, audio or additional layers are included.
@@ -169,7 +175,7 @@ workloads serially, without concurrent compilation or other benchmarks.
 For a 4K resource/correctness smoke check, use the built benchmark directly
 with `VESTRA_BENCH_WIDTH=3840`, `VESTRA_BENCH_HEIGHT=2160`,
 `VESTRA_BENCH_SCENARIO=dither_video`, `VESTRA_BENCH_WARMUPS=0`, and
-`VESTRA_BENCH_SAMPLES=1`. This is not the versioned 1080p baseline.
+`VESTRA_BENCH_SAMPLES=1`. This is not the maintained 1080p baseline.
 
 The `dither-patterns-smoke` and `dither-patterns-1080p` suites compare the same
 FFV1 control, legacy Bayer8, and stationary blue-noise dithering (`seed=37`).

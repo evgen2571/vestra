@@ -7,7 +7,9 @@ description: Run the maintained benchmark suites on Windows, macOS or Linux.
 
 The collector uses bundled footage, builds the selected checkout, validates
 rendered output, and writes results locally. The first
-build can take tens of minutes; leave the terminal open and the computer plugged in.
+build can take tens of minutes. Each scene also runs repeatedly for warmup and
+measurement, so a full collection can take an hour or more. Leave the terminal
+open and the computer plugged in.
 
 ## Prepare the computer once
 
@@ -34,7 +36,7 @@ git checkout COMMIT
 uv run --no-project --python 3.13 scripts/collect-benchmarks.py
 ```
 
-The default run includes CPU smoke checks, six representative 640 × 360
+The default run includes CPU smoke checks, six representative 1920 × 1080 / 60 fps
 workloads, the three matched MoviePy timelines, and hardware GPU measurements
 when an eligible adapter is found. Hour-long rendering and decoder-cache
 experiments are optional.
@@ -43,10 +45,8 @@ The terminal shows task starts, completions and elapsed time. During long worker
 commands it prints an activity update every fifteen seconds. Builds, input
 generation and validation are outside the render measurements.
 
-For an NVIDIA Windows PC, automatic discovery tries the platform's available
-APIs; on macOS it tries Metal. The report records the device and actual backend.
-An unavailable or software adapter is labelled explicitly. It does not become a
-hardware result through CPU fallback.
+The report records the selected device and actual backend. An unavailable or
+software adapter is labelled explicitly; CPU fallback cannot count as hardware.
 
 ## Read the results
 
@@ -69,5 +69,3 @@ uv run --no-project --python 3.13 scripts/collect-benchmarks.py --smoke --backen
 
 For timeouts, strict hardware selection, output folders, cache or endurance
 profiles, use the [full collection reference](https://github.com/evgen2571/vestra/blob/develop/benchmarks/COLLECTING.md#optional-profiles).
-Windows and macOS measurements require actual native runs; Linux tests and
-mocked platform checks do not prove those systems work.

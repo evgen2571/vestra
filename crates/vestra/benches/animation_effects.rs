@@ -88,6 +88,11 @@ fn main() {
     };
     project["output"]["width"] = width.into();
     project["output"]["height"] = height.into();
+    if std::env::var_os("VESTRA_BENCH_FPS").is_some() {
+        let fps = env_u32("VESTRA_BENCH_FPS", 60);
+        assert!(fps > 0, "VESTRA_BENCH_FPS must be positive");
+        project["output"]["frame_rate"] = format!("{fps}/1").into();
+    }
     if let Ok(quality) = std::env::var("VESTRA_BENCH_QUALITY") {
         project["output"]["quality"] = quality.into();
     }

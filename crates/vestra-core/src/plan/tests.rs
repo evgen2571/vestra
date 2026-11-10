@@ -55,6 +55,54 @@ fn compile_project(project: Project) -> super::RenderPlan {
     compile_project_with_limits(project, ResourceLimits::default())
 }
 
+#[test]
+fn sized_groups_evaluate_local_extents_and_inherit_through_unsized_groups() {
+    let mut project = canonical_input().project.clone();
+    let mut leaf = project.visual.clips[0].clone();
+    leaf.effects.clear();
+    leaf.transform = Some(
+        serde_json::from_value(serde_json::json!({
+            "position": {"base_value": {"x": 0.25, "y": 0.5}},
+            "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+            "scale": {"base_value": {"x": 1.0, "y": 1.0}},
+            "rotation_degrees": {"base_value": 0.0}
+        }))
+        .expect("transform"),
+    );
+    let mut inner = leaf.clone();
+    inner.source = VisualSource::Group(Group {
+        size: None,
+        clips: vec![leaf],
+        transitions: vec![],
+    });
+    let mut outer = inner.clone();
+    outer.source = VisualSource::Group(Group {
+        size: Some(crate::project::GroupSize {
+            width: 600.5,
+            height: 300.25,
+        }),
+        clips: vec![inner],
+        transitions: vec![],
+    });
+    project.visual.clips = vec![outer];
+    project.visual.transitions.clear();
+    let plan = compile_project(project);
+    let frame = evaluate(&plan, &[super::ScheduledItem(0)], 0).expect("frame");
+    let super::EvaluatedSource::Group { composition } = &frame.layers[0].source else {
+        panic!("outer group")
+    };
+    assert_eq!((composition.width, composition.height), (601, 301));
+    assert_eq!(frame.layers[0].transform.position.x, 0.25);
+    assert!((frame.layers[0].transform.anchor.x - 0.5 * 600.5 / 601.0).abs() < 1e-12);
+    let inner = &composition.layers[0];
+    assert!((inner.transform.position.x - 0.25 * 600.5 / 601.0).abs() < 1e-12);
+    let super::EvaluatedSource::Group { composition } = &inner.source else {
+        panic!("unsized group")
+    };
+    assert_eq!((composition.width, composition.height), (601, 301));
+    assert!((composition.layers[0].transform.position.y - 0.5 * 300.25 / 301.0).abs() < 1e-12);
+}
+
 fn compile_project_with_limits(project: Project, limits: ResourceLimits) -> super::RenderPlan {
     compile_project_result(project, limits).expect("plan")
 }
@@ -200,6 +248,7 @@ fn video_slots_are_compact_and_deterministic_across_assets_and_groups() {
     let mut group = project.visual.clips[0].clone();
     group.id = "group".to_owned();
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![video_clip("nested-video", "video-b")],
         transitions: vec![],
     });
@@ -248,6 +297,7 @@ fn groups_compile_nested_layers_and_use_local_time_with_parent_clipping() {
     parent.start = 10.0;
     parent.duration = 5.0;
     parent.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -342,6 +392,7 @@ fn nested_generic_transitions_compile_locally_and_count_all_associations() {
 
     let mut deep = clip("deep");
     deep.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![clip("deep-a"), clip("deep-b")],
         transitions: vec![opacity_transition("deep-transition", "deep-a", "deep-b")],
     });
@@ -349,6 +400,7 @@ fn nested_generic_transitions_compile_locally_and_count_all_associations() {
 
     let mut nested = clip("nested");
     nested.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![deep, clip("nested-peer")],
         transitions: vec![opacity_transition(
             "nested-transition",
@@ -360,6 +412,7 @@ fn nested_generic_transitions_compile_locally_and_count_all_associations() {
 
     let mut grouped = clip("grouped");
     grouped.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![nested, clip("group-peer")],
         transitions: vec![opacity_transition(
             "group-transition",
@@ -405,6 +458,7 @@ fn static_group_dependency_ignores_children_outside_its_effective_interval() {
     let mut group = child.clone();
     group.id = "static-group".to_owned();
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child.clone()],
         transitions: vec![],
     });
@@ -456,6 +510,7 @@ fn group_dependency_tracks_membership_and_nested_dynamic_content() {
     let mut group = first.clone();
     group.id = "group".to_owned();
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![first.clone(), second],
         transitions: vec![],
     });
@@ -479,6 +534,7 @@ fn group_dependency_tracks_membership_and_nested_dynamic_content() {
     let mut inner = animated.clone();
     inner.id = "inner".to_owned();
     inner.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![animated],
         transitions: vec![],
     });
@@ -486,6 +542,7 @@ fn group_dependency_tracks_membership_and_nested_dynamic_content() {
     inner.start = 0.0;
     inner.duration = 6.0;
     project.visual.clips[0].source = VisualSource::Group(Group {
+        size: None,
         clips: vec![inner],
         transitions: vec![],
     });
@@ -512,6 +569,7 @@ fn effective_ancestor_window_excludes_invisible_nested_layers_from_limits() {
     group.duration = 20.0;
     group.transform = None;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child, second],
         transitions: vec![],
     });
@@ -530,6 +588,7 @@ fn root_transitions_accept_groups_without_resolving_nested_ids() {
     let mut group = child.clone();
     group.id = "group".to_owned();
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -615,6 +674,7 @@ fn nested_clips_use_root_preset_and_normalization_semantics_recursively() {
     group.preset = None;
     group.transform = None;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![root_clip.clone()],
         transitions: vec![],
     });
@@ -640,6 +700,7 @@ fn nested_clips_use_root_preset_and_normalization_semantics_recursively() {
     let mut outer = inner.clone();
     outer.id = "outer".into();
     outer.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![inner],
         transitions: vec![],
     });
@@ -661,6 +722,7 @@ fn nested_clips_use_root_preset_and_normalization_semantics_recursively() {
 fn group_clip_with_child(child: crate::project::Clip) -> crate::project::Clip {
     let mut group = child.clone();
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -689,6 +751,7 @@ fn nested_compositions_enforce_active_layer_limits_independently() {
     group.duration = 2.0;
     group.transform = None;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: children,
         transitions: vec![],
     });
@@ -743,6 +806,7 @@ fn nested_active_layer_limit_ignores_children_after_group_duration() {
     group.duration = 5.0;
     group.transform = None;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: children,
         transitions: vec![],
     });
@@ -783,6 +847,7 @@ fn nested_active_layer_limit_counts_only_partial_overlap_before_group_end() {
     group.duration = 5.0;
     group.transform = None;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: children,
         transitions: vec![],
     });
@@ -822,6 +887,7 @@ fn child_starting_at_group_end_is_not_active() {
     group.duration = 5.0;
     group.transform = None;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -857,6 +923,7 @@ fn deeply_nested_active_layer_limit_uses_inner_group_duration() {
     inner.duration = 5.0;
     inner.transform = None;
     inner.source = VisualSource::Group(Group {
+        size: None,
         clips: children,
         transitions: vec![],
     });
@@ -866,6 +933,7 @@ fn deeply_nested_active_layer_limit_uses_inner_group_duration() {
     outer.duration = 10.0;
     outer.transform = None;
     outer.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![inner],
         transitions: vec![],
     });
@@ -909,6 +977,7 @@ fn camera_shake_targets_group_transform_and_preserves_child_transform() {
     group.transform = None;
     group.effects.clear();
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -1120,6 +1189,7 @@ fn nested_spectrum2d_samples_root_project_time() {
     group.start = 10.0;
     group.duration = 10.0;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -1229,6 +1299,7 @@ fn nested_particles_keep_local_age_and_random_access_determinism() {
     group.start = 10.0;
     group.duration = 20.0;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -1275,6 +1346,7 @@ fn compiled_identities_are_unique_across_compositions_with_local_ids() {
     let mut first = child.clone();
     first.id = "group-a".into();
     first.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child.clone()],
         transitions: vec![],
     });
@@ -1592,6 +1664,7 @@ fn nested_motion_blur_shutter_samples_shift_root_project_time() {
     group.id = "group".into();
     group.transform = None;
     group.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -1636,6 +1709,33 @@ fn nested_motion_blur_shutter_samples_shift_root_project_time() {
         composition.layers[0].effects.last(),
         Some(super::EvaluatedEffect::MotionBlur { radius, .. }) if *radius > 1.0
     ));
+
+    let super::CompiledVisualSource::Group(composition) = &mut plan.layers[0].source else {
+        panic!("expected Group");
+    };
+    std::sync::Arc::make_mut(composition).size = Some(crate::project::GroupSize {
+        width: 600.5,
+        height: 300.25,
+    });
+    let signals = PreparedScalarSignals::new(vec![
+        PreparedScalarSignal::new(0, 1_000_000_000, vec![0.0, 1.0, 2.0, 3.0]).expect("signal"),
+    ]);
+    let frame = evaluate_with_context(
+        &plan,
+        &[super::ScheduledItem(0)],
+        1_500_000_000,
+        &EvaluationContext::new(&signals),
+    )
+    .expect("sized motion blur");
+    let super::EvaluatedSource::Group { composition } = &frame.layers[0].source else {
+        panic!("expected Group");
+    };
+    let super::EvaluatedEffect::MotionBlur { radius, .. } =
+        composition.layers[0].effects.last().expect("blur")
+    else {
+        panic!("motion blur");
+    };
+    assert!((*radius - 600.5 * 41_666_666.0 / 1_000_000_000.0).abs() < 1e-9);
 }
 
 #[test]
@@ -2166,6 +2266,7 @@ fn nested_palette_period_uses_child_time_and_signal_uses_root_time() {
     parent.transform = None;
     parent.effects.clear();
     parent.source = VisualSource::Group(Group {
+        size: None,
         clips: vec![child],
         transitions: vec![],
     });
@@ -2205,4 +2306,58 @@ fn nested_palette_period_uses_child_time_and_signal_uses_root_time() {
         );
         assert_eq!(*amount, 0.75);
     }
+}
+
+#[test]
+fn runtime_resolution_overrides_preview_without_changing_authored_coordinates_or_timing() {
+    let input = canonical_input();
+    let authored = (input.project.output.width, input.project.output.height);
+    let plan = compile(
+        input,
+        CompileOptions {
+            preview: true,
+            resolution: Some((128, 96)),
+        },
+    )
+    .expect("runtime resolution compiles");
+    assert_eq!((plan.canvas.width, plan.canvas.height), (128, 96));
+    assert_eq!((plan.encoder.width, plan.encoder.height), (128, 96));
+    assert_eq!(
+        (plan.canvas.logical_width, plan.canvas.logical_height),
+        authored
+    );
+    assert_eq!(
+        (plan.frame_rate, plan.frame_count, plan.duration),
+        ((24, 1), 144, 6.0)
+    );
+}
+
+#[test]
+fn runtime_resolution_reuses_dimension_and_resource_limit_contracts() {
+    for (resolution, code) in [
+        ((0, 64), "VESTRA-OUTPUT-WIDTH"),
+        ((64, 3), "VESTRA-OUTPUT-HEIGHT"),
+        ((8194, 64), "VESTRA-OUTPUT-WIDTH"),
+    ] {
+        let error = compile(
+            canonical_input(),
+            CompileOptions {
+                resolution: Some(resolution),
+                ..CompileOptions::default()
+            },
+        )
+        .expect_err("invalid runtime dimensions");
+        assert_eq!(error.code, code);
+    }
+    let mut input = canonical_input();
+    input.limits.maximum_width = 64;
+    let error = compile(
+        input,
+        CompileOptions {
+            resolution: Some((128, 96)),
+            ..CompileOptions::default()
+        },
+    )
+    .expect_err("runtime resource limit");
+    assert_eq!(error.code, "VESTRA-LIMIT-DIMENSIONS");
 }

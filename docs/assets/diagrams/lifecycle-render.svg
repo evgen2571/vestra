@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="400" viewBox="0 0 480 400" role="img" aria-labelledby="title desc">
+  <title id="title">What each rendering step establishes</title>
+  <desc id="desc">From a frozen project snapshot, semantic validation checks the description. Preflight checks media and environment readiness. Preparation creates a reusable runtime. Rendering and encoding produce frames and audio. Finalization and publication make the finished file available. Only then does completed return a RenderResult.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; --stripe:#466c8c; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; --stripe:#4b6e8d; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .small { font-size:21px; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--shape); stroke:var(--edge); stroke-width:2; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+    .point { fill:var(--ink); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="400" rx="10" fill="var(--bg)"/>
+  <text x="20" y="34">From a frozen project snapshot</text>
+  <rect x="20" y="63" width="216" height="40" class="panel" rx="5"/>
+  <rect x="20" y="118" width="216" height="40" class="panel" rx="5"/>
+  <rect x="20" y="173" width="216" height="40" class="panel" rx="5"/>
+  <rect x="20" y="228" width="216" height="40" class="panel" rx="5"/>
+  <rect x="20" y="283" width="216" height="40" class="panel" rx="5"/>
+  <rect x="20" y="338" width="216" height="40" class="panel" rx="5"/>
+  <path d="M128 104v10" class="arrow"/>
+  <path d="M128 159v10" class="arrow"/>
+  <path d="M128 214v10" class="arrow"/>
+  <path d="M128 269v10" class="arrow"/>
+  <path d="M128 324v10" class="arrow"/>
+  <text x="128" y="90" class="small" text-anchor="middle">Validate</text>
+  <text x="128" y="145" class="small" text-anchor="middle">Preflight</text>
+  <text x="128" y="200" class="small" text-anchor="middle">Prepare</text>
+  <text x="128" y="255" class="small" text-anchor="middle">Render + encode</text>
+  <text x="128" y="310" class="small" text-anchor="middle">Finalize + publish</text>
+  <text x="128" y="365" class="small" text-anchor="middle">Completed</text>
+  <text x="254" y="90" class="small">Meaning is valid</text>
+  <text x="254" y="145" class="small">Files / tools ready</text>
+  <text x="254" y="200" class="small">Reusable runtime</text>
+  <text x="254" y="255" class="small">Frames + audio</text>
+  <text x="254" y="310" class="small">Finished output file</text>
+  <text x="254" y="365" class="small">RenderResult</text>
+</svg>

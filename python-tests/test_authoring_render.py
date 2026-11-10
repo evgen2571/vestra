@@ -52,7 +52,7 @@ def test_public_spectrum2d_preset_authoring_renders_on_cpu(tmp_path: Path, prese
         width=64, height=64, frame_rate=FrameRate(10, 1), output_path="spectrum.mp4",
         duration=0.2, base_directory=Path(__file__).resolve().parents[1],
     )
-    audio = project_builder.add_audio_asset("examples/assets/tone.wav")
+    audio = project_builder.add_audio_asset("assets/fixtures/tone.wav")
     track = project_builder.audio.add_track(id="music")
     track.add_clip(asset=audio, start=0, trim_end=0.2)
     clip = project_builder.add_spectrum2d_clip(start=0, duration=0.2, layer=1, preset=preset)  # type: ignore[arg-type]
@@ -79,14 +79,14 @@ def test_public_spectrum2d_integration_project_exercises_audio_reactive_backgrou
             width=64, height=54, frame_rate=FrameRate(10, 1), output_path="spectrum.mp4",
             duration=3.0, background="#101018", base_directory=Path(__file__).resolve().parents[1],
         )
-        image = builder.add_image_asset("examples/assets/green.png")
+        image = builder.add_image_asset("assets/fixtures/green.png")
         background = builder.add_image_clip(
             source=image, start=0, duration=3, layer=0, sizing=Sizing.cover(),
         )
         background.transform.scale.react_to(
             builder.audio.master.rms().remap(0, 1, 1, 1.08).envelope(0.02, 0.15),
         )
-        audio = builder.add_audio_asset("examples/assets/tone.wav")
+        audio = builder.add_audio_asset("assets/fixtures/tone.wav")
         track = builder.audio.add_track(id="music")
         # Keep the reactive bands above the valid low-energy/no-bars case.
         track.add_clip(asset=audio, start=0, trim_end=3, gain=2.0)

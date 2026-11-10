@@ -32,6 +32,10 @@ fn nested_diagnostics_preserve_order_messages_and_pointers() {
         &Default::default(),
         16,
         crate::validation::ResourceLimits::default(),
+        crate::project::GroupSize {
+            width: 640.0,
+            height: 360.0,
+        },
         &mut diagnostics,
         false,
     );
@@ -59,7 +63,7 @@ fn nested_diagnostics_preserve_order_messages_and_pointers() {
         (
             "VESTRA-SOURCE-COLOUR",
             "solid color must use #RRGGBB or #RRGGBBAA",
-            "/visual/clips/0/source/clips/0/source/colour",
+            "/visual/clips/0/source/clips/0/masks/0/input/source/colour",
         ),
         (
             "VESTRA-TRACK-VALUE",

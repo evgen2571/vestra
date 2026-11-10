@@ -152,6 +152,7 @@ impl<'a> EvaluationContext<'a> {
 pub enum EvaluationError {
     MissingScalarSignal(ScalarSignalId),
     NonFiniteScalarProperty,
+    ResolutionEffectLimit(&'static str),
 }
 
 impl fmt::Display for EvaluationError {
@@ -160,6 +161,10 @@ impl fmt::Display for EvaluationError {
             Self::MissingScalarSignal(id) => {
                 write!(formatter, "missing prepared scalar signal {id:?}")
             }
+            Self::ResolutionEffectLimit(message) => write!(
+                formatter,
+                "runtime resolution cannot preserve effect: {message}"
+            ),
             Self::NonFiniteScalarProperty => write!(formatter, "non-finite scalar property value"),
         }
     }

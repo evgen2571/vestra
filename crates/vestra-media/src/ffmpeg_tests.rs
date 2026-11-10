@@ -69,6 +69,7 @@ fn test_sink(script: &str) -> FfmpegSink {
         filtergraph_file: None,
         static_image: None,
         static_frame_count: None,
+        animation_writer: None,
     }
 }
 
@@ -97,6 +98,7 @@ fn static_settings(frame_count: u64) -> EncoderSettings {
         frame_rate: (30, 1),
         frame_count,
         duration: frame_count as f64 / 30.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 128,
         audio_mix: None,
@@ -143,6 +145,7 @@ fn large_graph_settings(mix: AudioMixPlan) -> EncoderSettings {
         frame_rate: (1, 1),
         frame_count: 1,
         duration: 1.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 1,
         audio_mix: Some(mix),
@@ -179,6 +182,7 @@ fn multi_input_mix_muxes_aac_audio_with_raw_video() {
         frame_rate: (30, 1),
         frame_count: 30,
         duration: 1.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 128,
         audio_mix: Some(AudioMixPlan {
@@ -260,6 +264,7 @@ fn production_aac_decodes_automation_and_equal_power_crossfade() {
         frame_rate: (30, 1),
         frame_count: 60,
         duration: 2.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 128,
         audio_mix: Some(AudioMixPlan {
@@ -603,6 +608,7 @@ fn missing_operation_time_audio_source_reports_ffmpeg_failure_without_output() {
         frame_rate: (1, 1),
         frame_count: 1,
         duration: 1.0,
+        audio_range: None,
         quality_crf: 30,
         maximum_audio_sources: 128,
         audio_mix: Some(AudioMixPlan {
@@ -679,7 +685,7 @@ fn static_sink_reports_progress_finishes_nonblocking_and_removes_image() {
     write_test_ppm(&image);
     let settings = static_settings(12);
     let mut sink =
-        FfmpegSink::start_static(&settings, &output, image.clone()).expect("static FFmpeg");
+        FfmpegSink::start_static(&settings, &output, image.clone(), None).expect("static FFmpeg");
     let result = loop {
         match sink.try_finish_static().expect("polls static FFmpeg") {
             Some(result) => break result,
@@ -700,7 +706,7 @@ fn aborting_static_sink_removes_static_input() {
     write_test_ppm(&image);
     let settings = static_settings(3_000);
     let mut sink =
-        FfmpegSink::start_static(&settings, &output, image.clone()).expect("static FFmpeg");
+        FfmpegSink::start_static(&settings, &output, image.clone(), None).expect("static FFmpeg");
     sink.abort().expect("aborts static FFmpeg");
     assert!(!image.exists(), "static input is cleaned after abort");
 }
@@ -758,6 +764,7 @@ fn finished_sink_rejects_further_writes_and_finishes() {
         filtergraph_file: None,
         static_image: None,
         static_frame_count: None,
+        animation_writer: None,
     };
     assert!(sink.write_frame(0, &[0; 4]).is_err());
     assert!(sink.finish().is_err());

@@ -1,19 +1,34 @@
 # Architecture overview
 
-Vestra separates project meaning from the code that renders or reads media. Put a rule about project JSON, timelines, effects, transitions, or signals in `vestra-core`. Shared rendering contracts and prepared assets belong in `vestra-render-common`, execution in `vestra-render-cpu` or `vestra-render-wgpu`, and selection/fallback in the `vestra-render` facade. Put media formats, FFmpeg and output files in `vestra-media`. The `vestra` crate is the public Rust SDK that coordinates those layers. `vestra-python` exposes that SDK through PyO3, and `vestra-cli` presents the same SDK operations as `ve`.
+Vestra's public Rust SDK, `vestra`, coordinates project meaning, frame rendering
+and media I/O. Python's mutable authoring objects lower to a canonical snapshot;
+the `vestra-python` PyO3 extension passes that snapshot and runtime requests to
+the SDK. Rust applications and the `ve` CLI use the same SDK operations.
 
-```text
-high-level Python ─┐
-PyO3 bindings ────┼──> vestra SDK ──> core: model, validation, plan, evaluation
-ve CLI ───────────┘          │
-                               ├──> render: CPU or WGPU frames
-                               └──> media: probe, decode, audio, encode, publish
-```
+<figure class="diagram" markdown="span">
+![Python authoring lowers a snapshot through the PyO3 extension to the vestra SDK. The SDK also serves Rust and the CLI, and coordinates core planning, CPU or WGPU rendering, and media I/O.](../../assets/diagrams/architecture-system.svg)
+<figcaption>Arrows show calls and handoff through the SDK. This is an ownership view, not a Cargo dependency graph.</figcaption>
+</figure>
 
-The ordinary render path is `Project` load or lowering, semantic validation, target-specific preflight, plan and resource preparation, backend selection, frame and audio execution, temporary encoding, finalization, and publication. Loading and validation deliberately leave asset paths unresolved. Preflight resolves them and probes media. That separation lets a caller validate canonical JSON without touching the machine, while render operations can report environment failures before they start a frame loop.
+## Keep each boundary clear
 
-`vestra-core` owns the canonical schema-v1 model, semantic validation, checked time and frame conversions, plan compilation, frame-time evaluation, animation, signal definitions, and effect/audio-effect descriptors. `vestra-render` consumes evaluated work; it must not reinterpret public project rules. CPU and WGPU are two implementations of the same prepared plan, not two project evaluators.
+- **Core defines meaning.** `vestra-core` owns the canonical model, semantic
+  validation, timeline compilation and frame-time evaluation. It does not open
+  files, invoke FFmpeg or hold GPU state.
+- **Renderers execute evaluated work.** `vestra-render` selects CPU or WGPU.
+  Both backends implement the same project semantics; shared rendering contracts
+  and prepared assets live in `vestra-render-common`.
+- **Media owns bytes and files.** `vestra-media` probes and decodes assets,
+  executes audio work, encodes frames and publishes output. It has no renderer
+  dependency.
+- **The SDK joins the work.** `Editor` coordinates validation, preflight,
+  preparation and execution. It bridges owned renderer frames to borrowed media
+  writes and reports success only after output publication.
 
-`vestra-media` owns the boundary where paths become media. It probes and decodes assets, builds and executes audio work, receives a frame number and borrowed RGBA bytes through a sink, finalizes temporary encoder output, and publishes the requested file. It has no renderer dependency; the SDK bridges owned renderer frames to media writes. A successful frame loop is therefore not a successful render until publication succeeds.
+Semantic validation checks project data without reading assets. SDK preflight
+resolves paths and probes media, so environment failures can be reported before
+frame execution. Preparation then creates reusable runtime state.
 
-For the next level of detail, read [crate ownership](crates.md), [project to plan](project-to-plan.md), and [render pipeline](render-pipeline.md).
+Use [crate ownership](crates.md) to choose where a change belongs,
+[project to plan](project-to-plan.md) for compilation and timing contracts, or
+[render pipeline](render-pipeline.md) to follow a prepared project through execution.

@@ -1,6 +1,13 @@
 # Python binding architecture
 
-The public Python package has two layers. The normal layer is pure Python and mutable: `Project`, `Composition`, `Layer`, sources, effects, transitions, audio and properties hold authoring intent. `Project.snapshot()` lowers that graph through `ProjectBuilder` and `LoweringContext` into an immutable native `ProjectSnapshot` (`vestra._native.Project`). Advanced authoring can use `ProjectBuilder` directly. Neither layer is a second renderer.
+The public Python package separates mutable authoring from native execution.
+`Project`, `Composition`, `Layer`, sources, effects, transitions, audio and
+properties hold authoring intent in pure Python.
+
+`Project.snapshot()` lowers that graph through `ProjectBuilder` and
+`LoweringContext` into an immutable native `ProjectSnapshot`
+(`vestra._native.Project`). Advanced callers can use `ProjectBuilder` directly.
+Both authoring routes use the Rust SDK for rendering.
 
 ```text
 high-level Python editing graph
@@ -10,7 +17,24 @@ high-level Python editing graph
   -> core + renderer + media
 ```
 
-`vestra-python` is a thin PyO3 boundary over `vestra`. It converts paths, enums, JSON-like mappings, diagnostics, reports, frames, events and errors. `ProjectSnapshot` is immutable and supports loading/serialization. `Editor` owns semantic validation, preflight, inspection, preparation and one-shot render. `PreparedProject` keeps prepared native resources and exposes frame and video methods.
+## Native operations and prepared state
+
+`vestra-python` converts Python paths, enums, mappings and requests into SDK
+operations, then returns reports, frames, events or errors through PyO3.
+`ProjectSnapshot` supports immutable loading and serialization. `Editor`
+provides validation, preflight, inspection, preparation and one-shot rendering;
+`PreparedProject` retains native resources for repeated frame and video requests.
+
+Python resolves FFmpeg lazily in `vestra._ffmpeg` using the automatically
+installed `imageio-ffmpeg` dependency or `IMAGEIO_FFMPEG_EXE`. The binding passes
+an absolute path through an SDK editor clone; preparation retains it for master
+analysis and every raw/static video operation. No environment mutation or
+process-wide native configuration is used. Import, semantic validation and media
+inspection continue to use only the native libraries. Rust/CLI editors retain
+their default PATH lookup unless explicitly configured with
+`Editor::with_ffmpeg_executable`.
+
+## Progress, logging and callback failures
 
 Tracing remains native and renderer-independent. Python does not configure a
 second logger or duplicate lifecycle records; native render spans and
@@ -30,9 +54,17 @@ Python logging is explicit: `vestra.configure_logging(...)` maps to the shared
 rendering. The binding exposes ergonomic level, format, output, file, and
 EnvFilter settings without duplicating Rust formatting or filtering.
 
-If a Python callback raises, the binding requests native cancellation, preserves that original Python exception, and re-raises it after cleanup. It never returns a `RenderResult` or replaces the callback exception with a generic `RenderError`. When cleanup reports a native error, the binding attaches its Python error object as `error.render_cleanup_error`. Ordinary cooperative cancellation is different: it raises `CancelledError`, a `RenderError`.
+If a Python callback raises, the binding requests native cancellation and
+re-raises the original Python exception after cleanup. It does not return a
+`RenderResult`. A cleanup error is attached as `error.render_cleanup_error`,
+preserving the callback exception.
 
-Native project/preparation/render errors become the documented Python exception hierarchy. Cooperative cancellation maps to `CancelledError`, a `RenderError`, rather than a result with partial success. Keep `.pyi`, PyO3 method signatures and package exports synchronized: users type against the stub, but behavior comes from the compiled extension.
+Native failures map to the documented Python exception hierarchy. Cooperative
+cancellation raises `CancelledError`, a `RenderError`. Keep `.pyi`, PyO3 method
+signatures and package exports synchronized: type checking uses the stub;
+execution uses the compiled extension.
+
+## Source lowering and font ownership
 
 High-level Text resolves its optional bundled font or installed family at the
 authoring/lowering boundary, retaining canonical Font asset IDs and file paths.
@@ -48,3 +80,7 @@ canonical group clips as `CompositionLayer`. Child placements use ordinary
 source handlers, scoped deterministic IDs and the snapshot's shared asset
 registry. Source transform defaults are copied into placement transforms once;
 individual overrides replace only the selected property's animation/bindings.
+
+For a binding change, keep the native signature, `.pyi` and package exports
+in agreement and use [Testing](../testing.md) for focused Python checks. Public
+user-facing methods are listed in [Python API](../../reference/python-api.md).

@@ -1,0 +1,312 @@
+{
+  "program_sha256": {
+    "effects_catalog": "5d4e29dbfaec0911222052fbe6241fdd2bd3272418f9a1fc3dd9b51072f5e14f",
+    "concepts_masks": "824aa5c32850760a3953ffc40bbdbe4b8c802d4e2e132b6356abb9d3e2035403",
+    "transition_comparisons": "280977cdf8ed1142b9ed1f256ea9c4941b39484374cd990ccccd10859c605baa",
+    "audio_response": "fe7be774865322ecf99a58dca2461a272c644e782565847ae7c3e459fdc930dc",
+    "group_placements": "15a410f6064846c587e919b007de4a42cfdfd11939f42480262b75d2673e6864"
+  },
+  "input_sha256": {
+    "assets/images/landscape-study.jpg": "551efde1b9a96fdbeb1d7dc91af1aa0bd0e3ae035cd3ba15b38afcc5ca949b51",
+    "assets/images/learning-inputs.txt": "8ef7ca6ce54f5e255f4fe226da7f92dc51329e9006b706d7270fd349649d9555"
+  },
+  "stills": {
+    "effect-brightness": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "4421b388645eed559bc48d160b8a06589d301dea74ecd1858429415b5e045934"
+    },
+    "effect-contrast": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "487f52eac4cbd84662dbbfa0590f6a20a63ea8875da413d2821aa2b470d81d66"
+    },
+    "effect-saturation": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "f8b705d47cbb0c836f4728b4ebaa27d0f6259d8cf654917745b767e9bf3ba6ea"
+    },
+    "effect-tint": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "490450524a2ff692a02727eb74115acd23d1abd5abb708bb9e4c2198a90e851f"
+    },
+    "effect-color-adjust": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "9efa8a108454d8a89fc8f3927ecd20f99f83d6d8c69a9995a21357c6c9196eb0"
+    },
+    "effect-gaussian-blur": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "998e731dc826ec1ceb122c738aab53d9db838f2d08a11e2af889b0f663a0f1e7"
+    },
+    "effect-directional-blur": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "1b2eeee963a2b59a3a64558f783b203b81d701117d7cd1666d56f0e9fa3922e7"
+    },
+    "effect-zoom-blur": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "e4f205d7da11b9e337bb59d38b1f26faec26cbf9d0b4dd47efd50d1197af8b36"
+    },
+    "effect-radial-blur": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "8d937964c2406772a3a3765559f9c1d2a5da3dac084d093f576f44f50049a8b7"
+    },
+    "effect-glow": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "e21edbd72fa1a9854d4a7078ac8f7625099ed21805ddeb86e44e905feb8e1458"
+    },
+    "effect-bloom": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "3f7d63cb253cf4fc0733d91e2670ddc7f6cb61e8226b328987c48f3cfec9a25b"
+    },
+    "effect-chromatic-aberration": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "9107ef9205ffa862bf5ac39ce72e374a12b0817bdb185c4b3ba286f026cf09bb"
+    },
+    "effect-vignette": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "84670b8f0afacd38ec5afa4e9079fa5fe3fbdfce8abc9bcf78665d51e16c6ceb"
+    },
+    "effect-sharpen": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "b7ce20103951360dab2a5baec45b518b644ee21a4b4ce3dfa27534266f247dee"
+    },
+    "effect-palette-map": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "1000ae26b0998b72218048736a5df94805915f45dbf7f547c3d9b16e8a677ba1"
+    },
+    "effect-ordered-dither": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "82c2fb5387b551bb3609836164b79833b8b2985ae07f0c7beba781288d04ca00"
+    },
+    "effect-blue-noise": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "b5d4038c8d1add2443aafea42435d3c05f393b9835f7312c91c5912bbecee7b5"
+    },
+    "effect-halftone": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "2c376228f55da26066faa8a0374ba9b55aa0e049f1ad63f810b277445ecda57e"
+    },
+    "effect-pixel-sort": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "c98a8e7637b5f4bc59d68db3b4081b753bd37d7308e3d87584a44c08c290e824"
+    },
+    "effect-ascii": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "67f81b6d4e900bf4ebe831d5d8a8b76a586625a18ceaca0dcbe6f1cf3286b60b"
+    },
+    "effect-pseudo-ascii": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "b8f301fb219d5acba14d4a1b1d43c93b00138cdb56737fe29405b2550522beff"
+    },
+    "effect-order": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "d8be017144af93f4703dcd71c820d4dc9d4ccfc59558f12da6a7db1a57505978"
+    },
+    "group-placements": {
+      "seconds": 0.7,
+      "backend": "cpu",
+      "web_sha256": "f3248c466c48cce1936c94f95471ff3f17711f1f88ee53bfe4b4b913393c014f"
+    }
+  },
+  "effect-camera-shake": {
+    "source_sha256": "d0323238c3bb45adc976d5db85b6ddb90548e3a6d716b2d407965a873502d81b",
+    "poster_seconds": 0.7,
+    "size": [
+      640,
+      520
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "688dd367f737252190140663ca1d32d06a1a3d3a89e2d28c76d05edb32d62759",
+    "poster_sha256": "de32ed84b76c2dbf1c8c6e022438e10d6967640db30b177e1dc7602f14ab21dc"
+  },
+  "effect-motion-blur": {
+    "source_sha256": "a0872ddd24f6bbfcfe2606e8803a159b4f2fda90d1b572a10b02a8fb53213b68",
+    "poster_seconds": 0.7,
+    "size": [
+      640,
+      520
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "da51e35ea69995cd7927e74081342701899c1a487d54d1770e7b92e9d5a3ee2e",
+    "poster_sha256": "1bdd0bc96b2dba0c0fd7e74f428c931bc41663cdc1ec346bfe7cb0d878f4364a"
+  },
+  "effect-motion-tile": {
+    "source_sha256": "c85d48274e387b7bc1adbac2e95d5231cb8efc0c9310f8bedd4de896ed00f856",
+    "poster_seconds": 0.7,
+    "size": [
+      640,
+      520
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "98e54435cf86aafa412cee4420d2c51840a0dffc49a1e5d69762a3a479a4a8ef",
+    "poster_sha256": "23cd218dccdb368aed8e8e6856d041f5e38728c295084271390b52fb1a8e96cf"
+  },
+  "effect-crt": {
+    "source_sha256": "966f46c5ca9f5ac21db8c9f0f84ee461b5df97a5a2d2b320705f45ec939c1521",
+    "poster_seconds": 0.7,
+    "size": [
+      640,
+      520
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "936d8389d3979904a37089dc99655cd4c185681b007c4a37c2cf37bbf051d40a",
+    "poster_sha256": "9f8563a77765b3822f6a6e920f667d033caed7dea771b3bcd134fb6a2dd5aadc"
+  },
+  "transition-crossfade": {
+    "source_sha256": "c5f9a05a15ae6ea0067664a6e29cbcd40bee435578456c1d7e103e78f60f53ff",
+    "poster_seconds": 1.5,
+    "size": [
+      640,
+      360
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "c09fb4519d63da9a52f3da372b6da92183794dbfa2b283357e419e3abea2d33d",
+    "poster_sha256": "e8d98c8d70a1c060a82df80ca604571be85592de3f9137cf2b3b7efe2ea2a437"
+  },
+  "transition-push": {
+    "source_sha256": "60eb477745956e35df311edc20472b22cf4ca8d86c3f053d8535f8c384e7958e",
+    "poster_seconds": 1.5,
+    "size": [
+      640,
+      360
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "d0ea2ad85afee9a3c1d0f396d0d77e3fb22575fc4f36bc727948c38a72ab0745",
+    "poster_sha256": "6e1f9f9f5f0ed50be1a160ed1ac7af22da64f2112053480c7d312374d385e340"
+  },
+  "transition-zoom": {
+    "source_sha256": "d7f988b3811fbd432658737657c622f0471f42d3a85c860665b67754d97301d9",
+    "poster_seconds": 1.5,
+    "size": [
+      640,
+      360
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "d252dcda386f40bed29f80bd5990c688df4069ab1e1c29c7e08fdae9666a5dc7",
+    "poster_sha256": "eebfa951957725b5ece1d5a2bf0b620409aa8032d05a109b45f130b565148e5d"
+  },
+  "transition-blur": {
+    "source_sha256": "095fe7b763c46bbd055c02fdfeb4a39036521cdf4b79df1c53f1775b42bae165",
+    "poster_seconds": 1.5,
+    "size": [
+      640,
+      360
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "631c38c536e82c703f8ed4f9d8d13719065ff3fcf43aee8b368e8e9cd0bdd0fb",
+    "poster_sha256": "721e67208085bdb6428e357c6fac12bf692d4f134be6e2219fc762cc1137765f"
+  },
+  "audio-bounded": {
+    "source_sha256": "48a162e26af22e13b3424f4b17de31810c0145462ee70982a542dfd456157cb0",
+    "poster_seconds": 1.2,
+    "size": [
+      640,
+      560
+    ],
+    "seconds": 4,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "ab3b8bbfa575c3d3223f14e462089f964b8a374c7e5536a69fee2a161077c047",
+    "poster_sha256": "6e213a3d257b34c7688f344fd0231be48db261a569d1ed807b5beca63f6408d9"
+  },
+  "audio-smoothing": {
+    "source_sha256": "1ffdd2145551f3aae3013d5c678918ac488bb414f2c772584f21d41eee6fd864",
+    "poster_seconds": 1.2,
+    "size": [
+      640,
+      560
+    ],
+    "seconds": 4,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "41526a25c7a8574413948e3f371fee1fce3ee568b2986dc4a2a5bc40a883a84c",
+    "poster_sha256": "e854f2ca60dfcbf10cc30a38e7341e15e295a79603d155d3307ed57e9e68d55a"
+  },
+  "audio-spectra": {
+    "source_sha256": "50655463f03ce730d37f9f048cddbbf3ab0bd4700696eb9bd8d6596bb3b7bc65",
+    "poster_seconds": 1.2,
+    "size": [
+      640,
+      560
+    ],
+    "seconds": 4,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "95dd67ed4f057fdd0a9f53afbb25e915942178fef6fb24c768f6fe619821e462",
+    "poster_sha256": "97c53db83934cc857c8b9c588e0ccebb6241c16a77cb4923b9f25b9a432d49fe"
+  },
+  "concepts-masks": {
+    "source_sha256": "bf1166b9b7a68ab3c52375232d1311a73237a88d85b2c47f387c7474545b52ef",
+    "poster_seconds": 0.5,
+    "size": [
+      640,
+      480
+    ],
+    "seconds": 3,
+    "fps": 30,
+    "backend": "cpu",
+    "audio": false,
+    "web_sha256": "0b53493c3048bfb8326a67a7ed2dbb02e7fa4e90c7c6b9834816b061a5699ea4",
+    "poster_sha256": "eaab3fbce84732f4be07a47bcbddefd83d1a4ab57bbffcad2cb0a979670e618b"
+  },
+  "source_relocation": {
+    "note": "Tutorial programs and inputs relocated; the effect program only changes input-path lookup. Original hashes and delivery media are retained.",
+    "program_sha256": {
+      "effects_catalog": "cd774022bb496bc79cc5483816424d5cce1550609c9a2327d346283ce406cc0d",
+      "concepts_masks": "824aa5c32850760a3953ffc40bbdbe4b8c802d4e2e132b6356abb9d3e2035403",
+      "transition_comparisons": "280977cdf8ed1142b9ed1f256ea9c4941b39484374cd990ccccd10859c605baa",
+      "audio_response": "fe7be774865322ecf99a58dca2461a272c644e782565847ae7c3e459fdc930dc",
+      "group_placements": "15a410f6064846c587e919b007de4a42cfdfd11939f42480262b75d2673e6864"
+    },
+    "input_sha256": {
+      "landscape.jpg": "551efde1b9a96fdbeb1d7dc91af1aa0bd0e3ae035cd3ba15b38afcc5ca949b51",
+      "learning-inputs.txt": "ed0611fa835d95f1ab9060021f3a68c0e61f0b8b49ecad2476f921752711f420"
+    }
+  }
+}

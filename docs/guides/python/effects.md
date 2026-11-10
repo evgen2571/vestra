@@ -1,227 +1,183 @@
-# Add effects
+# Add and animate an effect
 
-Visual effects attach to a layer or to the project output. Layer effects are
-processed with that layer. Project `post_effects` apply to the rendered visual
-output.
-
-```python
-from vestra import Brightness, GaussianBlur
-from vestra.sources import Image
-
-layer = project.root.add(Image("assets/photo.png"), duration=5)
-layer.effects.add(Brightness(0.1))
-# Keep the attached effect handle so its radius can be animated.
-blur = layer.effects.add(GaussianBlur(3.0))
-blur.radius.keyframe(0, 0.0)
-blur.radius.keyframe(1.0, 3.0)
-
-# Post effects process the final composition, after its layers.
-project.post_effects.add(Brightness(0.05))
-```
-
-Motion Tile is intended for the common edge-filling edit where a layer is
-zoomed, rotated, or shaken:
+Start with a [layer](sources-and-layers.md) in a project. An effect changes its
+appearance; it does not alter its timeline placement. This example blurs a
+procedural title, so no input files are needed.
 
 ```python
-from vestra import ChromaticAberration, DirectionalBlur, MotionTile
+from vestra import Color, Project, Text
+from vestra.effects import GaussianBlur
 
-layer.effects.add(MotionTile(200, 200, mirror_edges=True))
-layer.transform.scale = (1.25, 1.25)
-layer.effects.add(DirectionalBlur(12, 45))
-layer.effects.add(ChromaticAberration(4, 0))
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+)
+
+project.root.add(Color("#101b32"))
+title = project.root.add(Text("A changing focus", font_size=40))
+
+blur = title.effects.add(GaussianBlur(radius=0))
+blur.radius.keyframe(0, 0)
+blur.radius.keyframe(2, 6)
 ```
 
-Motion Tile runs before the layer transform. Directional Blur, Radial Blur,
-Chromatic Aberration, and the other image effects run after it. Its percentage
-parameters describe the virtual tiled source region, while the composition
-canvas size is unchanged.
+<span id="animate-an-effect"></span>
 
-`EffectStack` preserves insertion order. Use layer effects for content-specific
-processing and post effects for a whole-project look. Effect parameters that
-are exposed as properties can be animated or bound to a signal.
+Keep the handle returned by `add()`: it refers to the attached copy. Reusing a
+`GaussianBlur` value on two layers creates independent attachments. Editing the
+original value afterwards does not edit either layer. The blur grows during
+these two seconds using the same [keyframe rules](../../getting-started/animation.md)
+as transforms. Layer effect keyframes use layer-local time, even when the layer
+starts later in its composition.
 
-Choose a representative effect first, then validate. Exact parameter ranges
-and the complete effect catalog belong to the API reference. An effect does not
-change a layer's start or duration.
+## Choose where the effect applies
 
+| Attachment | What it processes | Useful for |
+| --- | --- | --- |
+| `title.effects` | One layer's presentation | Blur a title without blurring the background. |
+| A group/composition layer's `effects` | The composed child result | Apply one look to a card and everything inside it. |
+| `project.post_effects` | Final root composition | Give all layers one consistent treatment. |
 
-For fine palette dithering, use a dark-to-light set of opaque colors and an
-output-pixel pattern scale of one:
+Continue the project above with a subtle global adjustment:
 
 ```python
-from vestra.effects import OrderedDither, PaletteMap, PaletteMode
+from vestra.effects import Brightness
 
-palette = ("#071827", "#27565d", "#69b49c", "#fff0c0")
-dither = layer.effects.add(OrderedDither(palette, matrix="bayer8", scale=1))
-dither.strength.keyframe(0, 0.25)
-dither.strength.keyframe(1, 1)
-
-# An explicit two-second procedural color loop.
-color = project.post_effects.add(PaletteMap(mode=PaletteMode.RAINBOW, period=2))
-color.amount = 0.25
-color.phase.bind(project.audio.signal.rms(), operation="add")
+project.post_effects.add(Brightness(amount=0.05))
+project.render("focus.mp4", backend="cpu", overwrite=True)
 ```
 
-Bayer and blue-noise patterns stay fixed in output pixel coordinates. For a
-less regular fine texture, use `OrderedDither(palette, matrix="blue_noise",
-seed=37, scale=1)`. The seed shifts/reflects a fixed seamless 32×32 tile; it does
-not change over time. Bayer defaults and output remain unchanged. To adjust tonal
-separation before quantization, place `ColorAdjust` or `Contrast` earlier in
-the stack. Palette Map's `gradient` mode gives smooth coloring; `nearest`
-gives discrete tonal bands. Dither always quantizes to discrete colors.
-Use `mode="nearest_rgb"` to retain source colors with an arbitrary palette, or
-`mode="nearest_hue"` to emphasize hue and saturation. These modes also work with
-`PaletteMap`. Chromatic dithering mixes the two closest colors; colors need not
-be ordered from dark to light. Compare both on the generated moving footage:
+Run the two blocks in one Python file with `python focus.py`. It writes a
+2-second `focus.mp4` in the current directory and replaces it on a rerun.
+Global effect tracks use project time. A reusable `Group` snapshots its children;
+attach processing to the returned placed layer when editing that instance.
 
-```bash
-uv run python examples/showcase/stylized-effects/main.py --look dither-blue-noise --palette ember --mode nearest_rgb --smoke
-uv run python examples/showcase/stylized-effects/main.py --look dither-blue-noise --palette ember --mode nearest_hue --smoke
-```
+## Predict the order
 
-For an RGB color cube instead of an authored palette, use
-`OrderedDither(mode="rgb_channels", levels=4, matrix="blue_noise")` or
-`PaletteMap(mode="rgb_channels", levels=4)`. Two levels give eight RGB colors;
-four give 64 colors; 256 preserve the source bytes. Palette phase does not alter
-this mode. In the showcase, select `--mode rgb_channels --levels 4`.
+Effects in the same stage run in attachment order. Blur followed by quantization
+makes crisp palette dots from softened content. Quantization followed by blur
+softens those dots and introduces intermediate colors. Inspect the
+[controlled order comparison](../../concepts/effects-transitions-and-animation.md#order-changes-the-result)
+and [pipeline diagram](../../concepts/effects-transitions-and-animation.md#processing-stages)
+before combining treatments.
 
-Use `mode="nearest_oklab"` for perceptual palette matching. It interprets source
-bytes as sRGB and uses a fixed-point Oklab approximation, matching lightness and
-chroma together. It preserves exact palette inputs and retains authored order.
-Compare it with `nearest_rgb` on the same footage and palette using the showcase's
-`--mode nearest_oklab` option. Neither mode alters the selected palette bytes.
+Motion Tile is the exception to ordinary post-transform image processing: its
+intrinsic stage is before transform. Inserting it later in a list does not move
+it after a blur. It is layer-only and supports image, video, shape, text and
+group content. Masks and track mattes consume the effected layer presentation.
 
-An explicit `period` loops procedural palette phase; the source clip and audio
-continue on their normal timelines. See the [effect reference](../../reference/effects.md)
-for exact ranges and the [palette example](../../../examples/python/high-level/13_palette_dither.py)
-for an asset-free recipe.
+<span id="fill-the-edges-of-a-moving-image"></span>
+<span id="reduce-colours-with-dithering"></span>
+<span id="try-halftone-sorting-or-crt"></span>
+<span id="turn-image-detail-into-characters"></span>
+<span id="adjust-palette-spacing-and-interpolation"></span>
+<span id="adjust-detail-before-quantization"></span>
+<span id="render-a-treatment"></span>
 
-Halftone, sorting and CRT can be attached to video layers, groups or the global
-stack. Numeric properties support the same keyframes and signals:
+## Choose a treatment
+
+Start with the [visual effect catalog](effect-catalog.md). Every entry shows
+representative settings, the same baseline and a route to runnable source.
+Then use a focused guide when a treatment needs more decisions:
+
+- [Palettes and dithering](palettes-and-dithering.md): tonal versus color matching,
+  pattern size, contrast and input detail.
+- [ASCII](ascii.md): glyph cells, source colors, alpha and readability.
+- [Composed treatments](#fill-moving-image-edges): edge filling, halftone and monitor recipes.
+
+The [parameter reference](../../reference/effect-parameters.md) distinguishes
+bindable properties from static enums/colors/integers. Bindable controls can use
+[signals](signals-and-audio-reactivity.md). Validate after choosing settings;
+exact ranges, ownership, scope and backend limits are in
+[effect contracts](../../reference/effects.md) and [feature support](../../reference/feature-support.md).
+
+## Fill moving image edges
+
+Use Motion Tile before moving, rotating or scaling content when transparent edges
+would otherwise reveal the background. This asset-free example deliberately
+shrinks a card so the repeated region is visible:
 
 ```python
-from vestra.effects import Halftone, PixelSort, Crt
+from vestra import Color, Group, Project, Rectangle, Text
+from vestra.effects import DirectionalBlur, MotionTile
+
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+)
+
+card = Group(size=(320, 180))
+card.add(Color("#101b32"))
+card.add(Rectangle(width=120, height=8, fill="#d6a46b"))
+card.add(Text("Repeated card", font_size=24), position=(0.5, 0.7))
+
+layer = project.root.add(card, anchor=(0, 0), position=(0.25, 0.25))
+
+layer.effects.add(
+    MotionTile(
+        output_width_percent=400,
+        output_height_percent=400,
+        mirror_edges=True,
+    )
+)
+
+layer.transform.rotation.keyframe(0, -12)
+layer.transform.rotation.keyframe(2, 12)
+
+layer.effects.add(DirectionalBlur(radius=4, angle_degrees=25))
+
+project.render("tiled-card.mp4", backend="cpu", overwrite=True)
+```
+
+Run this complete program with `python tiled_card.py`; it replaces
+`tiled-card.mp4` on a rerun. Notice mirrored repeats around the original card,
+then blur in the rotated output. Motion Tile samples a virtual source region;
+the 640×360 canvas stays the same size. The explicit origin anchor places the
+card's top-left; expanding the region preserves that placement for any anchor.
+Its stage is intrinsically before transform,
+even if it is attached after an ordinary effect. Check
+[source restrictions](../../reference/effects.md#motion-tile) before attaching it.
+
+## Apply a monitor recipe
+
+For this alternative, start a fresh project rather than accumulating the previous
+example's tiling and blur:
+
+```python
+from vestra import Color, Project, Text
 from vestra.effects.recipes import analog_monitor
 
-print_effect = layer.effects.add(Halftone(mode="source", cell_size=6, softness=0.5))
-print_effect.amount.keyframe(0, 0)
-print_effect.amount.keyframe(1, 1)
-layer.effects.add(PixelSort(direction="vertical", segment_length=64, amount=0.4))
-project.post_effects.add(Crt(period=4, seed=7, jitter=0.2))
-
-# An optional reusable chain, with independently editable ordinary effects.
-for effect in analog_monitor(period=4):
-    project.post_effects.add(effect)
-```
-
-Halftone analyzes whole rotated cells with alpha-aware area means. Sorting uses
-bounded runs, stable equal-luminance ties and deliberate hard threshold changes.
-CRT grain and jitter evolve continuously, so evaluating frames out of order
-preserves their animation. A procedural CRT period does not loop footage/audio.
-Modes, colors and integer block sizes are discrete configuration choices;
-animate intensity to introduce a look smoothly. See the
-[synthetic looping showcase](../../../examples/showcase/stylized-effects/README.md)
-and the [effect reference](../../reference/effects.md) for parameter bounds.
-
-For cinematic ASCII, choose dark-to-light characters, output-pixel cell sizes
-and optional colors/source blending. The same effect works on images, footage,
-compositions and global output:
-
-```python
-from vestra.effects import Ascii, PseudoAscii, CHARACTER_SETS
-
-ascii_effect = layer.effects.add(Ascii(
-    CHARACTER_SETS["dense"], cell_width=8, cell_height=12,
-    mode="hybrid", color_mode="source", background="#00000000",
-    source_mix=.15,
-))
-ascii_effect.amount.keyframe(0, 0)
-ascii_effect.amount.keyframe(1, 1)
-project.post_effects.add(PseudoAscii(color_mode="rainbow", period=4))
-
-# Explicit portable font resource; no system-font fallback.
-layer.effects.add(Ascii(" .oO#", font="assets/MyFont.ttf", mode="fill"))
-```
-
-`font=None` uses the bundled licensed font. Custom font glyph coverage is
-validated during preparation; unsupported or invisible characters fail with a
-resource diagnostic. Each Unicode scalar is independent, so this effect does
-not shape ligatures or combining sequences. Use `background="#00000000"` to
-retain glyph-only alpha; `source_mix` blends footage detail in premultiplied
-space. Cell sizes, amount, source mix, edge controls and phase support the
-existing keyframe/audio-signal properties. Palette/rainbow periods repeat the
-effect's colors, while footage/audio must separately align for a looping video.
-See the [ASCII reference](../../reference/effects.md#cinematic-ascii-and-pseudo-ascii)
-for area filtering, anchoring, prepared glyph resources and discrete controls.
-
-Nonuniform tonal palettes use `stops` on `PaletteMap` or `OrderedDither`:
-
-```python
-from vestra.effects import OrderedDither
-
-look = OrderedDither(
-    ("#080508", "#351120", "#9e3341", "#efa463", "#fff1c5"),
-    stops=(0, 0.12, 0.35, 0.7, 1), matrix="blue_noise", scale=1,
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
 )
-look.stops = (0, 0.18, 0.42, 0.8, 1)
-look.stops = None  # Restore uniform tonal positions.
+
+project.root.add(Color("#101b32"))
+project.root.add(Text("Signal monitor", font_size=42))
+
+for effect in analog_monitor(period=2):
+    project.post_effects.add(effect)
+
+project.render("monitor.mp4", backend="cpu", overwrite=True)
 ```
 
-The advanced `add_palette_map` and `add_ordered_dither` methods accept the same
-control. Positions are static, one per color, strictly increasing with endpoints
-zero and one, and distinct after rounding to `1/65280`. Native project validation
-checks palette cardinality and restricts stops to `gradient`/`nearest` modes.
-Phase remains bindable and animates colors through those fixed positions.
+This writes `monitor.mp4`. Recipe attachments are independent copies, so keep
+returned handles if changing them afterwards. `halftone_print()` and
+`sorted_neon(direction=...)` provide other composed starting points. They do not
+change which layer types a cinematic preset accepts. Periodic CRT motion repeats
+the procedural component; it does not loop your footage or soundtrack.
 
-Palette interpolation is independently selectable:
+## Decide what to animate
 
-```python
-from vestra.effects import PaletteMap, PaletteInterpolation
+Fade a look with `amount` when available. Halftone's cell geometry can change
+membership as it moves; PixelSort's threshold crossings deliberately create sharp
+run changes. These effects do not promise a smooth crossfade between static
+modes. Inspect motion at the output size, especially after compression.
 
-look = PaletteMap(("#ff0000", "#0000ff", "#ffffff"), interpolation="oklab")
-look.interpolation = PaletteInterpolation.RGB
-```
-
-`OrderedDither` and advanced `add_palette_map`/`add_ordered_dither` expose the same
-static control. RGB is the compatible default; Oklab affects gradient mapping and
-animated authored palette colors. Dither output remains discrete palette colors.
-Amounts and phase continue to support keyframes and signal binding.
-
-
-Use entering-signal tone controls to lift shadows without changing the source
-used for a partial blend:
-
-```python
-from vestra.effects import OrderedDither
-
-look = OrderedDither(("#080508", "#9e3341", "#efa463", "#fff1c5"),
-                     matrix="blue_noise", input_exposure=0.5, input_gamma=1.5)
-look.input_gamma.keyframe(0, 1)
-look.input_gamma.keyframe(2, 1.5)
-```
-
-`PaletteMap` and both advanced authoring methods expose the same controls.
-Exposure and gamma can bind to signals. Neutral values preserve existing output;
-the final `amount` always blends against the original image.
-
-Preserve small edges before quantization with `input_detail=1.5` and
-`input_detail_radius=1`. For broader local contrast, try `0.5` and `8` instead.
-Both controls are bindable on `PaletteMap`, `OrderedDither` and their advanced
-authoring counterparts:
-
-```python
-look.input_detail = 1.5
-look.input_detail_radius = 1
-look.input_detail.keyframe(0, 0)
-look.input_detail.keyframe(2, 1.5)
-```
-
-Detail runs before exposure/gamma and adds three full-resolution passes when
-active. Its default zero amount preserves existing output.
-
-
-For a complete fine-detail dither video and ASCII readability comparison, run
-[the generated portrait example](../../../examples/showcase/stylized-effects/reference.py).
-Its [guide](../../../examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis)
-explains editable tone/detail/filter settings, three arbitrary palettes and the
-expected darkness of source-colored ASCII with zero source mixing.
+See the [processing model](../../concepts/effects-transitions-and-animation.md),
+[exact parameters](../../reference/effect-parameters.md), and
+[backend support](../../reference/feature-support.md). Broader moving treatments
+remain available in the [rendered gallery](../../gallery/visual-effects.md).

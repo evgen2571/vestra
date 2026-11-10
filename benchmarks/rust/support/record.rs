@@ -1,0 +1,219 @@
+//! Benchmark-only records. No instrumentation is added to engine hot paths.
+
+use std::{fs, path::Path, process::Command};
+
+use serde::Serialize;
+use serde_json::{Value, json};
+
+use super::Sample;
+
+pub(super) fn adapter_class(
+    adapter: &vestra::AdapterInfo,
+) -> vestra_render::AdapterPerformanceClass {
+    vestra_render::AdapterMetadata {
+        adapter_name: adapter.adapter_name.clone(),
+        device_type: adapter.device_type.as_str().to_owned(),
+        graphics_backend: adapter.graphics_backend.as_str().to_owned(),
+        driver_name: adapter.driver_name.clone(),
+        driver_info: adapter.driver_info.clone(),
+        vendor_id: adapter.vendor_id,
+        device_id: adapter.device_id,
+    }
+    .performance_class()
+}
+
+pub(super) fn serialize_result<S: serde::Serializer>(
+    result: &vestra::RenderResult,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut value = serde_json::to_value(result).map_err(serde::ser::Error::custom)?;
+    // SDK reports omit adapter metadata; measurements need the actual device.
+    value["adapter"] = match &result.adapter {
+        Some(adapter) => {
+            let mut value = serde_json::to_value(adapter).map_err(serde::ser::Error::custom)?;
+            value["performance_class"] = adapter_class(adapter).as_str().into();
+            value
+        }
+        None => Value::Null,
+    };
+    value.serialize(serializer)
+}
+
+fn command(program: &str, args: &[&str]) -> String {
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+        .output()
+        .unwrap_or_else(|error| panic!("benchmark metadata {program}: {error}"));
+    assert!(
+        output.status.success(),
+        "benchmark metadata command failed: {program}"
+    );
+    String::from_utf8(output.stdout)
+        .expect("UTF-8 benchmark metadata")
+        .trim()
+        .to_owned()
+}
+
+pub(super) fn write(
+    path: &Path,
+    scenario: &str,
+    warmups: usize,
+    project: &Value,
+    samples: &[Sample],
+    validation: Option<Value>,
+) {
+    // Content identities survive temporary directories and detect edited assets.
+    let mut workload = project.clone();
+    workload["output"]["path"] = "benchmark.mp4".into();
+    for asset in workload["assets"].as_array_mut().expect("benchmark assets") {
+        let source = asset["source"].as_str().expect("asset source");
+        asset["source"] = command("git", &["hash-object", "--", source]).into();
+    }
+    let preview = std::env::var_os("VESTRA_BENCH_PREVIEW").is_some();
+    let mut workload_id = serde_json::to_string(&workload).expect("workload identity");
+    if preview {
+        workload_id.push_str(";preview=true");
+    }
+    let environment_variables: std::collections::BTreeMap<_, _> = std::env::vars()
+        .filter(|(key, _)| {
+            key.starts_with("VESTRA_") && !key.starts_with("VESTRA_BENCH_")
+                || matches!(
+                    key.as_str(),
+                    "RUSTFLAGS"
+                        | "RAYON_NUM_THREADS"
+                        | "WGPU_BACKEND"
+                        | "WGPU_ADAPTER_NAME"
+                        | "VK_ICD_FILENAMES"
+                )
+        })
+        .collect();
+    let record = json!({
+        "benchmark_schema_version": 1,
+        "scenario": scenario,
+        "workload_id": workload_id,
+        "workload": workload,
+        "runtime_request": {"preview": preview},
+        "warmups": warmups,
+        "cache_scope": "new editor and preparation per sample; OS page cache uncontrolled",
+        "command": std::env::args().collect::<Vec<_>>(),
+        "environment": {
+            "revision": command("git", &["rev-parse", "HEAD"]),
+            "dirty": !command("git", &["status", "--porcelain"]).is_empty(),
+            "cpu": super::cpu_model(),
+            "logical_threads": std::thread::available_parallelism().map(std::num::NonZeroUsize::get).unwrap_or(1),
+            "os": if cfg!(windows) {
+                format!("{} {}", command("cmd", &["/c", "ver"]), std::env::consts::ARCH)
+            } else {
+                command("uname", &["-srm"])
+            },
+            "rustc": command("rustc", &["-Vv"]),
+            "ffmpeg": command("ffmpeg", &["-version"]),
+            "features": {"cpu": cfg!(feature = "cpu"), "wgpu": cfg!(feature = "wgpu")},
+            "profile": if cfg!(debug_assertions) { "debug" } else { "release" },
+            "variables": environment_variables,
+        },
+        "samples": samples,
+        "validation": validation,
+    });
+    fs::write(
+        path,
+        serde_json::to_vec_pretty(&record).expect("serialize benchmark record"),
+    )
+    .expect("write benchmark record");
+}
+
+/// Collector opt-in correctness work, always after measured renders and before
+/// the temporary output directory is dropped. Legacy timings are unaffected.
+pub(super) fn validate_media(
+    directory: &Path,
+    expected: &vestra::RenderResult,
+    count: usize,
+) -> Value {
+    let mut evidence = Vec::new();
+    for entry in fs::read_dir(directory).expect("benchmark output directory") {
+        let path = entry.expect("output entry").path();
+        if path.extension().is_none_or(|extension| extension != "mp4") {
+            continue;
+        }
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-count_frames",
+                "-show_streams",
+                "-of",
+                "json",
+            ])
+            .arg(&path)
+            .output()
+            .expect("probe published benchmark output");
+        assert!(probe.status.success(), "output probe failed");
+        let data: Value = serde_json::from_slice(&probe.stdout).expect("probe JSON");
+        let videos: Vec<_> = data["streams"]
+            .as_array()
+            .expect("streams")
+            .iter()
+            .filter(|stream| stream["codec_type"] == "video")
+            .collect();
+        assert_eq!(videos.len(), 1, "one published video stream");
+        let video = videos[0];
+        assert_eq!(video["codec_name"], "h264");
+        assert_eq!(video["pix_fmt"], "yuv420p");
+        assert_eq!(video["width"], expected.width);
+        assert_eq!(video["height"], expected.height);
+        assert_eq!(
+            video["nb_read_frames"]
+                .as_str()
+                .expect("frame count")
+                .parse::<u64>()
+                .expect("integer frame count"),
+            expected.total_frames
+        );
+        let rate = |text: &str| {
+            let (numerator, denominator) = text.split_once('/').unwrap_or((text, "1"));
+            numerator.parse::<f64>().expect("numeric FPS numerator")
+                / denominator.parse::<f64>().expect("numeric FPS denominator")
+        };
+        assert!(
+            (rate(video["avg_frame_rate"].as_str().expect("FPS")) - rate(&expected.frame_rate))
+                .abs()
+                < 1e-9,
+            "published frame rate"
+        );
+        let duration = video["duration"]
+            .as_str()
+            .expect("duration")
+            .parse::<f64>()
+            .expect("numeric duration");
+        assert!(
+            (duration - expected.duration).abs() < 0.002,
+            "published duration"
+        );
+        assert_eq!(
+            data["streams"]
+                .as_array()
+                .expect("streams")
+                .iter()
+                .any(|stream| stream["codec_type"] == "audio"),
+            expected.audio_present
+        );
+        let decode = Command::new("ffmpeg")
+            .args(["-v", "error", "-xerror", "-nostdin", "-i"])
+            .arg(&path)
+            .args(["-map", "0:v:0", "-f", "null", "-"])
+            .output()
+            .expect("decode published benchmark output");
+        assert!(decode.status.success(), "published output decode failed");
+        evidence.push(
+            json!({"filename": path.file_name().expect("filename").to_string_lossy(),
+            "video": video, "full_decode": true}),
+        );
+    }
+    assert_eq!(
+        evidence.len(),
+        count,
+        "validate every measured and warmup output"
+    );
+    json!({"status": "passed", "outputs": evidence})
+}

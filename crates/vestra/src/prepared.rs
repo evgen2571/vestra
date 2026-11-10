@@ -81,12 +81,20 @@ const fn gcd(mut left: u64, mut right: u64) -> u64 {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PrepareOptions {
     backend: RenderBackendPreference,
+    resolution: Option<(u32, u32)>,
+    frame_rate: Option<FrameRate>,
+    quality: Option<crate::Quality>,
 }
 
 impl PrepareOptions {
     #[must_use]
     pub const fn new(backend: RenderBackendPreference) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            resolution: None,
+            frame_rate: None,
+            quality: None,
+        }
     }
     #[must_use]
     pub const fn backend(&self) -> RenderBackendPreference {
@@ -97,6 +105,34 @@ impl PrepareOptions {
         self.backend = backend;
         self
     }
+    #[must_use]
+    pub const fn resolution(&self) -> Option<(u32, u32)> {
+        self.resolution
+    }
+    #[must_use]
+    pub const fn frame_rate(&self) -> Option<FrameRate> {
+        self.frame_rate
+    }
+    #[must_use]
+    pub const fn quality(&self) -> Option<crate::Quality> {
+        self.quality
+    }
+    /// Sets output dimensions while preserving the authored composition geometry.
+    #[must_use]
+    pub const fn with_resolution(mut self, width: u32, height: u32) -> Self {
+        self.resolution = Some((width, height));
+        self
+    }
+    #[must_use]
+    pub const fn with_frame_rate(mut self, frame_rate: FrameRate) -> Self {
+        self.frame_rate = Some(frame_rate);
+        self
+    }
+    #[must_use]
+    pub const fn with_quality(mut self, quality: crate::Quality) -> Self {
+        self.quality = Some(quality);
+        self
+    }
 }
 
 /// Per-operation configuration for [`PreparedProject::render_video`].
@@ -104,6 +140,8 @@ impl PrepareOptions {
 pub struct PreparedVideoRenderRequest {
     output: PathBuf,
     overwrite: bool,
+    start: Duration,
+    end: Option<Duration>,
     progress_mode: vestra_progress::ProgressMode,
 }
 
@@ -113,6 +151,8 @@ impl PreparedVideoRenderRequest {
         Self {
             output: output.into(),
             overwrite: false,
+            start: Duration::ZERO,
+            end: None,
             progress_mode: vestra_progress::ProgressMode::Auto,
         }
     }
@@ -120,6 +160,20 @@ impl PreparedVideoRenderRequest {
     pub const fn with_overwrite(mut self, overwrite: bool) -> Self {
         self.overwrite = overwrite;
         self
+    }
+    #[must_use]
+    pub const fn with_range(mut self, start: Duration, end: Option<Duration>) -> Self {
+        self.start = start;
+        self.end = end;
+        self
+    }
+    #[must_use]
+    pub const fn start(&self) -> Duration {
+        self.start
+    }
+    #[must_use]
+    pub const fn end(&self) -> Option<Duration> {
+        self.end
     }
     #[must_use]
     pub fn output(&self) -> &std::path::Path {
@@ -223,6 +277,24 @@ impl Frame {
     #[must_use]
     pub fn into_bytes(self) -> Vec<u8> {
         self.pixels
+    }
+
+    /// Saves PNG, JPEG (over black), or lossless static WebP, selected by
+    /// extension. An existing destination requires `overwrite`.
+    #[expect(clippy::result_large_err, reason = "frame failures retain diagnostics")]
+    pub fn save(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        overwrite: bool,
+    ) -> Result<(), EditorError> {
+        vestra_media::save_frame(
+            path.as_ref(),
+            self.width,
+            self.height,
+            &self.pixels,
+            overwrite,
+        )
+        .map_err(|error| simple_error("VESTRA-FRAME-OUTPUT", &error.to_string()))
     }
 }
 
@@ -440,6 +512,27 @@ impl PreparedProject {
         self.render_frame_number(frame)
     }
 
+    /// Resolves `[start, end)` on the original rational frame grid. Both bounds
+    /// round up; omitted `end` uses the timeline end. Empty or out-of-range
+    /// selections are rejected without rendering a frame.
+    #[expect(
+        clippy::result_large_err,
+        reason = "range failures retain SDK diagnostics"
+    )]
+    pub fn frame_range(
+        &self,
+        start: Duration,
+        end: Option<Duration>,
+    ) -> Result<std::ops::Range<u64>, EditorError> {
+        resolve_frame_range(
+            start,
+            end,
+            self.report.duration,
+            self.report.frame_rate,
+            self.report.frame_count,
+        )
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "render failures retain diagnostics"
@@ -532,6 +625,8 @@ impl PreparedProject {
         // and failure context are captured per execution below.
         let operation_started = Instant::now();
         let output_path = request.output.clone();
+        let frame_range = self.frame_range(request.start, request.end)?;
+        let total_frames = frame_range.end - frame_range.start;
         let operation_id = OperationId::new();
         let render_span = tracing::info_span!(
             target: "vestra.render",
@@ -553,7 +648,7 @@ impl PreparedProject {
             actual_backend = self.report.selected_backend.as_str(),
             "render started"
         );
-        if lifecycle.started(Some(self.report.frame_count), &output_path)
+        if lifecycle.started(Some(total_frames), &output_path)
             == crate::RenderObserverControl::Cancel
             || cancellation.is_cancelled()
         {
@@ -567,7 +662,7 @@ impl PreparedProject {
             );
             return Err(prepared_cancelled_error(
                 operation_started,
-                self.report.frame_count,
+                total_frames,
                 output_path,
             ));
         }
@@ -584,11 +679,14 @@ impl PreparedProject {
             );
             return Err(prepared_cancelled_error(
                 operation_started,
-                self.report.frame_count,
+                total_frames,
                 output_path,
             ));
         }
         let render_request = application::RenderRequest {
+            resolution: None,
+            frame_range: (request.start != Duration::ZERO || request.end.is_some())
+                .then_some(frame_range),
             output_override: Some(request.output),
             overwrite: request.overwrite,
             preview: false,
@@ -707,6 +805,44 @@ fn preparation_report_warnings(
         warnings.push(crate::render::backend_fallback_warning(fallback));
     }
     crate::editor::Editor::operation_warnings(&warnings)
+}
+
+#[expect(
+    clippy::result_large_err,
+    reason = "range failures retain SDK diagnostics"
+)]
+pub(crate) fn resolve_frame_range(
+    start: Duration,
+    end: Option<Duration>,
+    duration: Duration,
+    rate: FrameRate,
+    frame_count: u64,
+) -> Result<std::ops::Range<u64>, EditorError> {
+    let end = end.unwrap_or(duration);
+    if start >= end || end > duration {
+        return Err(simple_error(
+            "VESTRA-RENDER-RANGE",
+            "range must satisfy 0 <= start < end <= project duration",
+        ));
+    }
+    let boundary = |time: Duration| {
+        vestra_core::timeline::frame_count(time.as_nanos(), rate.numerator(), rate.denominator())
+            .map_err(|_| {
+                simple_error(
+                    "VESTRA-RENDER-RANGE",
+                    "range boundary overflows the frame index",
+                )
+            })
+    };
+    let first = boundary(start)?;
+    let stop = boundary(end)?.min(frame_count);
+    if first >= stop {
+        return Err(simple_error(
+            "VESTRA-RENDER-RANGE",
+            "range contains no project frames",
+        ));
+    }
+    Ok(first..stop)
 }
 
 fn simple_error(code: &str, message: &str) -> EditorError {

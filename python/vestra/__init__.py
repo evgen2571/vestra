@@ -7,6 +7,7 @@ from ._native import (
     Category,
     Diagnostic,
     Editor,
+    ResourceLimits,
     Frame,
     FrameRate,
     FrameRenderError,
@@ -325,4 +326,5 @@ __all__ = [
     "PaletteMode",
     "DitherMatrix",
     "list_system_fonts",
+    "ResourceLimits",
 ]

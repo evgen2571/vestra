@@ -1,9 +1,53 @@
 # Add a backend
 
-A render backend is a cross-cutting implementation of the prepared/evaluated plan, not an alternate project format. It must implement `vestra-render-common`'s `RenderBackend` contract, accept shared prepared resources, render evaluated sources/effects/groups into owned RGBA output, report metrics and errors, and cooperate with the SDK frame loop through the `vestra-render` facade.
+A backend renders Vestra's prepared/evaluated plan. It implements the common
+[`RenderBackend` lifecycle](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-common/src/backend.rs),
+accepts shared prepared resources and returns owned RGBA frames. Start with the
+[CPU implementation](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-cpu/src/cpu/backend.rs)
+and compare [WGPU's implementation](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-wgpu/src/wgpu/backend.rs)
+when submissions can remain in flight.
 
-Use `vestra-render-cpu` and `vestra-render-wgpu` as the two current examples. Backend-specific preparation may allocate CPU surfaces or GPU textures. Shared immutable image/shape/text/glyph preparation belongs in common; backend code must not open project paths or repeat semantic validation. Capability policy belongs to each implementation, using common's kernel mapping/requirements. Frame submission must preserve layer/effect order, source adaptation, nested composition timing, cancellation checks and public frame ownership. Any asynchronous backend also needs bounded in-flight work and safe resource retirement.
+## Find the owners
 
-Wire selection/fallback through the renderer facade, which the SDK calls during preflight and preparation. Keep requested preference, selected backend and fallback distinct in `PreparationReport` and `RenderResult`. Define adapter/device information only where it has a truthful analogue. Errors must map to preparation/render diagnostics with enough stage context for reports, and progress events remain owned by the SDK render loop. Media consumes frame numbers and borrowed RGBA bytes through the SDK bridge; it must not depend on the backend or renderer contracts.
+| Responsibility | Location |
+| --- | --- |
+| Lifecycle, completed frames and shared assets | `crates/vestra-render-common/src/` |
+| Execution, capability policy and private resources | New implementation crate, following CPU/WGPU ownership |
+| Backend selection, availability and fallback | `crates/vestra-render/src/lib.rs` and facade features |
+| Preparation, frame scheduling and reports | `crates/vestra/src/` |
+| Frame sink and encoded-output lifetime | `crates/vestra-media/src/`; no backend dependency |
 
-Before documenting support, test canonical scenes through the new backend against the supported semantics, including source/effect coverage, nested compositions, output encoding, cancellation and fallback/unavailability. Document every missing feature as `unsupported`, `partially supported` or `not fully verified`; do not imply parity because the backend compiles.
+## Implement in order
+
+1. Implement the lifecycle and capability validation against common kernel
+   mapping/requirements. Shared immutable image/shape/text/glyph preparation
+   stays in common. The backend must not open project paths or repeat semantic
+   validation.
+2. Prepare private surfaces or device resources, then render evaluated sources,
+   effects and groups. Preserve source adaptation, composition-local timing,
+   layer/effect order, masks/mattes, alpha and public frame ownership. Report
+   metrics and errors. An asynchronous implementation also needs bounded
+   in-flight work and completion-safe resource retirement.
+3. Wire selection and fallback through the facade, which the SDK calls during
+   preflight/preparation. Keep requested preference, selected backend and
+   fallback distinct in `PreparationReport` and `RenderResult`. Add truthful
+   adapter/device information only where it has an analogue.
+4. Map failures to preparation/render diagnostics with stage context. SDK
+   orchestration keeps progress events, cancellation checks and the bridge from
+   owned frames to media's borrowed RGBA writes. Do not add a renderer dependency
+   to media.
+
+## Verify and document
+
+Test lifecycle/capacity, retained output ownership, cancellation, resource reuse,
+fallback and unavailable-backend errors. Render canonical scenes covering each
+claimed source/effect, nested compositions and encoded output. Add facade feature
+isolation checks and update public selection/reference documentation; use
+[Testing](../testing.md#backend-feature-isolation) and
+[media verification](../media-pipeline.md#verify-encoded-output).
+
+The change is ready when demonstrated semantics and the support matrix agree.
+State missing coverage as `unsupported`, `partially supported` or
+`not fully verified` as appropriate. Compilation alone does not establish parity;
+use [GPU validation](../gpu-validation.md#understand-the-test-evidence) for
+adapter evidence and rendered-output inspection.

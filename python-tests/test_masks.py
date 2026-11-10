@@ -509,7 +509,7 @@ def test_video_track_matte_uses_matte_layer_timing(tmp_path: Path) -> None:
 def test_spectrum_mask_reuses_audio_analysis_and_cpu_wgpu_parity() -> None:
     def make_project() -> Project:
         project = Project(size=(32, 32), fps=1, duration=1, base_directory=ROOT)
-        project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
         layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
         layer.masks.add(
             Spectrum2D(band_count=8), operation=MaskOperation.REPLACE,
@@ -722,12 +722,12 @@ def test_image_masks_render_on_cpu_and_wgpu() -> None:
     project = Project(size=(32, 32), fps=1, duration=1, base_directory=ROOT)
     layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
     layer.masks.add(
-        Image("examples/assets/green.png"),
+        Image("assets/fixtures/green.png"),
         mode=MaskCoverageMode.ALPHA,
         feather=4,
     )
     layer.masks.add(
-        Image("examples/assets/blue.png"),
+        Image("assets/fixtures/blue.png"),
         mode=MaskCoverageMode.LUMA,
         operation=MaskOperation.UNION,
     )
@@ -1146,7 +1146,7 @@ def test_mask_uniform_scale_signal_is_evaluated_at_render_time() -> None:
         project.audio.signal.rms().remap(input=(0, 1), output=(0.2, 2.0)),
         operation="replace",
     )
-    clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip = project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
     clip.set_gain_automation([
         AudioGainKeyframe(0, 0),
         AudioGainKeyframe(0.5, 1),
@@ -1166,7 +1166,7 @@ def test_group_child_opacity_signal_is_evaluated_at_render_time() -> None:
         operation="replace",
     )
     layer.masks.add(group, operation=MaskOperation.REPLACE)
-    clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip = project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
     clip.set_gain_automation([
         AudioGainKeyframe(0, 0),
         AudioGainKeyframe(0.5, 1),
@@ -1188,7 +1188,7 @@ def test_group_child_uniform_scale_signal_cpu_wgpu_parity() -> None:
             operation="replace",
         )
         layer.masks.add(group, operation=MaskOperation.REPLACE)
-        project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
         return project
 
     cpu = _render(make_project(), "cpu", seconds=0.75)
@@ -1204,7 +1204,7 @@ def test_mask_strength_signal_is_evaluated_at_render_time() -> None:
         project.audio.signal.rms().remap(input=(0, 1), output=(0.1, 1.0)),
         operation="replace",
     )
-    clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip = project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
     clip.set_gain_automation([
         AudioGainKeyframe(0, 0),
         AudioGainKeyframe(0.5, 1),
@@ -1227,7 +1227,7 @@ def test_group_child_rotation_and_effect_signals_change_owned_mask_output() -> N
                 project.audio.signal.rms(), operation="replace"
             )
         layer.masks.add(group, operation=MaskOperation.REPLACE)
-        clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        clip = project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
         clip.set_gain_automation([
             AudioGainKeyframe(0, 0),
             AudioGainKeyframe(0.5, 1),
@@ -1251,7 +1251,7 @@ def test_mask_feather_and_rotation_signals_change_rendered_output() -> None:
             mask.feather.bind(project.audio.signal.rms(), operation="replace")
         else:
             mask.transform.rotation.bind(project.audio.signal.rms(), operation="replace")
-        clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+        clip = project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
         clip.set_gain_automation([
             AudioGainKeyframe(0, 0),
             AudioGainKeyframe(0.5, 1),

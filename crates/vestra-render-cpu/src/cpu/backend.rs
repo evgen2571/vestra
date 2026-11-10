@@ -619,8 +619,12 @@ pub(crate) fn automatic_worker_count(plan: &RenderPlan, available_parallelism: u
     }
     let available = available_parallelism.max(1);
     let cpu_limit = if available > 1 { available - 1 } else { 1 };
-    // shortcut: preserve the legacy heuristic until whole-operation admission exists.
+    // shortcut: budget the largest canvas with the legacy heuristic until whole-operation admission exists.
     let legacy_worker_bytes = super::memory::frame_bytes(plan.canvas.width, plan.canvas.height)
+        .max(super::memory::largest_group_canvas_bytes(
+            &plan.layers,
+            plan.canvas,
+        ))
         .saturating_mul(LEGACY_RGBA_FRAMES_PER_WORKER);
     let memory_limit = LEGACY_AUTO_CPU_FRAME_MEMORY_BUDGET_BYTES
         .checked_div(legacy_worker_bytes)
@@ -688,5 +692,5 @@ impl CpuBackend {
 mod tests;
 
 #[cfg(test)]
-#[path = "work_elimination_benchmarks.rs"]
+#[path = "../../../../benchmarks/rust/cpu/work_elimination_benchmarks.rs"]
 mod work_elimination_benchmarks;

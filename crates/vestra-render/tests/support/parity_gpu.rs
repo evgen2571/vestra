@@ -120,7 +120,7 @@ fn render_project_parity(
     assets.insert("tone".to_owned(), std::path::PathBuf::from("tone.wav"));
     assets.insert(
         "blue".to_owned(),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets/blue.png"),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixtures/blue.png"),
     );
     let mut durations = std::collections::BTreeMap::new();
     durations.insert("tone".to_owned(), 2.0);
@@ -155,6 +155,61 @@ fn render_project_parity(
         "Group parity exceeded tolerance {tolerance}: {difference:?}"
     );
     Some(gpu_output)
+}
+
+#[test]
+fn gpu_motion_tile_preserves_matched_anchor_coverage_at_every_extent() {
+    for mirror_edges in [false, true] {
+        for anchor in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            for extent in [100.0, 200.0, 400.0] {
+                let position = 0.15 + 0.7 * anchor;
+                let project = serde_json::from_value(json!({
+                "schema_version": 1,
+                "output": {
+                    "path": "motion-tile-anchor.mp4", "width": 640, "height": 360,
+                    "frame_rate": "24/1", "background": "#ff00ff", "quality": "preview",
+                    "audio": false, "duration_mode": "explicit", "duration": 1.0
+                },
+                "assets": [],
+                "visual": {"clips": [{
+                    "id": "layer", "source": {
+                        "type": "shape", "geometry": {"type": "rectangle", "width": 640.0, "height": 360.0},
+                        "fill": "#93cbb5"
+                    },
+                    "start": 0.0, "duration": 1.0, "layer": 0,
+                    "opacity": {"base_value": 1.0},
+                    "transform": {
+                        "position": {"base_value": {"x": position, "y": position}},
+                        "anchor": {"base_value": {"x": anchor, "y": anchor}},
+                        "scale": {"base_value": {"x": 0.7, "y": 0.7}}
+                    },
+                    "effects": [{
+                        "id": "tile", "type": "motion_tile",
+                        "output_width_percent": {"base_value": extent},
+                        "output_height_percent": {"base_value": extent},
+                        "tile_center": {"base_value": {"x": 0.5, "y": 0.5}},
+                        "mirror_edges": mirror_edges
+                    }]
+                }], "transitions": [], "flashes": [], "post_effects": []}
+            })).expect("Motion Tile anchor reproduction parses");
+                let Some(output) = render_project_parity(project, 0, 0) else {
+                    return;
+                };
+                for (x, y, pixel) in output.enumerate_pixels() {
+                    let expected =
+                        if extent > 100.0 || ((96..544).contains(&x) && (54..306).contains(&y)) {
+                            image::Rgba([147, 203, 181, 255])
+                        } else {
+                            image::Rgba([255, 0, 255, 255])
+                        };
+                    assert_eq!(
+                        *pixel, expected,
+                        "anchor={anchor}, extent={extent}, mirror={mirror_edges}, ({x},{y})"
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
@@ -218,6 +273,27 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
                 "transform": transform((0.52, 0.5), (0.9, 0.9), -9.0)
             }
         ]),
+        "group-tile" => json!([
+            {
+                "id": "group", "source": {"type": "group", "clips": [
+                    {
+                        "id": "left", "source": {"type": "shape", "geometry": {
+                            "type": "rectangle", "width": 16.0, "height": 32.0
+                        }, "fill": "#ff0000"}, "layer": 0,
+                        "transform": transform((0.25, 0.5), (1.0, 1.0), 0.0),
+                        "start": 0.0, "duration": 1.0, "opacity": {"base_value": 1.0}
+                    },
+                    {
+                        "id": "right", "source": {"type": "shape", "geometry": {
+                            "type": "rectangle", "width": 16.0, "height": 32.0
+                        }, "fill": "#0000ff"}, "layer": 1,
+                        "transform": transform((0.75, 0.5), (1.0, 1.0), 0.0),
+                        "start": 0.0, "duration": 1.0, "opacity": {"base_value": 1.0}
+                    }
+                ]}, "layer": 0, "effects": [tile],
+                "transform": transform((0.5, 0.5), (0.7, 0.7), 0.0)
+            }
+        ]),
         "cross-stage" => json!([
             {
                 "id": "consumer", "source": image, "layer": 0,
@@ -247,6 +323,11 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
             clip
         })
         .collect::<Vec<_>>();
+    let assets = if variant == "group-tile" {
+        Vec::new()
+    } else {
+        vec![json!({"id": "blue", "type": "image", "source": "assets/fixtures/blue.png"})]
+    };
     serde_json::from_value(json!({
         "schema_version": 1,
         "output": {
@@ -254,7 +335,7 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
             "frame_rate": "24/1", "background": "#00000000", "quality": "preview",
             "audio": false, "duration_mode": "explicit", "duration": 1.0
         },
-        "assets": [{"id": "blue", "type": "image", "source": "examples/assets/blue.png"}],
+        "assets": assets,
         "visual": {"clips": clips, "transitions": [], "flashes": [], "post_effects": []}
     }))
     .unwrap_or_else(|error| panic!("{variant} MotionTile parity project parses: {error}"))
@@ -262,13 +343,24 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
 
 #[test]
 fn gpu_motion_tile_matches_cpu_through_masks_mattes_groups_and_cross_stage_order() {
-    for variant in ["owned-mask", "track-matte", "group", "cross-stage"] {
+    for variant in [
+        "owned-mask",
+        "track-matte",
+        "group",
+        "group-tile",
+        "cross-stage",
+    ] {
         let output = render_project_parity(motion_tile_parity_project(variant), 0, 3);
         if let Some(output) = output {
             assert!(
                 output.pixels().any(|pixel| pixel[3] > 0),
                 "{variant} MotionTile parity case should produce visible pixels"
             );
+            if variant == "group-tile" {
+                assert!(output.pixels().all(|pixel| pixel[3] == 255));
+                assert_eq!(*output.get_pixel(12, 16), image::Rgba([255, 0, 0, 255]));
+                assert_eq!(*output.get_pixel(20, 16), image::Rgba([0, 0, 255, 255]));
+            }
         }
     }
 }
@@ -917,6 +1009,8 @@ fn gpu_spectrum2d_matches_cpu_for_fractional_zero_gap_bars() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let frame = spectrum_frame(vec![1.0, 1.0, 1.0], 0.0);
@@ -954,6 +1048,8 @@ fn gpu_spectrum2d_brightness_matches_cpu_without_double_application() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
@@ -976,6 +1072,8 @@ fn gpu_spectrum2d_brightness_then_bloom_matches_cpu() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
@@ -1011,6 +1109,8 @@ fn gpu_spectrum2d_frames_keep_distinct_in_flight_band_data() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let frames = [
@@ -1050,6 +1150,8 @@ fn gpu_spectrum2d_layout_and_style_cases_match_cpu() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 32;
     plan.canvas.height = 32;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     spectrum_style_cases(|frame, name, tolerance| {
@@ -1069,6 +1171,8 @@ fn gpu_spectrum2d_uses_the_existing_bloom_pipeline() {
     let mut base_plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     base_plan.canvas.width = 10;
     base_plan.canvas.height = 4;
+    base_plan.canvas.logical_width = base_plan.canvas.width;
+    base_plan.canvas.logical_height = base_plan.canvas.height;
     base_plan.compilation.effect_pass_count = 0;
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
     let without_plan = base_plan.clone();
@@ -1273,6 +1377,8 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 173;
     plan.canvas.height = 129;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     let mut upper = plan.layers[0].clone();
     upper.id = "overlapping-rgba-layer".to_owned();
     upper.opacity = vestra_core::plan::CompiledScalarProperty::authored(Track::new(1.0));
@@ -1715,6 +1821,8 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
     // partial-alpha, sharp-edge, and nonuniform-colour source pixels.
     plan.canvas.width = 173;
     plan.canvas.height = 129;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     // Preparation allocates every reusable working role the cases below use.
     plan.layers[0].effects = vec![TimedEffect {
         start: 0,

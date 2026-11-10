@@ -28,7 +28,15 @@ Character sets, sort directions and Bayer matrix choices are discrete. Animate
 provide corresponding lossless CPU/WGPU frames, contact sheets and metrics.
 
 Source generation and project code are original MIT-licensed work. The custom
-font's license is recorded in [asset credits](../ASSETS.md).
+ASCII example uses `tests/assets/VestraTest-Regular.ttf`, a DejaVu-derived face.
+Keep its complete [Bitstream Vera/DejaVu notice](../../../tests/assets/VestraTest-Regular.ttf.license)
+when redistributing that font file; rendered glyph images are distinct from the
+font source. The ordinary ASCII effect uses the [embedded face's notice](../../../crates/vestra-render-common/assets/DejaVuSans.LICENSE).
+
+The fine-detail reference generates its synthetic portrait, hair/cloth texture
+and periodic motion locally; it does not redistribute the AcerolaFX screenshot.
+The blue-noise tile is original MIT-licensed project work, reproducible with
+`scripts/generate-blue-noise.py`; no third-party texture or shader is included.
 
 Compare fine Bayer and blue noise over the same generated footage with
 `--look dither` and `--look dither-blue-noise`. Use `--palette mono`, `ember`,

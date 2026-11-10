@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 
-use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyType};
+use pyo3::{
+    exceptions::{PyRuntimeError, PyValueError},
+    prelude::*,
+    types::PyType,
+};
 use vestra::{
     BackendPreference as NativeBackendPreference, Editor as NativeEditor,
     PreflightOptions as NativePreflightOptions,
@@ -10,6 +14,58 @@ use crate::{
     PyInspectionReport, PyPreflightReport, PyProject, PyValidationReport, conversion, editor_error,
     prepared, render,
 };
+
+#[pyclass(
+    name = "ResourceLimits",
+    frozen,
+    skip_from_py_object,
+    module = "vestra._native"
+)]
+#[derive(Clone)]
+pub(crate) struct PyResourceLimits {
+    inner: vestra::ResourceLimits,
+}
+
+#[pymethods]
+impl PyResourceLimits {
+    #[new]
+    #[pyo3(signature = (*, maximum_group_width = None, maximum_group_height = None, maximum_group_pixels = None))]
+    fn new(
+        maximum_group_width: Option<&Bound<'_, PyAny>>,
+        maximum_group_height: Option<&Bound<'_, PyAny>>,
+        maximum_group_pixels: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
+        let mut inner = vestra::ResourceLimits::default();
+        if let Some(value) = maximum_group_width {
+            inner.maximum_group_width =
+                u32::try_from(prepared::u64_from_python(value, "maximum_group_width")?).map_err(
+                    |_| PyValueError::new_err("maximum_group_width is outside the u32 range"),
+                )?;
+        }
+        if let Some(value) = maximum_group_height {
+            inner.maximum_group_height =
+                u32::try_from(prepared::u64_from_python(value, "maximum_group_height")?).map_err(
+                    |_| PyValueError::new_err("maximum_group_height is outside the u32 range"),
+                )?;
+        }
+        if let Some(value) = maximum_group_pixels {
+            inner.maximum_group_pixels = prepared::u64_from_python(value, "maximum_group_pixels")?;
+        }
+        Ok(Self { inner })
+    }
+    #[getter]
+    fn maximum_group_width(&self) -> u32 {
+        self.inner.maximum_group_width
+    }
+    #[getter]
+    fn maximum_group_height(&self) -> u32 {
+        self.inner.maximum_group_height
+    }
+    #[getter]
+    fn maximum_group_pixels(&self) -> u64 {
+        self.inner.maximum_group_pixels
+    }
+}
 #[pyclass(
     name = "Editor",
     frozen,
@@ -21,13 +77,29 @@ pub(crate) struct PyEditor {
     inner: NativeEditor,
 }
 
+impl PyEditor {
+    fn runtime_editor(&self, py: Python<'_>) -> PyResult<NativeEditor> {
+        let executable: PathBuf = py
+            .import("vestra._ffmpeg")?
+            .getattr("resolve_ffmpeg")?
+            .call0()?
+            .extract()?;
+        Ok(self.inner.clone().with_ffmpeg_executable(executable))
+    }
+}
+
 #[pymethods]
 impl PyEditor {
     #[new]
-    fn new() -> Self {
-        Self {
-            inner: NativeEditor::new(),
-        }
+    #[pyo3(signature = (*, resource_limits = None))]
+    fn new(resource_limits: Option<&PyResourceLimits>) -> PyResult<Self> {
+        let limits =
+            resource_limits.map_or_else(vestra::ResourceLimits::default, |value| value.inner);
+        let inner = NativeEditor::builder()
+            .resource_limits(limits)
+            .build()
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(Self { inner })
     }
     fn validate(&self, py: Python<'_>, project: &PyProject) -> PyValidationReport {
         PyValidationReport::from(py.detach(|| self.inner.validate(&project.inner)))
@@ -37,10 +109,15 @@ impl PyEditor {
         py: Python<'_>,
         project: &PyProject,
         options: &PyPreflightOptions,
-    ) -> PyPreflightReport {
-        PyPreflightReport::from(
-            py.detach(|| self.inner.preflight(&project.inner, options.inner.clone())),
-        )
+    ) -> PyResult<PyPreflightReport> {
+        let editor = if options.kind == "inspection" {
+            self.inner.clone()
+        } else {
+            self.runtime_editor(py)?
+        };
+        Ok(PyPreflightReport::from(py.detach(|| {
+            editor.preflight(&project.inner, options.inner.clone())
+        })))
     }
     #[pyo3(signature = (project, *, preview = false))]
     #[expect(
@@ -70,12 +147,13 @@ impl PyEditor {
         project: &PyProject,
         options: Option<&prepared::PyPrepareOptions>,
     ) -> PyResult<prepared::PyPreparedProject> {
+        let editor = self.runtime_editor(py)?;
         let options = options.map_or_else(vestra::PrepareOptions::default, |value| value.inner);
         match py.detach(|| {
             if !prepared::wait_for_test_barrier() {
                 return Err(None);
             }
-            self.inner.prepare(&project.inner, options).map_err(Some)
+            editor.prepare(&project.inner, options).map_err(Some)
         }) {
             Ok(value) => Ok(prepared::PyPreparedProject::new(value)),
             Err(Some(error)) => prepared::preparation_error(py, error),
@@ -95,9 +173,10 @@ impl PyEditor {
         on_progress: Option<Py<PyAny>>,
         cancellation: Option<&render::PyCancellationToken>,
     ) -> PyResult<render::PyRenderResult> {
+        let editor = self.runtime_editor(py)?;
         render::render_one_shot(
             py,
-            &self.inner,
+            &editor,
             &project.inner,
             request,
             show_progress,

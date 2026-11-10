@@ -29,7 +29,19 @@ pub(in crate::wgpu) fn encode_parameters(
     particle_instances.clear();
     particle_upload_bytes.clear();
     particle_uploads.clear();
-    for operation in &mut plan.operations {
+    let mut local_frame = EvaluatedFrame {
+        time: frame.time,
+        background: frame.background,
+        width: frame.width,
+        height: frame.height,
+        layers: Vec::new(),
+        post_effects: Vec::new(),
+        evaluated_track_count: 0,
+    };
+    for (operation, &(width, height)) in plan.operations.iter_mut().zip(&plan.extents) {
+        local_frame.width = width;
+        local_frame.height = height;
+        let frame = &local_frame;
         match operation {
             GpuOperation::ClearCanvas { destination, .. } => {
                 arena.push(&LayerParameters {
@@ -72,14 +84,30 @@ pub(in crate::wgpu) fn encode_parameters(
                 source_layer,
                 ..
             } => {
+                let owner_extent = if parent_matte(
+                    &plan.layers[*layer_index],
+                    plan.local_mask_rules[*layer_index],
+                    *mask_index,
+                ) {
+                    (frame.width, frame.height)
+                } else {
+                    mask_extent(&plan.layers[*layer_index], (frame.width, frame.height))
+                };
+                let mask_frame = EvaluatedFrame {
+                    width: owner_extent.0,
+                    height: owner_extent.1,
+                    layers: Vec::new(),
+                    post_effects: Vec::new(),
+                    ..local_frame.clone()
+                };
                 let mask = &plan.layers[*layer_index].masks[*mask_index];
                 let intrinsic = if *source_layer {
-                    crate::render::geometry::IntrinsicSize::new(frame.width, frame.height)
+                    crate::render::geometry::IntrinsicSize::new(owner_extent.0, owner_extent.1)
                 } else {
                     sources.raster_textures[*source_index].intrinsic_size
                 };
                 let mut parameters = parameters::raster(
-                    frame,
+                    &mask_frame,
                     intrinsic,
                     crate::domain::Crop {
                         x: 0.0,
@@ -101,6 +129,10 @@ pub(in crate::wgpu) fn encode_parameters(
                     vestra_core::plan::ColourTransform::default(),
                     None,
                 );
+                parameters.header[0] = frame.width.max(owner_extent.0);
+                parameters.header[1] = frame.height.max(owner_extent.1);
+                parameters.header[2] = owner_extent.0;
+                parameters.effective[3] = owner_extent.1 as f32;
                 parameters.header[3] = match mask.input {
                     vestra_core::plan::EvaluatedMaskInput::Shape { .. } => 3,
                     vestra_core::plan::EvaluatedMaskInput::Image { mode, .. } => match mode {
@@ -118,13 +150,30 @@ pub(in crate::wgpu) fn encode_parameters(
                 layer_index,
                 mask_index,
                 horizontal,
+                transform_owner,
                 ..
             } => {
-                let radius = plan.layers[*layer_index].masks[*mask_index].feather;
-                arena.push(&parameters::mask_feather(frame, radius, *horizontal))?;
+                let mask = &plan.layers[*layer_index].masks[*mask_index];
+                let owner = transform_owner.then(|| {
+                    parameters::mask(
+                        frame,
+                        mask,
+                        mask.owner_transform
+                            .unwrap_or(plan.layers[*layer_index].transform),
+                        mask_extent(&plan.layers[*layer_index], (frame.width, frame.height)),
+                        true,
+                    )
+                });
+                arena.push(&parameters::mask_feather(
+                    frame,
+                    mask.feather,
+                    *horizontal,
+                    owner,
+                    plan.local_mask_rules[*layer_index],
+                ))?;
             }
             GpuOperation::RenderSurfaceLayer { layer_index, .. } => {
-                let vestra_core::plan::EvaluatedSource::Group { .. } =
+                let vestra_core::plan::EvaluatedSource::Group { composition } =
                     &plan.layers[*layer_index].source
                 else {
                     unreachable!("surface frame operation must reference a Group source")
@@ -135,6 +184,7 @@ pub(in crate::wgpu) fn encode_parameters(
                 // ApplyEffect.
                 arena.push(&parameters::surface(
                     frame,
+                    (composition.width, composition.height),
                     plan.layers[*layer_index].transform,
                     vestra_core::plan::ColourTransform::default(),
                     parameters::motion_tile(&plan.layers[*layer_index].effects),
@@ -306,24 +356,39 @@ pub(in crate::wgpu) fn encode_parameters(
                 layer_index,
                 mask_index,
                 ..
-            } => {
-                let encoded = parameters::mask(
-                    frame,
-                    &plan.layers[*layer_index].masks[*mask_index],
-                    plan.layers[*layer_index].transform,
-                    *mask_index == 0,
-                );
-                arena.push(&encoded)?;
             }
-            GpuOperation::UpdateMaskCoverage {
+            | GpuOperation::UpdateMaskCoverage {
                 layer_index,
                 mask_index,
                 ..
             } => {
+                let presented = plan.local_mask_rules[*layer_index]
+                    && (plan.layers[*layer_index].masks[*mask_index].feather > 0.0
+                        || parent_matte(
+                            &plan.layers[*layer_index],
+                            plan.local_mask_rules[*layer_index],
+                            *mask_index,
+                        ));
+                let transform = if presented {
+                    crate::animation::Transform2D::identity(
+                        crate::domain::Point { x: 0.5, y: 0.5 },
+                        crate::domain::Point { x: 0.5, y: 0.5 },
+                    )
+                } else {
+                    plan.layers[*layer_index].masks[*mask_index]
+                        .owner_transform
+                        .unwrap_or(plan.layers[*layer_index].transform)
+                };
+                let extent = if presented {
+                    (frame.width, frame.height)
+                } else {
+                    mask_extent(&plan.layers[*layer_index], (frame.width, frame.height))
+                };
                 let encoded = parameters::mask(
                     frame,
                     &plan.layers[*layer_index].masks[*mask_index],
-                    plan.layers[*layer_index].transform,
+                    transform,
+                    extent,
                     *mask_index == 0,
                 );
                 arena.push(&encoded)?;
@@ -337,6 +402,21 @@ pub(in crate::wgpu) fn encode_parameters(
         }
     }
     Ok(())
+}
+
+fn parent_matte(
+    layer: &vestra_core::plan::EvaluatedLayer,
+    local_rules: bool,
+    mask_index: usize,
+) -> bool {
+    local_rules && layer.matte.is_some() && mask_index + 1 == layer.masks.len()
+}
+
+fn mask_extent(layer: &vestra_core::plan::EvaluatedLayer, parent_extent: (u32, u32)) -> (u32, u32) {
+    match &layer.source {
+        EvaluatedSource::Group { composition } => (composition.width, composition.height),
+        _ => parent_extent,
+    }
 }
 
 const fn blend_mode(mode: BlendMode) -> u32 {
@@ -427,5 +507,42 @@ mod tests {
             std::mem::size_of::<parameters::GaussianBlurParameters>()
                 < std::mem::size_of::<LayerParameters>()
         );
+    }
+}
+
+#[cfg(test)]
+mod sized_group_tests {
+    use super::*;
+    use crate::{animation::Transform2D, domain::Point};
+
+    #[test]
+    fn group_surface_sampling_uses_source_extent_and_parent_placement() {
+        let frame = EvaluatedFrame {
+            time: 0,
+            background: [0; 4],
+            width: 4,
+            height: 4,
+            layers: Vec::new(),
+            post_effects: Vec::new(),
+            evaluated_track_count: 0,
+        };
+        let transform = Transform2D {
+            position: Point { x: 0.5, y: 0.5 },
+            anchor: Point { x: 0.5, y: 0.5 },
+            scale: Point { x: 0.5, y: 0.5 },
+            rotation_radians: 0.0,
+        };
+        let parameters = parameters::surface(
+            &frame,
+            (8, 6),
+            transform,
+            vestra_core::plan::ColourTransform::default(),
+            None,
+        );
+        assert_eq!(&parameters.header[..2], &[4, 4]);
+        assert_eq!(&parameters.source[..2], &[8, 6]);
+        assert_eq!(&parameters.effective[..2], &[8.0, 6.0]);
+        assert_eq!(&parameters.inverse_row0[..3], &[2.0, 0.0, 0.0]);
+        assert_eq!(&parameters.inverse_row1[..3], &[-0.0, 2.0, -1.0]);
     }
 }

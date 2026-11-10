@@ -20,9 +20,9 @@ def builder(**changes: object) -> ProjectBuilder:
 
 def test_assets_clips_and_audio_serialize_in_registration_order() -> None:
     authored = builder(output_audio=True)
-    image = authored.add_image_asset("examples/assets/red.png")
-    audio = authored.add_audio_asset(Path("examples/assets/tone.wav"))
-    second_image = authored.add_image_asset("examples/assets/blue.png")
+    image = authored.add_image_asset("assets/fixtures/red.png")
+    audio = authored.add_audio_asset(Path("assets/fixtures/tone.wav"))
+    second_image = authored.add_image_asset("assets/fixtures/blue.png")
     clip = authored.add_image_clip(source=image, start=0, duration=1, layer=0, sizing=Sizing.fit())
     solid = authored.add_solid_color_clip(colour="#112233", start=1, duration=1, layer=-1)
     clip.transform.position.base_value = Point(0.25, 0.75)
@@ -83,8 +83,8 @@ def test_mutation_is_validated_and_snapshots_are_isolated() -> None:
 
 def test_cpu_frame_and_video_cover_solid_image_and_audio(tmp_path: Path) -> None:
     authored = builder(base_directory=Path.cwd(), duration=None, output_audio=True)
-    image = authored.add_image_asset("examples/assets/red.png")
-    audio = authored.add_audio_asset("examples/assets/tone.wav")
+    image = authored.add_image_asset("assets/fixtures/red.png")
+    audio = authored.add_audio_asset("assets/fixtures/tone.wav")
     authored.add_solid_color_clip(colour="#0000ff", start=0, duration=0.2, layer=0)
     authored.add_image_clip(source=image, start=0, duration=0.2, layer=1, sizing=Sizing.stretch(width=160, height=90))
     authored.audio.add_track().add_clip(asset=audio, start=0, trim_end=0.2)

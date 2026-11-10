@@ -717,3 +717,65 @@ fn video_requirements_charge_each_compiled_video_slot_once() {
     assert_eq!(estimates.source_texture_count, 2);
     assert_eq!(estimates.source_texture_bytes, 16);
 }
+
+#[test]
+fn sized_group_requirements_include_large_canvases_in_owned_source_masks() {
+    let (mut plan, decoded) = nested_group_requirements(1, false);
+    let vestra_core::plan::CompiledVisualSource::Group(group) = &mut plan.layers[0].source else {
+        panic!("expected group");
+    };
+    std::sync::Arc::make_mut(group).size = Some(vestra_core::project::GroupSize {
+        width: 600.25,
+        height: 300.5,
+    });
+    let sized_source = plan.layers[0].source.clone();
+    let vestra_core::plan::CompiledVisualSource::Group(group) = &mut plan.layers[0].source else {
+        unreachable!();
+    };
+    std::sync::Arc::make_mut(group).size = None;
+    let transform = plan.layers[0].transform.clone();
+    plan.layers[0].masks.push(vestra_core::plan::CompiledMask {
+        input: vestra_core::plan::CompiledMaskInput::Source {
+            source: Box::new(sized_source),
+            mode: crate::project::MaskCoverageMode::Alpha,
+        },
+        operation: crate::project::MaskOperation::Intersect,
+        invert: false,
+        strength: scalar(Track::new(1.0)),
+        feather: scalar(Track::new(0.0)),
+        transform,
+    });
+    let requirements = GpuRequirements::from_plan(
+        &plan,
+        &decoded,
+        std::mem::size_of::<LayerParameters>() as u32,
+    )
+    .unwrap();
+    assert_eq!(requirements.max_texture_dimension_2d, 601);
+    assert!(
+        requirements
+            .requested_device_limits(
+                &plan,
+                &wgpu::Limits {
+                    max_compute_workgroups_per_dimension: 75,
+                    ..wgpu::Limits::default()
+                }
+            )
+            .is_err()
+    );
+    let estimates = requirements.resource_estimates(256).unwrap();
+    assert_eq!(estimates.layer_texture_bytes, 601 * 301 * 4);
+    assert_eq!(estimates.canvas_texture_bytes, 4 * 4 * 4 * 2);
+    assert_eq!(estimates.packed_frame_bytes, 4 * 4 * 4);
+    assert!(
+        requirements
+            .requested_device_limits(
+                &plan,
+                &wgpu::Limits {
+                    max_texture_dimension_2d: 600,
+                    ..wgpu::Limits::default()
+                }
+            )
+            .is_err()
+    );
+}

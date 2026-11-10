@@ -6,7 +6,7 @@ Diagnostics are structured values with a project-owned `VESTRA-*` code.
 | --- | --- |
 | `severity` | `fatal` or `warning`. |
 | `category` | `usage`, `project`, `semantic`, `asset`, `media`, `backend`, `render`, `output`, `cancellation`, or `internal`. |
-| `code` | Stable-looking machine identifier in the `VESTRA-` namespace. Consumers should match documented codes, not message text. |
+| `code` | Machine-readable identifier in the `VESTRA-` namespace. Consumers should match documented codes, not message text. |
 | `message` | Human-readable explanation. |
 | `pointer` | Optional JSON pointer to the related field. |
 | `related_id` | Optional project object identifier. |
@@ -18,6 +18,8 @@ attributes. CLI human output formats them for people. CLI JSON results and
 reports serialize diagnostics, errors, and warnings where the command has
 them.
 
+## Video timing locations
+
 Video source-span preflight failures use `VESTRA-VIDEO-TIMING` and name the
 owning clip in the message. Their pointer follows the canonical clip tree,
 including every nested group's `/source/clips/{index}`. For example,
@@ -27,9 +29,22 @@ Owned video masks point to `/masks/{index}/input/source` under their owning clip
 Children of owned Group masks continue through `/input/source/clips/{index}`,
 including any further nested groups or masks.
 
+## Frame and range errors
+
+Still-image saving reports `VESTRA-FRAME-OUTPUT` through Python's
+`FrameRenderError` when the extension, destination, encoding or final write
+fails. An existing destination is preserved if encoding or writing fails.
+Continuous image sequences and selected video ranges report `VESTRA-RENDER-RANGE`
+for reversed, out-of-timeline or empty frame ranges. These checks use the
+prepared rational frame grid before producing output.
+
+## Diagnostics, logs and progress
+
 Tracing/logging is operational observability. `RenderEvent` progress describes
 operation state. Diagnostics and errors are structured, actionable failures;
 JSON progress is not a diagnostics stream and does not carry warnings.
+
+## Code stability
 
 Codes are part of the current diagnostic contract, but the project does not
 promise that every code is an eternal catalog. Treat codes as identifiers and

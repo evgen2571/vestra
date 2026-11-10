@@ -12,7 +12,7 @@ from benchmarks.comparisons.moviepy.workloads import (
     workload,
 )
 from benchmarks.collector.fixtures import frame_at
-from scripts.benchmark import ROOT, require_backend
+from benchmarks.benchmark import ROOT, require_backend
 
 
 def definition(duration, width=640, height=360):
@@ -20,8 +20,8 @@ def definition(duration, width=640, height=360):
         raise ValueError(
             "duration must be positive, at most 7200s, and a whole number of frames"
         )
-    result = workload("layered", width, height)
-    result.update(name="sustained-v1", duration=duration)
+    result = workload("layered", width, height, fps=30)
+    result.update(name="sustained", duration=duration)
     # Two moving placements with a transform, opacity, and animated position.
     # Both read the same long source; no static-frame or encoded-video shortcut.
     result["clips"] = result["clips"][:2]
@@ -146,7 +146,7 @@ def run(
             record["measurement"] = execute(
                 [
                     python,
-                    str(ROOT / "scripts/collect-benchmarks.py"),
+                    str(ROOT / "benchmarks/collect.py"),
                     "--worker",
                     "sustained",
                     "--request",

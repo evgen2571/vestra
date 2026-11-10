@@ -19,6 +19,7 @@ const MIX_SAMPLE_RATE: u64 = MASTER_AUDIO_SAMPLE_RATE as u64;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AudioGraphCompileOptions {
     pub(crate) first_audio_input_index: usize,
+    pub(crate) output_range: Option<(f64, f64)>,
 }
 
 #[derive(Debug)]
@@ -54,6 +55,7 @@ pub(crate) fn compile(
         mix,
         project_duration,
         AudioGraphCompileOptions {
+            output_range: None,
             first_audio_input_index: 0,
         },
     )
@@ -111,9 +113,26 @@ pub(crate) fn compile_with_options(
         MediaError::InvalidAudioTiming("audio graph has no audible contributors".to_owned())
     })?;
     let master_effects = graph.apply_effect_chain(master, &mix.effects)?;
+    let mixed_output = if options.output_range.is_some() {
+        "timeline_audio"
+    } else {
+        "audio"
+    };
     graph.filters.push(format!(
-        "[{master_effects}]apad=whole_len={project_samples},atrim=end_sample={project_samples}[audio]"
+        "[{master_effects}]apad=whole_len={project_samples},atrim=end_sample={project_samples}[{mixed_output}]"
     ));
+    if let Some((start, end)) = options.output_range {
+        let start = seconds_to_samples(start)?;
+        let end = seconds_to_samples(end)?;
+        if start >= end {
+            return Err(MediaError::InvalidAudioTiming(
+                "output range contains no audio samples".to_owned(),
+            ));
+        }
+        graph.filters.push(format!(
+            "[timeline_audio]apad=whole_len={end},atrim=start_sample={start}:end_sample={end},asetpts=PTS-STARTPTS[audio]"
+        ));
+    }
     Ok(FfmpegAudioGraph {
         input_paths: graph
             .sources
@@ -245,7 +264,7 @@ impl GraphBuilder {
         let fade_out = requested_fade_out.min(processed.saturating_sub(fade_in));
         let normalized = self.label("clip");
         self.filters.push(format!(
-            "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=PTS-STARTPTS[{normalized}]"
+            "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=N/SR/TB[{normalized}]"
         ));
         let effected = self.apply_effect_chain(normalized, &clip.effects)?;
         let effected = if clip.effects.has_duration_transform() {
@@ -273,7 +292,10 @@ impl GraphBuilder {
                 "aeval=exprs='val(0)*({envelope})|val(1)*({envelope})':c=stereo,aformat=sample_rates={MIX_SAMPLE_RATE}:sample_fmts=fltp:channel_layouts=stereo"
             ));
         }
-        filters.push(format!("adelay={timeline_start}S:all=1[{label}]"));
+        // FFmpeg's synthetic delay frames can have no usable timestamps.
+        filters.push(format!(
+            "adelay={timeline_start}S:all=1,asetpts=N/SR/TB[{label}]"
+        ));
         self.filters.push(filters.join(","));
         Ok(label)
     }

@@ -182,7 +182,7 @@ def test_native_inspection_resolves_visual_and_audio_automatic_duration() -> Non
     assert visual_report.assets.images == 0 and visual_report.assets.audio == 0
 
     audio = builder()
-    asset = audio.add_audio_asset("examples/assets/tone.wav")
+    asset = audio.add_audio_asset("assets/fixtures/tone.wav")
     audio.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
     track = audio.audio.add_track(id="music")
     track.add_clip(asset=asset, start=1, trim_end=2)
@@ -227,7 +227,7 @@ def test_native_inspection_reports_processed_playback_speed_end(
 def test_muted_audio_serializes_but_cpu_video_has_no_audio_stream(tmp_path: Path) -> None:
     authored = builder()
     authored.base_directory = Path.cwd()
-    asset = authored.add_audio_asset("examples/assets/tone.wav")
+    asset = authored.add_audio_asset("assets/fixtures/tone.wav")
     authored.add_solid_color_clip(colour="#000000", start=0, duration=0.2, layer=0)
     track = authored.audio.add_track(mute=True)
     track.add_clip(asset=asset, start=0, trim_end=0.2)
@@ -248,7 +248,7 @@ def test_muted_audio_serializes_but_cpu_video_has_no_audio_stream(tmp_path: Path
 
 def test_image_pixels_visibility_and_native_id_tie_breaking() -> None:
     image_project = builder()
-    image = image_project.add_image_asset("examples/assets/red.png")
+    image = image_project.add_image_asset("assets/fixtures/red.png")
     image_project.add_image_clip(
         source=image, start=0, duration=1, layer=0, sizing=Sizing.stretch(width=160, height=90),
     )

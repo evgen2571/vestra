@@ -1,27 +1,66 @@
 # Text source
 
-`Text(text, *, font=None, font_size=48, fill="#ffffff", align="left", max_width=None,
-line_spacing=1.0, letter_spacing=0.0)` creates a static file-backed text source.
-`text` is a string. `font=None` uses the packaged DejaVu-derived VestraTest
-regular font. A non-empty string can select an installed family or file;
-`PathLike[str]` always selects a file. `list_system_fonts() -> list[str]` returns
-case-insensitively sorted unique installed families, cached for the process. An unavailable family
-raises `ValueError` at snapshot creation, without fallback. See
-[font selection and portability](../../guides/python/sources-and-layers.md)
-for path disambiguation, platform discovery and collection-cache behavior.
-The constructor canonicalizes `fill` to `#RRGGBB` or `#RRGGBBAA`.
+`Text` draws static text using a bundled font, an installed family or a font file.
+Use it for titles, labels and paragraphs; animate the layer to move or fade the
+prepared text. See [sources and layers](../../guides/python/sources-and-layers.md)
+for a complete placement example and font-portability guidance.
 
-`font_size` defaults to 48 pixels. `font_size`, `max_width` when set, and
-`line_spacing` are finite and positive.
-`letter_spacing` is finite and can be negative. `align` is `left`, `center`, or
-`right`. Line height is `font_size * line_spacing`. The canonical tag is `text`
-with `text`, `font` (a registered Font asset ID), `font_size`, `fill`, `align`, optional `max_width`,
-`line_spacing`, and `letter_spacing`.
+## API signatures
 
-Text layout/raster data is preparation work, not JSON data. The font must exist
-and load successfully during preflight/preparation. Layer transform, animation,
-effects, transitions, nesting, CPU, and WGPU support follow the ordinary text
-source path, provided that font preparation succeeds.
+```text title="Source signature (presentation keywords omitted)"
+Text(text: str, *, font: str | PathLike[str] | None = None,
+     font_size=48, fill="#ffffff", align="left", max_width=None,
+     line_spacing=1.0, letter_spacing=0.0)
+```
 
-Python constructors also accept [presentation transform defaults](../../guides/python/sources-and-layers.md),
-which are copied into each placement and can be individually overridden by `add()`.
+```text title="Font discovery signature"
+list_system_fonts() -> list[str]
+```
+
+The constructor also accepts [presentation transform defaults](../../guides/python/sources-and-layers.md),
+copied into each placement and individually overridable by `add()`.
+
+## Parameters and layout
+
+| Parameter | Default | Units and accepted values |
+| --- | --- | --- |
+| `text` | Required | String; empty text is allowed. |
+| `font` | `None` | Bundled font, installed family name or file path; see below. |
+| `font_size` | `48` | Pixels; finite and positive. |
+| `fill` | `"#ffffff"` | `Color` or a `#RRGGBB` / `#RRGGBBAA` string. |
+| `align` | `"left"` | `"left"`, `"center"` or `"right"` within the layout box. |
+| `max_width` | `None` | Optional wrapping width in pixels; finite and positive when set. |
+| `line_spacing` | `1.0` | Finite positive multiplier; line height is `font_size * line_spacing`. |
+| `letter_spacing` | `0.0` | Extra spacing in pixels; finite, including negative values. |
+
+The constructor canonicalizes `fill` to a hex color. Layout and raster data are
+created during preparation; they are not stored in JSON. Layers own placement
+timing, transforms, animation, effects and transitions. Text supports nesting
+and the ordinary CPU/WGPU raster presentation path once font preparation succeeds.
+
+## Select a font
+
+| `font` value | Selection |
+| --- | --- |
+| `None` | Packaged DejaVu-derived VestraTest regular font. |
+| Non-empty `str` | Installed family or file, using the [path-disambiguation rules](../../guides/python/sources-and-layers.md). |
+| `PathLike[str]` | Always a file path. |
+
+`list_system_fonts()` returns unique installed families, sorted without regard
+to case and cached for the process. The guide covers platform discovery and
+font-collection caching.
+
+## Validation and error timing
+
+| Stage | Failure |
+| --- | --- |
+| Construction | Invalid text/font types, empty font selector, invalid color, alignment or numeric layout values. |
+| Snapshot creation | An unavailable installed family raises `ValueError`; there is no fallback. |
+| Preflight/preparation | A selected font file must exist and load successfully. |
+
+## Canonical JSON
+
+The source tag is `text`. Fields are `text`, `font`, `font_size`, `fill`, `align`,
+optional `max_width`, `line_spacing` and `letter_spacing`. In a project snapshot,
+`font` is a registered **Font asset ID**, rather than the Python selector.
+See [project format](../project-format.md) for the surrounding asset and clip objects.

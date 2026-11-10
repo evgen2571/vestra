@@ -258,7 +258,7 @@ def test_snapshot_is_independent_and_empty_master_effects_are_preserved(
 
 def test_high_level_audio_render_contains_ffmpeg_audio_stream(tmp_path: Path) -> None:
     authored = vestra.Project(size=(2, 2), fps=1, duration=1, base_directory=Path("."))
-    authored.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    authored.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
     output = tmp_path / "high-level-audio.mp4"
     result = authored.render(output, backend="cpu", overwrite=True)
     assert output.is_file() and output.stat().st_size > 0

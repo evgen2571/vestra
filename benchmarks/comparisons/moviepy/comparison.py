@@ -1,4 +1,4 @@
-"""External comparison adapter for scripts/benchmark.py; generated evidence is local."""
+"""External comparison adapter for benchmarks/benchmark.py; generated evidence is local."""
 
 import argparse
 import hashlib
@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median, pstdev
 
-from scripts.benchmark import ROOT, measure_process, require_backend, source_identity
+from benchmarks.benchmark import ROOT, measure_process, require_backend, source_identity
 from benchmarks.comparisons.moviepy.workloads import (
     adapter_class as adapter_class,
     render_moviepy,
@@ -74,6 +74,7 @@ def discover(assets):
                 f"missing asset {name}; supply --assets DIRECTORY (default ~/drive/Assets)"
             )
         data = probe(p)
+        data["format"]["filename"] = name
         video = next((s for s in data["streams"] if s["codec_type"] == "video"), None)
         if (
             not video
@@ -146,13 +147,13 @@ def prepare(args):
         ffmpeg=version(["ffmpeg", "-version"]),
         sources=sources,
         settings=dict(
-            width=1280,
-            height=720,
-            fps=30,
+            width=1920,
+            height=1080,
+            fps=60,
             duration=12,
             codec="libx264",
-            crf=18,
-            preset="veryfast",
+            crf=23,
+            preset="slow",
             pixel_format="yuv420p",
             audio=False,
         ),
@@ -172,19 +173,25 @@ def prepare(args):
             "0:v:0",
             "-an",
             "-vf",
-            "fps=30,scale=1280:720:force_original_aspect_ratio=increase:flags=bicubic,crop=1280:720,setsar=1",
+            "fps=60,scale=1920:1080:force_original_aspect_ratio=increase:flags=bicubic,crop=1920:1080,setsar=1",
             "-frames:v",
-            "360",
+            "720",
             "-c:v",
             "libx264",
             "-crf",
-            "18",
+            "23",
             "-preset",
-            "veryfast",
+            "slow",
             "-pix_fmt",
             "yuv420p",
             "-threads",
             "2",
+            "-g",
+            "120",
+            "-sc_threshold",
+            "0",
+            "-movflags",
+            "+faststart",
             "-map_metadata",
             "-1",
             "-fflags",
@@ -195,7 +202,7 @@ def prepare(args):
         ]
         subprocess.run(command, check=True)
         validation = validate_output(
-            output, dict(width=1280, height=720, fps=30, duration=12)
+            output, dict(width=1920, height=1080, fps=60, duration=12)
         )
         manifest["prepared"][key] = dict(
             filename=output.name,
@@ -400,7 +407,7 @@ def run(args):
                     print(f"Rendering {stem}", flush=True)
                     command = [
                         sys.executable,
-                        str(ROOT / "scripts/benchmark.py"),
+                        str(ROOT / "benchmarks/benchmark.py"),
                         "moviepy",
                         "worker",
                         "--inputs",
@@ -450,7 +457,9 @@ def run(args):
                             )
                     sample["validation"] = validate_output(output, definition)
                     sample["effective_fps"] = (
-                        definition["duration"] * 30 / (sample["wall_ms"] / 1000)
+                        definition["duration"]
+                        * definition["fps"]
+                        / (sample["wall_ms"] / 1000)
                     )
                     sample["status"] = "ok"
                     write_json(report, record)
@@ -557,9 +566,9 @@ def add_arguments(parser):
             )
         if name == "verify":
             p.add_argument("--output", type=Path, required=True)
-            p.add_argument("--inputs", type=Path, default=Path("target/moviepy-inputs"))
+            p.add_argument("--inputs", type=Path, default=ROOT / "assets/footage")
     prep = commands.add_parser(
-        "prepare", help="prepare shared silent 720p30 input clips"
+        "prepare", help="prepare shared silent 1080p60 input clips"
     )
     prep.add_argument("--assets", type=Path, default=Path("~/drive/Assets"))
     prep.add_argument("--inputs", type=Path, default=Path("target/moviepy-inputs"))
@@ -579,7 +588,7 @@ def add_arguments(parser):
     run_parser.add_argument("--samples", type=int, default=5)
     run_parser.add_argument("--timeout", type=float, default=900)
     for p in (run_parser, commands.add_parser("worker", help=argparse.SUPPRESS)):
-        p.add_argument("--inputs", type=Path, default=Path("target/moviepy-inputs"))
+        p.add_argument("--inputs", type=Path, default=ROOT / "assets/footage")
         p.add_argument("--output", type=Path, required=True)
         p.add_argument("--width", type=int, default=1920)
         p.add_argument("--height", type=int, default=1080)

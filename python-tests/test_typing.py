@@ -37,7 +37,10 @@ if TYPE_CHECKING:
     options = PrepareOptions(backend=vestra.BackendPreference.CPU)
     prepared = Editor().prepare(project, options)
     token = vestra.CancellationToken()
-    request = vestra.PreparedVideoRenderRequest("out.mp4")
+    request = vestra.PreparedVideoRenderRequest("out.mp4", start=0, end=1)
+    range_start: float = request.start
+    range_end: float | None = request.end
+    assert range_start == 0 and range_end == 1
 
     def on_progress(event: vestra.RenderEvent) -> object:
         print(event.fraction)
@@ -49,6 +52,28 @@ if TYPE_CHECKING:
     preparation_report = prepared.preparation_report
     frame: Frame = prepared.render_frame_number(0)
     pixels: bytes = frame.to_bytes()
+    image_frame: Frame = high_level_project.render_frame(0.5, "poster.png")
+    image_frame.save("poster.webp", overwrite=True)
+    pixel_array = image_frame.to_numpy()
+    array_channel: int = int(pixel_array[0, 0, 0])
+    pixel_array = high_level_project.get_frame(frame_number=0)
+    sequence_count: int = high_level_project.render_frames(
+        directory=Path("frames"), indices=[1, 0], format="png"
+    )
+    assert array_channel or sequence_count
+    high_level_project.render("clip.mp4", start=0.25, end=0.75)
+    high_level_project.render_preview("preview.mp4", fps=12)
+    high_level_project.render(
+        "animation.webp", resolution=(320, 180), fps=(24000, 1001),
+        quality=vestra.authoring.Quality.HIGH,
+    )
+    options = PrepareOptions(resolution=(320, 180), fps=vestra.FrameRate(12), quality="preview")
+    native_request = vestra.RenderRequest(
+        "animation.gif", resolution=(320, 180), fps=vestra.FrameRate(12), quality="preview",
+    )
+    output_size: tuple[int, int] | None = native_request.resolution
+    output_rate: vestra.FrameRate | None = options.fps
+    assert output_size or output_rate
     device: AdapterDeviceType | None = (
         preparation_report.adapter.device_type
         if preparation_report.adapter is not None
@@ -327,3 +352,12 @@ def test_source_defaults_fixture_typechecks() -> None:
         check=False, capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_invalid_group_size_fixture_is_rejected() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "python-tests/typing_failures/high_level_invalid_group_sizes.py"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout.count("error:") == 8, result.stdout + result.stderr

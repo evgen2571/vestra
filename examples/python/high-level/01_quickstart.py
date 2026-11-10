@@ -1,4 +1,7 @@
-"""Build a small editor project and render it without invoking the CLI."""
+"""Build a small editor project and render it without invoking the CLI.
+
+Run from the repository root: uv run python examples/python/high-level/01_quickstart.py
+"""
 
 from __future__ import annotations
 
@@ -15,12 +18,14 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def build_project() -> Project:
     project = Project(size=(160, 90), fps=12, duration=1, base_directory=ROOT)
-    layer = project.root.add(
-        Image("examples/assets/red.png", sizing="cover"),
+    background = project.root.add(
+        Image("assets/fixtures/red.png", sizing="cover"),
         duration=1,
         id="background",
     )
-    layer.effects.add(Vignette(0.2, 1.0, 0.5, "#000000"))
+    background.effects.add(
+        Vignette(amount=0.2, radius=1.0, softness=0.5, colour="#000000")
+    )
     return project
 
 
@@ -29,6 +34,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, help="write the MP4 here")
     args = parser.parse_args()
     project = build_project()
+
     report = project.validate()
     print(f"valid={report.is_valid}")
     if not report.is_valid:

@@ -145,8 +145,35 @@ pub struct CompilationStats {
 pub struct Canvas {
     pub width: u32,
     pub height: u32,
+    /// Authored coordinate extent, independent of runtime output dimensions.
+    pub logical_width: u32,
+    pub logical_height: u32,
     pub background: [u8; 4],
     pub preview: bool,
+}
+
+impl Canvas {
+    /// Uniform output density relative to authored coordinates.
+    #[must_use]
+    pub fn render_scale(self) -> f64 {
+        (f64::from(self.width) / f64::from(self.logical_width))
+            .min(f64::from(self.height) / f64::from(self.logical_height))
+    }
+
+    /// Raster extent used for an authored root or group canvas.
+    #[must_use]
+    pub fn scaled_extent(self, width: u32, height: u32) -> (u32, u32) {
+        let scale = self.render_scale();
+        (
+            (f64::from(width) * scale).round().max(1.0) as u32,
+            (f64::from(height) * scale).round().max(1.0) as u32,
+        )
+    }
+
+    #[must_use]
+    pub fn fitted_extent(self) -> (u32, u32) {
+        self.scaled_extent(self.logical_width, self.logical_height)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -239,6 +266,7 @@ pub enum CompiledMaskInput {
 /// containing composition's root layer list.
 #[derive(Clone, Debug)]
 pub struct CompiledComposition {
+    pub size: Option<crate::project::GroupSize>,
     pub layers: Vec<CompiledLayer>,
     pub schedule: crate::plan::ActiveSchedule,
     pub dependency: TemporalDependency,
@@ -356,8 +384,20 @@ pub enum CompiledSizing {
     Original,
     Fit,
     Cover,
+    /// Evaluated fit/cover retain the authored canvas when rendering at another size.
+    FitTo {
+        width: u32,
+        height: u32,
+    },
+    CoverTo {
+        width: u32,
+        height: u32,
+    },
     Scale(f64),
-    Stretch { width: u32, height: u32 },
+    Stretch {
+        width: u32,
+        height: u32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

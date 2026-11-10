@@ -1,5 +1,6 @@
 """Observable contracts for the external comparison (no native build required)."""
 
+import argparse
 import importlib.util
 import json
 import sys
@@ -9,7 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from scripts import benchmark  # noqa: E402
+from benchmarks import benchmark  # noqa: E402
 
 
 def comparison():
@@ -21,6 +22,17 @@ def comparison():
     return module
 
 
+def test_default_comparison_uses_bundled_shared_inputs():
+    parser = argparse.ArgumentParser()
+    comparison().add_arguments(parser)
+    for command in (
+        ["run", "--output", "target/test"],
+        ["verify", "target/test", "--output", "target/verify"],
+    ):
+        args = parser.parse_args(command)
+        assert args.inputs == ROOT / "assets/footage"
+
+
 def test_missing_assets_are_actionable(tmp_path):
     with pytest.raises(ValueError, match="forward-fly-above-snow-forest.mp4"):
         comparison().discover(tmp_path)
@@ -28,7 +40,7 @@ def test_missing_assets_are_actionable(tmp_path):
 
 def test_workloads_have_exact_timelines():
     c = comparison()
-    for name, frames in [("basic", 300), ("editing", 360), ("layered", 300)]:
+    for name, frames in [("basic", 600), ("editing", 720), ("layered", 600)]:
         workload = c.workload(name, 1920, 1080)
         assert workload["duration"] * workload["fps"] == frames
         assert (
@@ -181,6 +193,55 @@ def test_failed_render_persists_failed_record(tmp_path, monkeypatch):
     assert record["records"][0]["summary"] is None
 
 
+def test_effective_fps_uses_the_workload_frame_rate(tmp_path, monkeypatch):
+    c = comparison()
+    monkeypatch.setattr(c, "load_inputs", lambda d: {})
+    monkeypatch.setattr(c, "source_identity", lambda: "unchanged")
+    monkeypatch.setattr(
+        c,
+        "environment",
+        lambda: dict.fromkeys(
+            (
+                "packages",
+                "native_extension_sha256",
+                "ffmpeg_executable_sha256",
+                "graphics_api",
+            )
+        ),
+    )
+
+    def measure(command, log, **kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.with_suffix(".result.json").write_text("{}")
+        return dict(
+            returncode=0,
+            timed_out=False,
+            wall_ms=2000,
+            peak_tree_rss_bytes=None,
+            cpu_percent=None,
+        )
+
+    monkeypatch.setattr(c, "measure_process", measure)
+    monkeypatch.setattr(c, "validate_output", lambda *args: {"status": "ok"})
+    args = argparse.Namespace(
+        inputs=tmp_path,
+        output=tmp_path / "run",
+        samples=1,
+        warmups=0,
+        width=1920,
+        height=1080,
+        timeout=3,
+        scenarios=["basic"],
+        engines=["moviepy-cpu"],
+    )
+    c.run(args)
+    record = json.loads((args.output / "comparison.json").read_text())
+    row = record["records"][0]
+    assert row["definition"]["fps"] == 60
+    assert row["samples"][0]["effective_fps"] == 300
+    assert row["summary"]["effective_fps"]["median"] == 300
+
+
 def test_report_rejects_failed_run(tmp_path):
     c = comparison()
     (tmp_path / "comparison.json").write_text(json.dumps({"status": "failed"}))
@@ -233,7 +294,8 @@ def test_timeout_terminates_worker_children(tmp_path):
         state = stat.read_text().split(") ", 1)[1]
     except (FileNotFoundError, ProcessLookupError):
         return  # The killed child was already reaped.
-    assert state.startswith("Z")
+    # Linux can expose a zombie (Z) or a dead task (X) before /proc disappears.
+    assert state.split()[0] in {"Z", "X"}
 
 
 def test_summary_rejects_nonfinite_measurement():

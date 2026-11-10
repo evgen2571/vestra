@@ -8,9 +8,36 @@ network access for the first FFmpeg source fetch. A local patch removes the
 dependency's host-specific `-march=native` compiler flag for portable wheels.
 The repository Nix development shell supplies the build tools.
 
-## `ffmpeg` or `ffprobe` is missing at runtime
+<span id="ffmpeg-or-ffprobe-is-missing-at-runtime"></span>
 
-Some operational checks/workflows require `ffmpeg` and `ffprobe` on `PATH`; that is separate from native linking. Confirm with `command -v ffmpeg` and `command -v ffprobe`, then run their `-version` commands in the same shell that runs Vestra. Keep the executable path and version in a bug report.
+## `ffmpeg` is missing at runtime
+
+Python installs FFmpeg through `imageio-ffmpeg` and uses its packaged executable.
+If Vestra reports that FFmpeg is unavailable, reinstall that dependency in the
+same environment. The diagnostic includes the selected executable path. Check
+whether `IMAGEIO_FFMPEG_EXE` selects a missing or incompatible build; unset it
+to restore the packaged default. A bare system `ffmpeg` is never a silent fallback.
+
+To select a different build, set `IMAGEIO_FFMPEG_EXE` to its executable path
+before preparation or rendering. It must provide `libx264`, AAC and the audio
+filters needed by your project. Keep the path, `-version` output and native
+error in a bug report. Prepared projects keep the executable selected during
+preparation; prepare again after changing the override.
+
+The separate native CLI and developer media tools still require `ffmpeg` on
+`PATH`. Run `ffmpeg -version` in the shell running those tools.
+
+Media probing uses bundled FFmpeg libraries and does not require `ffprobe`.
+Some optional developer checks use `ffprobe` to verify output independently;
+install it when running those checks.
+
+### NixOS
+
+The FFmpeg executable and Vestra's native extension have separate runtime
+requirements. If the extension cannot load because of a missing ELF interpreter
+or shared library, use the repository's Nix development environment for a source
+build. If only the packaged executable cannot run, select Nix's FFmpeg with
+`IMAGEIO_FFMPEG_EXE`. Changing that override does not fix extension import errors.
 
 ## An existing asset does not decode
 

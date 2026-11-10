@@ -6,14 +6,15 @@ external assets, so it is easy to copy and inspect.
 
 ## Prerequisites
 
-The Python package does not install the `ve` CLI. Build the CLI separately
-from a repository checkout using the
+The Python package does not install the `ve` CLI. Download a
+[native CLI archive](installation.md#install-the-native-cli), or build it from
+a repository checkout using the
 [build-from-source instructions](installation.md#build-from-source--development).
-You also need `ffmpeg` and `ffprobe` on `PATH`.
+You also need `ffmpeg` on `PATH` for encoding and audio processing.
 
-Run the commands below from the checkout. They use `cargo run` to build and
-execute the CLI. If you have already added `ve` to your `PATH`, replace
-`cargo run -q -p vestra-cli --` with `ve`.
+Run the commands below in a working directory with `ve` on your `PATH`.
+They need no repository checkout. If you built from source, add the binary
+to PATH as described in the installation instructions, or use its full path.
 
 ## Create a project
 
@@ -59,7 +60,7 @@ whole second. This is enough for the CLI to build and render a project.
 Run validation before rendering:
 
 ```bash
-cargo run -q -p vestra-cli -- validate solid.json
+ve validate solid.json
 ```
 
 The command should print `solid.json is valid`. Validation checks the JSON
@@ -72,12 +73,16 @@ error[VESTRA-KEYFRAME-TIME]: keyframe times must be finite, strictly increasing,
   at /visual/clips/0/opacity/keyframes/0/time
 ```
 
+Keep the configured `output.mp4` path unused while repeating validation: the
+command rejects an existing destination. The render below writes to
+`quickstart.mp4` instead. See [validation meaning](../reference/cli.md#validation-meaning).
+
 ## Render it
 
 Render to an explicit output path and allow replacement of an existing file:
 
 ```bash
-cargo run -q -p vestra-cli -- render solid.json \
+ve render solid.json \
   --output quickstart.mp4 \
   --overwrite \
   --progress none \
@@ -106,14 +111,14 @@ hardware GPU. The render result reports the selected backend.
 
 Read the diagnostic message for the setting or asset that needs attention.
 Check that `solid.json` contains the complete example above. If rendering fails,
-check `ffmpeg -version` and `ffprobe -version`, then consult
+check `ffmpeg -version`, then consult
 [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md) or
 [rendering troubleshooting](../troubleshooting/rendering.md).
 
 Use `inspect` to see the resolved output settings, duration and contents:
 
 ```bash
-cargo run -q -p vestra-cli -- inspect solid.json
+ve inspect solid.json
 ```
 
 ```text

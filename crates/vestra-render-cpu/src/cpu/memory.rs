@@ -1,4 +1,4 @@
-//! Pixel storage estimates for reporting, not worker selection or process memory.
+//! Pixel storage estimates and canvas sizes, not whole-process memory accounting.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -25,8 +25,10 @@ pub(super) fn estimated_worker_bytes(plan: &RenderPlan) -> u64 {
         .saturating_add(composition.depths.len() as u64)
         .saturating_add(peak_distinct(std::mem::take(&mut composition.mattes)))
         .saturating_add(composition.temporary_frames);
-    let mut bytes =
-        frame_bytes(plan.canvas.width, plan.canvas.height).saturating_mul(canvas_buffers);
+    // Local canvases can exceed the output; conservatively size working buffers to the largest.
+    let canvas_bytes = frame_bytes(plan.canvas.width, plan.canvas.height)
+        .max(largest_group_canvas_bytes(&plan.layers, plan.canvas));
+    let mut bytes = canvas_bytes.saturating_mul(canvas_buffers);
     // Cursors retain current RGBA and scaler output; layer requests are serial,
     // so only one incoming RGBA conversion overlaps those retained buffers.
     // Native YUV/lookahead/codec state has no format-independent bound here.
@@ -41,6 +43,41 @@ pub(super) fn estimated_worker_bytes(plan: &RenderPlan) -> u64 {
         }
     }
     bytes.saturating_add(incoming_bytes)
+}
+
+pub(super) fn largest_group_canvas_bytes(
+    layers: &[CompiledLayer],
+    canvas: vestra_core::plan::Canvas,
+) -> u64 {
+    layers
+        .iter()
+        .flat_map(|layer| {
+            std::iter::once(&layer.source).chain(layer.masks.iter().filter_map(|mask| {
+                if let CompiledMaskInput::Source { source, .. } = &mask.input {
+                    Some(source.as_ref())
+                } else {
+                    None
+                }
+            }))
+        })
+        .filter_map(|source| {
+            if let CompiledVisualSource::Group(group) = source {
+                Some(
+                    group
+                        .size
+                        .map_or(0, |size| {
+                            let (width, height) = canvas
+                                .scaled_extent(size.width.ceil() as u32, size.height.ceil() as u32);
+                            frame_bytes(width, height)
+                        })
+                        .max(largest_group_canvas_bytes(&group.layers, canvas)),
+                )
+            } else {
+                None
+            }
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 // Matching origins and source clocks produce exactly the same requested time.
@@ -82,13 +119,18 @@ fn storage_for_plan(plan: &RenderPlan) -> CompositionStorage {
             .collect(),
         ..CompositionStorage::default()
     };
+    let fitted =
+        usize::from(plan.canvas.fitted_extent() != (plan.canvas.width, plan.canvas.height));
+    if fitted != 0 {
+        storage.depths.insert(0);
+    }
     storage.record_effects(&plan.post_effects);
     storage.visit_layers(
         &plan.layers,
         Visit {
             origin: 0,
             span: (0, output_end),
-            depth: 0,
+            depth: fitted,
             temporary: 0,
             isolated: false,
         },
@@ -295,10 +337,36 @@ mod tests {
 
     fn group(plan: &RenderPlan, layers: Vec<CompiledLayer>) -> CompiledVisualSource {
         CompiledVisualSource::Group(std::sync::Arc::new(CompiledComposition {
+            size: None,
             layers,
             schedule: ActiveSchedule::compile(plan),
             dependency: TemporalDependency::Dynamic,
         }))
+    }
+
+    #[test]
+    fn estimate_accounts_for_group_canvases_larger_than_output() {
+        let mut plan = fixture_plan();
+        plan.canvas.width = 16;
+        plan.canvas.height = 16;
+        plan.canvas.logical_width = plan.canvas.width;
+        plan.canvas.logical_height = plan.canvas.height;
+        let mut child = plan.layers[0].clone();
+        child.source = CompiledVisualSource::SolidColor { colour: [255; 4] };
+        child.effects.clear();
+        child.masks.clear();
+        let mut parent = child.clone();
+        parent.source = group(&plan, vec![child]);
+        plan.layers = vec![parent];
+        let baseline = estimated_worker_bytes(&plan);
+        let CompiledVisualSource::Group(group) = &mut plan.layers[0].source else {
+            unreachable!()
+        };
+        std::sync::Arc::make_mut(group).size = Some(vestra_core::project::GroupSize {
+            width: 64.0,
+            height: 32.0,
+        });
+        assert!(estimated_worker_bytes(&plan) >= baseline * 8);
     }
 
     #[test]
@@ -441,6 +509,8 @@ mod tests {
         for (width, height, workers) in [(1_920, 1_080, 8), (2_560, 1_440, 6), (3_840, 2_160, 2)] {
             plan.canvas.width = width;
             plan.canvas.height = height;
+            plan.canvas.logical_width = plan.canvas.width;
+            plan.canvas.logical_height = plan.canvas.height;
             plan.videos[0].width = 17;
             plan.videos[0].height = 9;
             let small = estimated_worker_bytes(&plan);
@@ -516,6 +586,8 @@ mod tests {
         let mut plan = video_plan();
         plan.canvas.width = 1_920;
         plan.canvas.height = 1_080;
+        plan.canvas.logical_width = plan.canvas.width;
+        plan.canvas.logical_height = plan.canvas.height;
         plan.videos[0].width = 1_280;
         plan.videos[0].height = 720;
         let layer = plan.layers[0].clone();
@@ -568,6 +640,8 @@ mod tests {
         let mut plan = video_plan();
         plan.canvas.width = 1_920;
         plan.canvas.height = 1_080;
+        plan.canvas.logical_width = plan.canvas.width;
+        plan.canvas.logical_height = plan.canvas.height;
         let bytes = estimated_worker_bytes(&plan);
         let workers = super::super::backend::automatic_worker_count(&plan, 64);
         let mut unused = plan.layers[0].clone();

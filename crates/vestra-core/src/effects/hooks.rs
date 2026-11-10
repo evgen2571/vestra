@@ -7,8 +7,8 @@ pub(crate) struct MotionContext<'a, 'signals> {
     pub relative: u128,
     pub root_project_time: u128,
     pub frame_rate: (u64, u64),
-    pub width: u32,
-    pub height: u32,
+    pub width: f64,
+    pub height: f64,
     pub root_composition: bool,
     pub context: &'a EvaluationContext<'signals>,
 }

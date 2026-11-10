@@ -13,6 +13,11 @@ ve render project.json --output preview.mp4 --overwrite
 the loaded project and asset information without rendering it. `render` runs
 preparation, frame evaluation, audio processing, and encoding.
 
+Keep the project's configured output path unused for repeated validation;
+the commands above render to a separate preview path. Validation always checks
+the configured destination with overwrite disabled. See
+[validation meaning](../../reference/cli.md#validation-meaning).
+
 Useful render options include:
 
 ```bash
@@ -27,10 +32,13 @@ ve render project.json \
 
 The default output format is human-readable. Progress defaults to Auto: it is
 shown on a supported interactive terminal and disabled for redirected or CI
- stderr. Use `--progress terminal` to force the terminal presentation,
+stderr. Use `--progress terminal` to force the terminal presentation,
 `--progress json` for the event stream, or `--progress none` when another
 program owns the display. `--format json` selects a machine-readable final
-result. `--preview` requests preview rendering behavior.
+result. `--preview` caps the longest side at 640 pixels and FPS at 15, and
+selects fast encoding without editing the project. A runtime `--output` ending
+in `.gif` or `.webp` selects a silent looping animation. See
+[render outputs](../../reference/render-outputs.md) for format limits.
 `--render-backend` accepts `auto`, `cpu`, or `wgpu`.
 
 Run `validate` first in scripts so an invalid project fails before encoding.

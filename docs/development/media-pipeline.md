@@ -1,7 +1,11 @@
 # Media pipeline and concurrency
 
 Vestra separates project meaning, pixels, and media I/O. The SDK coordinates
-these owners; CPU and WGPU consume the same compiled timeline.
+these owners; CPU and WGPU consume the same compiled timeline. Use the
+[frame-selection sections](#video-frame-selection) for decoder/cache changes,
+[ordered frames](#ordered-frames-and-encoder-overlap) for scheduling changes,
+and [encoded-output verification](#verify-encoded-output) when checking a
+published file. The [media I/O map](architecture/media-io.md) locates the modules.
 
 ```text
 media source → probe/decode → frame selection/cache
@@ -159,13 +163,20 @@ and benchmark workloads. Fix source dimensions, rational frame rate, seeds and
 audio placement; use lossless input where exact source pixels matter. Avoid
 downloaded footage or new fixture generators when existing helpers cover the case.
 
-Probe the published target, not just the encoder's temporary file. For example:
+### Probe the published file
+
+After rendering a deterministic test project, probe the published target, not
+just the encoder's temporary file. Use `ffprobe` as an independent verification
+tool; it is optional for Vestra runtime use. Substitute the target path in this
+command (requires `ffprobe` on `PATH`):
 
 ```bash
 ffprobe -v error -select_streams v:0 -count_frames \
   -show_entries stream=codec_name,pix_fmt,width,height,r_frame_rate,avg_frame_rate,time_base,start_time,duration,nb_read_frames \
   -of json target/media-check/output.mp4
 ```
+
+### Check frame boundaries and AV alignment
 
 Compare decoded frame count with the resolved plan, not just `nb_frames` or
 rounded container duration. Inspect `-show_frames`/`-show_packets` timestamps
@@ -175,16 +186,24 @@ early/middle/final positions to measure AV alignment, allowing justified codec
 delay and container/sample rounding. Matching stream durations alone cannot
 prove sync. Raw frame fidelity and encoded-media correctness are separate checks.
 
-Current output is MP4 with libx264 H264/yuv420p; quality controls CRF and an
-internal x264 preset. Hardware WGPU rendering does not imply hardware decode,
-hardware encoding or direct GPU-to-encoder transfer. Record actual renderer,
-adapter and encoder separately. Selected-range video, resumability and alternate
-output codecs remain proposals rather than established test targets.
+For MP4, check libx264 H.264/yuv420p output and optional AAC audio. Selected-range
+tests should compare the clip against the same project times in a full render,
+with zero-based output timestamps and synchronized audio. GIF and animated WebP
+need decoded-frame checks for timing, looping and transparency; see
+[render outputs](../reference/render-outputs.md) for their encoding policies and
+container limits.
+
+Hardware WGPU rendering does not imply hardware decoding, encoding or direct
+GPU-to-encoder transfer. Record the renderer, adapter and encoder separately.
+
+### Exercise duration, size and failure boundaries
 
 For long-duration/large-file tests, state actual timeline length, frame count,
-encoded bytes, disk budget and timestamp coverage. Current default timeline
-caps still apply; low-cost sparse boundary tests do not prove sustained encoding
-or >4 GiB container behavior. Keep expensive runs explicit and outputs temporary;
+encoded bytes, disk budget and timestamp coverage. There is no default two-hour
+or 216,000-frame cap; checked timeline arithmetic and other
+[resource limits](../reference/project-format.md#validation-layers) still apply.
+Low-cost sparse boundary tests do not prove sustained encoding or >4 GiB
+container behavior. Keep expensive runs explicit and outputs temporary;
 combine with [sustained resource profiling](performance.md#allocation-and-sustained-render-profiling).
 
 Use existing sink/publication fault tests for decode, write, finalization,

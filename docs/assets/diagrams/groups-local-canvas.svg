@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="312" viewBox="0 0 480 312" role="img" aria-labelledby="title desc">
+  <title id="title">Each position uses its parent's canvas</title>
+  <desc id="desc">A blue group is centered in the root with position 0.5, 0.5. A gold child is placed at position 0.25, 0.5 inside that group: a quarter of the group's width and halfway down. Callouts point to the center anchor of each placement. Both positions are normalized values accepted by the Python API.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --group:#d8e5ee; --ink:#242b33; --line:#697988; --edge:#3e607e; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --group:#344d60; --ink:#eef2f6; --line:#95a7b6; --edge:#bdd0e0; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .leader { fill:none; stroke:var(--line); stroke-width:1.5; }
+  </style>
+  <rect width="480" height="312" rx="10" fill="var(--bg)"/>
+  <text x="24" y="30">Root</text>
+  <rect x="24" y="48" width="432" height="243" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+  <rect x="132" y="108.75" width="216" height="121.5" fill="var(--group)" stroke="var(--edge)" stroke-width="2"/>
+  <text x="144" y="136">Group</text>
+  <rect x="152.25" y="149.25" width="67.5" height="40.5" rx="3" fill="#e9bd72" stroke="#7a5a22" stroke-width="1.5"/>
+  <path d="M240 169.5h136v-56" class="leader"/>
+  <path d="M234 169.5h12m-6-6v12" fill="none" stroke="var(--edge)" stroke-width="2.5"/>
+  <text x="288" y="76">Group in root</text>
+  <text x="288" y="103">(0.5, 0.5)</text>
+  <path d="M186 169.5H100v60" class="leader"/>
+  <circle cx="186" cy="169.5" r="4" fill="#242b33"/>
+  <text x="40" y="251">Child in group</text>
+  <text x="40" y="277">(0.25, 0.5)</text>
+</svg>

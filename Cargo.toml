@@ -15,7 +15,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.4"
+version = "0.1.5"
 
 # The vendored build fixes host-specific FFmpeg flags and Windows dependency parsing.
 [patch.crates-io]

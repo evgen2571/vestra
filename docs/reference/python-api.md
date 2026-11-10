@@ -1,32 +1,68 @@
 # Python API
 
-`vestra.Project` is the normal mutable authoring API. `vestra.authoring.ProjectBuilder` is the advanced canonical authoring API. Runtime control uses immutable native `ProjectSnapshot` (`vestra._native.Project`) and `Editor`.
+Use `vestra.Project` to author a mutable project. Create an immutable
+`ProjectSnapshot` (`vestra._native.Project`) to save canonical JSON or run native
+operations through `Editor`. The advanced `vestra.authoring.ProjectBuilder`
+constructs canonical objects directly.
 
 ## High-level authoring
 
-```python
+```text title="Project constructor"
 Project(*, size: tuple[int, int], fps: int | tuple[int, int] | FrameRate,
         duration: float | None = None, background="#000000", quality=Quality.BALANCED,
-        base_directory=".", name=None, metadata=None, output_audio=None, output_path=None)
+        base_directory=".", name=None, metadata=None, output_audio=None, output_path=None,
+        resource_limits: ResourceLimits | None = None)
+```
 
+| Parameter | Contract |
+| --- | --- |
+| `size` | Positive integer width and height in pixels; canonical output limits also apply. |
+| `fps` | Integer, `(numerator, denominator)` pair or `FrameRate`. |
+| `duration` | Positive seconds when explicit; `None` uses automatic duration. |
+| `output_audio` | `None` follows whether authored audio clips exist; an explicit boolean overrides publication. |
+| `output_path` | Optional default for snapshots; rendering takes an explicit output. |
+
+`project.root` is the top-level `Composition`. Source constructors are documented
+on the [source pages](catalog.md#source-types); `list_system_fonts() -> list[str]` lists
+installed families without a project. See [Text](sources/text.md) for font selection.
+
+```text title="Layer placement signature"
 composition.add(source, *, start=0, duration=None, source_start=0.0,
                 playback_rate=1.0, z=0, visible=True, opacity=1.0,
                 id=None, name=None, blend_mode=BlendMode.NORMAL,
                 transform=None, position=None, anchor=None, scale=None,
                 rotation=None, rotation_degrees=None) -> Layer
+```
+
+`add()` copies the source. `start` and `duration` use owning-composition seconds.
+Omitted duration uses the owning duration except for `Video`, where placement
+probes media to derive the usable source span. `source_start` uses source-media
+seconds; `playback_rate` is positive. Later edits belong on the returned layer.
+
+### Nested authoring
+
+```text title="Owned composition placement signature"
 composition.group(name=None, *, start=0, duration=None, z=0, visible=True,
                   opacity=1, id=None, blend_mode=BlendMode.NORMAL) -> CompositionLayer
 ```
 
-`size` has positive integer width/height; `fps` is an integer, `(numerator, denominator)` pair or `FrameRate`; explicit `duration` is positive seconds. `root` is the top-level `Composition`; a `CompositionLayer.child` is another composition with child-local timing. `add` copies its `Source`; `duration=None` uses the owning duration except for `Video`, where it probes media to derive the usable source duration. `source_start` is source-media seconds and `playback_rate` is positive.
+`CompositionLayer.child` is another composition with child-local timing.
+A reusable `Group` is an ordinary visual source:
 
-`Group(children=(), *, transform=None, position=None, anchor=None, scale=None,
-rotation=None, rotation_degrees=None)` is an ordinary visual source.
-`group.add(source, *, start=0, duration=None, source_start=0, playback_rate=1,
-layer=None, visible=True, opacity=1, transform=None, position=None, anchor=None,
-scale=None, rotation=None, rotation_degrees=None)` returns a `GroupChild`.
-See [nested groups](../guides/python/nested-compositions.md) for ownership,
-local timing and the direct `CompositionLayer` alternative.
+```text title="Reusable group source and child signatures"
+Group(children=(), *, size=None, transform=None, position=None, anchor=None, scale=None,
+      rotation=None, rotation_degrees=None)
+group.add(source, *, start=0, duration=None, source_start=0, playback_rate=1,
+          layer=None, visible=True, opacity=1, transform=None, position=None,
+          anchor=None, scale=None, rotation=None, rotation_degrees=None) -> GroupChild
+```
+
+The optional read-only `size: tuple[float, float]` contains positive finite pixel
+dimensions. Omit it to inherit the containing canvas. Size changes coordinates,
+without scaling child geometry or changing timing/FPS. See
+[nested groups](../guides/python/nested-compositions.md) for ownership and examples.
+
+### Source presentation
 
 All visual source constructors accept the same transform keywords; ParticleSystem
 keeps `rotation` for particle orientation and accepts `rotation_degrees` for
@@ -35,80 +71,208 @@ An individual placement override replaces only that property's animation and
 bindings. `transform=` replaces all defaults and is exclusive with individual
 keywords. See [precedence and validation](../guides/python/sources-and-layers.md).
 
-```python
-project.snapshot(*, output=None) -> ProjectSnapshot
-project.validate() -> ValidationReport
-project.prepare(*, backend="auto") -> PreparedProject
-project.render_frame(seconds, *, backend="auto") -> Frame
-project.render(output, *, backend="auto", overwrite=False, preview=False,
-               show_progress=True, on_progress=None,
-               cancellation=None) -> RenderResult
-```
+### Masks and track mattes
 
-`project.render("output.mp4")` uses native Auto progress by default. Set
-`show_progress=False` to disable it, or pass `on_progress=my_callback` to
-replace the built-in terminal renderer with a callback.
-
-`list_system_fonts() -> list[str]` lists installed font families without a project.
-`Text(..., font=None)` uses the bundled default; see [Text](sources/text.md).
-
-`validate()` lowers then performs canonical semantic validation only. It resolves authored font selections during lowering, but does not probe media or create a renderer. `snapshot()` defaults output to the construction-time output path or `"output.mp4"`; `output_audio=None` follows whether authored audio clips exist. See individual [source pages](sources/image.md) for source constructors.
-
-Layers expose an ordered mask collection:
-
-```python
-mask = layer.masks.add(shape, operation=MaskOperation.INTERSECT, id=None, feather=12)
+```text title="Owned mask collection signatures"
+layer.masks.add(source, *, operation=MaskOperation.INTERSECT, id=None, feather=0, mode=None)
 layer.masks.items
 layer.masks.remove(mask_or_id)
 layer.masks.clear()
 ```
 
-`Mask` exposes `id`, `input`, `operation`, `invert`, `strength`, `feather`, and
-`transform`. Supported inputs are the existing `Rectangle`, `Ellipse`,
-`Circle`, and `Polygon` shape authoring objects, or the normal `Image` source
-with `mode=MaskCoverageMode.ALPHA` or `MaskCoverageMode.LUMA`. `strength`, `feather`, and
-transform properties support the normal keyframes, modifiers, and signal
-bindings. Masks are applied after layer effects and before final
-opacity/blending.
+A `Mask` exposes `id`, `input`, `operation`, `invert`, `strength`, `feather` and
+`transform`. Shapes, Image, Color, Text, Video, Spectrum2D, ParticleSystem and
+owned Group sources are accepted. Non-shapes select `MaskCoverageMode.ALPHA`
+(default) or `LUMA`; shapes use rendered alpha and reject `mode`. Direct Image
+and Video masks reject sizing/crop. Strength, feather and transform properties
+support keyframes, modifiers and signals. Masks follow layer effects and precede
+final opacity/blending.
 
-`ProjectBuilder(*, width, height, frame_rate, output_path, duration=None, duration_mode=None, background="#000000", quality=Quality.BALANCED, base_directory=".", name=None, metadata=None, output_audio=False)` owns advanced canonical assets, visual clips, tracks, effects, transitions, flashes and audio. `build()` creates a native snapshot; `validate()` has the same semantic-only meaning.
+```text title="Sibling matte signatures"
+layer.set_matte(matte, *, mode=MatteMode.ALPHA, invert=False)
+layer.clear_matte()
+```
 
-## Native runtime
+The matte must be a layer in the same immediate composition. See
+[masks and track mattes](masks.md) for coordinates, source restrictions and timing.
 
-| Type | Exact construction or methods |
+### Advanced canonical authoring
+
+```text title="ProjectBuilder constructor"
+ProjectBuilder(*, width, height, frame_rate, output_path, duration=None,
+               duration_mode=None, background="#000000", quality=Quality.BALANCED,
+               base_directory=".", name=None, metadata=None, output_audio=False)
+```
+
+The builder owns assets, clips, tracks, effects, transitions, flashes and audio.
+`build()` creates a native snapshot; `validate()` performs semantic validation only.
+
+## Snapshots and validation
+
+```text title="High-level snapshot and validation signatures"
+project.snapshot(*, output=None) -> ProjectSnapshot
+project.validate() -> ValidationReport
+```
+
+Snapshots are immutable copies; later authoring edits do not change them.
+`snapshot()` defaults its output to the construction-time path or `"output.mp4"`.
+Lowering resolves authored font selections. `validate()` then performs canonical
+semantic validation only; it does not probe media or create a renderer.
+
+```text title="Snapshot load/save signatures"
+ProjectSnapshot.load(path)
+ProjectSnapshot.from_json(text, *, base_directory=None)
+ProjectSnapshot.from_dict(data, *, base_directory=None)
+snapshot.to_json()
+snapshot.to_dict()
+snapshot.save(path)
+```
+
+<span id="native-runtime"></span>
+
+## Preparation and rendering
+
+### High-level requests
+
+```text title="High-level rendering signatures"
+project.prepare(*, backend="auto", resolution=None, fps=None, quality=None) -> PreparedProject
+project.render_frame(seconds=None, output=None, *, frame_number=None,
+                     backend="auto", resolution=None, fps=None, overwrite=False) -> Frame
+project.get_frame(seconds=None, *, frame_number=None, backend="auto",
+                  resolution=None, fps=None) -> NDArray[uint8]
+project.render_frames(*, directory, times=None, indices=None, start=None,
+                      end=None, format="png", backend="auto", resolution=None, fps=None,
+                      overwrite=False) -> int
+project.render(output, *, backend="auto", overwrite=False, preview=False,
+               resolution=None, fps=None, quality=None, start=0, end=None,
+               show_progress=True, on_progress=None,
+               cancellation=None) -> RenderResult
+project.render_preview(output, **render_options) -> RenderResult
+```
+
+`render_frame()` prepares on every call. Reuse `prepare()` for repeated frames or
+video renders. Backend preferences are `"auto"`, `"cpu"`, `"wgpu"` or
+`BackendPreference` values; see [backends](backends.md). Existing outputs require
+`overwrite=True`.
+
+| Argument | Contract |
 | --- | --- |
-| `ProjectSnapshot` | `load(path)`, `from_json(text, *, base_directory=None)`, `from_dict(data, *, base_directory=None)`, `to_json()`, `to_dict()`, `save(path)`. |
-| `Editor` | `Editor()`, then `validate(project)`, `preflight(project, options)`, `inspect(project, *, preview=False)`, `prepare(project, options=None)`, `render(project, request, *, on_progress=None, cancellation=None)`. |
-| `PrepareOptions` | `PrepareOptions(*, backend=None)`. |
-| `PreparedProject` | `render_frame_number(frame_number)`, `render_frame_ns(timestamp_ns)`, `render_frame_seconds(seconds)`, `render_video(request, *, on_progress=None, show_progress=True, cancellation=None)`. |
-| `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False)` for one-shot `Editor.render`. |
-| `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False)` for `PreparedProject.render_video`. |
-| `CancellationToken` | `CancellationToken()`, `cancel()`, read-only `is_cancelled`. |
+| `output` | Video destination: `.mp4`, `.gif` or `.webp`. Still destination: `.png`, `.jpg`, `.jpeg` or `.webp`. |
+| `preview` | Caps the longest side at 640 px and FPS at 15; selects `Quality.PREVIEW`. Explicit settings override their respective defaults. |
+| `resolution` | Even integer width and height in `2..=8192`, within resource limits; centered fit preserves proportions. |
+| `fps` | Positive integer, rational tuple or `FrameRate`. |
+| `quality` | Authoring `Quality` enum; controls MP4 encoding. |
+| `start`, `end` | Seconds on the original timeline, selecting frames in `[start, end)`. Omitted end uses project duration. |
+| `seconds`, `frame_number` | Single-frame selectors; supply exactly one. Times select the containing frame; indices are zero-based. |
+| `times`, `indices` | Explicit sequence selection; exclusive with each other and continuous range bounds. Order and duplicates are retained. |
+
+Prepared state fixes output dimensions, FPS and quality without changing the
+authored project. `render_frames()` defaults to the whole timeline, saves
+`frame_000000.ext`, … in request order and returns a count. Video range timestamps
+start at zero while effects retain project time. See [render outputs](render-outputs.md)
+for exact range rounding, audio synchronization, alpha, publication and format limits.
+
+### Frame methods
+
+`Frame.save(output, *, overwrite=False)` writes PNG, JPEG or lossless static
+WebP by extension. `Frame.to_numpy()` and `Project.get_frame()` require the
+`numpy` extra and return independent writable contiguous `uint8` arrays shaped
+`(height, width, 4)`. `Frame.to_bytes()` works without NumPy. See
+[frame data](render-outputs.md#frames-and-arrays) for pixel layout and ownership.
+
+### Native Editor
+
+```text title="Native Editor signatures (project is a ProjectSnapshot)"
+Editor(*, resource_limits=None)
+editor.validate(project)
+editor.preflight(project, options)
+editor.inspect(project, *, preview=False)
+editor.prepare(project, options=None)
+editor.render(project, request, *, show_progress=True, on_progress=None, cancellation=None)
+```
+
+| Options/request type | Construction and purpose |
+| --- | --- |
+| `PrepareOptions` | `PrepareOptions(*, backend=None, resolution=None, fps=None, quality=None)` selects backend and runtime overrides. Native FPS is `FrameRate`; quality is `"preview"`, `"balanced"` or `"high"`. |
+| `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False, start=None, end=None, resolution=None, fps=None, quality=None)` for one-shot `Editor.render`. |
+| `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False, start=None, end=None)` for prepared video rendering. |
+
+Native request `start=None` means zero. Both request types expose read-only
+`start` (seconds, default `0.0`) and `end` (seconds or `None`) properties.
+
+`Editor.validate()` checks canonical semantics only. Choose a preflight target
+for the additional operational checks below; backend arguments use `BackendPreference`.
+
+| `PreflightOptions` constructor | Additional checks |
+| --- | --- |
+| `for_validation()` | Media, tools, configured output with overwrite disabled, and Auto backend readiness; matches `ve validate`. |
+| `for_inspection()` | Media, without output/backend checks. |
+| `for_preparation(backend)` | Media and requested backend readiness. |
+| `for_render(backend, output, *, overwrite=False)` | Media, backend, supplied destination and render policy. |
+
+```text title="Prepared frame and video signatures"
+prepared.render_frame_number(frame_number)
+prepared.render_frame_ns(timestamp_ns)
+prepared.render_frame_seconds(seconds)
+prepared.render_video(request, *, on_progress=None, show_progress=True, cancellation=None)
+```
+
+## Resource limits
+
+```text title="Resource budget constructor"
+ResourceLimits(*, maximum_group_width=None, maximum_group_height=None,
+               maximum_group_pixels=None)
+```
+
+`ResourceLimits` configures group canvas budgets. Omitted or `None`
+values use safe defaults: 8192 pixels per axis and 67,108,864 pixels per canvas.
+Values are nonnegative integers within the native `u32`/`u64` ranges; the three
+properties are read-only. Zero disallows a positive canvas under that budget.
+Other native resource budgets retain their defaults.
+
+Pass the value to `Project(..., resource_limits=limits)` for high-level
+validation, preparation and one-shot rendering, or to
+`Editor(resource_limits=limits)` when operating on immutable snapshots. These
+settings are not serialized in project JSON. Canonical dimensions must remain
+positive, finite and safely representable; CPU allocation constraints and WGPU
+device limits still apply when budgets are raised.
+
+## Progress and cancellation
+
+Rendering uses native Auto terminal progress by default. Set `show_progress=False`
+to disable it, or pass `on_progress=my_callback` to replace the built-in renderer.
+
+```text title="Cancellation token signature"
+CancellationToken()
+token.cancel()
+token.is_cancelled  # read-only
+```
 
 `RenderEvent` v1 exposes `schema_version`, `kind`, `operation_id`, `stage`,
 `frame`, `total_frames`, `fraction`, and `output_path` with the applicable
 fields optional. Its lifecycle is `started`, `stage_changed`, `progress`, and
-one terminal event: `completed`, `cancelled`, or `failed`. Pass `on_progress`
-for a callback, or set `show_progress=False` to disable
-the built-in Auto terminal presentation. Custom callbacks replace the built-in
-terminal renderer. `Completed` occurs only after encoder finalization and
+one terminal event: `completed`, `cancelled`, or `failed`. `Completed` occurs only
+after encoder finalization and
 successful output publication. Rendering may reach fraction `1.0` before
 encoding and finalizing complete. A callback error before terminal success may
 abort the operation; an error while receiving `Completed` cannot invalidate a
-successfully published render. A successful `RenderResult` exposes output
-dimensions/timing, selected/requested backend, fallback, adapter, warnings,
-detailed `timings` and `performance`. `CancelledError` is a `RenderError`; a
+successfully published render. `CancelledError` is a `RenderError`; a
 cancelled operation does not return a `RenderResult`.
-
-`performance` exposes CPU scratch backing capacity, native video cache/current/
-working-buffer bytes, per-session cache peaks, and worker/output memory estimates.
-See [CPU memory accounting](../development/architecture/cpu-renderer.md#memory-accounting)
-for ownership, exclusions and units. These byte fields are not process RSS/PSS.
 
 If a Python progress callback raises, Vestra stops the native render and
 re-raises the original Python exception. No `RenderResult` is returned. If
 cleanup reports a native error, it is attached as
 `error.render_cleanup_error`; it does not replace the callback exception.
+
+### Successful results and memory counters
+
+`RenderResult` on success exposes output dimensions/timing, selected/requested backend, fallback, adapter, warnings,
+detailed `timings` and `performance`.
+
+`performance` exposes CPU scratch backing capacity, native video cache/current/
+working-buffer bytes, per-session cache peaks, and worker/output memory estimates.
+See [CPU memory accounting](../development/architecture/cpu-renderer.md#memory-accounting)
+for ownership, exclusions and units. These byte fields are not process RSS/PSS.
 
 ## Logging
 
@@ -119,8 +283,20 @@ importing Vestra and ordinary rendering do not install a global subscriber:
 import vestra
 
 vestra.configure_logging(level="info")
-vestra.configure_logging(level="debug", format="json", output="file",
-                         file="vestra.log")
+```
+
+For JSON logs in a file, choose this configuration instead. Initialize logging
+once per process:
+
+```python
+import vestra
+
+vestra.configure_logging(
+    level="debug",
+    format="json",
+    output="file",
+    file="vestra.log",
+)
 ```
 
 `level` accepts `error`, `warn`, `info`, `debug`, and `trace`. `format` is
@@ -137,4 +313,13 @@ native stderr progress available.
 
 ## Reports and errors
 
-`ValidationReport` has `is_valid`, `diagnostics`, `errors` and `warnings`; `PreflightReport` adds `is_ready`. `Diagnostic` has `code`, `category`, `severity`, `message`, `pointer`, `related_id` and `hint`. Native runtime errors include `ProjectError`, `PreparationError`, `FrameRenderError`, `RenderError` and `PreparedProjectBusyError`. `BackendPreference` is `AUTO`, `CPU` or `WGPU`; `BackendKind` reports `CPU` or `WGPU`. The exact exported native declarations are in `python/vestra/_native.pyi`.
+| Value | Fields or meaning |
+| --- | --- |
+| `ValidationReport` | `is_valid`, `diagnostics`, `errors`, `warnings`. |
+| `PreflightReport` | The validation fields plus `is_ready`. |
+| `Diagnostic` | `code`, `category`, `severity`, `message`, `pointer`, `related_id`, `hint`; see [diagnostics](diagnostics.md). |
+| Native errors | `ProjectError`, `PreparationError`, `FrameRenderError`, `RenderError`, `PreparedProjectBusyError`; cancellation raises `CancelledError`, a `RenderError`. |
+| Backend enums | `BackendPreference`: `AUTO`, `CPU`, `WGPU`; selected `BackendKind`: `CPU`, `WGPU`. |
+
+The exact native exports and declarations are in
+[`python/vestra/_native.pyi`](https://github.com/evgen2571/vestra/blob/develop/python/vestra/_native.pyi).

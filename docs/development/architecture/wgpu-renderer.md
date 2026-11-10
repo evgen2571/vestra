@@ -1,21 +1,52 @@
 # WGPU renderer
 
-The WGPU backend in `vestra-render-wgpu` implements the common `RenderBackend` contract and keeps GPU state inside one prepared render. It creates a WGPU instance, selects an adapter under the requested graphics API, requests the device and queue, then builds pipelines, textures, buffers, source resources and readback state. `AdapterInfo` records the actual graphics backend and device classification so the SDK can distinguish a hardware adapter from software WGPU.
+The WGPU backend in `vestra-render-wgpu` implements the common `RenderBackend` contract and keeps GPU state inside one prepared render.
 
-Root instances are process-owned and shared by backend selection. This preserves
-WSL/Mesa GL's EGL instance lifetime; each prepared renderer still owns its device,
-queue and resources. WGPU 23.0.1 includes the upstream
-[device/queue identity correction](https://github.com/gfx-rs/wgpu/commit/8c7c5c4974717414d49ffbd19e91a337f2db7861),
-first released in WGPU 23.0.0. WGPU 22.1.0 derived a queue's public identity from
-its device even though their registry lifetimes can differ. The complete fix
-also decouples submission-index polling from device identity; changing only the
-returned queue handle would leave readback waits affected. The adjacent release
-keeps the same default graphics backends and requires only explicit optional
-pipeline entry points in Vestra, with matching Naga 23 shader validation.
+## Preparation
 
-Preparation uploads static image/font/source data and creates reusable GPU resources. Frame evaluation still happens outside the backend. For each evaluated frame, the backend uploads changed video data, builds source/effect/composite passes from the evaluated layer tree, renders nested groups recursively, submits commands and schedules a readback of the completed RGBA frame. The readback path accounts for row alignment and repacks rows into the public tightly packed frame format.
+The backend obtains a shared root WGPU instance, selects an adapter under the requested graphics API, requests the device and queue, then builds pipelines, textures, buffers, source resources and readback state. `AdapterInfo` records the actual graphics backend and device classification so the SDK can distinguish a hardware adapter from software WGPU.
+
+Preparation uploads static image/font/source data and creates reusable GPU resources.
+
+## Frame execution
+
+Frame evaluation still happens outside the backend. For each evaluated frame, the backend uploads changed video data, builds source/effect/composite passes from the evaluated layer tree, renders nested groups recursively, submits commands and schedules a readback of the completed RGBA frame. The readback path accounts for row alignment and repacks rows into the public tightly packed frame format.
+
+### Canvas extents and mask precision
+
+The two root canvases and readback use output dimensions. Shared layer/effect
+scratch and group targets use the componentwise maximum of output and local
+canvas extents. Each operation carries its logical extent for dispatch, source
+sizing, clipping and sampling.
+Resource estimates and adapter limits account for those actual allocations.
+Orthogonal aspect ratios can amplify shared scratch memory because the pool
+uses fixed preparation-time targets. Group resource budgets constrain logical
+canvases, not total device memory.
+
+Owned group-mask recursion preserves both the consumer pixels and accumulated
+coverage in the existing reserved composition slots. In local canvas contexts,
+mask coverage is presented before feathering in parent pixels, and track mattes
+remain in parent coordinates. The legacy unsized WGPU path retains its existing
+transform/feather ordering. Feather scratch preserves R/G coverage state and uses
+the unused B channel for alpha rounding residuals between box passes, avoiding
+accumulated byte-rounding error without allocating another target.
+
+Accumulated coverage between masks remains byte-valued. Repeated faint masks at
+12 or 64 stages can differ from CPU float coverage by three channel levels;
+ordinary mask parity checks retain their two-level tolerance. This is a
+precision limit of the retained coverage state.
+
+## Resource ownership and reuse
+
+Root instances are process-owned and shared by backend selection to preserve
+WSL/Mesa GL's EGL lifetime. Each prepared renderer owns its device, queue and
+resources. Keep device, queue and submission identities distinct when managing
+completion; see the upstream [identity correction](https://github.com/gfx-rs/wgpu/commit/8c7c5c4974717414d49ffbd19e91a337f2db7861)
+and [lifecycle verification](../gpu-validation.md#stress-resource-lifetimes).
 
 The backend has bounded in-flight work. `VESTRA_WGPU_IN_FLIGHT` controls the implementation pipeline depth only when valid; it is not a semantic setting. Texture pools, source caches, staging buffers, pending static layers and readback slots are retained across a prepared operation. Release them only when their GPU completion token makes them safe to reuse. This is why a `PreparedProject` owns one backend instance and is not freely concurrent.
+
+## Frame planning and module ownership
 
 The internal frame path has these owners, all inside
 `crates/vestra-render-wgpu/src/wgpu/`:
@@ -36,7 +67,9 @@ The internal frame path has these owners, all inside
 The private `FramePlanBuilder` owns the operation/layer vectors and shared
 parameter/value counters. Recursive calls retain explicit canvas and logical
 value transitions. Effect expansion and validation consume the same operation
-and texture definitions; this remains a fixed-slot planner.
+and texture definitions in a fixed-slot planner.
+
+## Caching and capability policy
 
 `support.rs` owns WGPU kernel/blend capability policy and plan validation.
 Common supplies kernel identifiers and operation/requirement mapping; the facade
@@ -45,10 +78,9 @@ pipelines stay in WGPU, alongside private planning/resource tests. Cross-backend
 parity tests live in the facade and use public submission/completion contracts.
 
 Bind groups remain owned by the backend's frame slots. Most are prepared once;
-bindings for static cached textures are still created on demand during command
-encoding. Keeping that timing preserves the existing allocation and metric
-scopes. Topology, requirements, pipelines, texture pools and readback retain
-their separate resource responsibilities.
+bindings for static cached textures are created on demand during command
+encoding and counted in that scope. Topology, requirements, pipelines, texture
+pools and readback have separate resource responsibilities.
 
 Shader labels and ordered static WGSL fragments derive from `registry.rs`;
 `pipeline.rs` prepares supported kernels in common inventory order. Unsupported
@@ -59,6 +91,8 @@ registered record's size/alignment, named field offsets and scalar types against
 validated WGSL, plus typed upload. Numerical packing and algorithms still need
 their own specimens and rendered-pixel tests. The runtime kernel-mismatch guard
 remains in parameter/frame planning.
+
+## Metrics and current limits
 
 The current pipeline/shader counter omits one of nine base entries: with 19
 effect kernels it reports 27 for 28 actual creations. Interpret that metric with

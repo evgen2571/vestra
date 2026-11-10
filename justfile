@@ -21,6 +21,12 @@ fmt-check:
     rustfmt --edition 2024 --check crates/vestra-core/src/effects/*.rs
     uvx --from 'ruff>=0.12,<0.13' ruff format --check python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
 
+# Lint and test release helpers without building the native engine.
+release-check:
+    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/package-cli.py scripts/verify-cli.py scripts/verify-wheel.py benchmarks/python-abi.py scripts/release-*.py tests/test_cli_release.py tests/test_release_*.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/package-cli.py scripts/verify-cli.py scripts/verify-wheel.py benchmarks/python-abi.py scripts/release-*.py tests/test_cli_release.py tests/test_release_*.py
+    uv run --no-project --with pytest python -m pytest tests/test_cli_release.py tests/test_release_metadata.py tests/test_release_manifest.py tests/test_release_wheel.py tests/test_ffmpeg_source_archive.py -q
+
 # Run the inexpensive CI style checks.
 style: fmt-check lint-python showcase-style comparison-style docs-check gen-effects-check
 
@@ -113,37 +119,37 @@ examples *args='--validate-only':
 
 # Run a CPU smoke benchmark into a new output directory.
 benchmark-smoke output:
-    uv run --no-project python scripts/benchmark.py run --suite smoke --output "$1"
+    uv run --no-project python benchmarks/benchmark.py run --suite smoke --output "$1"
 
 # Run a canonical benchmark; backend is cpu or hardware-wgpu.
 benchmark output backend='cpu':
-    uv run --no-project python scripts/benchmark.py run --suite canonical --output "$1" --backend "$2"
+    uv run --no-project python benchmarks/benchmark.py run --suite canonical --output "$1" --backend "$2"
 
 # Compare two saved benchmark suite JSON files.
 benchmark-compare before after:
-    uv run --no-project python scripts/benchmark.py compare "$1" "$2"
+    uv run --no-project python benchmarks/benchmark.py compare "$1" "$2"
 
-# Check showcase authoring/scripts without importing the native extension.
+# Check Python examples and showcase scripts without importing the native extension.
 showcase-style:
-    uvx --from 'ruff>=0.12,<0.13' ruff check examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check examples/python examples/showcase examples/tutorials scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py tests/test_documentation_examples.py python-tests/test_documentation_examples.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/python examples/showcase examples/tutorials scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py tests/test_documentation_examples.py python-tests/test_documentation_examples.py
 
 # Check the external comparison and Code to Video authoring tools.
 comparison-style:
-    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
-    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check benchmarks/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check benchmarks/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check benchmarks/process.py benchmarks/collect.py benchmarks/collector tests/test_benchmark_collector.py benchmarks/render-previews.py benchmarks/render-charts.py tests/test_benchmark_previews.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check benchmarks/process.py benchmarks/collect.py benchmarks/collector tests/test_benchmark_collector.py benchmarks/render-previews.py benchmarks/render-charts.py tests/test_benchmark_previews.py
 
 # Collector contracts without building the project/native Python extension.
 collector-test:
-    uv run --no-project --python 3.13 --with pytest --with psutil==7.2.2 --with Pillow==11.3.0 python -m pytest tests/test_benchmark_collector.py tests/test_benchmark_compare.py tests/test_moviepy_comparison.py
+    uv run --no-project --python 3.13 --with pytest --with psutil==7.2.2 --with Pillow==11.3.0 python -m pytest tests/test_benchmark_collector.py tests/test_benchmark_compare.py tests/test_moviepy_comparison.py tests/test_benchmark_previews.py
 
 # Script regression tests; Pillow is isolated from Vestra's runtime dependencies.
 comparison-test:
     uv run --with 'Pillow==11.3.0' pytest tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
 
-# Reproduce the licensed footage selections and original soundtrack.
+# Verify bundled footage and reproduce the original soundtrack.
 showcase-assets:
     uv run python examples/showcase/prepare-assets.py
 
@@ -158,3 +164,21 @@ showcase:
 # Replace committed videos/posters and the README GIF with fresh full renders.
 showcase-refresh:
     uv run python scripts/render-showcases.py --preview --update-results
+
+# Preview documentation with live reload; no Rust engine or Vestra install needed.
+docs-serve *args:
+    uv run --no-project --with-requirements docs/requirements.txt zensical serve "$@"
+
+# Build the documentation website without compiling Vestra.
+docs-build:
+    uv run --no-project --with-requirements docs/requirements.txt zensical build --clean --strict
+
+# Check generated links, anchors and media at the GitHub Pages repository path.
+site-check: docs-build
+    uv run --no-project python scripts/check-site.py
+    uv run --no-project python benchmarks/render-previews.py --check
+    uv run --no-project --with pytest python -m pytest tests/test_site_links.py tests/test_site_navigation.py tests/test_documentation_examples.py -q
+
+# Reproduce documentation previews from the checkout (requires python-sync + FFmpeg).
+docs-media *args:
+    uv run --no-sync python scripts/render-docs-media.py "$@"

@@ -1,19 +1,19 @@
 # Vestra
 
 Vestra is a video composition and rendering engine. You describe a video as a
-project — layers, sources, keyframes, effects, audio — and Vestra renders it to
-MP4 through a native Rust engine, on the CPU or GPU (WGPU). It ships as a
-Python library, with a canonical JSON format and a `ve` CLI built from source.
+project — layers, sources, keyframes, effects, audio — and Vestra renders it
+through a native Rust engine, on the CPU or GPU (WGPU). It ships as a
+Python library, with a canonical JSON format and a separate native `ve` CLI.
 
 ![Animated showcase: animation, media, compositing and audio-reactive graphics](examples/showcase/readme-demo/preview.gif)
 
-[Full demo](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/render.mp4)
-· [Python source](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-demo/main.py)
-· [Asset credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md)
+[Full demo](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/readme-demo/render.mp4)
+· [Python source](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/readme-demo/main.py)
+· [Asset credits](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/readme-demo/README.md#credits)
 
 ## Quick start
 
-Requires Python 3.11–3.14. Rendering needs `ffmpeg` and `ffprobe` on `PATH`
+Requires Python 3.11–3.14. FFmpeg is installed automatically for Python
 (see [installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)).
 
 ```bash
@@ -46,24 +46,31 @@ project.render("output.mp4", overwrite=True)
 - **Stylized looks** — ASCII, palette mapping, ordered and blue-noise dither,
   halftone, pixel sorting and CRT effects, on clips or the whole frame.
 
-See [the rendered showcases](https://github.com/evgen2571/vestra/blob/main/examples/showcase/README.md)
+See [the rendered showcases](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/README.md)
 and [reference examples](https://github.com/evgen2571/vestra/blob/main/examples/README.md).
 
 ## Design and limits
 
 Projects compile to a versioned canonical model validated before rendering,
 so timing and layering errors are reported up front, with locations —
-`ve validate` and `project.validate()` check semantics; `ve inspect` and
-`prepare()` check media and backends. CPU and GPU share one evaluated plan.
+`project.validate()` checks semantics; `ve validate` also checks media, tools,
+the configured output path and backend readiness. `ve inspect` resolves media
+for a summary, while `prepare()` sets up reusable rendering. CPU and GPU share
+one evaluated plan.
 
-- Output is MP4 (H.264 + AAC) up to 8192×8192; even dimensions are required.
-- Rendering shells out to `ffmpeg`/`ffprobe` at runtime; wheels only bundle
-  the FFmpeg libraries used internally for decoding.
+- Export MP4 (H.264 + AAC), GIF, animated WebP, still images, image sequences
+  or NumPy arrays. Render a selected interval or use a smaller preview without
+  editing the project. See [render outputs](docs/reference/render-outputs.md)
+  for format and dimension limits.
+- Python installs an FFmpeg executable through `imageio-ffmpeg` for encoding
+  and audio processing; bundled FFmpeg libraries handle media probing and video
+  decoding. `ffprobe` is optional for independent output inspection.
 - `auto` uses WGPU when a usable adapter is found and falls back to CPU;
   `cpu` and `wgpu` force a renderer. WGPU coverage per feature is in the
   [feature matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md).
-- The Python wheel does not install the `ve` CLI — build it with
-  `cargo build -p vestra-cli` ([JSON authoring](https://github.com/evgen2571/vestra/blob/main/docs/guides/json-authoring.md)).
+- Download the separate `ve` CLI from [GitHub Releases](https://github.com/evgen2571/vestra/releases),
+  or build it with `cargo build -p vestra-cli`. It needs no Python; see
+  [CLI installation](https://github.com/evgen2571/vestra/blob/develop/docs/getting-started/installation.md#install-the-native-cli).
 - Python text uses a bundled default, an installed font family, or an explicit font file.
 
 Vestra is a rendering engine, not a live editor: it renders a finished project
@@ -74,7 +81,7 @@ Motion Canvas or MoviePy instead.
 ## Documentation
 
 [Installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)
-· [Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md)
+· [Python quickstart](https://github.com/evgen2571/vestra/blob/develop/docs/getting-started/first-render.md)
 · [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md)
 · [Docs index](https://github.com/evgen2571/vestra/blob/main/docs/index.md)
 · [Python API](https://github.com/evgen2571/vestra/blob/main/docs/reference/python-api.md)
@@ -130,7 +137,8 @@ Install these dependencies before running `uv sync`:
 - libclang for native bindings, and `pkg-config` for library discovery.
 - Git to fetch the source code.
 - **NASM** for FFmpeg's x86 assembly.
-- FFmpeg runtime: `ffmpeg` and `ffprobe` on `PATH` for rendering.
+- FFmpeg on `PATH` for native CLI tests and developer media tools; Python
+  uses its installed `imageio-ffmpeg` dependency.
 
 See [native setup instructions](docs/getting-started/installation.md#without-nix)
 for the prerequisites and build commands, including an Ubuntu/Debian example.
@@ -143,11 +151,12 @@ and `just python-test` for Python tests. Run `just` to list available commands.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and
 [testing](docs/development/testing.md) for focused checks.
 Agents start with [AGENTS.md](AGENTS.md); benchmarks live in
-[benchmarks](benchmarks/README.md) with a
-[MoviePy comparison](https://github.com/evgen2571/vestra/blob/main/docs/benchmarks/vestra-vs-moviepy.md).
+[benchmarks](benchmarks/README.md): [results](docs/benchmarks/index.md),
+[workload previews](docs/benchmarks/workloads.md), and
+[one-command collection](docs/benchmarks/collecting.md).
 
 ## License
 
 [MIT](LICENSE). Third-party software and example assets keep their own
 licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
-[asset credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/ASSETS.md).
+[asset credits](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/readme-demo/README.md#credits).

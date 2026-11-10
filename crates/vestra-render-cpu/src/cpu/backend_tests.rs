@@ -21,6 +21,8 @@ fn scratch_capacity_includes_nested_compositions_across_workers_and_resize() {
     for workers in [1, 3] {
         plan.canvas.width = 4;
         plan.canvas.height = 4;
+        plan.canvas.logical_width = plan.canvas.width;
+        plan.canvas.logical_height = plan.canvas.height;
         let decoded = DecodedAssets::build(&plan).expect("fixture assets");
         let shared_bytes = decoded.stats().decoded_source_bytes;
         let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, workers);
@@ -33,12 +35,18 @@ fn scratch_capacity_includes_nested_compositions_across_workers_and_resize() {
             let mut group = child.clone();
             group.source = EvaluatedSource::Group {
                 composition: vestra_core::plan::EvaluatedComposition {
+                    is_sized: false,
+                    width: size,
+                    height: size,
                     layers: vec![child],
                 },
             };
             let mut parent = group.clone();
             parent.source = EvaluatedSource::Group {
                 composition: vestra_core::plan::EvaluatedComposition {
+                    is_sized: false,
+                    width: size,
+                    height: size,
                     layers: vec![group],
                 },
             };
@@ -862,7 +870,7 @@ fn cpu_mixed_static_and_video_sources_render_through_one_layer_pipeline() {
     )
     .expect("mixed source fixture parses");
     let image_path =
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets/red.png");
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixtures/red.png");
     let asset_paths = std::collections::BTreeMap::from([
         ("image".to_owned(), image_path),
         ("video".to_owned(), std::path::PathBuf::from("fixture.mp4")),
@@ -1082,6 +1090,8 @@ fn automatic_worker_policy_preserves_legacy_canvas_heuristic() {
 
     plan.canvas.width = 1_920;
     plan.canvas.height = 1_080;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     assert_eq!(automatic_worker_count(&plan, 1), 1);
     assert_eq!(automatic_worker_count(&plan, 2), 1);
     assert_eq!(automatic_worker_count(&plan, 4), 3);
@@ -1089,10 +1099,87 @@ fn automatic_worker_policy_preserves_legacy_canvas_heuristic() {
 
     plan.canvas.width = 2_560;
     plan.canvas.height = 1_440;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     assert_eq!(automatic_worker_count(&plan, 64), 6);
     plan.canvas.width = 3_840;
     plan.canvas.height = 2_160;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     assert_eq!(automatic_worker_count(&plan, 64), 2);
+}
+
+#[test]
+fn automatic_worker_policy_accounts_for_large_visual_and_mask_group_canvases() {
+    use vestra_core::plan::CompiledVisualSource;
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
+    plan.canvas.width = 16;
+    plan.canvas.height = 16;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
+    plan.visual_dependency = TemporalDependency::Dynamic;
+    let group_source = |size| {
+        CompiledVisualSource::Group(Arc::new(vestra_core::plan::CompiledComposition {
+            size,
+            layers: Vec::new(),
+            schedule: vestra_core::plan::ActiveSchedule::compile(&plan),
+            dependency: TemporalDependency::Dynamic,
+        }))
+    };
+    let inherited = group_source(None);
+    let large = group_source(Some(vestra_core::project::GroupSize {
+        width: 8192.0,
+        height: 8192.0,
+    }));
+    let thin = group_source(Some(vestra_core::project::GroupSize {
+        width: 8192.0,
+        height: 16.0,
+    }));
+    plan.layers.truncate(1);
+    plan.layers[0].source = inherited;
+    plan.layers[0].masks.clear();
+    assert_eq!(
+        automatic_worker_count(&plan, 64),
+        8,
+        "legacy inherited canvas"
+    );
+    plan.layers[0].source = thin;
+    assert_eq!(
+        automatic_worker_count(&plan, 64),
+        8,
+        "use area, not squared maximum axis"
+    );
+    plan.layers[0].source = large.clone();
+    assert_eq!(automatic_worker_count(&plan, 64), 1, "large visual group");
+    plan.layers[0].source = CompiledVisualSource::SolidColor { colour: [255; 4] };
+    let transform = plan.layers[0].transform.clone();
+    plan.layers[0].masks.push(vestra_core::plan::CompiledMask {
+        input: vestra_core::plan::CompiledMaskInput::Source {
+            source: Box::new(large),
+            mode: crate::project::MaskCoverageMode::Alpha,
+        },
+        operation: crate::project::MaskOperation::Intersect,
+        invert: false,
+        strength: vestra_core::plan::CompiledScalarProperty::authored(
+            vestra_core::animation::Track::new(1.0),
+        ),
+        feather: vestra_core::plan::CompiledScalarProperty::authored(
+            vestra_core::animation::Track::new(0.0),
+        ),
+        transform,
+    });
+    assert_eq!(
+        automatic_worker_count(&plan, 64),
+        1,
+        "large owned group mask"
+    );
 }
 
 #[test]
@@ -1107,6 +1194,8 @@ fn automatic_worker_policy_is_never_zero_and_handles_overflow() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = u32::MAX;
     plan.canvas.height = u32::MAX;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     assert_eq!(automatic_worker_count(&plan, 0), 1);
     assert_eq!(automatic_worker_count(&plan, usize::MAX), 1);
 }
@@ -1378,6 +1467,8 @@ fn reuses_complete_static_layer_surfaces_without_mutating_them() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 4;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
     assert_eq!(backend.capacity(), 1);
@@ -1542,6 +1633,8 @@ fn dynamic_effect_scratch_allocations_stabilize_after_warmup() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 4;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
     let mut frame = static_frame();
@@ -1610,6 +1703,8 @@ fn over_budget_static_layers_render_without_retention() {
     plan.limits.maximum_cache_bytes = 1;
     plan.canvas.width = 4;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let mut backend = CpuBackend::new_with_worker_count(&plan, Arc::clone(&decoded), 1);
     let mut reference = CpuBackend::new_with_worker_count(&plan, decoded, 1);
@@ -2056,6 +2151,8 @@ fn spectrum2d_cpu_benchmark() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 1_920;
     plan.canvas.height = 1_080;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let available = thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
 
@@ -2267,6 +2364,8 @@ fn cpu_parallel_scaling_benchmark() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 1_920;
     plan.canvas.height = 1_080;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let frame_count = plan.frame_count.min(60);
     let frames: Vec<_> = (0..frame_count)
@@ -2368,5 +2467,46 @@ fn cancellation_does_not_block_on_cpu_completion() {
     assert!(backend.verify_idle().is_err());
 }
 
-#[path = "native_worker_benchmarks.rs"]
+#[path = "../../../../benchmarks/rust/cpu/native_worker_benchmarks.rs"]
 mod native_worker_benchmarks;
+#[test]
+fn preview_preserves_authored_shape_geometry() {
+    let project: vestra_core::project::Project = serde_json::from_value(serde_json::json!({
+        "schema_version": 1,
+        "output": {"path": "resolution.mp4", "width": 1280, "height": 720,
+            "frame_rate": "24/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1.0},
+        "assets": [],
+        "visual": {"clips": [{"id": "shape", "source": {"type": "shape",
+            "geometry": {"type": "rectangle", "width": 640, "height": 360}, "fill": "#ff0000"},
+            "start": 0, "duration": 1, "layer": 0, "opacity": {"base_value": 1}}]}
+    }))
+    .expect("shape fixture");
+    let assets = std::collections::BTreeMap::new();
+    let durations = std::collections::BTreeMap::new();
+    let plan = compile(
+        vestra_core::plan::PlanCompileInput::new(
+            &project,
+            vestra_core::validation::ResourceLimits::default(),
+            std::path::Path::new("."),
+            &assets,
+            &durations,
+            1.0,
+            (24, 1),
+            24,
+            &[],
+        ),
+        CompileOptions {
+            preview: true,
+            ..CompileOptions::default()
+        },
+    )
+    .expect("compile");
+    let decoded = DecodedAssets::build(&plan).expect("shape raster");
+    let frame = evaluate(&plan, &[ScheduledItem(0)], 0).expect("evaluate");
+    let mut backend = CpuBackend::new_with_worker_count(&plan, decoded, 1);
+    let mut output = image::RgbaImage::new(frame.width, frame.height);
+    backend.render_frame(&frame, &mut output).expect("render");
+    assert_eq!(output.dimensions(), (640, 360));
+    assert_eq!(output.get_pixel(80, 180).0, [0, 0, 0, 255]);
+    assert_eq!(output.get_pixel(320, 180).0, [255, 0, 0, 255]);
+}

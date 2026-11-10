@@ -1,10 +1,10 @@
 # Add a visual effect
 
-Define an effect once, keep its semantic decisions in its own Rust module, and
-register a kernel only when existing operations cannot implement it. Start with
-[Vignette](../../../crates/vestra-core/src/effects/vignette.rs),
-[Glow](../../../crates/vestra-core/src/effects/glow.rs), or
-[Camera Shake](../../../crates/vestra-core/src/effects/camera_shake.rs).
+Choose an existing effect with the same kind of work, then follow its path from
+declaration to rendered pixels. Start with
+[Vignette](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effects/vignette.rs),
+[Glow](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effects/glow.rs), or
+[Camera Shake](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effects/camera_shake.rs).
 
 Read the [effect pipeline](../architecture/effect-pipeline.md) before changing
 resources. The [effect reference](../../reference/effects.md) owns coordinate,
@@ -25,16 +25,27 @@ Gaussian's two directions share one kernel, and Glow reuses extraction,
 Gaussian and composition. `ColourTransform` is internal compiled/evaluated data,
 without an authored public effect.
 
-For a small ordinary effect with its CPU algorithm in the existing effects
-file, expect eight maintained files: catalog, semantic module, logical operation,
-common kernel declaration, CPU implementation/dispatch, WGPU registry, WGPU
-record/packing and WGSL. A composite or transform effect using existing renderer
-behavior needs only the catalog and semantic module. Tests and generated output
-are additional; specialized resources can require more implementation files.
+## Find the owners
 
-## Declare fields and parameters
+| Work | Owning files |
+| --- | --- |
+| Declaration and semantic decisions | Core `effect_definition/catalog_entries.rs` and `effects/<module>.rs` |
+| New logical operation | Core `plan/effect_passes/mod.rs` |
+| Kernel identity and operation mapping | Render-common `kernel.rs` |
+| CPU algorithm, support and dispatch | Render-cpu `cpu/effects.rs` |
+| WGPU support, packing and shader | Render-wgpu `wgpu/registry.rs`, `wgpu/parameters/effects.rs` and `shaders/effects/` |
+| Generated Python, schema and reference | `just gen-effects`; Python ergonomics overrides in `scripts/effects/python_metadata.py` |
 
-Edit [catalog_entries.rs](../../../crates/vestra-core/src/effect_definition/catalog_entries.rs).
+Crate paths above are relative to their `src/` directories. Use the
+[full ownership map](../architecture/effect-pipeline.md#ownership-and-data-flow)
+for specialized resources. Composite and transform-only effects can reuse
+renderer behavior without new kernels.
+
+## Implement in order
+
+### 1. Declare fields and parameters { #declare-fields-and-parameters }
+
+Edit [catalog_entries.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effect_definition/catalog_entries.rs).
 Each entry owns the Rust variant, semantic module, canonical JSON `id`, class,
 scope, stage, temporal policy, conservative pass estimate and original-retention
 policy. It also contains:
@@ -92,7 +103,7 @@ fail compilation. These checks run during ordinary builds, without a generator.
 The lists derive visitors, target metadata and ordinary normalization/remapping;
 descriptor completeness and semantic compatibility are additionally tested.
 
-[field_types.rs](../../../crates/vestra-core/src/effect_definition/field_types.rs)
+[field_types.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/effect_definition/field_types.rs)
 explicitly classifies supported Rust types. Qualified scalar/track paths and
 aliases resolve to the same classification. New types require a deliberate
 classification there; there is no blanket rule treating every `Track<T>` as a
@@ -112,7 +123,7 @@ as needed. Aliases and other paths to these specialized point/timing types fail
 compilation with `use canonical point/timing type paths`, so they cannot silently
 bypass normalization or timing/remapping.
 
-## Implement semantic decisions
+### 2. Implement semantic decisions { #implement-semantic-decisions }
 
 Add `crates/vestra-core/src/effects/<module>.rs`; the declaration includes it
 automatically. Follow the closest existing module:
@@ -151,7 +162,7 @@ These routes need no new cases in the central frame evaluator.
 Direct transform presentation currently supports Image, Shape, Text and Group;
 the hook does not broaden the existing source-support policy.
 
-## Declare passes and resources
+### 3. Declare passes and resources { #declare-passes-and-resources }
 
 Use `Original`, `Current`, `Temporary0`, `Temporary1` and explicit
 `EffectPassInputs`. Map live inputs and outputs before coding. Preserve
@@ -164,13 +175,13 @@ Glow-like effect needs no artificial kernel. ASCII has analysis/resolve passes
 and a prepared atlas with its own lifetime and shared shader fragments.
 
 For genuinely new work, add typed evaluated fields to `EffectOperation` in
-[plan/effect_passes/mod.rs](../../../crates/vestra-core/src/plan/effect_passes/mod.rs).
+[plan/effect_passes/mod.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-core/src/plan/effect_passes/mod.rs).
 Keep this IR backend-neutral. Conservative topology must include operations
 reachable on any active frame, including when a sampled frame is an identity.
 
-## Register a kernel and CPU behavior
+### 4. Register a kernel and CPU behavior { #register-a-kernel-and-cpu-behavior }
 
-Add one row in [render-common/kernel.rs](../../../crates/vestra-render-common/src/kernel.rs):
+Add one row in [render-common/kernel.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-common/src/kernel.rs):
 
 ```rust
 Vignette = 7 => [Vignette],
@@ -181,7 +192,7 @@ mapping. Preserve existing order/bits. Append a new kernel with an unused bit
 below 64; bits are independent of enum discriminants. Gaussian demonstrates
 mapping several operations to one kernel.
 
-In [CPU effects](../../../crates/vestra-render-cpu/src/cpu/effects.rs), add the
+In [CPU effects](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-cpu/src/cpu/effects.rs), add the
 algorithm and one `cpu_effect_kernels!` row binding explicit support to typed
 dispatch. Reuse source/secondary/target surfaces, prepared atlases and pools.
 A dedicated algorithm module additionally needs its ordinary Rust declaration.
@@ -189,14 +200,14 @@ Unsupported kernels need explicit `unsupported` entries and operation patterns;
 missing capability/dispatch cases fail compilation. Preserve alpha, Gaussian
 direction adapters, profiling and temporary liveness.
 
-## Implement WGPU behavior
+### 5. Implement WGPU behavior { #implement-wgpu-behavior }
 
 An ordinary new WGPU kernel has three maintained locations:
 
 1. The WGSL algorithm under `crates/vestra-render-wgpu/src/shaders/effects/`.
 2. An explicit `effect_parameters!` record and operation packing in
-   [parameters/effects.rs](../../../crates/vestra-render-wgpu/src/wgpu/parameters/effects.rs).
-3. One [registry.rs](../../../crates/vestra-render-wgpu/src/wgpu/registry.rs) row
+   [parameters/effects.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-wgpu/src/wgpu/parameters/effects.rs).
+3. One [registry.rs](https://github.com/evgen2571/vestra/blob/develop/crates/vestra-render-wgpu/src/wgpu/registry.rs) row
    declaring support, parameter type, exact shader label and ordered static
    source fragments.
 
@@ -218,7 +229,7 @@ implementation can also explicitly decline support. Registration, backend
 policy, device features/limits and resource preparation remain separate checks.
 Preserve `RENDER-UNSUPPORTED-KERNEL`, explicit-backend errors and `Auto` fallback.
 
-## Generate the public surface
+### 6. Generate the public surface { #generate-the-public-surface }
 
 ```bash
 just gen-effects
@@ -254,43 +265,36 @@ just docs-check
 just check
 ```
 
-`effect-check` runs generation, core/common/CPU tests and adapter-independent
-WGPU library tests, including shader/ABI/packing/registration contracts. It
-disables the WGPU crate's default `adapter-tests` feature; no graphics adapter,
-Vulkan ICD or EGL environment is required. A test-only guard rejects accidental
-graphics initialization in this suite. Device, submission, readback and rendering
-tests remain enabled by default and are explicitly included in the strict
-software/hardware commands below. Included semantic-source formatting is also
-checked. Use `just fmt` to format. After Rust-only edits, the explicit
-reinstall above ensures Python loads a newly built extension; ordinary uv
-synchronization can reuse its cached native build. Run adapter checks separately:
+`effect-check` covers generation, core/common/CPU tests and adapter-independent
+WGPU contracts. Use `just fmt` for included semantic-source formatting. The
+explicit reinstall ensures Python loads the changed Rust extension; ordinary
+uv synchronization can reuse a cached build.
+
+Run adapter checks separately:
 
 ```bash
 just wgpu-software
 just wgpu-hardware
 ```
 
-Follow [GPU validation](../gpu-validation.md) to discover/name the adapter.
-Software tests do not establish hardware correctness. Inspect actual frames:
-alpha, masks/groups, chains, boundaries, repeated and out-of-order requests.
-Compare literal/reference pixels as well as CPU/WGPU parity. See
-[testing](../testing.md) for isolated features, frozen contracts, schema and
-packaging, and [performance](../performance.md) for comparable measurements.
+Use [GPU validation](../gpu-validation.md#understand-the-test-evidence) for
+adapter selection, evidence requirements and frame inspection. The
+[effect test reference](../effect-testing.md) locates compatibility fixtures;
+[Testing](../testing.md) covers feature isolation, schema and packaging.
+Use [Performance](../performance.md) when measuring cost.
 
-Compile-time checks catch missing variants/modules/functions, operations and
-backend decisions; duplicate kernel bits fail constant assertions. Whole-catalog
-structural tests check scalar/plain-track visitors, compiled constraints and
-negative keyframe-validation paths. Registered GPU records receive ABI checks.
-Frozen specimens and actual pixels supply further compatibility evidence;
-these are not exhaustive proofs of every parameter combination or device.
+Before submitting:
 
-Add a specimen to the whole-catalog conformance table in
-`crates/vestra-render-common/src/kernel.rs` for each public effect. A new kernel
-also needs new rows in the frozen kernel-order, shader-byte and packed-record
-tests; keep existing rows unchanged. Catalog-count tests intentionally require
-updates too. These test edits are additional to the implementation footprint.
-
-Common mistakes are identity rules ignoring animation/modifiers, omitted
-conservative passes, wrong original/secondary inputs, incomplete validation,
-wrong WGSL field order, and treating shader parsing as renderer validation.
-Add effect-specific regression tests for those decisions.
+- Add each public effect to the conformance table in
+  `crates/vestra-render-common/src/kernel.rs`. For a new kernel, add frozen
+  kernel-order, shader-byte and packed-record rows; preserve existing specimens
+  and update intentional catalog counts.
+- Test identity with animation/modifiers, conservative passes, original/secondary
+  input liveness, validation and WGSL layout. Exercise alpha, masks/groups,
+  effect chains, boundaries and repeated/out-of-order frame requests.
+- Inspect actual pixels against an independent reference as well as backend
+  parity. Record CPU, software-WGPU and named hardware results separately;
+  unavailable checks remain unverified.
+- Update the [effect reference](../../reference/effects.md) and
+  [support matrix](../../reference/feature-support.md) to match demonstrated
+  behavior, including limits. Commit generated output with its declaration.

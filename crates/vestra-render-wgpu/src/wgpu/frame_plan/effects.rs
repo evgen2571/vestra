@@ -24,7 +24,7 @@ impl FramePlanBuilder {
         let retains_original = passes.requirements().retains_original();
         let original_value = *current_value;
         if retains_original {
-            self.operations.push(GpuOperation::CopyForEffect {
+            self.push(GpuOperation::CopyForEffect {
                 source: *current,
                 destination: TextureSlot::Auxiliary,
                 value: original_value,
@@ -64,7 +64,7 @@ impl FramePlanBuilder {
                 pass.output,
                 [source, auxiliary.unwrap_or(source)],
             );
-            self.operations.push(GpuOperation::ApplyEffect {
+            self.push(GpuOperation::ApplyEffect {
                 kernel: kernel_for_operation(&pass.operation),
                 scope,
                 layer_index,

@@ -1,56 +1,106 @@
-# Vestra documentation
+---
+title: Vestra documentation
+description: Documentation for Vestra, a Python video composition library backed by Rust. Installation, tutorials, rendered examples, and API reference.
+hide:
+  - navigation
+  - toc
+---
 
-Learn to compose and render videos with Vestra's Python API or CLI. Start with
-installation and a quickstart, then use the guides for the features you need.
-The [feature-support matrix](reference/feature-support.md) states what each
-backend actually implements.
+<div class="vestra-home" markdown="1">
 
-## Get started
+<div class="home-hero" markdown="0">
+<div class="home-hero__copy">
+<h1>Video composition<br> in Python</h1>
+<p class="home-lead">Vestra is a Python library for composing and rendering video, backed by Rust. Combine footage, text, shapes, effects, and audio in a script.</p>
+<div class="home-actions">
+<a class="home-button home-button--primary" href="getting-started/first-render/">Render a shape</a>
+<a class="home-button" href="gallery/">Browse examples</a>
+</div>
+<p class="home-requirements">Python 3.11–3.14 · CPU or WGPU rendering · MP4 output</p>
+</div>
+<figure class="home-hero__preview">
+<video controls playsinline preload="metadata" width="640" height="360" poster="assets/gallery/motion-design.webp" aria-label="Vestra overview: animated cards, masked valley footage with dithering, and a radial audio spectrum" aria-describedby="reel-caption">
+<source src="assets/gallery/motion-design.mp4" type="video/mp4">
+<a href="assets/gallery/motion-design.mp4">Download the feature reel</a>.
+</video>
+<figcaption id="reel-caption">A ten-second render of animated cards, masked valley footage, palette effects, and a radial audio spectrum. <a href="gallery/motion-design/">Source &amp; credits</a></figcaption>
+</figure>
+</div>
 
-- [Install Vestra](getting-started/installation.md)
-- [Python quickstart](getting-started/python-quickstart.md)
-- [JSON / CLI quickstart](getting-started/cli-quickstart.md)
-- [Showcases](../examples/showcase/README.md) and [reference examples](../examples/README.md)
+<div class="home-intro" markdown="1">
+
+## Projects, layers, and rendering
+
+A project defines the canvas and timeline. Add sources as layers, set their properties, and use keyframes to change those properties over time. Vestra evaluates the composition and encodes the result as an MP4.
+
+Because the composition is Python code, you can use data, loops, and functions to produce related videos from the same script. The examples below cover motion graphics, masked images, video editing, and audio-reactive graphics.
+
+</div>
+
+<div class="home-code" markdown="1">
+<div markdown="1">
+
+### A complete rendering example
+
+Three position keyframes move this rounded rectangle across the canvas and back. It renders on CPU and writes `quickstart.mp4` to the current directory; rerunning it replaces that file.
+
+```python
+--8<-- "examples/tutorials/first_animation.py"
+```
+
+[Install Vestra](getting-started/installation.md), then follow the [first render tutorial](getting-started/first-render.md) for a complete, explained project.
+
+</div>
+<figure>
+<video controls playsinline preload="metadata" width="640" height="360" poster="assets/renders/first-animation.webp" aria-label="A mint rounded rectangle moves right and returns over three seconds">
+<source src="assets/renders/first-animation.mp4" type="video/mp4">
+<a href="assets/renders/first-animation.mp4">Download the rectangle animation</a>.
+</video>
+<figcaption>The output of the code alongside it. Positions use fractions of the canvas: (0.5, 0.5) is the center.</figcaption>
+</figure>
+</div>
 
 ## Learn Vestra
 
-- [Projects and compositions](guides/python/projects-and-compositions.md)
-- [Sources and layers](guides/python/sources-and-layers.md)
-- [Animation](guides/python/animation.md)
-- [Effects](guides/python/effects.md)
-- [Masks](guides/python/masks.md)
-- [Transitions, flashes and presets](guides/python/transitions-flashes-and-presets.md)
-- [Audio](guides/python/audio.md) and [signals](guides/python/signals-and-audio-reactivity.md)
-- [Nested compositions](guides/python/nested-compositions.md)
-- [Rendering and preparation](guides/python/rendering-and-preparation.md)
+The introductory tutorials start with the rectangle's static layout, then add the position track from the example above. Each includes complete source and the expected output.
 
-## JSON authoring
+<ol class="learning-path">
+<li>
+<span class="learning-path__step" aria-hidden="true">1</span>
+<h3><a href="getting-started/installation/">Install Vestra</a></h3>
+<p>Install the Python package, then check your environment.</p>
+</li>
+<li>
+<span class="learning-path__step" aria-hidden="true">2</span>
+<h3><a href="getting-started/first-render/">Render a shape</a></h3>
+<p>Define a canvas, place a rounded rectangle, and render a three-second MP4.</p>
+</li>
+<li>
+<span class="learning-path__step" aria-hidden="true">3</span>
+<h3><a href="getting-started/first-animation/">Animate the layers</a></h3>
+<p>Add eased position keyframes to move the rectangle right and back.</p>
+</li>
+</ol>
 
-- [Compose videos with JSON](guides/json-authoring.md)
-- [Project-format reference](reference/project-format.md)
+[Animation and keyframes](getting-started/animation.md) explains interpolation, easing, and layer-local time in more detail.
 
-## CLI
+## Rendered examples
 
-- [CLI quickstart](getting-started/cli-quickstart.md)
-- [Rendering](guides/cli/rendering.md)
-- [Logging and progress](guides/cli/logging-and-progress.md)
+<div class="home-gallery" markdown="0">
+<a href="gallery/visual-effects/" class="home-gallery__item"><img src="assets/gallery/visual-effects.webp" width="640" height="360" loading="lazy" alt="A landscape displayed as a photograph, halftone, and ASCII"><span><strong>Photo effects</strong><span>Halftone, ASCII, and group masks</span></span></a>
+<a href="gallery/audio-reactive/" class="home-gallery__item"><img src="assets/gallery/audio-reactive.webp" width="640" height="360" loading="lazy" alt="A cyan and coral radial spectrum surrounding a pulsing ring"><span><strong>Audio-reactive graphics</strong><span>Audio analysis, signals, and particles</span></span></a>
+<a href="gallery/video-editing/" class="home-gallery__item"><img src="assets/gallery/video-editing.webp" width="640" height="360" loading="lazy" alt="Snowy valley footage with animated reframing"><span><strong>Video editing</strong><span>Video layers, reframing, and transitions</span></span></a>
+</div>
 
-## Troubleshooting
+[Browse all examples and their source code](gallery/index.md), or see the same bundled footage in the [benchmark workloads](benchmarks/workloads.md).
 
-- [FFmpeg and media](troubleshooting/ffmpeg.md)
-- [Python](troubleshooting/python.md)
-- [Rendering](troubleshooting/rendering.md)
-- [WGPU](troubleshooting/wgpu.md)
+<div class="home-reference" markdown="1">
 
-## Reference
+## Guides and API reference
 
-Browse the [detailed reference](reference/README.md) for API contracts, source
-and effect options, project formats, [backend support](reference/backends.md),
-[feature support](reference/feature-support.md) and [core concepts](concepts/authoring-model.md).
+Use the **Guides** navigation for tasks such as [grouping layers](guides/python/nested-compositions.md), [masking images](guides/python/masks.md), [applying effects](guides/python/effects.md), or [working with audio and spectra](guides/python/signals-and-audio-reactivity.md). **Concepts** explains the authoring and timing model. **Reference** lists [source types](reference/index.md#choose-a-source), APIs, parameters and support limits.
 
-## Development
+Vestra renders finished videos to H.264 MP4. The Python API is evolving in the 0.1 series. Check [feature support](reference/feature-support.md) for backend coverage and [troubleshooting](troubleshooting/rendering.md) if a render fails.
 
-See [Contributing](../CONTRIBUTING.md) for setup and contribution guidance and the
-[development documentation](development/README.md) for testing, architecture,
-performance, extensions and release procedures. Agent contributors can start
-with [AGENTS.md](../AGENTS.md) and use [PLANS.md](../PLANS.md) for larger tasks.
+</div>
+</div>

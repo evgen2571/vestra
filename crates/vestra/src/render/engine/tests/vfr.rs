@@ -46,6 +46,7 @@ fn native_vfr_video_renders_through_layer_timing_and_holds_previous_pts() {
         plan,
         RenderBackendPreference::Cpu,
         validated.video_metadata.clone(),
+        None,
     )
     .expect("native VFR video prepares");
 

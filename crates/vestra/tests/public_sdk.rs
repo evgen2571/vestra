@@ -21,6 +21,129 @@ fn background_project(directory: &std::path::Path) -> vestra::Project {
     .expect("project")
 }
 
+#[test]
+fn prepared_ranges_resolve_on_the_original_half_open_frame_grid() {
+    let directory = tempdir().expect("temporary directory");
+    let prepared = Editor::new()
+        .prepare(
+            &background_project(directory.path()),
+            PrepareOptions::new(BackendPreference::Cpu),
+        )
+        .expect("prepare");
+    assert_eq!(prepared.frame_range(Duration::ZERO, None).unwrap(), 0..30);
+    assert_eq!(
+        prepared
+            .frame_range(Duration::from_millis(26), Some(Duration::from_millis(101)))
+            .unwrap(),
+        1..4
+    );
+    assert_eq!(
+        prepared
+            .frame_range(Duration::from_millis(100), Some(Duration::from_millis(200)))
+            .unwrap(),
+        3..6
+    );
+    for (start, end) in [
+        (Duration::ZERO, Some(Duration::ZERO)),
+        (Duration::from_secs(1), None),
+        (Duration::ZERO, Some(Duration::from_secs(2))),
+        (Duration::from_millis(1), Some(Duration::from_millis(2))),
+        (Duration::MAX, None),
+    ] {
+        let error = prepared.frame_range(start, end).expect_err("invalid range");
+        assert_eq!(error.diagnostics()[0].code, "VESTRA-RENDER-RANGE");
+    }
+}
+
+#[test]
+fn prepared_ranges_keep_fractional_fps_boundaries_exact() {
+    let directory = tempdir().expect("temporary directory");
+    let project = vestra::Project::from_json(
+        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":2,"height":2,"frame_rate":"30000/1001","background":"#102030","quality":"preview","audio":false,"duration_mode":"explicit","duration":1},"assets":[],"visual":{"clips":[]}}"##,
+        directory.path(),
+    ).expect("project");
+    let prepared = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .unwrap();
+    assert_eq!(
+        prepared
+            .frame_range(
+                Duration::from_nanos(33_366_666),
+                Some(Duration::from_nanos(66_733_333))
+            )
+            .unwrap(),
+        1..2
+    );
+    assert_eq!(
+        prepared
+            .frame_range(
+                Duration::from_nanos(33_366_667),
+                Some(Duration::from_nanos(66_733_334))
+            )
+            .unwrap(),
+        2..3
+    );
+}
+
+#[test]
+fn configurable_group_resource_limits_reach_validation_preflight_and_cpu_preparation() {
+    let directory = tempdir().expect("temporary directory");
+    let project = vestra::Project::from_value(serde_json::json!({
+        "schema_version": 1,
+        "output": {"path": "large-thin.mp4", "width": 2, "height": 2, "frame_rate": "2/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 0.5},
+        "assets": [],
+        "visual": {"clips": [{"id": "group", "source": {"type": "group", "size": {"width": 16_384, "height": 2}, "clips": [{
+            "id": "fill", "source": {"type": "solid_color", "colour": "#ff0000"}, "start": 0, "duration": 0.5, "layer": 0, "opacity": {"base_value": 1}
+        }]}, "start": 0, "duration": 0.5, "layer": 0, "opacity": {"base_value": 1},
+        "transform": {
+            "position": {"base_value": {"x": 0.5, "y": 0.5}},
+            "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+            "scale": {"base_value": {"x": 2.0 / 16_384.0, "y": 1.0}},
+            "rotation_degrees": {"base_value": 0}
+        }}]}
+    }), directory.path()).expect("representable project parses");
+    assert!(!Editor::new().validate(&project).is_valid());
+    let editor = Editor::builder()
+        .resource_limits(vestra::ResourceLimits {
+            maximum_group_width: 16_384,
+            maximum_group_pixels: 32_768,
+            ..vestra::ResourceLimits::default()
+        })
+        .build()
+        .expect("editor");
+    assert!(editor.validate(&project).is_valid());
+    assert!(
+        editor
+            .preflight(&project, PreflightOptions::for_inspection())
+            .is_valid()
+    );
+    let mut prepared = editor
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("custom group limits prepare");
+    let frame = prepared
+        .render_frame(Duration::ZERO)
+        .expect("large thin group renders");
+    assert_eq!(frame.as_bytes(), [255, 0, 0, 255].repeat(4));
+    let limited = Editor::builder()
+        .resource_limits(vestra::ResourceLimits {
+            maximum_group_width: 16_384,
+            maximum_group_pixels: 32_767,
+            ..vestra::ResourceLimits::default()
+        })
+        .build()
+        .expect("limited editor");
+    let error = limited
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .err()
+        .expect("pixel budget prevents allocation");
+    assert!(
+        error
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-GROUP-PIXELS")
+    );
+}
+
 enum WgpuTestEnvironment {
     Available(Box<PreparedProject>),
     Unavailable { diagnostic: vestra::Diagnostic },
@@ -418,8 +541,8 @@ fn public_cpu_wgpu_parity_covers_audio_reactive_project_when_an_adapter_is_avail
           "schema_version": 1,
           "output": {"path": "unused.mp4", "width": 32, "height": 32, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
           "assets": [
-            {"id": "red", "type": "image", "source": "examples/assets/red.png"},
-            {"id": "tone", "type": "audio", "source": "examples/assets/tone.wav"}
+            {"id": "red", "type": "image", "source": "assets/fixtures/red.png"},
+            {"id": "tone", "type": "audio", "source": "assets/fixtures/tone.wav"}
           ],
           "audio": {"tracks": [{"id": "music", "clips": [{"id": "tone-clip", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 1}]}]},
           "visual": {"clips": [{
@@ -540,7 +663,7 @@ fn public_sdk_loads_validates_preflights_and_inspects_without_cli() {
 fn public_sdk_prepares_and_renders_a_complete_audio_project() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(
-        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":16,"height":16,"frame_rate":"30/1","background":"#000000","quality":"preview","audio":true,"duration_mode":"explicit","duration":2},"assets":[{"id":"tone","type":"audio","source":"examples/assets/tone.wav"}],"audio":{"tracks":[{"id":"music","gain":0.8,"clips":[{"id":"outgoing","asset":"tone","start":0,"trim_start":0,"trim_end":1.5,"fade_out":0.5,"fade_out_curve":"equal_power"},{"id":"incoming","asset":"tone","start":1,"trim_start":0,"trim_end":1.5,"fade_in":0.5,"fade_in_curve":"equal_power","gain_automation":{"keyframes":[{"time":0,"gain":0,"interpolation":"linear"},{"time":0.25,"gain":1,"interpolation":"hold"}]}}]},{"id":"ambience","gain":0.2,"clips":[{"id":"bed","asset":"tone","start":0,"trim_start":0,"trim_end":2}]}]},"visual":{"clips":[{"id":"canvas","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":2,"layer":0,"opacity":{"base_value":1}}]}}"##,
+        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":16,"height":16,"frame_rate":"30/1","background":"#000000","quality":"preview","audio":true,"duration_mode":"explicit","duration":2},"assets":[{"id":"tone","type":"audio","source":"assets/fixtures/tone.wav"}],"audio":{"tracks":[{"id":"music","gain":0.8,"clips":[{"id":"outgoing","asset":"tone","start":0,"trim_start":0,"trim_end":1.5,"fade_out":0.5,"fade_out_curve":"equal_power"},{"id":"incoming","asset":"tone","start":1,"trim_start":0,"trim_end":1.5,"fade_in":0.5,"fade_in_curve":"equal_power","gain_automation":{"keyframes":[{"time":0,"gain":0,"interpolation":"linear"},{"time":0.25,"gain":1,"interpolation":"hold"}]}}]},{"id":"ambience","gain":0.2,"clips":[{"id":"bed","asset":"tone","start":0,"trim_start":0,"trim_end":2}]}]},"visual":{"clips":[{"id":"canvas","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":2,"layer":0,"opacity":{"base_value":1}}]}}"##,
         fixture("."),
     )
     .expect("schema-v1 audio project");
@@ -576,7 +699,7 @@ fn public_sdk_prepares_canonical_audio_reactive_video_without_output_audio() {
         {
           "schema_version": 1,
           "output": {"path": "unused.mp4", "width": 16, "height": 16, "frame_rate": "30/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
-          "assets": [{"id": "tone", "type": "audio", "source": "examples/assets/tone.wav"}],
+          "assets": [{"id": "tone", "type": "audio", "source": "assets/fixtures/tone.wav"}],
           "audio": {"tracks": [{"id": "music", "clips": [{"id": "tone-clip", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 1}]}]},
           "visual": {"clips": [{
             "id": "canvas", "source": {"type": "solid_color", "colour": "#000000"}, "start": 0, "duration": 1, "layer": 0,
@@ -637,11 +760,14 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
         .render(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(directory.path().join("output.mp4")),
                 overwrite: true,
                 preview: false,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -822,11 +948,14 @@ fn observer_cancellation_at_encoding_prevents_publication() {
         .render_with_observer(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             |event| {
                 let cancel = matches!(
@@ -871,11 +1000,14 @@ fn observer_cancellation_at_finalizing_prevents_publication() {
         .render_with_observer(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             |event| {
                 let cancel = matches!(
@@ -915,11 +1047,14 @@ fn static_render_does_not_report_ffmpeg_progress_as_rendering_progress() {
         .render(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: false,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -984,11 +1119,14 @@ fn observer_cancellation_at_encoding_removes_temporary_output_and_prevents_publi
         .render_with_observer(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             |event| {
                 let cancel = matches!(
@@ -1045,11 +1183,14 @@ fn token_cancellation_from_progress_prevents_publication() {
         .render(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             &mut |event| {
                 if matches!(
@@ -1080,11 +1221,14 @@ fn multi_frame_progress_is_strictly_pre_completion_and_completed_is_post_publica
         .render(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -1116,11 +1260,14 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
         .render_with_observer(
             &project,
             RenderRequest {
+                start: Duration::ZERO,
+                end: None,
                 output: Some(output.clone()),
                 overwrite: true,
                 preview: false,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             |event| {
                 let control = if matches!(event, vestra::RenderEvent::Completed { .. }) {
@@ -1145,9 +1292,13 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
 #[test]
 fn request_getters_expose_the_configured_values() {
     let output = PathBuf::from("nested/output.mp4");
-    let prepared = PreparedVideoRenderRequest::new(&output).with_overwrite(true);
+    let prepared = PreparedVideoRenderRequest::new(&output)
+        .with_overwrite(true)
+        .with_range(Duration::from_millis(500), Some(Duration::from_secs(1)));
     assert_eq!(prepared.output(), output.as_path());
     assert!(prepared.overwrite());
+    assert_eq!(prepared.start(), Duration::from_millis(500));
+    assert_eq!(prepared.end(), Some(Duration::from_secs(1)));
 
     let request = RenderRequest {
         output: Some(output.clone()),
@@ -1155,12 +1306,16 @@ fn request_getters_expose_the_configured_values() {
         preview: true,
         backend: BackendPreference::Cpu,
         progress_mode: vestra::ProgressMode::Disabled,
-    };
+        ..RenderRequest::default()
+    }
+    .with_range(Duration::from_millis(500), None);
     assert_eq!(request.output(), Some(output.as_path()));
     assert!(request.overwrite());
     assert!(request.preview());
     assert_eq!(request.backend(), BackendPreference::Cpu);
     assert_eq!(request.progress_mode(), vestra::ProgressMode::Disabled);
+    assert_eq!(request.start(), Duration::from_millis(500));
+    assert_eq!(request.end(), None);
     assert_eq!(
         RenderRequest::default().progress_mode(),
         vestra::ProgressMode::Auto

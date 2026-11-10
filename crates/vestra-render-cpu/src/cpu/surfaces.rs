@@ -72,6 +72,7 @@ impl CompositionSurfacePool {
 
 pub(crate) struct EffectSurfacePool {
     extent: (u32, u32),
+    mask_local_extent: (u32, u32),
     surfaces: [RgbaImage; SURFACE_COUNT],
     mask_local_surface: RgbaImage,
     mask_surface: RgbaImage,
@@ -91,6 +92,7 @@ impl EffectSurfacePool {
     pub(crate) fn new(width: u32, height: u32) -> Self {
         Self {
             extent: (width, height),
+            mask_local_extent: (width, height),
             surfaces: std::array::from_fn(|index| {
                 if index == 0 {
                     RgbaImage::new(width, height)
@@ -127,11 +129,22 @@ impl EffectSurfacePool {
     }
 
     pub(super) fn mask_local_surface(&mut self) -> &mut RgbaImage {
-        self.allocations += ensure_image(&mut self.mask_local_surface, self.extent);
+        self.allocations += ensure_image(&mut self.mask_local_surface, self.mask_local_extent);
         &mut self.mask_local_surface
     }
 
+    pub(super) fn resize_mask_local(&mut self, width: u32, height: u32) {
+        self.mask_local_extent = (width, height);
+    }
+
+    pub(super) fn record_nested_usage(&mut self, nested: &Self) {
+        self.allocations += nested.allocations;
+        self.reuses += nested.reuses;
+        self.copy_bytes += nested.copy_bytes;
+    }
+
     pub(super) fn copy_current_to_mask_local(&mut self) {
+        self.mask_local_extent = self.extent;
         self.mask_local_surface();
         let current_slot = self.current_slot;
         self.mask_local_surface
@@ -232,8 +245,8 @@ impl EffectSurfacePool {
         for y in 0..height {
             for x in 0..width {
                 let center = if horizontal { x as f32 } else { y as f32 };
-                let first = (center - half_width - 0.5).floor() as i32;
-                let last = (center + half_width + 0.5).ceil() as i32;
+                let first = (center - half_width).floor() as i32;
+                let last = (center + half_width).ceil() as i32 + 1;
                 let mut value = 0.0;
                 for sample in first..last {
                     let overlap = (sample as f32 + 0.5).min(center + half_width + 0.5)
@@ -741,6 +754,25 @@ mod tests {
         assert!(cached.as_raw().iter().all(|&value| value == 0));
         drop(pool);
         assert!(cached.as_raw().iter().all(|&value| value == 0));
+    }
+
+    #[test]
+    fn fractional_box_feather_preserves_constant_coverage_and_symmetry() {
+        for half_width in [1.0 / 3.0, 4.0 / 3.0, 8.0 / 3.0] {
+            let mut output = vec![0.0; 17];
+            EffectSurfacePool::box_blur(&[1.0; 17], &mut output, 17, 1, half_width, true);
+            assert!(
+                (output[8] - 1.0).abs() < 1e-6,
+                "half width {half_width}: {}",
+                output[8]
+            );
+            let mut impulse = [0.0; 17];
+            impulse[8] = 1.0;
+            EffectSurfacePool::box_blur(&impulse, &mut output, 17, 1, half_width, true);
+            for offset in 1..8 {
+                assert!((output[8 - offset] - output[8 + offset]).abs() < 1e-6);
+            }
+        }
     }
 
     #[test]

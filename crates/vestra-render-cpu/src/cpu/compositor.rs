@@ -121,6 +121,7 @@ impl ComposeContext<'_> {
         canvas: &mut RgbaImage,
         depth: usize,
     ) {
+        self.surfaces.resize(width, height);
         for layer in layers {
             if !layer.visible {
                 continue;
@@ -301,11 +302,13 @@ impl ComposeContext<'_> {
         let width = parent.width();
         let height = parent.height();
         let transform = layer.transform;
-        let mut group_surface = self.compositions.acquire(depth, width, height);
+        let mut group_surface =
+            self.compositions
+                .acquire(depth, composition.width, composition.height);
         self.compose_layers(
             &composition.layers,
-            width,
-            height,
+            composition.width,
+            composition.height,
             &mut group_surface,
             depth + 1,
         );
@@ -313,6 +316,7 @@ impl ComposeContext<'_> {
         // A Group becomes image-like only after all children have been composed.
         // The effect pool is separate so the live composition surface remains
         // available while nested composition is unwound.
+        self.surfaces.resize(width, height);
         self.surfaces.clear();
         let direct_colour_path = uses_direct_colour_path(layer);
         let motion_tile = layer
@@ -456,6 +460,9 @@ impl ComposeContext<'_> {
         depth: usize,
     ) {
         let Some(matte) = &layer.matte else { return };
+        let width = self.surfaces.current().width();
+        let height = self.surfaces.current().height();
+        self.surfaces.resize_mask_local(width, height);
         let mode = match matte.mode {
             crate::project::MatteMode::Alpha => crate::project::MaskCoverageMode::Alpha,
             crate::project::MatteMode::Luma => crate::project::MaskCoverageMode::Luma,
@@ -470,8 +477,6 @@ impl ComposeContext<'_> {
             self.surfaces.apply_external_matte(mode, matte.invert);
             return;
         };
-        let width = self.surfaces.current().width();
-        let height = self.surfaces.current().height();
         let mut saved_consumer = self.compositions.acquire(depth + 1, width, height);
         saved_consumer
             .copy_from(self.surfaces.current(), 0, 0)
@@ -506,15 +511,18 @@ impl ComposeContext<'_> {
         if let EvaluatedSource::Group { composition } = &layer.source {
             let width = self.surfaces.current().width();
             let height = self.surfaces.current().height();
-            let mut group_surface = self.compositions.acquire(depth + 1, width, height);
+            let mut group_surface =
+                self.compositions
+                    .acquire(depth + 1, composition.width, composition.height);
             self.compose_layers(
                 &composition.layers,
-                width,
-                height,
+                composition.width,
+                composition.height,
                 &mut group_surface,
                 depth + 2,
             );
             // Child effects leave pixels in scratch; transform only the completed group.
+            self.surfaces.resize(width, height);
             self.surfaces.clear();
             let motion_tile = layer
                 .effects
@@ -582,6 +590,15 @@ impl ComposeContext<'_> {
         }
         let started = self.profiling_enabled.then(Instant::now);
         self.surfaces.reset_mask_coverage();
+        let local_extent = match &layer.source {
+            EvaluatedSource::Group { composition } => (composition.width, composition.height),
+            _ => {
+                let current = self.surfaces.current();
+                (current.width(), current.height())
+            }
+        };
+        self.surfaces
+            .resize_mask_local(local_extent.0, local_extent.1);
         for mask in &layer.masks {
             for pixel in self.surfaces.mask_local_surface().pixels_mut() {
                 *pixel = Rgba([0, 0, 0, 0]);
@@ -652,28 +669,28 @@ impl ComposeContext<'_> {
                         blend_mode: crate::project::BlendMode::Normal,
                     };
                     if let EvaluatedSource::Group { composition } = &mask_layer.source {
-                        let owner_surface = self.surfaces.current().clone();
-                        let mut group_surface = RgbaImage::new(
-                            self.surfaces.mask_local_surface().width(),
-                            self.surfaces.mask_local_surface().height(),
+                        // Preserve the owner's pixels and accumulated mask coverage during recursion.
+                        let owner_surfaces = std::mem::replace(
+                            self.surfaces,
+                            EffectSurfacePool::new(composition.width, composition.height),
                         );
-                        for pixel in group_surface.pixels_mut() {
-                            *pixel = Rgba([0, 0, 0, 0]);
-                        }
+                        let mut group_surface =
+                            RgbaImage::new(composition.width, composition.height);
                         self.compose_layers(
                             &composition.layers,
-                            group_surface.width(),
-                            group_surface.height(),
+                            composition.width,
+                            composition.height,
                             &mut group_surface,
                             depth + 1,
                         );
+                        let nested_surfaces = std::mem::replace(self.surfaces, owner_surfaces);
+                        self.surfaces.record_nested_usage(&nested_surfaces);
                         crate::cpu::raster::draw_surface(
                             self.surfaces.mask_local_surface(),
                             &group_surface,
                             mask.transform,
                             ColourTransform::default(),
                         );
-                        self.surfaces.begin_from(&owner_surface);
                     } else {
                         super::raster::draw_layer(
                             self.surfaces.mask_local_surface(),
@@ -692,7 +709,8 @@ impl ComposeContext<'_> {
                     }
                 }
             }
-            self.surfaces.compose_mask_surface(layer.transform);
+            self.surfaces
+                .compose_mask_surface(mask.owner_transform.unwrap_or(layer.transform));
             self.surfaces.feather_mask_surface(mask.feather);
             self.surfaces
                 .combine_mask_coverage(mask.operation, mask.invert, mask.strength);

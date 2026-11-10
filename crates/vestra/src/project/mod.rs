@@ -100,6 +100,39 @@ impl Project {
     pub(crate) fn canonical(&self) -> &CanonicalProject {
         &self.canonical
     }
+    pub(crate) fn with_render_overrides(
+        &self,
+        frame_rate: Option<crate::FrameRate>,
+        quality: Option<crate::Quality>,
+        preview: bool,
+        silent: bool,
+    ) -> std::borrow::Cow<'_, Self> {
+        let silent = silent && self.canonical.output.audio;
+        if frame_rate.is_none() && quality.is_none() && !preview && !silent {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut project = self.clone();
+        let output = &mut project.canonical.output;
+        if let Some(rate) = frame_rate {
+            output.frame_rate = vestra_core::project::FrameRate::Rational(format!(
+                "{}/{}",
+                rate.numerator(),
+                rate.denominator()
+            ));
+        } else if preview
+            && let Ok((numerator, denominator)) = output.frame_rate.rational()
+            && u128::from(numerator) > u128::from(denominator) * 15
+        {
+            output.frame_rate = vestra_core::project::FrameRate::Decimal(15.0);
+        }
+        if let Some(quality) = quality.or(preview.then_some(crate::Quality::Preview)) {
+            output.quality = quality;
+        }
+        if silent {
+            output.audio = false;
+        }
+        std::borrow::Cow::Owned(project)
+    }
     pub(crate) const fn parse_elapsed(&self) -> Duration {
         self.parse_elapsed
     }

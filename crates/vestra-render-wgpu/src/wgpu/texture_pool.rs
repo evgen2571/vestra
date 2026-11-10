@@ -94,18 +94,24 @@ impl TexturePool {
         plan: &RenderPlan,
         topology: &PlanTopology,
     ) -> Self {
+        let (width, height) = topology.maximum_extent();
         let descriptor = WorkingTextureDescriptor {
-            width: plan.canvas.width,
-            height: plan.canvas.height,
+            width,
+            height,
             format: WORKING_FORMAT,
             usage: WORKING_TEXTURE_USAGE,
+        };
+        let canvas_descriptor = WorkingTextureDescriptor {
+            width: plan.canvas.width,
+            height: plan.canvas.height,
+            ..descriptor
         };
         let effect_pass_count = plan.compilation.effect_pass_count;
         let group_depth = topology.required_group_depth();
         let requires_auxiliary = topology.requires_auxiliary();
         Self {
-            canvas_a: create_texture(device, descriptor, "vestra canvas A"),
-            canvas_b: create_texture(device, descriptor, "vestra canvas B"),
+            canvas_a: create_texture(device, canvas_descriptor, "vestra canvas A"),
+            canvas_b: create_texture(device, canvas_descriptor, "vestra canvas B"),
             layer: create_texture(device, descriptor, "vestra layer"),
             particle_accumulation: create_texture(
                 device,

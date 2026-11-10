@@ -193,7 +193,7 @@ fn measure_transformed_signal_scaling(
 
     reset_analysis_work_counters();
     let analysis_started = Instant::now();
-    let raw_features = analyze_master_audio(&requirements, mix, seconds as f64, 1)
+    let raw_features = analyze_master_audio(&requirements, mix, seconds as f64, 1, None)
         .expect("benchmark Master analysis");
     let analysis_elapsed_ms = analysis_started.elapsed().as_millis();
     let master_decode_count = master_decode_invocation_count();
@@ -715,6 +715,7 @@ fn silent_authored_master_produces_zero_rms_and_peak_without_pcm_process() {
         &mix,
         0.01,
         1,
+        None,
     )
     .expect("silent Master is analyzable");
     for requirement in [
@@ -734,6 +735,7 @@ fn empty_requirements_skip_master_validation_and_processing() {
             &AudioMixPlan::default(),
             0.01,
             1,
+            None,
         )
         .expect("empty analysis")
         .is_empty()
@@ -807,6 +809,7 @@ fn extracts_the_production_master_graph() {
         &mix,
         0.01,
         1,
+        None,
     )
     .expect("analyze production Master graph");
     assert!(features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Rms)].sample(0) > 0.0);

@@ -47,7 +47,7 @@ def _builder() -> tuple[ProjectBuilder, AudioAsset, ImageClip, ImageClip]:
         duration=2.5, base_directory=".", name="Public authoring API", metadata={"suite": "authoring"},
     )
     image = builder.add_image_asset("tests/assets/wgpu-small-rgba.png")
-    audio = builder.add_audio_asset("examples/assets/tone.wav")
+    audio = builder.add_audio_asset("assets/fixtures/tone.wav")
     outgoing = builder.add_image_clip(source=image, start=0, duration=2, layer=0, sizing=Sizing.cover())
     incoming = builder.add_image_clip(source=image, start=1.5, duration=1, layer=1, sizing=Sizing.cover())
     return builder, audio, outgoing, incoming

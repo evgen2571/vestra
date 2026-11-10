@@ -292,7 +292,7 @@ def test_spectrum2d_no_audio_uses_native_diagnostic() -> None:
 
 def test_spectrum2d_with_authored_audio_validates() -> None:
     project = builder(base_directory=ROOT)
-    audio = project.add_audio_asset("examples/assets/tone.wav")
+    audio = project.add_audio_asset("assets/fixtures/tone.wav")
     track = project.audio.add_track(id="music")
     track.add_clip(asset=audio, start=0, trim_end=0.2)
     project.add_spectrum2d_clip(start=0, duration=0.2, layer=1)

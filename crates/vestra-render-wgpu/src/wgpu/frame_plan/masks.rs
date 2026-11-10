@@ -48,7 +48,10 @@ impl FramePlanBuilder {
                 _ => 0,
             }
         }
+        let local_rules = self.local_mask_rules[layer_index];
         for (mask_index, mask) in layer.masks.iter().enumerate() {
+            let parent_mask =
+                local_rules && layer.matte.is_some() && mask_index + 1 == layer.masks.len();
             let saved_layer_destination = if matches!(
                 &mask.input,
                 vestra_core::plan::EvaluatedMaskInput::Source { source, .. }
@@ -78,9 +81,26 @@ impl FramePlanBuilder {
                 vestra_core::plan::EvaluatedMaskInput::Source { .. }
             ) && (*layer_result == TextureSlot::Layer
                 || source_is_group);
+            let saved_mask_state = if source_is_group {
+                mask_state_value.map(|value| {
+                    let TextureSlot::GroupCanvasB(scratch_depth) = saved_layer_destination else {
+                        unreachable!()
+                    };
+                    (TextureSlot::GroupCanvasA(scratch_depth), value)
+                })
+            } else {
+                None
+            };
+            if let Some((destination, value)) = saved_mask_state {
+                self.push(GpuOperation::CopyForEffect {
+                    source: TextureSlot::MaskCoverage,
+                    destination,
+                    value,
+                });
+            }
             let saved_layer_value = *layer_value;
             if saved_layer_for_source {
-                self.operations.push(GpuOperation::CopyForEffect {
+                self.push(GpuOperation::CopyForEffect {
                     source: saved_layer_result,
                     destination: saved_layer_destination,
                     value: saved_layer_value,
@@ -89,6 +109,12 @@ impl FramePlanBuilder {
             let (source_index, source_layer) = match &mask.input {
                 vestra_core::plan::EvaluatedMaskInput::Source { source, mode: _ } => {
                     let source_layer_index = self.layers.len();
+                    let parent_extent = self.extent;
+                    let parent_sized_context = self.sized_context;
+                    self.sized_context = local_rules;
+                    if !parent_mask && let EvaluatedSource::Group { composition } = &layer.source {
+                        self.extent = (composition.width, composition.height);
+                    }
                     self.append_mask_source(
                         &vestra_core::plan::EvaluatedLayer {
                             compiled_layer_index: usize::MAX,
@@ -107,6 +133,8 @@ impl FramePlanBuilder {
                         source_scope_layers,
                         cached_layers,
                     );
+                    self.extent = parent_extent;
+                    self.sized_context = parent_sized_context;
                     (source_layer_index, true)
                 }
                 vestra_core::plan::EvaluatedMaskInput::Shape { shape_index } => {
@@ -116,7 +144,14 @@ impl FramePlanBuilder {
                     (*asset_index, false)
                 }
             };
-            self.operations.push(GpuOperation::RenderMask {
+            if let Some((source, value)) = saved_mask_state {
+                self.push(GpuOperation::CopyForEffect {
+                    source,
+                    destination: TextureSlot::MaskCoverage,
+                    value,
+                });
+            }
+            self.push(GpuOperation::RenderMask {
                 layer_index,
                 mask_index,
                 source_index,
@@ -128,7 +163,7 @@ impl FramePlanBuilder {
             self.parameter_count += 1;
             self.next_value += 1;
             if saved_layer_for_source {
-                self.operations.push(GpuOperation::CopyForEffect {
+                self.push(GpuOperation::CopyForEffect {
                     source: saved_layer_destination,
                     destination: saved_layer_result,
                     value: saved_layer_value,
@@ -138,15 +173,22 @@ impl FramePlanBuilder {
             let coverage_source_value = *layer_value;
             let mut feather_value = self.next_value - 1;
             if mask.feather > 0.0 {
+                let parent_extent = self.extent;
+                if !local_rules && let EvaluatedSource::Group { composition } = &layer.source {
+                    self.extent = (
+                        self.extent.0.max(composition.width),
+                        self.extent.1.max(composition.height),
+                    );
+                }
                 let mut feather_source = TextureSlot::Auxiliary;
                 for horizontal in [true, false] {
-                    for _ in 0..crate::project::MASK_FEATHER_PASSES {
+                    for pass_index in 0..crate::project::MASK_FEATHER_PASSES {
                         let feather_destination = if feather_source == TextureSlot::Auxiliary {
                             TextureSlot::MaskFeather
                         } else {
                             TextureSlot::Auxiliary
                         };
-                        self.operations.push(GpuOperation::FeatherMask {
+                        self.push(GpuOperation::FeatherMask {
                             layer_index,
                             mask_index,
                             source: feather_source,
@@ -155,6 +197,10 @@ impl FramePlanBuilder {
                             result_value: self.next_value,
                             parameters_index: self.parameter_count,
                             horizontal,
+                            transform_owner: local_rules
+                                && !parent_mask
+                                && horizontal
+                                && pass_index == 0,
                         });
                         self.parameter_count += 1;
                         feather_source = feather_destination;
@@ -162,12 +208,13 @@ impl FramePlanBuilder {
                         self.next_value += 1;
                     }
                 }
+                self.extent = parent_extent;
             }
             let destination = match *layer_result {
                 TextureSlot::EffectA => TextureSlot::EffectB,
                 _ => TextureSlot::EffectA,
             };
-            self.operations.push(GpuOperation::ApplyMask {
+            self.push(GpuOperation::ApplyMask {
                 layer_index,
                 mask_index,
                 source: coverage_source,
@@ -180,7 +227,7 @@ impl FramePlanBuilder {
             *layer_result = destination;
             *layer_value = self.next_value;
             self.next_value += 1;
-            self.operations.push(GpuOperation::UpdateMaskCoverage {
+            self.push(GpuOperation::UpdateMaskCoverage {
                 layer_index,
                 mask_index,
                 source: coverage_source,
@@ -203,11 +250,15 @@ impl FramePlanBuilder {
         cached_layers: &BTreeSet<usize>,
     ) {
         let layer_index = self.layers.len();
-        self.layers.push(layer.clone());
+        self.push_layer(layer.clone());
         match &layer.source {
             EvaluatedSource::Group { composition } => {
+                let parent_extent = self.extent;
+                let parent_sized_context = self.sized_context;
+                self.sized_context |= composition.is_sized;
+                self.extent = (composition.width, composition.height);
                 let mut group_canvas = TextureSlot::GroupCanvasA(depth);
-                self.operations.push(GpuOperation::ClearCanvas {
+                self.push(GpuOperation::ClearCanvas {
                     destination: group_canvas,
                     parameters_index: self.parameter_count,
                 });
@@ -229,7 +280,9 @@ impl FramePlanBuilder {
                         &BTreeSet::new(),
                     );
                 }
-                self.operations.push(GpuOperation::RenderSurfaceLayer {
+                self.extent = parent_extent;
+                self.sized_context = parent_sized_context;
+                self.push(GpuOperation::RenderSurfaceLayer {
                     layer_index,
                     source: group_canvas,
                     destination: TextureSlot::Layer,
@@ -239,7 +292,7 @@ impl FramePlanBuilder {
                 self.next_value += 1;
             }
             EvaluatedSource::Image { asset_index, .. } => {
-                self.operations.push(GpuOperation::RenderRasterLayer {
+                self.push(GpuOperation::RenderRasterLayer {
                     layer_index,
                     source_index: *asset_index,
                     destination: TextureSlot::Layer,
@@ -249,7 +302,7 @@ impl FramePlanBuilder {
                 self.next_value += 1;
             }
             EvaluatedSource::Video { source_index, .. } => {
-                self.operations.push(GpuOperation::RenderRasterLayer {
+                self.push(GpuOperation::RenderRasterLayer {
                     layer_index,
                     source_index: *source_index,
                     destination: TextureSlot::Layer,
@@ -262,7 +315,7 @@ impl FramePlanBuilder {
             | EvaluatedSource::Text {
                 text_index: shape_index,
             } => {
-                self.operations.push(GpuOperation::RenderRasterLayer {
+                self.push(GpuOperation::RenderRasterLayer {
                     layer_index,
                     source_index: *shape_index,
                     destination: TextureSlot::Layer,
@@ -272,7 +325,7 @@ impl FramePlanBuilder {
                 self.next_value += 1;
             }
             EvaluatedSource::SolidColor { .. } => {
-                self.operations.push(GpuOperation::RenderSolidLayer {
+                self.push(GpuOperation::RenderSolidLayer {
                     layer_index,
                     destination: TextureSlot::Layer,
                     parameters_index: self.parameter_count,
@@ -281,7 +334,7 @@ impl FramePlanBuilder {
                 self.next_value += 1;
             }
             EvaluatedSource::Spectrum2D { .. } => {
-                self.operations.push(GpuOperation::RenderSpectrum2DLayer {
+                self.push(GpuOperation::RenderSpectrum2DLayer {
                     layer_index,
                     destination: TextureSlot::Layer,
                     parameters_index: self.parameter_count,
@@ -295,7 +348,7 @@ impl FramePlanBuilder {
                     crate::project::ParticleBlendMode::Normal => TextureSlot::ParticleAccumulation,
                     crate::project::ParticleBlendMode::Additive => TextureSlot::Layer,
                 };
-                self.operations.push(GpuOperation::RenderParticleLayer {
+                self.push(GpuOperation::RenderParticleLayer {
                     layer_index,
                     destination,
                     parameters_index: self.parameter_count,
@@ -306,7 +359,7 @@ impl FramePlanBuilder {
                 self.parameter_count += 1;
                 self.next_value += 1;
                 if matches!(blend_mode, crate::project::ParticleBlendMode::Normal) {
-                    self.operations.push(GpuOperation::ResolveParticleLayer {
+                    self.push(GpuOperation::ResolveParticleLayer {
                         source: TextureSlot::ParticleAccumulation,
                         destination: TextureSlot::Layer,
                     });

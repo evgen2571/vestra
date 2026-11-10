@@ -23,8 +23,14 @@ pub fn inspect(
     validated: ValidatedProject,
     preview: bool,
 ) -> Result<Inspection, LoadError> {
-    let plan = compile(&validated, CompileOptions { preview })
-        .map_err(|diagnostic| LoadError::Diagnostics(vec![diagnostic]))?;
+    let plan = compile(
+        &validated,
+        CompileOptions {
+            preview,
+            ..CompileOptions::default()
+        },
+    )
+    .map_err(|diagnostic| LoadError::Diagnostics(vec![diagnostic]))?;
     let processed_audio_durations = plan
         .audio_mix
         .tracks

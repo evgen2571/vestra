@@ -84,6 +84,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
     );
     frame.layers[0].masks = vec![
         vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
             input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 1 },
             operation: crate::project::MaskOperation::Intersect,
             invert: false,
@@ -92,6 +93,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
             transform,
         },
         vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
             input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 2 },
             operation: crate::project::MaskOperation::Replace,
             invert: false,
@@ -295,6 +297,9 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
         content_dependency: vestra_core::plan::TemporalDependency::Static,
         source: EvaluatedSource::Group {
             composition: vestra_core::plan::EvaluatedComposition {
+                is_sized: false,
+                width: 4,
+                height: 4,
                 layers: vec![child(3)],
             },
         },
@@ -318,6 +323,9 @@ fn nested_groups_use_isolated_depth_indexed_composition_targets() {
             transform,
             source: EvaluatedSource::Group {
                 composition: vestra_core::plan::EvaluatedComposition {
+                    is_sized: false,
+                    width: 4,
+                    height: 4,
                     layers: vec![nested],
                 },
             },
@@ -438,6 +446,9 @@ fn group_frame(effects: Vec<vestra_core::plan::EvaluatedEffect>) -> EvaluatedFra
             transform,
             source: EvaluatedSource::Group {
                 composition: vestra_core::plan::EvaluatedComposition {
+                    is_sized: false,
+                    width: 4,
+                    height: 4,
                     layers: vec![vestra_core::plan::EvaluatedLayer {
                         compiled_layer_index: 2,
                         visible: true,
@@ -900,7 +911,9 @@ fn effect_operations_are_self_describing_and_ping_pong_layer_slots() {
             EffectResource::Current,
         ),
     ];
-    let plan = GpuFramePlan {
+    let mut plan = GpuFramePlan {
+        extents: Vec::new(),
+        local_mask_rules: Vec::new(),
         operations: vec![
             GpuOperation::ClearCanvas {
                 destination: TextureSlot::CanvasA,
@@ -950,6 +963,7 @@ fn effect_operations_are_self_describing_and_ping_pong_layer_slots() {
         final_canvas: TextureSlot::CanvasB,
         layers: Vec::new(),
     };
+    plan.extents = vec![(4, 4); plan.operations.len()];
     plan.validate(0)
         .expect("self-describing effect plan validates");
     let GpuOperation::ApplyEffect {
@@ -978,7 +992,9 @@ fn effect_operations_are_self_describing_and_ping_pong_layer_slots() {
 
 #[test]
 fn global_effect_chain_can_follow_layer_composition() {
-    let plan = GpuFramePlan {
+    let mut plan = GpuFramePlan {
+        extents: Vec::new(),
+        local_mask_rules: Vec::new(),
         operations: vec![
             GpuOperation::ClearCanvas {
                 destination: TextureSlot::CanvasA,
@@ -1027,6 +1043,7 @@ fn global_effect_chain_can_follow_layer_composition() {
         final_canvas: TextureSlot::EffectA,
         layers: Vec::new(),
     };
+    plan.extents = vec![(4, 4); plan.operations.len()];
     plan.validate(0).expect("global effect plan validates");
 }
 
@@ -1223,7 +1240,9 @@ fn builder_plans_local_then_global_effects_and_reads_the_real_final_slot() {
 
 #[test]
 fn validation_rejects_effect_scope_destination_and_auxiliary_contract_violations() {
-    let plan = GpuFramePlan {
+    let mut plan = GpuFramePlan {
+        extents: Vec::new(),
+        local_mask_rules: Vec::new(),
         operations: vec![
             GpuOperation::ClearCanvas {
                 destination: TextureSlot::CanvasA,
@@ -1262,6 +1281,7 @@ fn validation_rejects_effect_scope_destination_and_auxiliary_contract_violations
         final_canvas: TextureSlot::CanvasA,
         layers: Vec::new(),
     };
+    plan.extents = vec![(4, 4); plan.operations.len()];
     assert_eq!(
         plan.validate(0).expect_err("invalid effect contract").code,
         "WGPU-FRAME-PLAN"
@@ -1535,6 +1555,7 @@ fn source_matte_restores_single_pass_effect_and_mask_into_effect_b() {
     frame.layers[0]
         .masks
         .push(vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
             input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 0 },
             operation: crate::project::MaskOperation::Intersect,
             invert: false,
@@ -1558,4 +1579,168 @@ fn source_matte_restores_single_pass_effect_and_mask_into_effect_b() {
     )));
     plan.validate(1)
         .expect("restoring masked effect result into EffectB is valid");
+}
+
+#[test]
+fn sized_groups_keep_each_operation_in_its_composition_canvas() {
+    let mut frame = static_frame();
+    let mut leaf = frame.layers[0].clone();
+    leaf.effects = vec![EvaluatedEffect::Brightness { amount: 0.2 }];
+    let mut nested = leaf.clone();
+    nested.compiled_layer_index = 4;
+    nested.effects.clear();
+    nested.source = EvaluatedSource::Group {
+        composition: vestra_core::plan::EvaluatedComposition {
+            is_sized: true,
+            width: 2,
+            height: 3,
+            layers: vec![leaf],
+        },
+    };
+    frame.layers[0].source = EvaluatedSource::Group {
+        composition: vestra_core::plan::EvaluatedComposition {
+            is_sized: true,
+            width: 8,
+            height: 6,
+            layers: vec![nested],
+        },
+    };
+    let plan = GpuFramePlan::build(&frame);
+    plan.validate(0).unwrap();
+    let mut group_clears = Vec::new();
+    let mut group_samples = Vec::new();
+    for (operation, &extent) in plan.operations.iter().zip(&plan.extents) {
+        match operation {
+            GpuOperation::ClearCanvas { destination, .. } if destination.is_group_canvas() => {
+                group_clears.push(extent);
+            }
+            GpuOperation::RenderSurfaceLayer { .. } => group_samples.push(extent),
+            GpuOperation::RenderSolidLayer { .. } | GpuOperation::ApplyEffect { .. } => {
+                assert_eq!(extent, (2, 3));
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(group_clears, [(8, 6), (2, 3)]);
+    assert_eq!(group_samples, [(8, 6), (4, 4)]);
+    assert_eq!(plan.extents.last(), Some(&(4, 4)));
+}
+
+#[test]
+fn sized_group_source_masks_render_into_the_owners_local_canvas() {
+    let mut frame = static_frame();
+    let child = frame.layers[0].clone();
+    frame.layers[0].source = EvaluatedSource::Group {
+        composition: vestra_core::plan::EvaluatedComposition {
+            is_sized: true,
+            width: 8,
+            height: 6,
+            layers: vec![child.clone()],
+        },
+    };
+    let geometry_mask = vestra_core::plan::EvaluatedMask {
+        owner_transform: None,
+        input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 0 },
+        operation: crate::project::MaskOperation::Intersect,
+        invert: false,
+        strength: 1.0,
+        feather: 0.0,
+        transform: frame.layers[0].transform,
+    };
+    let mut masked_child = child;
+    masked_child.masks.push(geometry_mask.clone());
+    frame.layers[0].masks.push(geometry_mask);
+    let transform = frame.layers[0].transform;
+    frame.layers[0]
+        .masks
+        .push(vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
+            input: vestra_core::plan::EvaluatedMaskInput::Source {
+                source: Box::new(EvaluatedSource::Group {
+                    composition: vestra_core::plan::EvaluatedComposition {
+                        is_sized: true,
+                        width: 12,
+                        height: 10,
+                        layers: vec![masked_child],
+                    },
+                }),
+                mode: crate::project::MaskCoverageMode::Alpha,
+            },
+            operation: crate::project::MaskOperation::Intersect,
+            invert: false,
+            strength: 1.0,
+            feather: 0.0,
+            transform,
+        });
+    let plan = GpuFramePlan::build(&frame);
+    plan.validate(1).unwrap();
+    let surface_extents = plan
+        .operations
+        .iter()
+        .zip(&plan.extents)
+        .filter_map(|(operation, &extent)| {
+            matches!(operation, GpuOperation::RenderSurfaceLayer { .. }).then_some(extent)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(surface_extents, [(4, 4), (8, 6)]);
+    assert!(
+        plan.operations
+            .iter()
+            .zip(&plan.extents)
+            .any(|(operation, &extent)| {
+                matches!(operation, GpuOperation::RenderMask { .. }) && extent == (4, 4)
+            })
+    );
+    assert!(plan.operations.iter().any(|operation| matches!(
+        operation,
+        GpuOperation::CopyForEffect {
+            destination: TextureSlot::MaskCoverage,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn feather_presents_owner_once_in_sized_contexts_and_retains_legacy_unsized_path() {
+    for is_sized in [false, true] {
+        let mut frame = static_frame();
+        let child = frame.layers[0].clone();
+        let transform = child.transform;
+        frame.layers[0].source = EvaluatedSource::Group {
+            composition: vestra_core::plan::EvaluatedComposition {
+                is_sized,
+                width: 4,
+                height: 4,
+                layers: vec![child],
+            },
+        };
+        frame.layers[0]
+            .masks
+            .push(vestra_core::plan::EvaluatedMask {
+                owner_transform: None,
+                input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 0 },
+                operation: crate::project::MaskOperation::Intersect,
+                invert: false,
+                strength: 1.0,
+                feather: 1.5,
+                transform,
+            });
+        let plan = GpuFramePlan::build(&frame);
+        plan.validate(1).unwrap();
+        let presentations = plan
+            .operations
+            .iter()
+            .filter(|operation| {
+                matches!(
+                    operation,
+                    GpuOperation::FeatherMask {
+                        transform_owner: true,
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(presentations, usize::from(is_sized));
+        assert!(plan.local_mask_rules.iter().all(|&local| local == is_sized));
+    }
 }

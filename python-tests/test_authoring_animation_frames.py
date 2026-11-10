@@ -201,7 +201,7 @@ def test_cpu_video_renders_authored_animation_without_audio(tmp_path: Path) -> N
         width=160, height=90, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=1,
         background="#000000", base_directory=Path.cwd(),
     )
-    image = authored.add_image_asset("examples/assets/red.png")
+    image = authored.add_image_asset("assets/fixtures/red.png")
     clip = authored.add_image_clip(source=image, start=0, duration=1, layer=0)
     clip.transform.scale.keyframe(time=0, value=clip.transform.scale.base_value)
     clip.transform.scale.keyframe(time=1, value=type(clip.transform.scale.base_value)(1.2, 1.2), interpolation=Interpolation.EASE_IN_OUT)

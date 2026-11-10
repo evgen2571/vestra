@@ -14,6 +14,8 @@ verbosity flags provide the CLI's default filter when it is unset.
 | `generate-schema` | `--output PATH`, default `schemas/project.schema.json`. |
 | `version` | Prints the Vestra version. |
 
+## Results, diagnostics and logging
+
 `PROJECT` is a path. Human results are short summaries: `validate` names the
 valid project, `inspect` lists the resolved output, duration and contents, and
 `render` reports the output path, size, frame count, renderer and elapsed time.
@@ -29,13 +31,15 @@ has precedence over those flags and supports target-specific filters such as
 
 | Option | Default and values |
 | --- | --- |
-| `--output PATH` | Unset. The project output path is used. |
+| `--output PATH` | Unset. The project output path is used. An override ending in `.gif` or `.webp` selects an animation. |
 | `--overwrite` | False. Required to replace an existing output. |
-| `--preview` | False. Requests preview output behavior. |
+| `--preview` | False. Caps longest side at 640 px, FPS at 15, and selects fast encoding. |
 | `--format human\|json` | `human`. |
 | `--progress auto\|terminal\|json\|none` | `auto`. JSON progress is JSONL. |
 | `--report PATH` | Unset. Writes a structured report on success or failure. |
 | `--render-backend auto\|cpu\|wgpu` | `auto`. |
+
+### Progress streams
 
 With JSON progress and human final results, progress is sent to stdout and the
 final result is sent to stderr to keep the streams separable. Auto selects
@@ -54,3 +58,11 @@ These are partial engine counters, not resident process memory.
 It can therefore report missing assets, FFmpeg/media failures, output
 problems, and backend readiness issues. Python `project.validate()` and Rust
 `Editor::validate()` perform canonical semantic validation only.
+
+Validation uses the project's `output.path`, Auto backend selection and
+overwrite disabled. An existing output causes `VESTRA-OUTPUT-PATH`; `validate`
+has no `--overwrite` or `--output` option. For repeated editing, keep that path
+unused and render to a separate file with `render --output preview.mp4 --overwrite`,
+as in the [JSON guide](../guides/json-authoring.md).
+`inspect` resolves project media without checking the render destination or
+backend readiness.

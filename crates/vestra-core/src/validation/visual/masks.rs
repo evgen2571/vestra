@@ -15,6 +15,7 @@ pub(super) fn validate(
     path: &str,
     maximum_keyframes_per_track: usize,
     limits: crate::validation::ResourceLimits,
+    canvas_size: crate::project::GroupSize,
     errors: &mut Vec<Diagnostic>,
     has_authored_audio: bool,
     group_depth: usize,
@@ -52,9 +53,11 @@ pub(super) fn validate(
             crate::project::MaskInput::Source { source, .. } => {
                 validate_owned_mask_source(
                     source,
+                    &mask_path,
                     assets,
                     maximum_keyframes_per_track,
                     limits,
+                    canvas_size,
                     errors,
                     has_authored_audio,
                     group_depth,
@@ -221,11 +224,17 @@ fn visit_matte<'a>(
     state.insert(node, 2);
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation retains the owning mask path and hierarchy context"
+)]
 fn validate_owned_mask_source(
     source: &crate::project::VisualSource,
+    mask_path: &str,
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes_per_track: usize,
     limits: crate::validation::ResourceLimits,
+    canvas_size: crate::project::GroupSize,
     errors: &mut Vec<Diagnostic>,
     has_authored_audio: bool,
     group_depth: usize,
@@ -259,13 +268,24 @@ fn validate_owned_mask_source(
         flashes: Vec::new(),
         post_effects: Vec::new(),
     };
+    let first_error = errors.len();
     super::validate_with_depth(
         &visual,
         assets,
         maximum_keyframes_per_track,
         limits,
+        canvas_size,
         errors,
         has_authored_audio,
         group_depth,
     );
+    for diagnostic in &mut errors[first_error..] {
+        if let Some(pointer) = &mut diagnostic.pointer {
+            *pointer = pointer.replacen(
+                "/visual/clips/0/source",
+                &format!("{mask_path}/input/source"),
+                1,
+            );
+        }
+    }
 }

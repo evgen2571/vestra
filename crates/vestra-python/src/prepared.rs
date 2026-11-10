@@ -1,4 +1,5 @@
 use std::{
+    path::PathBuf,
     sync::{Condvar, Mutex, OnceLock, TryLockError},
     time::Duration,
 };
@@ -6,7 +7,7 @@ use std::{
 use pyo3::{
     exceptions::{PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyBool, PyBytes, PyInt, PyModule},
+    types::{PyAny, PyBool, PyBytes, PyInt, PyModule, PyTuple},
 };
 use vestra::{
     AdapterDeviceType as NativeAdapterDeviceType, AdapterInfo as NativeAdapterInfo,
@@ -36,18 +37,84 @@ pub(crate) struct PyPrepareOptions {
 #[pymethods]
 impl PyPrepareOptions {
     #[new]
-    #[pyo3(signature = (*, backend = None))]
-    fn new(backend: Option<&PyBackendPreference>) -> Self {
+    #[pyo3(signature = (*, backend = None, resolution = None, fps = None, quality = None))]
+    fn new(
+        backend: Option<&PyBackendPreference>,
+        resolution: Option<&Bound<'_, PyAny>>,
+        fps: Option<&PyFrameRate>,
+        quality: Option<&str>,
+    ) -> PyResult<Self> {
         let backend = backend.copied().unwrap_or(PyBackendPreference::Auto);
-        Self {
-            inner: NativePrepareOptions::new(backend.native()),
-            backend,
+        let mut inner = NativePrepareOptions::new(backend.native());
+        if let Some((width, height)) = resolution.map(resolution_from_python).transpose()? {
+            inner = inner.with_resolution(width, height);
         }
+        if let Some(rate) = fps {
+            inner = inner.with_frame_rate(rate.inner);
+        }
+        if let Some(quality) = quality.map(quality_from_python).transpose()? {
+            inner = inner.with_quality(quality);
+        }
+        Ok(Self { inner, backend })
     }
 
     #[getter]
     fn backend(&self) -> PyBackendPreference {
         self.backend
+    }
+    #[getter]
+    fn resolution(&self) -> Option<(u32, u32)> {
+        self.inner.resolution()
+    }
+    #[getter]
+    fn fps(&self) -> Option<PyFrameRate> {
+        self.inner.frame_rate().map(Into::into)
+    }
+    #[getter]
+    fn quality(&self) -> Option<&'static str> {
+        self.inner.quality().map(quality_name)
+    }
+}
+
+pub(crate) fn resolution_from_python(value: &Bound<'_, PyAny>) -> PyResult<(u32, u32)> {
+    let tuple = value
+        .cast::<PyTuple>()
+        .map_err(|_| PyTypeError::new_err("resolution must be a (width, height) tuple"))?;
+    if tuple.len() != 2 {
+        return Err(PyTypeError::new_err(
+            "resolution must be a (width, height) tuple",
+        ));
+    }
+    let mut size = [0; 2];
+    for (index, name) in ["width", "height"].into_iter().enumerate() {
+        size[index] = u32::try_from(u64_from_python(&tuple.get_item(index)?, name)?)
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "resolution {name} must be between 1 and 4294967295"
+                ))
+            })?;
+    }
+    Ok((size[0], size[1]))
+}
+
+pub(crate) fn quality_from_python(value: &str) -> PyResult<vestra::Quality> {
+    match value {
+        "preview" => Ok(vestra::Quality::Preview),
+        "balanced" => Ok(vestra::Quality::Balanced),
+        "high" => Ok(vestra::Quality::High),
+        _ => Err(PyValueError::new_err(
+            "quality must be preview, balanced or high",
+        )),
+    }
+}
+
+pub(crate) const fn quality_name(value: vestra::Quality) -> &'static str {
+    match value {
+        vestra::Quality::Preview => "preview",
+        vestra::Quality::Balanced => "balanced",
+        vestra::Quality::High => "high",
     }
 }
 
@@ -298,7 +365,7 @@ impl From<&NativeAdapterInfo> for PyAdapterInfo {
 )]
 #[derive(Clone, Copy)]
 pub(crate) struct PyFrameRate {
-    inner: NativeFrameRate,
+    pub(crate) inner: NativeFrameRate,
 }
 #[pymethods]
 impl PyFrameRate {
@@ -477,6 +544,21 @@ impl PyFrame {
     fn __bytes__<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
         self.to_bytes(py)
     }
+    fn to_numpy<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        PyModule::import(py, "numpy")?
+            .call_method1("frombuffer", (self.to_bytes(py), "uint8"))?
+            .call_method1("reshape", ((self.inner.height(), self.inner.width(), 4),))?
+            .call_method0("copy")
+    }
+    #[pyo3(signature = (output, *, overwrite = false))]
+    #[expect(
+        clippy::result_large_err,
+        reason = "frame output retains SDK diagnostics"
+    )]
+    fn save(&self, py: Python<'_>, output: PathBuf, overwrite: bool) -> PyResult<()> {
+        py.detach(|| self.inner.save(output, overwrite))
+            .or_else(|error| frame_error(py, error))
+    }
 }
 impl From<NativeFrame> for PyFrame {
     fn from(inner: NativeFrame) -> Self {
@@ -633,6 +715,25 @@ impl PyPreparedProject {
     fn supports_single_frame_rendering(&self) -> bool {
         self.report.supports_single_frame_rendering
     }
+    #[pyo3(signature = (start, end = None))]
+    #[expect(
+        clippy::result_large_err,
+        reason = "the Python bridge preserves native range diagnostics"
+    )]
+    fn _frame_range_seconds(
+        &self,
+        py: Python<'_>,
+        start: &Bound<'_, PyAny>,
+        end: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<(u64, u64)> {
+        let start = duration_from_seconds(start)?;
+        let end = end.map(duration_from_seconds).transpose()?;
+        match self.operation(py, move |prepared| prepared.frame_range(start, end)) {
+            Ok(Ok(range)) => Ok((range.start, range.end)),
+            Ok(Err(error)) => frame_error(py, error),
+            Err(error) => Err(slot_error(py, error)?),
+        }
+    }
     #[expect(
         clippy::result_large_err,
         reason = "the Python bridge preserves native frame diagnostics"
@@ -694,7 +795,7 @@ impl PyPreparedProject {
     }
 }
 
-fn u64_from_python(value: &Bound<'_, PyAny>, name: &str) -> PyResult<u64> {
+pub(crate) fn u64_from_python(value: &Bound<'_, PyAny>, name: &str) -> PyResult<u64> {
     if value.is_instance_of::<PyBool>() {
         return Err(PyTypeError::new_err(format!(
             "{name} must be an integer, not bool"
@@ -734,7 +835,7 @@ fn duration_from_ns(value: u128) -> PyResult<Duration> {
         .map_err(|_| PyValueError::new_err("timestamp_ns is outside the native duration range"))?;
     Ok(Duration::new(seconds, nanos))
 }
-fn duration_from_seconds(value: &Bound<'_, PyAny>) -> PyResult<Duration> {
+pub(crate) fn duration_from_seconds(value: &Bound<'_, PyAny>) -> PyResult<Duration> {
     if value.is_instance_of::<PyBool>() {
         return Err(PyTypeError::new_err(
             "seconds must be a finite float, not bool",

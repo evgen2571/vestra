@@ -459,7 +459,7 @@ fn cancellation_failure_reports_frames_written_before_cancellation() {
     assert_eq!(failure_progress(24, 24), None);
 }
 
-#[path = "render_benchmarks.rs"]
+#[path = "../../../../../../benchmarks/rust/sdk/render_benchmarks.rs"]
 mod benchmark_tests;
 #[path = "selection.rs"]
 mod selection_tests;
@@ -650,6 +650,7 @@ fn backend_failure_aborts_encoder_and_removes_partial_output() {
     let workspace = TempDir::new().expect("temporary output directory");
     let output = workspace.path().join("failed-render.mp4");
     let options = RenderOptions {
+        frame_range: None,
         output_override: Some(output.clone()),
         overwrite: false,
         cancelled: Arc::new(AtomicBool::new(false)),
@@ -705,6 +706,7 @@ fn runtime_gpu_failures_preserve_context_and_cleanup_after_completed_frames() {
         let workspace = TempDir::new().expect("temporary output directory");
         let output = workspace.path().join(format!("{code}.mp4"));
         let options = RenderOptions {
+            frame_range: None,
             output_override: Some(output.clone()),
             overwrite: false,
             cancelled: Arc::new(AtomicBool::new(false)),

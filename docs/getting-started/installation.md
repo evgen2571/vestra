@@ -1,7 +1,8 @@
 # Install Vestra
 
 Install Vestra into a Python project with uv or pip. The Python wheel includes
-the native engine.
+the native engine, and the `imageio-ffmpeg` dependency supplies an FFmpeg executable.
+No separate FFmpeg or FFprobe installation is needed on the supported wheel targets.
 
 ## Install into a Python project with uv
 
@@ -13,53 +14,136 @@ uv run python -c "import vestra; print(vestra.__version__)"
 ```
 
 For a new project, run `uv init my-video`, then `cd my-video` first.
-Follow the [Python quickstart](python-quickstart.md), save its code as
-`quickstart.py`, and run `uv run python quickstart.py` to receive
-`quickstart.mp4`.
+Continue with [your first render](first-render.md) to encode an MP4.
 
 ## Install with pip
 
-In your chosen Python environment:
+Create and activate a virtual environment first:
+
+```bash
+python -m venv .venv
+```
+
+On macOS and Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+On Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+In that environment:
 
 ```bash
 python -m pip install vestra
 python -c "import vestra; print(vestra.__version__)"
 ```
 
-Run the same quickstart with `python quickstart.py`. Wheel users do not need
+Use `python` wherever the tutorials say `uv run python`. Wheel users do not need
 Rust, a C compiler or NASM. If no wheel matches your platform/interpreter,
 pip may attempt a source build, which needs the tools below.
 
-## Install the FFmpeg runtime
+<span id="3-check-the-environment"></span>
 
-Install FFmpeg with your platform's package manager. Both `ffmpeg` (encoding)
-and `ffprobe` (media inspection) must be available on `PATH` in the shell that
-runs Vestra:
+## Check the environment
 
 ```bash
-ffmpeg -version
-ffprobe -version
+uv run python -c "import vestra; print('Vestra', vestra.__version__)"
 ```
 
-These executables are required even though wheels bundle the native FFmpeg
-libraries used by the engine. A working Python import does not check them.
-For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
+This checks the import; [your first render](first-render.md) checks encoding.
+For import and wheel errors, see [Python troubleshooting](../troubleshooting/python.md).
+The tutorials use `backend="cpu"` and need no GPU.
 
 ## Supported Python versions and platforms
 
 Vestra supports CPython 3.11–3.14. Published wheels cover Linux x86_64
 and aarch64 (glibc 2.28+), macOS Intel and Apple Silicon, and Windows x64.
-The `ve` CLI is built separately from the Rust checkout.
+Wheels use CPython's stable ABI (`cp311-abi3`): the same platform wheel
+supports all four versions. Standard CPython builds are supported; PyPy and
+free-threaded CPython are not covered.
+
+## Install the native CLI
+
+Download the archive matching your machine from
+[GitHub Releases](https://github.com/evgen2571/vestra/releases). The CLI runs
+without Python; installing the Python wheel does not install `ve`.
+
+| Platform | Archive target | Compatibility |
+| --- | --- | --- |
+| Linux Intel/AMD 64-bit | `x86_64-unknown-linux-gnu.tar.gz` | glibc 2.28+, not musl/Alpine |
+| Linux ARM64 | `aarch64-unknown-linux-gnu.tar.gz` | glibc 2.28+ |
+| macOS Intel | `x86_64-apple-darwin.tar.gz` | macOS 11.0+ |
+| macOS Apple Silicon | `aarch64-apple-darwin.tar.gz` | macOS 11.0+ |
+| Windows x64 | `x86_64-pc-windows-msvc.zip` | Windows 10+/Server 2022 tested |
+
+Each filename starts with `ve-<version>-`. Download its `.sha256` sidecar too.
+On Linux, verify and install (substitute the downloaded version):
+
+```bash
+sha256sum -c ve-<version>-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -xzf ve-<version>-x86_64-unknown-linux-gnu.tar.gz
+mkdir -p "$HOME/.local/bin"
+chmod +x ve-<version>-x86_64-unknown-linux-gnu/ve
+cp ve-<version>-x86_64-unknown-linux-gnu/ve "$HOME/.local/bin/ve"
+ve version
+```
+
+Ensure `$HOME/.local/bin` is on PATH. Keep the extracted license files and
+README. On macOS, compare `shasum -a 256 <archive>` with the sidecar, extract,
+and install `ve` similarly. Binaries are not signed/notarized; follow your
+organization's macOS security policy when using downloaded executables.
+
+On Windows, compare `Get-FileHash <archive> -Algorithm SHA256` with the
+sidecar, use `Expand-Archive <archive>`, and add the extracted folder containing
+`ve.exe` to your user PATH. Open a new terminal and run `ve version`. Windows
+may require the Microsoft Visual C++ 2015–2022 x64 Redistributable.
+
+The native FFmpeg libraries are statically linked, but the `ffmpeg`
+**executable remains an external requirement** for encoding and audio processing.
+Linux also needs its standard C/C++ runtime libraries; macOS needs its system
+frameworks. A GPU and compatible driver are needed only for WGPU rendering;
+use `--render-backend cpu` for a first render. Release smoke coverage is Ubuntu
+24.04, macOS 15 and Windows Server 2022; older compatible systems are not
+exhaustively tested. Continue with the [CLI quickstart](cli-quickstart.md).
+
+## Choose a different FFmpeg executable
+
+Python uses the executable packaged by `imageio-ffmpeg`, even when a system
+FFmpeg is on `PATH`. To use your own build, set `IMAGEIO_FFMPEG_EXE` before
+preparing or rendering:
+
+```bash
+export IMAGEIO_FFMPEG_EXE=/absolute/path/to/ffmpeg
+```
+
+In PowerShell, use `$env:IMAGEIO_FFMPEG_EXE = 'C:\tools\ffmpeg.exe'`.
+Paths with spaces, relative paths and command names on `PATH` are accepted;
+an absolute path is recommended. Invalid overrides fail instead of silently
+selecting another executable. Prepared projects retain their selected path.
+Your build must support H.264 via `libx264`, AAC and Vestra's audio filters.
+
+The extension separately bundles native FFmpeg libraries for probing and video
+decoding. `ffprobe` is optional for independent media verification; Vestra does
+not invoke it at runtime. Import and semantic validation do not run FFmpeg.
+For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
+
+<a id="build-from-source--development"></a>
 
 ## Build from source / development
 
 This section is for contributors and platforms without a matching wheel.
-For contribution guidance, see [Contributing](../../CONTRIBUTING.md).
+For contribution guidance, see [Contributing](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md).
 
 A source build compiles the Rust engine and bundled FFmpeg libraries. It needs
 Rust, Python 3.11–3.14, uv, a C compiler, libclang, `make`, `git`, and NASM,
 plus network access for the initial FFmpeg source fetch. The first build can
-take a while. Runtime rendering still needs the FFmpeg executables above.
+take a while. Python installs its FFmpeg executable dependency automatically;
+native CLI tests and developer media tools still use `ffmpeg` on `PATH`.
 
 Cargo builds the Rust workspace. Maturin, configured in `pyproject.toml`, builds
 the Python extension from `crates/vestra-python`; uv invokes it when installing
@@ -106,7 +190,7 @@ Native build and runtime dependencies:
 - `pkg-config` for library discovery.
 - Git for the initial FFmpeg source fetch.
 - **NASM** for FFmpeg's x86 assembly.
-- `ffmpeg` and `ffprobe` for runtime encoding and media inspection.
+- `ffmpeg` for runtime encoding and audio processing.
 
 On Ubuntu/Debian, install the native build tools and FFmpeg runtime before
 running `uv sync`:
@@ -145,4 +229,4 @@ cargo run -q -p vestra-cli -- version
 
 The binary is `target/debug/ve` (`ve.exe` on Windows). Add it to `PATH` if you
 want to use the short CLI commands. Continue with the
-[CLI quickstart](cli-quickstart.md) or [Python quickstart](python-quickstart.md).
+[CLI quickstart](cli-quickstart.md) or [Python quickstart](first-render.md).

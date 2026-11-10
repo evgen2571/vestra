@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
+
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
 
 from . import _native
 from .authoring.builder import ProjectBuilder
@@ -77,6 +81,14 @@ def _frame_rate(value: int | tuple[int, int] | _native.FrameRate) -> _native.Fra
     raise TypeError(
         "fps must be a positive integer, (numerator, denominator), or FrameRate"
     )
+
+
+def _quality_override(value: Quality | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, Quality):
+        raise TypeError("quality must be Quality or None")
+    return value.value
 
 
 def _backend(value: str | _native.BackendPreference) -> _native.BackendPreference:
@@ -672,6 +684,7 @@ class Project:
         "_audio",
         "_post_effects",
         "_flashes",
+        "_resource_limits",
     )
 
     def __init__(
@@ -687,6 +700,7 @@ class Project:
         metadata: JsonValue | None = None,
         output_audio: bool | None = None,
         output_path: str | os.PathLike[str] | None = None,
+        resource_limits: _native.ResourceLimits | None = None,
     ) -> None:
         if not isinstance(size, tuple) or len(size) != 2:
             raise TypeError("size must be a (width, height) tuple")
@@ -721,6 +735,9 @@ class Project:
         self._audio = AudioTimeline(self)
         self._post_effects = EffectStack("post")
         self._flashes = FlashCollection(self)
+        if resource_limits is not None and not isinstance(resource_limits, _native.ResourceLimits):
+            raise TypeError("resource_limits must be ResourceLimits or None")
+        self._resource_limits = resource_limits
 
     def __repr__(self) -> str:
         width, height = self.size
@@ -815,25 +832,136 @@ class Project:
         Media files, FFmpeg and graphics adapters are checked by ``prepare()``
         and ``render()``.
         """
-        return _native.Editor().validate(self.snapshot())
+        return _native.Editor(resource_limits=self._resource_limits).validate(self.snapshot())
 
     def prepare(
-        self, *, backend: str | _native.BackendPreference = "auto"
+        self,
+        *,
+        backend: str | _native.BackendPreference = "auto",
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+        quality: Quality | None = None,
     ) -> _native.PreparedProject:
         """Decode media and initialize a renderer for repeated frame or video renders."""
-        return _native.Editor().prepare(
-            self.snapshot(), _native.PrepareOptions(backend=_backend(backend))
+        return _native.Editor(resource_limits=self._resource_limits).prepare(
+            self.snapshot(),
+            _native.PrepareOptions(
+                backend=_backend(backend),
+                resolution=resolution,
+                fps=None if fps is None else _frame_rate(fps),
+                quality=_quality_override(quality),
+            )
         )
 
     def render_frame(
-        self, seconds: float, *, backend: str | _native.BackendPreference = "auto"
+        self,
+        seconds: float | None = None,
+        output: str | os.PathLike[str] | None = None,
+        *,
+        frame_number: int | None = None,
+        backend: str | _native.BackendPreference = "auto",
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+        overwrite: bool = False,
     ) -> _native.Frame:
-        """Render one RGBA frame at ``seconds``.
+        """Render one frame by time or index, optionally saving PNG/JPEG/WebP.
 
-        This prepares the project on every call; call ``prepare()`` once and
-        reuse the result to render many frames.
+        Times select the containing project frame. Supply exactly one of
+        ``seconds`` and ``frame_number``. Use ``prepare()`` or ``render_frames()``
+        to share preparation across multiple frames.
         """
-        return self.prepare(backend=backend).render_frame_seconds(seconds)
+        if (seconds is None) == (frame_number is None):
+            raise ValueError("supply exactly one of seconds or frame_number")
+        prepared = self.prepare(backend=backend, resolution=resolution, fps=fps)
+        if seconds is not None:
+            frame = prepared.render_frame_seconds(seconds)
+        else:
+            assert frame_number is not None
+            frame = prepared.render_frame_number(frame_number)
+        if output is not None:
+            frame.save(_path(output, "output"), overwrite=overwrite)
+        return frame
+
+    def get_frame(
+        self,
+        seconds: float | None = None,
+        *,
+        frame_number: int | None = None,
+        backend: str | _native.BackendPreference = "auto",
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+    ) -> NDArray[np.uint8]:
+        """Return an owned writable ``uint8[height, width, 4]`` RGBA array.
+
+        Install ``vestra[numpy]``. Rows run top to bottom, with straight alpha
+        and strides ``(width * 4, 4, 1)``. Changing the array cannot change
+        another frame or prepared renderer.
+        """
+        return self.render_frame(
+            seconds, frame_number=frame_number, backend=backend, resolution=resolution, fps=fps
+        ).to_numpy()
+
+    def render_frames(
+        self,
+        *,
+        directory: str | os.PathLike[str],
+        times: Sequence[float] | None = None,
+        indices: Sequence[int] | None = None,
+        start: float | None = None,
+        end: float | None = None,
+        format: str = "png",
+        backend: str | _native.BackendPreference = "auto",
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+        overwrite: bool = False,
+    ) -> int:
+        """Save ``frame_000000.ext``, … and return the number of images.
+
+        Supply ``times``, ``indices``, or a continuous ``[start, end)`` range
+        (the whole timeline by default). Selection order and duplicates are
+        retained. Range boundaries round up to the next project frame. Frames
+        are rendered and saved one at a time using one preparation.
+        """
+        if times is not None and indices is not None:
+            raise ValueError("supply times or indices, not both")
+        if (times is not None or indices is not None) and (start is not None or end is not None):
+            raise ValueError("start/end cannot be combined with times or indices")
+        if not isinstance(format, str) or format.lower() not in {"png", "jpg", "jpeg", "webp"}:
+            raise ValueError("format must be png, jpg, jpeg or webp")
+        format = format.lower()
+        target = Path(_path(directory, "directory"))
+        prepared = self.prepare(backend=backend, resolution=resolution, fps=fps)
+        report = prepared.preparation_report
+        if times is not None:
+            for seconds in times:
+                if _real(seconds, "time") >= report.duration_ns / 1_000_000_000:
+                    raise ValueError("time is outside the project timeline")
+            count = len(times)
+        elif indices is not None:
+            for index in indices:
+                if not 0 <= _integer(index, "index") < report.frame_count:
+                    raise ValueError("index is outside the project timeline")
+            count = len(indices)
+        else:
+            first, stop = prepared._frame_range_seconds(0 if start is None else start, end)
+            indices = range(first, stop)
+            count = len(indices)
+        if not overwrite:
+            for number in range(count):
+                path = target / f"frame_{number:06d}.{format}"
+                if path.exists():
+                    raise FileExistsError(path)
+        if count:
+            target.mkdir(parents=True, exist_ok=True)
+        for number in range(count):
+            if times is not None:
+                frame = prepared.render_frame_seconds(times[number])
+            else:
+                assert indices is not None
+                frame = prepared.render_frame_number(indices[number])
+            frame.save(target / f"frame_{number:06d}.{format}", overwrite=overwrite)
+            del frame
+        return count
 
     def render(
         self,
@@ -842,28 +970,74 @@ class Project:
         backend: str | _native.BackendPreference = "auto",
         overwrite: bool = False,
         preview: bool = False,
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+        quality: Quality | None = None,
+        start: float = 0,
+        end: float | None = None,
         show_progress: bool = True,
         on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
     ) -> _native.RenderResult:
-        """Render the project to an MP4 file and return a ``RenderResult``.
+        """Render the project to MP4, GIF or animated WebP and return a ``RenderResult``.
 
         ``backend`` is ``"auto"`` (WGPU when an adapter is available, otherwise
         CPU), ``"cpu"`` or ``"wgpu"``. An existing ``output`` is replaced only
         with ``overwrite=True``. ``preview=True`` caps the longest side at
-        640 px. A progress bar is shown on interactive terminals unless
+        640 px, caps FPS at 15, and selects fast encoding. Explicit ``resolution``,
+        ``fps`` and ``quality`` override those defaults without editing the project.
+        A progress bar is shown on interactive terminals unless
         ``show_progress=False``; ``on_progress`` receives ``RenderEvent``
-        values instead. Requires ``ffmpeg`` and ``ffprobe`` on ``PATH``.
+        values instead. ``start``/``end`` select project sample times in
+        ``[start, end)``; the encoded clip and trimmed audio start at zero.
+        An omitted end uses the project duration. FFmpeg is installed automatically; set
+        ``IMAGEIO_FFMPEG_EXE`` to select a different executable.
         """
         request = _native.RenderRequest(
             _path(output, "output"),
             backend=_backend(backend),
             overwrite=overwrite,
             preview=preview,
+            resolution=resolution,
+            fps=None if fps is None else _frame_rate(fps),
+            quality=_quality_override(quality),
+            start=start,
+            end=end,
         )
-        return _native.Editor().render(
-            self.snapshot(output=output),
+        return _native.Editor(resource_limits=self._resource_limits).render(
+            self.snapshot(),
             request,
+            show_progress=show_progress,
+            on_progress=on_progress,
+            cancellation=cancellation,
+        )
+
+    def render_preview(
+        self,
+        output: str | os.PathLike[str],
+        *,
+        backend: str | _native.BackendPreference = "auto",
+        overwrite: bool = False,
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+        quality: Quality | None = None,
+        start: float = 0,
+        end: float | None = None,
+        show_progress: bool = True,
+        on_progress: Callable[[_native.RenderEvent], object] | None = None,
+        cancellation: _native.CancellationToken | None = None,
+    ) -> _native.RenderResult:
+        """Render with the 640 px, at most 15 FPS, fast-encoding preset."""
+        return self.render(
+            output,
+            backend=backend,
+            overwrite=overwrite,
+            preview=True,
+            resolution=resolution,
+            fps=fps,
+            quality=quality,
+            start=start,
+            end=end,
             show_progress=show_progress,
             on_progress=on_progress,
             cancellation=cancellation,

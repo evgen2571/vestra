@@ -20,6 +20,14 @@ pub enum AudioAnalysisError {
 
 #[derive(Debug, Error)]
 pub enum MediaError {
+    #[error("still images require a .png, .jpg, .jpeg or .webp extension")]
+    UnsupportedStillFormat,
+    #[error("invalid RGBA image dimensions or byte count")]
+    InvalidImageLayout,
+    #[error("cannot encode still image: {0}")]
+    ImageEncoding(#[from] image::ImageError),
+    #[error("cannot write still image: {0}")]
+    ImageWrite(#[source] io::Error),
     #[error(transparent)]
     AudioAnalysis(#[from] AudioAnalysisError),
     #[error("cannot start {program}: {source}")]
@@ -30,20 +38,31 @@ pub enum MediaError {
     },
     #[error("{program} did not report a usable version")]
     Unavailable { program: &'static str },
+    #[error("FFmpeg encoder '{encoder}' is unavailable for {format} output")]
+    EncoderUnavailable {
+        encoder: &'static str,
+        format: &'static str,
+    },
+    #[error("cannot encode animation: {0}")]
+    AnimationEncoding(String),
+    #[error("cannot write animation: {0}")]
+    AnimationWrite(#[source] io::Error),
     #[error("{program} failed with status {status}: {stderr}")]
     ProcessFailed {
         program: &'static str,
         status: ExitStatus,
         stderr: String,
     },
-    #[error("invalid FFprobe response: {0}")]
-    InvalidProbeOutput(#[from] serde_json::Error),
-    #[error("audio duration is unavailable")]
+    #[error("cannot probe audio media '{path}': {message}")]
+    AudioProbe { path: PathBuf, message: String },
+    #[error("media contains no audio stream")]
+    NoAudioStream,
+    #[error("audio duration is unavailable: no decoded samples")]
     MissingAudioDuration,
     #[error("invalid audio duration: {0}")]
     InvalidAudioDuration(String),
-    #[error("cannot initialize FFmpeg video support: {0}")]
-    VideoInitialization(String),
+    #[error("cannot initialize FFmpeg media support: {0}")]
+    FfmpegInitialization(String),
     #[error("cannot open video media '{path}': {message}")]
     VideoOpen { path: PathBuf, message: String },
     #[error("media contains no usable video stream")]

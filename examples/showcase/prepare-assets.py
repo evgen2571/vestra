@@ -1,42 +1,17 @@
 #!/usr/bin/env python3
-"""Reproduce the downloaded footage and original audio used by the showcases."""
+"""Verify shared footage and reproduce the original showcase audio."""
 
 import argparse
-import hashlib
 import math
 from pathlib import Path
-import shutil
 import struct
-import subprocess
-import urllib.request
+import sys
 import wave
 
 ROOT = Path(__file__).resolve().parent
-CITY_URL = (
-    "https://upload.wikimedia.org/wikipedia/commons/d/d7/City_timelapse_video.webm"
-)
-CITY_SHA256 = "42ebfa7a64b4538497dd08891b1aa11f20545940948f06473a0e77a6d917a450"
+sys.path.insert(0, str(ROOT.parents[1]))
 
-
-def download(url: str, digest: str, target: Path) -> None:
-    if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == digest:
-        return
-    target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_suffix(target.suffix + ".partial")
-    try:
-        request = urllib.request.Request(
-            url, headers={"User-Agent": "Vestra-showcase/0.1"}
-        )
-        with (
-            urllib.request.urlopen(request, timeout=60) as response,
-            partial.open("wb") as output,
-        ):
-            shutil.copyfileobj(response, output)
-        if hashlib.sha256(partial.read_bytes()).hexdigest() != digest:
-            raise ValueError(f"checksum mismatch for {target.name}")
-        partial.replace(target)
-    finally:
-        partial.unlink(missing_ok=True)
+from benchmarks.comparisons.moviepy.comparison import load_inputs  # noqa: E402
 
 
 def write_audio(path: Path) -> None:
@@ -74,54 +49,18 @@ def main() -> None:
     parser.add_argument(
         "--audio-only",
         action="store_true",
-        help="generate audio without downloading footage",
+        help="generate audio without checking bundled footage",
     )
     args = parser.parse_args()
-    print(
-        "Original synth audio: CC0. Footage: City timelapse video / Location Kenya / CC BY 3.0."
-    )
-    print(
-        "Read examples/showcase/ASSETS.md for source, license and redistribution requirements."
-    )
-    write_audio(ROOT / "assets/synth.wav")
+    write_audio(ROOT.parents[1] / "assets/audio/synth.wav")
     if args.audio_only:
         return
-    source = ROOT.parents[1] / "target/showcase-sources/city.webm"
-    download(CITY_URL, CITY_SHA256, source)
-    for number, start in enumerate((3, 34, 59), 1):
-        destination = ROOT / f"assets/city-{number}.mp4"
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-v",
-                "error",
-                "-ss",
-                str(start),
-                "-i",
-                str(source),
-                "-t",
-                "5",
-                "-an",
-                "-vf",
-                "setpts=PTS-STARTPTS,scale=1280:720,fps=30",
-                "-map_metadata",
-                "-1",
-                "-c:v",
-                "libx264",
-                "-crf",
-                "18",
-                "-pix_fmt",
-                "yuv420p",
-                "-y",
-                str(destination),
-            ],
-            check=True,
-        )
-        print(f"Prepared {destination.relative_to(ROOT)}")
+    load_inputs(ROOT.parents[1] / "assets/footage")
+    print("Verified bundled footage; generated synth audio.")
 
 
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError) as error:
         raise SystemExit(f"Showcase asset preparation failed: {error}") from error

@@ -1,4 +1,7 @@
-"""Author a small particle scene and an audio-reactive appearance property."""
+"""Author a small particle scene and an audio-reactive appearance property.
+
+Run from the repository root: uv run python examples/python/authoring/10_particles.py
+"""
 
 from vestra import FrameRate
 from vestra.authoring import (
@@ -17,14 +20,16 @@ project = ProjectBuilder(
     output_path="particles.mp4",
     duration=1.0,
 )
-audio_asset = project.add_audio_asset("examples/assets/tone.wav")
-project.audio.add_track(id="music").add_clip(asset=audio_asset, start=0, trim_end=1.0)
+audio_asset = project.add_audio_asset("assets/fixtures/tone.wav")
+music = project.audio.add_track(id="music")
+music.add_clip(asset=audio_asset, start=0, trim_end=1.0)
 project.add_particle_system_clip(
     particle_system=sparks(), start=0, duration=1.0, layer=1
 )
 
 size = project.scalar_property(1.0)
-size.modulate(ScalarSignal({"type": "rms"}).clamp(0.0, 1.0), mode="multiply")
+loudness = ScalarSignal({"type": "rms"}).clamp(0.0, 1.0)
+size.modulate(loudness, mode="multiply")
 project.add_particle_system_clip(
     particle_system=ParticleSystem(
         emitter=PointEmitter(),
@@ -37,4 +42,4 @@ project.add_particle_system_clip(
 )
 
 assert project.validate().is_valid
-print(project.to_dict())
+print("Particle project valid: sparks and audio-reactive size")

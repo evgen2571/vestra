@@ -98,7 +98,24 @@ where
     S: FrameSink + Send,
     SF: FnOnce(&EncoderSettings, &Path) -> Result<S, MediaError>,
 {
-    render_prepared_with_sink_inner(prepared, options, lifecycle, start_sink)
+    let frames = options.frames(&prepared.plan);
+    render_prepared_with_sink_inner(prepared, options, lifecycle, start_sink).map_err(
+        |mut error| {
+            if options.frame_range.is_some() {
+                error.context.total_frames = frames.end - frames.start;
+                error.context.last_completed_frame_index = error
+                    .context
+                    .completed_frames
+                    .checked_sub(1)
+                    .map(|index| frames.start + index);
+                error.context.progress = super::failure::failure_progress(
+                    error.context.completed_frames,
+                    error.context.total_frames,
+                );
+            }
+            error
+        },
+    )
 }
 
 pub(crate) struct LifecycleEmitter<'a> {
@@ -232,6 +249,19 @@ where
     // This lets a failed operation invalidate the reusable state immediately.
     let plan = Arc::clone(&prepared.plan);
     let total_started = Instant::now();
+    let frames = options.frames(&plan);
+    let total_frames = frames.end - frames.start;
+    let mut encoder_settings = std::borrow::Cow::Borrowed(&plan.encoder);
+    let duration = if options.frame_range.is_some() {
+        let seconds_per_frame = plan.frame_rate.1 as f64 / plan.frame_rate.0 as f64;
+        let settings = encoder_settings.to_mut();
+        settings.frame_count = total_frames;
+        settings.audio_range =
+            Some(frames.start as f64 * seconds_per_frame..frames.end as f64 * seconds_per_frame);
+        total_frames as f64 * seconds_per_frame
+    } else {
+        plan.duration
+    };
     let _output_span = tracing::debug_span!(
         target: "vestra.output",
         "output",
@@ -281,10 +311,10 @@ where
         "encode",
         stage = "start",
         output = %output.final_path.display(),
-        total_frames = plan.frame_count
+        total_frames
     )
     .entered();
-    let mut encoder = start_sink(&plan.encoder, &output.temporary_path)
+    let mut encoder = start_sink(&encoder_settings, &output.temporary_path)
         .map_err(|error| {
             cleanup_error(
                 &output,
@@ -328,7 +358,7 @@ where
         target: "vestra.render",
         "frames",
         stage = "render",
-        total_frames = plan.frame_count
+        total_frames
     )
     .entered();
     let frame_loop = run_frame_loop(
@@ -472,7 +502,7 @@ where
         "finalize",
         stage = "finalize",
         output = %output.final_path.display(),
-        total_frames = plan.frame_count
+        total_frames
     )
     .entered();
     let sink_result = encoder
@@ -497,7 +527,7 @@ where
         stage = "finalize",
         "encoder finalization completed"
     );
-    if sink_result.frames_written != plan.frame_count {
+    if sink_result.frames_written != total_frames {
         return Err(failure_with_context(
             cleanup_error(
                 &output,
@@ -510,7 +540,7 @@ where
                     Category::Render,
                     format!(
                         "sink accepted {} frames; expected {}",
-                        sink_result.frames_written, plan.frame_count
+                        sink_result.frames_written, total_frames
                     ),
                     "",
                 ),
@@ -602,13 +632,15 @@ where
         timings.gpu_readback_wait_ms = Some(milliseconds(backend_timings.gpu_readback_wait));
         timings.row_repack_ms = Some(milliseconds(backend_timings.row_repack));
     }
+    let audio_present =
+        plan.encoder.audio_mix.is_some() && !vestra_media::is_animated_output(&output.final_path);
     Ok(RenderSummary {
         output_path: output.final_path,
         width: plan.canvas.width,
         height: plan.canvas.height,
-        duration: plan.duration,
-        frame_count: plan.frame_count,
-        audio_present: plan.encoder.audio_mix.is_some(),
+        duration,
+        frame_count: total_frames,
+        audio_present,
         preview: plan.canvas.preview,
         elapsed_ms: timings.operation_total_ms,
         timings,

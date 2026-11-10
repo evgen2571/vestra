@@ -893,14 +893,157 @@ mod tests {
         );
         let without_alpha = without_tile.pixels().filter(|pixel| pixel[3] > 0).count();
         let with_alpha = with_tile.pixels().filter(|pixel| pixel[3] > 0).count();
-        assert!(
-            without_alpha < with_alpha,
-            "Motion Tile should increase transformed coverage: {without_alpha} -> {with_alpha}"
-        );
-        assert!(
-            with_alpha >= 24,
-            "tiled coverage should fill transformed edges"
-        );
+        assert_eq!(without_alpha, 12);
+        assert_eq!(with_alpha, 52);
+        for (x, y, pixel) in with_tile.enumerate_pixels() {
+            // A centered 8x8 square rotated 45 degrees is this pixel-center diamond.
+            let distance = (f64::from(x) + 0.5 - 4.0).abs() + (f64::from(y) + 0.5 - 4.0).abs();
+            assert_eq!(pixel[3] > 0, distance < 4.0 * 2.0_f64.sqrt());
+        }
+    }
+
+    #[test]
+    fn motion_tile_preserves_matched_anchor_coverage_at_every_extent() {
+        let source = RgbaImage::from_pixel(640, 360, Rgba([147, 203, 181, 255]));
+        for mirror_edges in [false, true] {
+            for anchor in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                for factor in [1.0, 2.0, 4.0] {
+                    let mut output = RgbaImage::new(640, 360);
+                    draw_raster_with_motion_tile(
+                        &mut output,
+                        &source,
+                        geometry::IntrinsicSize::new(640, 360),
+                        Crop {
+                            x: 0.0,
+                            y: 0.0,
+                            width: 1.0,
+                            height: 1.0,
+                        },
+                        false,
+                        &vestra_core::plan::CompiledSizing::Original,
+                        Transform2D {
+                            scale: crate::domain::Point { x: 0.7, y: 0.7 },
+                            ..Transform2D::identity(
+                                crate::domain::Point {
+                                    x: 0.15 + 0.7 * anchor,
+                                    y: 0.15 + 0.7 * anchor,
+                                },
+                                crate::domain::Point {
+                                    x: anchor,
+                                    y: anchor,
+                                },
+                            )
+                        },
+                        1.0,
+                        ColourTransform::default(),
+                        Some(geometry::MotionTileParameters {
+                            width_factor: factor,
+                            height_factor: factor,
+                            center_x: 0.5,
+                            center_y: 0.5,
+                            mirror_edges,
+                        }),
+                    );
+                    for (x, y, pixel) in output.enumerate_pixels() {
+                        let covered =
+                            factor > 1.0 || ((96..544).contains(&x) && (54..306).contains(&y));
+                        assert_eq!(
+                            pixel[3] == 255,
+                            covered,
+                            "anchor={anchor}, extent={factor}, mirror={mirror_edges}, ({x},{y})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn motion_tile_expansion_preserves_rotated_cropped_pattern_phase() {
+        let source = RgbaImage::from_fn(12, 10, |x, y| {
+            Rgba([(x * 17) as u8, (y * 23) as u8, 91, 255])
+        });
+        let crop = Crop {
+            x: 1.0 / 6.0,
+            y: 0.2,
+            width: 2.0 / 3.0,
+            height: 0.6,
+        };
+        for sizing in [
+            vestra_core::plan::CompiledSizing::Original,
+            vestra_core::plan::CompiledSizing::Stretch {
+                width: 16,
+                height: 12,
+            },
+        ] {
+            for anchor in [0.0, 0.5, 1.0] {
+                let transform = Transform2D {
+                    rotation_radians: std::f64::consts::FRAC_PI_2,
+                    ..Transform2D::identity(
+                        crate::domain::Point { x: 0.5, y: 0.5 },
+                        crate::domain::Point {
+                            x: anchor,
+                            y: anchor,
+                        },
+                    )
+                };
+                let mut baseline = RgbaImage::new(40, 32);
+                draw_raster(
+                    &mut baseline,
+                    &source,
+                    geometry::IntrinsicSize::new(12, 10),
+                    crop,
+                    false,
+                    &sizing,
+                    transform,
+                    1.0,
+                    ColourTransform::default(),
+                );
+                for mirror_edges in [false, true] {
+                    for center in [(0.5, 0.5), (0.2, 0.8)] {
+                        for factor in [2.0, 4.0] {
+                            let mut output = RgbaImage::new(40, 32);
+                            draw_raster_with_motion_tile(
+                                &mut output,
+                                &source,
+                                geometry::IntrinsicSize::new(12, 10),
+                                crop,
+                                false,
+                                &sizing,
+                                transform,
+                                1.0,
+                                ColourTransform::default(),
+                                Some(geometry::MotionTileParameters {
+                                    width_factor: factor,
+                                    height_factor: factor,
+                                    center_x: center.0,
+                                    center_y: center.1,
+                                    mirror_edges,
+                                }),
+                            );
+                            // Exclude the cropped tile's boundary where repeat/mirror filtering differs.
+                            let mut compared = 0;
+                            for y in 1..31 {
+                                for x in 1..39 {
+                                    if [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+                                        .iter()
+                                        .all(|&(x, y)| baseline.get_pixel(x, y)[3] == 255)
+                                    {
+                                        assert_eq!(
+                                            output.get_pixel(x, y),
+                                            baseline.get_pixel(x, y),
+                                            "anchor={anchor}, extent={factor}, center={center:?}, mirror={mirror_edges}, sizing={sizing:?}, ({x},{y})"
+                                        );
+                                        compared += 1;
+                                    }
+                                }
+                            }
+                            assert!(compared >= 12);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

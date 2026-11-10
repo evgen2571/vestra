@@ -87,8 +87,8 @@ def test_custom_ascii_transition_fonts_lower_to_shared_assets_and_prepare(nested
     font = root / "tests/assets/VestraTest-Regular.ttf"
     project = Project(size=(26, 20), fps=10, duration=5)
     composition = project.root.group(start=0, duration=5).child if nested else project.root
-    first = composition.add(Image(root / "examples/assets/red.png"), start=0, duration=3)
-    second = composition.add(Image(root / "examples/assets/blue.png"), start=2, duration=3)
+    first = composition.add(Image(root / "assets/fixtures/red.png"), start=0, duration=3)
+    second = composition.add(Image(root / "assets/fixtures/blue.png"), start=2, duration=3)
     composition.transitions.add(first, second, CustomTransition(
         outgoing=TransitionLayer(effects=[Ascii(" .#", font=font, cell_width=4, cell_height=6)]),
         incoming=TransitionLayer(effects=[Ascii(" .#", font=font, cell_width=4, cell_height=6)]),

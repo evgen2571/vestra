@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    path::PathBuf,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -224,6 +225,7 @@ pub(super) fn audio_analysis_invocation_count() -> usize {
 /// and encoder: audio and FFmpeg are reopened for every video operation, while
 /// required audio-derived scalar series remain available for its lifetime.
 pub(crate) struct PreparedState {
+    pub(super) ffmpeg_executable: Option<PathBuf>,
     pub(super) plan: Arc<RenderPlan>,
     pub(super) schedule: ActiveSchedule,
     pub(super) _decoded: Arc<DecodedAssets>,
@@ -468,8 +470,15 @@ pub(crate) fn prepare_for_video(
     plan: RenderPlan,
     preference: RenderBackendPreference,
     video_metadata: BTreeMap<String, vestra_media::VideoMediaInfo>,
+    ffmpeg_executable: Option<PathBuf>,
 ) -> Result<PreparedState, RenderError> {
-    prepare_with_metadata(plan, preference, video_metadata, create_backend)
+    prepare_with_metadata(
+        plan,
+        preference,
+        video_metadata,
+        ffmpeg_executable,
+        create_backend,
+    )
 }
 
 #[cfg(test)]
@@ -487,7 +496,7 @@ pub(crate) fn prepare<P: IntoPreparedPlan>(
     )
         -> Result<(Box<dyn RenderBackend>, Option<BackendFallback>), Diagnostic>,
 ) -> Result<PreparedState, RenderError> {
-    prepare_with_metadata(plan, preference, BTreeMap::new(), build_backend)
+    prepare_with_metadata(plan, preference, BTreeMap::new(), None, build_backend)
 }
 
 #[allow(
@@ -498,6 +507,7 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
     plan: P,
     preference: RenderBackendPreference,
     video_metadata: BTreeMap<String, vestra_media::VideoMediaInfo>,
+    ffmpeg_executable: Option<PathBuf>,
     build_backend: impl FnOnce(
         RenderBackendPreference,
         &RenderPlan,
@@ -547,6 +557,7 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
             &plan.audio_mix,
             plan.duration,
             plan.limits.maximum_audio_sources,
+            ffmpeg_executable.as_deref(),
         )
         .map_err(|error| analysis_error(&plan, &decoded, error))?;
         prepare_scalar_signals(&plan.scalar_signals, raw_features)
@@ -617,6 +628,7 @@ pub(crate) fn prepare_with_metadata<P: IntoPreparedPlan>(
         ..backend.timings()
     };
     Ok(PreparedState {
+        ffmpeg_executable,
         plan: Arc::new(plan),
         schedule,
         _decoded: decoded,

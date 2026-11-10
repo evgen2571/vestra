@@ -7,7 +7,7 @@ uses `layer` for stacking order, for example, while Python uses `z`.
 
 The CLI is built separately from the Python package. Follow the
 [CLI quickstart](../getting-started/cli-quickstart.md) for setup, including
-`ffmpeg` and `ffprobe`. Commands below assume `ve` is on `PATH`; from a checkout,
+`ffmpeg`. Commands below assume `ve` is on `PATH`; from a checkout,
 you can replace `ve` with `cargo run -q -p vestra-cli --`.
 
 ## Start with a complete project
@@ -50,12 +50,15 @@ Validate it, then render:
 
 ```bash
 ve validate project.json
-ve render project.json --output output.mp4 --render-backend cpu --overwrite
+ve render project.json --output preview.mp4 --render-backend cpu --overwrite
 ```
 
 The result is a 640×360, 30 fps MP4. `--overwrite` allows replacement of an
-existing output file. This guide only authors project files; no Python script
-is needed.
+existing preview file. Keep the project's `output.path` (`output.mp4`) unused
+while following the tutorial: `ve validate` checks that path with overwrite
+disabled. Rendering to `preview.mp4` lets you repeat validation and rendering
+after each edit. If `output.mp4` already exists, choose an unused `output.path`
+or move the existing file before validating. This guide needs no Python script.
 
 The following sections build on this file. Each smaller JSON block is a fragment;
 the accompanying text tells you where to insert or replace it. JSON does not
@@ -115,7 +118,7 @@ include `position`, `anchor` and `scale`. Rotation is optional.
 
 Transforms apply to images, video, shapes, text and groups. A `solid_color`
 source fills the canvas and cannot have a transform. Spectrum and particle
-sources have their own layout fields. See the [source reference](../reference/README.md#source-reference)
+sources have their own layout fields. See the [source reference](../reference/catalog.md#source-reference)
 for each source's syntax.
 
 ## Animate a property
@@ -136,7 +139,7 @@ Keyframe times are measured from the clip's beginning, so the fade lasts half a
 second even if you later move the clip. `base_value` supplies the unanimated
 value; `keyframes` describe changes over time. Point properties such as position
 use `{"x": ..., "y": ...}` values instead of numbers. See
-[animation concepts](../concepts/effects-transitions-and-animation.md) for
+[animation concepts](../concepts/effects-transitions-and-animation.md#interpolation) for
 interpolation options.
 
 ## Add an effect
@@ -154,7 +157,7 @@ objects like the opacity example. Effect types use snake-case names in JSON.
 Effects run in their declared order within their rendering stage; consult the
 [effects reference](../reference/effects.md) for parameters and placement rules.
 For coverage and cutouts, see the [masks reference](../reference/masks.md) and
-[geometric mask example](../../examples/projects/geometric-masks.json).
+[geometric mask example](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/projects/geometric-masks.json).
 
 ## Transition between two clips
 
@@ -213,7 +216,7 @@ The endpoints are IDs of clips in the same composition. The transition must fit
 inside both clips. Its placement uses composition seconds, while its animation
 uses normalized `progress` from 0 to 1. JSON stores the transition's channels
 explicitly; it does not use Python constructor names such as `Crossfade`.
-See the [transition examples](../../examples/transitions/) for more
+See the [transition examples](https://github.com/evgen2571/vestra/tree/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/transitions) for more
 complete projects.
 
 ## Use media assets
@@ -331,7 +334,11 @@ inside that group. See [nested compositions](../reference/nested-compositions.md
 ## Validate edits and diagnose errors
 
 Run `ve validate project.json` after each step. It checks the format, project
-relationships and usable resources. The [JSON Schema](../../schemas/project.schema.json)
+relationships, media, FFmpeg, the configured output path and Auto backend
+readiness. Unlike Python's semantic-only `project.validate()` or
+`Editor.validate(snapshot)`, this is a render-readiness preflight. It has no
+`--overwrite` option; render's `--overwrite` does not change validation.
+The [JSON Schema](https://github.com/evgen2571/vestra/blob/develop/schemas/project.schema.json)
 can also provide field completion and structural checks in editors that support
 JSON schemas. Schema validation alone does not check asset files or all timeline
 relationships.
@@ -354,7 +361,7 @@ validation results readable by other tools. For render failures, see
 
 ## Further examples
 
-Browse the [reference examples](../../examples/README.md) for complete JSON
+Browse the [reference examples](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/README.md) for complete JSON
 projects demonstrating sources, effects, masks, transitions and audio. Use the
 [project-format reference](../reference/project-format.md) for field definitions
 and the [CLI rendering guide](cli/rendering.md) for command options.

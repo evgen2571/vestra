@@ -11,19 +11,50 @@ snapshots. `vestra::Editor` is the operation entry point. It exposes
 
 `PrepareOptions` selects preparation behavior. `PreparedProject` owns reusable
 prepared state and renders frames or video. `RenderRequest` is the one-shot
-render request. Prepared video rendering uses the prepared-project request
-type where it is exposed by the current API.
+render request. Use `PreparedVideoRenderRequest` to render video from prepared state.
 
 `RenderEvent`, `RenderResult`, `RenderTimings`, `RenderPerformance`,
 `RenderFailureContext`, and `RenderFailureStage` describe progress, successful
 publication, timings, and render failures. `CancellationToken` cancels a
 cooperative render.
 
+## Rendering
+
+### Output overrides and animation formats
+
+`RenderRequest` carries optional `resolution`, `frame_rate: FrameRate` and
+`quality: Quality` overrides. `preview: true` defaults to a 640 px longest side,
+at most 15 FPS and `Quality::Preview`; explicit fields take precedence.
+`PrepareOptions::with_resolution`, `with_frame_rate` and `with_quality` fix the
+same runtime settings for reusable preparation. They do not edit `Project`.
+A different aspect ratio fits centrally without stretching the composition.
+
+`PreparedVideoRenderRequest` and one-shot rendering select GIF and animated
+WebP from the destination extension, using the existing frame sink and atomic
+publication lifecycle. Both formats omit audio; visual audio analysis remains
+available. See the [format and timing contracts](render-outputs.md#animation-formats)
+for palette, transparency, timing quantization and container limits.
+
+### Progress and cancellation entry points
+
 For normal rendering, use `Editor::render_auto(...)`, which applies the
 default `ProgressMode::Auto` presentation. Use `render_with_progress(...)` when
 supplying a `ProgressSink`, and `render_with_observer(...)` for an observer that
 also needs cancellation control. `Editor::render(...)` is the callback-oriented
 entry point.
+
+### Selected video ranges
+
+Both `RenderRequest` and `PreparedVideoRenderRequest` support
+`.with_range(start: Duration, end: Option<Duration>)`. The default starts at zero
+and uses the project duration. `PreparedProject::frame_range(start, end)` returns
+the corresponding half-open frame-index range without rendering.
+
+Bounds round up on the rational project frame grid. Evaluation keeps absolute
+project time, encoded timestamps start at zero, and audio is trimmed after
+mixing and effects. See [range timing and errors](render-outputs.md#ranges-and-frame-boundaries).
+
+## Authoring visual effects through JSON values
 
 Visual effects use the canonical JSON/value route. With a mutable
 `serde_json::Value` project document, add an ordered layer `effects` array or
@@ -63,6 +94,29 @@ resource, media, output, and backend readiness checks selected by
 `PreflightOptions`. `EditorError` separates project, plan, and render failures
 and exposes diagnostics, warnings, timings, cancellation status, and render
 failure context.
+
+`Editor::new()` and `Editor::default()` use safe resource limits. Configure the
+same budgets across validation, preflight, preparation and rendering through
+the builder:
+
+```rust
+use vestra::{Editor, ResourceLimits};
+
+let editor = Editor::builder()
+    .resource_limits(ResourceLimits {
+        maximum_group_width: 16_384,
+        maximum_group_pixels: 32_768,
+        ..ResourceLimits::default()
+    })
+    .build()?;
+```
+
+Group budgets are independent of output dimensions. Defaults allow 8192 pixels
+per axis and 67,108,864 rounded-up raster pixels in one local canvas. Larger
+canvases require explicit budgets and a backend that supports them. Checked
+dimension and RGBA byte-length representability always apply. See
+[validation layers](project-format.md#validation-layers) for the diagnostic
+contract and other resource budgets.
 
 ## Backend types
 

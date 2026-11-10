@@ -16,7 +16,7 @@
     {
       "id": "red",
       "type": "image",
-      "source": "../assets/red.png"
+      "source": "../../assets/fixtures/red.png"
     }
   ],
   "visual": {

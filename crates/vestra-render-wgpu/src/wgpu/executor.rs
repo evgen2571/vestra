@@ -55,8 +55,6 @@ pub(super) fn encode_and_submit(
     parameter_buffer: &wgpu::Buffer,
     readback: &wgpu::Buffer,
     static_layers: &BTreeMap<usize, Arc<StaticLayerTexture>>,
-    width: u32,
-    height: u32,
     particle_buffer: Option<&wgpu::Buffer>,
     particle_upload_buffer: Option<&wgpu::Buffer>,
     particle_uploads: &[Option<ParticleUpload>],
@@ -73,7 +71,7 @@ pub(super) fn encode_and_submit(
         label: Some("vestra texture frame"),
     });
     let mut particle_upload_index = 0;
-    for operation in &plan.operations {
+    for (operation, &(width, height)) in plan.operations.iter().zip(&plan.extents) {
         match operation {
             GpuOperation::ClearCanvas {
                 destination,
@@ -211,6 +209,8 @@ pub(super) fn encode_and_submit(
                             "",
                         )
                     })?;
+                    pass.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
+                    pass.set_scissor_rect(0, 0, width, height);
                     pass.set_pipeline(pipeline);
                     pass.set_bind_group(
                         0,
@@ -266,10 +266,17 @@ pub(super) fn encode_and_submit(
             }
             GpuOperation::RenderMask {
                 source_index,
+                layer_index,
                 source_layer,
                 parameters_index,
                 ..
             } => {
+                let (mask_width, mask_height) = match &plan.layers[*layer_index].source {
+                    vestra_core::plan::EvaluatedSource::Group { composition } => {
+                        (width.max(composition.width), height.max(composition.height))
+                    }
+                    _ => (width, height),
+                };
                 dispatch(
                     &mut encoder,
                     &pipelines.mask_raster,
@@ -279,8 +286,8 @@ pub(super) fn encode_and_submit(
                         bind_groups.mask_raster_layer(*source_index)?
                     },
                     parameters.offset(*parameters_index)?,
-                    width,
-                    height,
+                    mask_width,
+                    mask_height,
                 );
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;

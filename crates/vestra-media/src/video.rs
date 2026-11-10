@@ -6,11 +6,7 @@
 //! are copied into Vestra-owned `Arc<RgbaImage>` values before they leave this
 //! module.
 
-use std::{
-    path::Path,
-    sync::{Arc, OnceLock},
-    time::Instant,
-};
+use std::{path::Path, sync::Arc, time::Instant};
 
 use ffmpeg::{
     format::{self, Pixel},
@@ -22,7 +18,7 @@ use ffmpeg_next as ffmpeg;
 use image::RgbaImage;
 use vestra_core::validation::ResourceLimits;
 
-use crate::MediaError;
+use crate::{MediaError, init_ffmpeg};
 
 #[path = "video_cache.rs"]
 mod video_cache;
@@ -31,8 +27,6 @@ mod video_cursor;
 
 use video_cache::FrameCache;
 use video_cursor::FfmpegVideoCursor;
-
-static FFMPEG_INIT: OnceLock<Result<(), String>> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct VideoDecoderMetrics {
@@ -469,13 +463,6 @@ impl VideoDecoder {
     }
 }
 
-fn init_ffmpeg() -> Result<(), MediaError> {
-    FFMPEG_INIT
-        .get_or_init(|| ffmpeg::init().map_err(|error| error.to_string()))
-        .clone()
-        .map_err(MediaError::VideoInitialization)
-}
-
 fn select_stream(input: &format::context::Input) -> Option<ffmpeg::format::stream::Stream<'_>> {
     input.streams().find(|stream| {
         stream.parameters().medium() == Type::Video
@@ -588,7 +575,7 @@ fn selects_latest_pts(current: Option<i64>, candidate: i64, target: i64) -> bool
 }
 
 #[cfg(test)]
-#[path = "video_benchmarks.rs"]
+#[path = "../../../benchmarks/rust/media/video_benchmarks.rs"]
 mod benchmarks;
 
 #[cfg(test)]

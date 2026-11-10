@@ -13,12 +13,16 @@ serde_json = "1"
 thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
 rustfft = "6"
-image = { version = "0.25", default-features = false }
-ffmpeg-next = { version = "8.0.0", default-features = false, features = ["build", "format", "software-scaling"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+ffmpeg-next = { version = "8.0.0", default-features = false, features = ["build", "format", "software-resampling", "software-scaling"] }
 tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
+
+[[example]]
+name = "benchmark_access"
+path = "../../benchmarks/rust/media/benchmark_access.rs"
 
 [lints.rust]
 unsafe_code = "forbid"

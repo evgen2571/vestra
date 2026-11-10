@@ -1,11 +1,14 @@
 # Environment variables
 
-Only variables that affect user-visible runs belong here. Benchmark, CI, and
-verification-only variables are intentionally excluded.
+The supported user-facing settings are listed first. Internal tuning and
+verification controls are identified separately below.
+
+## User-facing settings
 
 | Variable | Values and default | Scope |
 | --- | --- | --- |
 | `RUST_LOG` | A tracing filter understood by `tracing_subscriber`. Unset uses the CLI verbosity defaults. | CLI and Rust process logging. Takes precedence over `-v`, `-vv`, and `-vvv` when set. |
+| `IMAGEIO_FFMPEG_EXE` | FFmpeg executable path or command name. Unset uses the binary installed through `imageio-ffmpeg`. | Python encoding and audio processing. Set before preparing or rendering; prepared sessions retain the selected path. See [executable selection](../getting-started/installation.md#choose-a-different-ffmpeg-executable). |
 | `VESTRA_WGPU_BACKEND` | Case-insensitive `vulkan`, `gl`/`gles`, `metal`, `dx12`, or `browser_webgpu`. Unset or an unrecognized value lets wgpu consider all compiled backends. | WGPU adapter discovery. It does not select Vestra's CPU/WGPU render backend. |
 
 `VESTRA_WGPU_BACKEND` influences the graphics API used during WGPU adapter
@@ -14,6 +17,8 @@ renderer. The selected adapter and its device classification are reported
 separately when available.
 
 Vestra does not read `WGPU_BACKEND` for this selection.
+
+## Internal tuning and verification controls
 
 `VESTRA_WGPU_IN_FLIGHT` is an internal implementation tuning variable. It sets
 the WGPU pipeline depth, defaults to `3`, accepts only integers `1` through

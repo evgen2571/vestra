@@ -1,7 +1,8 @@
 use std::{
     fmt,
     path::{Path, PathBuf},
-    time::Instant,
+    sync::atomic::{AtomicBool, Ordering},
+    time::{Duration, Instant},
 };
 
 #[cfg(test)]
@@ -44,12 +45,16 @@ impl fmt::Display for EditorErrorKind {
 
 /// Reusable entry point for the supported SDK workflows.
 #[derive(Clone, Debug, Default)]
-pub struct Editor;
+pub struct Editor {
+    limits: crate::ResourceLimits,
+    ffmpeg_executable: Option<PathBuf>,
+}
 
-/// Builder for persistent SDK configuration. The builder currently has no
-/// persistent runtime options, but it provides the stable construction path.
+/// Builder for persistent SDK resource configuration.
 #[derive(Clone, Debug, Default)]
-pub struct EditorBuilder;
+pub struct EditorBuilder {
+    limits: crate::ResourceLimits,
+}
 
 /// The operation whose environment requirements are being checked.
 #[derive(Clone, Debug)]
@@ -130,6 +135,7 @@ struct PreparationContext {
 /// The one internal preparation coordinator serves both public reusable
 /// preparation and the one-shot render path. Only preflight
 /// target selection differs; validation through backend construction is shared.
+#[derive(Clone, Copy)]
 enum InternalPreparationTarget<'a> {
     Public(PrepareOptions),
     OneShot(&'a SdkRenderRequest),
@@ -327,11 +333,19 @@ pub(crate) fn log_render_timing_summary(
 impl Editor {
     #[must_use]
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
     #[must_use]
     pub fn builder() -> EditorBuilder {
-        EditorBuilder
+        EditorBuilder::default()
+    }
+
+    /// Selects the executable used for encoding and audio analysis by this editor
+    /// and its prepared projects. The default is `ffmpeg` on PATH.
+    #[must_use]
+    pub fn with_ffmpeg_executable(mut self, executable: impl Into<PathBuf>) -> Self {
+        self.ffmpeg_executable = Some(executable.into());
+        self
     }
     #[expect(
         clippy::result_large_err,
@@ -368,11 +382,8 @@ impl Editor {
     /// initialize a rendering backend.
     #[must_use]
     pub fn validate(&self, project: &Project) -> ValidationReport {
-        let diagnostics = vestra_core::validation::validate(
-            project.canonical(),
-            vestra_core::validation::ResourceLimits::default(),
-        )
-        .into_diagnostics();
+        let diagnostics =
+            vestra_core::validation::validate(project.canonical(), self.limits).into_diagnostics();
         ValidationReport { diagnostics }
     }
 
@@ -380,7 +391,8 @@ impl Editor {
     #[must_use]
     pub fn preflight(&self, project: &Project, options: PreflightOptions) -> PreflightReport {
         let validation = self.validate(project);
-        self.run_preflight(project, &validation, &options).report
+        self.run_preflight(project, &validation, &options, &AtomicBool::new(false))
+            .report
     }
 
     fn run_preflight(
@@ -388,12 +400,24 @@ impl Editor {
         project: &Project,
         validation: &ValidationReport,
         options: &PreflightOptions,
+        cancelled: &AtomicBool,
     ) -> InternalPreflightOutcome {
         let outcome = crate::project::validation::preflight(
             project,
             validation,
-            &ValidationOptions::default(),
+            &ValidationOptions {
+                limits: self.limits,
+            },
+            cancelled,
         );
+        if cancelled.load(Ordering::Relaxed) {
+            return InternalPreflightOutcome {
+                report: PreflightReport {
+                    diagnostics: outcome.diagnostics,
+                },
+                resolved: None,
+            };
+        }
         let mut diagnostics = outcome.diagnostics;
         let target = &options.target;
         let render_target = match target {
@@ -431,11 +455,18 @@ impl Editor {
                     "/output/path",
                 ));
             }
-            if let Err(error) = vestra_media::check_ffmpeg_available(None) {
+            if let Err(error) = vestra_media::check_output_encoder_available(
+                &output,
+                self.ffmpeg_executable.as_deref(),
+            ) {
+                let message = self.ffmpeg_executable.as_ref().map_or_else(
+                    || format!("FFmpeg is unavailable: {error}"),
+                    |path| format!("FFmpeg is unavailable ({}): {error}", path.display()),
+                );
                 diagnostics.push(Diagnostic::error(
                     "VESTRA-ENCODER-UNAVAILABLE",
                     crate::Category::Backend,
-                    format!("FFmpeg is unavailable: {error}"),
+                    message,
                     "",
                 ));
             }
@@ -465,7 +496,12 @@ impl Editor {
         preview: bool,
     ) -> Result<InspectionReport, EditorError> {
         let validation = self.validate(project);
-        let outcome = self.run_preflight(project, &validation, &PreflightOptions::for_inspection());
+        let outcome = self.run_preflight(
+            project,
+            &validation,
+            &PreflightOptions::for_inspection(),
+            &AtomicBool::new(false),
+        );
         let validated = outcome.resolved.ok_or_else(|| {
             Self::diagnostic_error(outcome.report.diagnostics, crate::RenderTimings::default())
         })?;
@@ -487,8 +523,11 @@ impl Editor {
         project: &Project,
         options: PrepareOptions,
     ) -> Result<PreparedProject, EditorError> {
-        let coordinated =
-            self.prepare_internal(project, InternalPreparationTarget::Public(options))?;
+        let coordinated = self.prepare_internal(
+            project,
+            InternalPreparationTarget::Public(options),
+            &AtomicBool::new(false),
+        )?;
         Ok(PreparedProject::new(
             coordinated.prepared,
             Self::project_display_path(project).to_path_buf(),
@@ -504,6 +543,7 @@ impl Editor {
         &self,
         project: &Project,
         target: InternalPreparationTarget<'_>,
+        cancelled: &AtomicBool,
     ) -> Result<CoordinatedPreparation, EditorError> {
         let _prepare_span = tracing::debug_span!(
             target: "vestra.render",
@@ -512,6 +552,24 @@ impl Editor {
         )
         .entered();
         let started = Instant::now();
+        let (frame_rate, quality, preview, resolution, silent) = match target {
+            InternalPreparationTarget::Public(options) => (
+                options.frame_rate(),
+                options.quality(),
+                false,
+                options.resolution(),
+                false,
+            ),
+            InternalPreparationTarget::OneShot(request) => (
+                request.frame_rate,
+                request.quality,
+                request.preview,
+                request.resolution,
+                vestra_media::is_animated_output(&Self::render_output_path(project, request)),
+            ),
+        };
+        let effective_project = project.with_render_overrides(frame_rate, quality, preview, silent);
+        let project = effective_project.as_ref();
         let validation_started = Instant::now();
         let validation = self.validate(project);
         let validation_elapsed = validation_started.elapsed();
@@ -538,7 +596,7 @@ impl Editor {
                 request.preview,
             ),
         };
-        let outcome = self.run_preflight(project, &validation, &options);
+        let outcome = self.run_preflight(project, &validation, &options, cancelled);
         let preflight_elapsed = preflight_started.elapsed();
         tracing::debug!(
             target: "vestra.project",
@@ -557,17 +615,26 @@ impl Editor {
             }
             Self::operation_warnings(&warnings)
         };
-        let validated = outcome.resolved.ok_or_else(|| {
-            Self::diagnostic_error(
-                outcome.report.diagnostics,
-                Self::operation_timings(project, started, validation_elapsed, preflight_elapsed),
-            )
-        })?;
+        let validated = outcome
+            .resolved
+            .filter(|_| !cancelled.load(Ordering::Relaxed))
+            .ok_or_else(|| {
+                Self::diagnostic_error(
+                    outcome.report.diagnostics,
+                    Self::operation_timings(
+                        project,
+                        started,
+                        validation_elapsed,
+                        preflight_elapsed,
+                    ),
+                )
+            })?;
         let prepared = self.prepare_validated(
             project,
             validated,
             backend,
             preview,
+            resolution,
             PreparationContext {
                 warnings: warnings.clone(),
                 timings: PreparationTimings {
@@ -593,9 +660,12 @@ impl Editor {
         validated: ValidatedProject,
         backend: RenderBackendPreference,
         preview: bool,
+        resolution: Option<(u32, u32)>,
         context: PreparationContext,
     ) -> Result<application::PreparedRender, EditorError> {
         let request = RenderRequest {
+            frame_range: None,
+            resolution,
             output_override: None,
             overwrite: false,
             preview,
@@ -607,6 +677,7 @@ impl Editor {
             &request,
             context.warnings.clone(),
             context.timings,
+            self.ffmpeg_executable.clone(),
         )
         .map_err(|error| {
             Self::render_error(
@@ -718,7 +789,7 @@ impl Editor {
         let operation_started = Instant::now();
         let operation_id = OperationId::new();
         let output_path = Self::render_output_path(project, &request);
-        let total_frames = Self::estimated_total_frames(project);
+        let total_frames = Self::estimated_total_frames(project, &request);
         let render_span = tracing::info_span!(
             target: "vestra.render",
             "render",
@@ -792,16 +863,54 @@ impl Editor {
             preview = request.preview,
             "render preparation started"
         );
-        let coordinated =
-            match self.prepare_internal(project, InternalPreparationTarget::OneShot(&request)) {
-                Ok(coordinated) => coordinated,
-                Err(error) => {
-                    lifecycle.failed();
-                    log_render_failure(operation_id, &output_path, operation_started, &error);
-                    return Err(error);
+        let coordinated = match self.prepare_internal(
+            project,
+            InternalPreparationTarget::OneShot(&request),
+            &cancellation.flag(),
+        ) {
+            Ok(coordinated) => coordinated,
+            Err(error) if cancellation.is_cancelled() => {
+                lifecycle.cancelled();
+                let mut cancelled_error = Self::cancelled_editor_error(
+                    operation_started,
+                    total_frames.unwrap_or_default(),
+                    output_path,
+                );
+                if let EditorError::Render {
+                    warnings, timings, ..
+                } = &mut cancelled_error
+                {
+                    *warnings = error.warnings().to_vec();
+                    *timings = error.timings().clone();
+                    timings.operation_total_ms = operation_started.elapsed().as_millis();
                 }
-            };
+                return Err(cancelled_error);
+            }
+            Err(error) => {
+                lifecycle.failed();
+                log_render_failure(operation_id, &output_path, operation_started, &error);
+                return Err(error);
+            }
+        };
+        let metadata = coordinated.prepared.result_metadata();
+        let frame_range = match crate::prepared::resolve_frame_range(
+            request.start,
+            request.end,
+            metadata.duration,
+            crate::FrameRate::new(metadata.frame_rate_ratio.0, metadata.frame_rate_ratio.1)
+                .expect("validated frame rate"),
+            metadata.frame_count,
+        ) {
+            Ok(range) => range,
+            Err(error) => {
+                lifecycle.failed();
+                return Err(error);
+            }
+        };
         let render_request = RenderRequest {
+            resolution: request.resolution,
+            frame_range: (request.start != Duration::ZERO || request.end.is_some())
+                .then_some(frame_range),
             output_override: request.output,
             overwrite: request.overwrite,
             preview: request.preview,
@@ -928,12 +1037,28 @@ impl Editor {
             }
         })
     }
-    fn estimated_total_frames(project: &Project) -> Option<u64> {
-        let output = &project.canonical().output;
+    fn estimated_total_frames(project: &Project, request: &SdkRenderRequest) -> Option<u64> {
+        let effective = project.with_render_overrides(
+            request.frame_rate,
+            request.quality,
+            request.preview,
+            false,
+        );
+        let output = &effective.canonical().output;
         let duration = output.duration?;
         let duration_nanos = vestra_core::timeline::seconds_to_nanos(duration)?;
         let (numerator, denominator) = output.frame_rate.rational().ok()?;
-        vestra_core::timeline::frame_count(duration_nanos, numerator, denominator).ok()
+        let total =
+            vestra_core::timeline::frame_count(duration_nanos, numerator, denominator).ok()?;
+        let range = crate::prepared::resolve_frame_range(
+            request.start,
+            request.end,
+            Duration::try_from_secs_f64(duration).ok()?,
+            crate::FrameRate::new(numerator, denominator).ok()?,
+            total,
+        )
+        .ok()?;
+        Some(range.end - range.start)
     }
     fn cancelled_editor_error(
         operation_started: Instant,
@@ -1128,12 +1253,22 @@ fn test_preflight_warning() -> Option<Diagnostic> {
 }
 
 impl EditorBuilder {
+    /// Applies the same caller resource budgets to validation, preflight and rendering.
+    #[must_use]
+    pub const fn resource_limits(mut self, limits: crate::ResourceLimits) -> Self {
+        self.limits = limits;
+        self
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "builder keeps the SDK error type consistent with other entry points"
     )]
     pub fn build(self) -> Result<Editor, EditorError> {
-        Ok(Editor::new())
+        Ok(Editor {
+            limits: self.limits,
+            ffmpeg_executable: None,
+        })
     }
 }
 
@@ -1142,13 +1277,49 @@ impl EditorBuilder {
 #[derive(Clone, Debug, Default)]
 pub struct SdkRenderRequest {
     pub output: Option<PathBuf>,
+    /// Output raster size; the authored canvas remains the coordinate space.
+    pub resolution: Option<(u32, u32)>,
+    pub frame_rate: Option<crate::FrameRate>,
+    pub quality: Option<crate::Quality>,
     pub overwrite: bool,
     pub preview: bool,
     pub backend: RenderBackendPreference,
     pub progress_mode: ProgressMode,
+    /// Select project samples in the half-open interval `[start, end)`.
+    pub start: Duration,
+    pub end: Option<Duration>,
 }
 
 impl SdkRenderRequest {
+    #[must_use]
+    pub const fn with_resolution(mut self, width: u32, height: u32) -> Self {
+        self.resolution = Some((width, height));
+        self
+    }
+    #[must_use]
+    pub const fn with_frame_rate(mut self, frame_rate: crate::FrameRate) -> Self {
+        self.frame_rate = Some(frame_rate);
+        self
+    }
+    #[must_use]
+    pub const fn with_quality(mut self, quality: crate::Quality) -> Self {
+        self.quality = Some(quality);
+        self
+    }
+    #[must_use]
+    pub const fn start(&self) -> Duration {
+        self.start
+    }
+    #[must_use]
+    pub const fn end(&self) -> Option<Duration> {
+        self.end
+    }
+    #[must_use]
+    pub const fn with_range(mut self, start: Duration, end: Option<Duration>) -> Self {
+        self.start = start;
+        self.end = end;
+        self
+    }
     #[must_use]
     pub fn output(&self) -> Option<&Path> {
         self.output.as_deref()
@@ -1181,6 +1352,88 @@ mod tests {
     use std::io;
 
     use super::*;
+
+    #[test]
+    fn cancellation_during_audio_preflight_emits_cancelled_instead_of_failed() {
+        struct CancelAfterAudioProbe(CancellationToken);
+
+        impl io::Write for CancelAfterAudioProbe {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                if String::from_utf8_lossy(bytes).contains("audio media probe completed") {
+                    self.0.cancel();
+                }
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let project = Project::from_value(
+            serde_json::json!({
+                "schema_version": 1,
+                "output": {"path": "missing-directory/out.mp4", "width": 2, "height": 2,
+                    "frame_rate": 1, "background": "#000000", "quality": "preview",
+                    "audio": false, "duration_mode": "explicit", "duration": 1},
+                "assets": [
+                    {"id": "tone", "type": "audio", "source": format!(
+                        "{}/../../assets/fixtures/tone.wav", env!("CARGO_MANIFEST_DIR")
+                    )},
+                    {"id": "missing", "type": "audio", "source": "missing.wav"}
+                ],
+                "visual": {"clips": []}
+            }),
+            directory.path(),
+        )
+        .expect("project");
+        let cancellation = CancellationToken::new();
+        let writer_cancellation = cancellation.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_writer(move || CancelAfterAudioProbe(writer_cancellation.clone()))
+            .finish();
+        let mut events = Vec::new();
+        let error = tracing::subscriber::with_default(subscriber, || {
+            Editor::new()
+                .render_with_observer(
+                    &project,
+                    SdkRenderRequest {
+                        backend: RenderBackendPreference::Cpu,
+                        ..SdkRenderRequest::default()
+                    },
+                    |event| {
+                        events.push(event);
+                        crate::RenderObserverControl::Continue
+                    },
+                    &cancellation,
+                )
+                .expect_err("cancellation must stop preparation")
+        });
+
+        assert!(
+            cancellation.is_cancelled(),
+            "cancel after the initial check"
+        );
+        assert!(error.is_cancelled(), "{error:?}");
+        assert!(matches!(events.last(), Some(RenderEvent::Cancelled { .. })));
+        assert_eq!(events.iter().filter(|event| event.is_terminal()).count(), 1);
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, RenderEvent::Failed { .. }))
+        );
+        assert_eq!(error.diagnostics()[0].code, "VESTRA-CANCELLED");
+        assert_eq!(
+            error
+                .render_failure_context()
+                .expect("render context")
+                .completed_frames,
+            0
+        );
+        assert!(!directory.path().join("missing-directory").exists());
+    }
 
     #[test]
     fn editor_error_accessors_cover_every_variant() {

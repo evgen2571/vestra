@@ -24,6 +24,8 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct RenderRequest {
     pub output_override: Option<PathBuf>,
+    pub resolution: Option<(u32, u32)>,
+    pub frame_range: Option<std::ops::Range<u64>>,
     pub overwrite: bool,
     pub preview: bool,
     pub cancelled: Arc<AtomicBool>,
@@ -179,6 +181,7 @@ pub(crate) fn prepare_project(
     request: &RenderRequest,
     preparation_warnings: Vec<Diagnostic>,
     preparation_timings: PreparationTimings,
+    ffmpeg_executable: Option<PathBuf>,
 ) -> Result<PreparedRender, ApplicationRenderError> {
     trace_execution_objects(&validated.project);
     let _compile_span = tracing::debug_span!(
@@ -192,6 +195,7 @@ pub(crate) fn prepare_project(
         &validated,
         CompileOptions {
             preview: request.preview,
+            resolution: request.resolution,
         },
     )
     .map_err(|diagnostic| ApplicationRenderError::Plan {
@@ -211,6 +215,7 @@ pub(crate) fn prepare_project(
         plan,
         request.backend_preference,
         validated.video_metadata.clone(),
+        ffmpeg_executable,
     )
     .map_err(|error| ApplicationRenderError::Render {
         error: Box::new(error),
@@ -270,6 +275,7 @@ pub(crate) fn render_prepared_project(
     let summary = render_prepared_with_lifecycle(
         &mut prepared.prepared,
         &RenderOptions {
+            frame_range: request.frame_range,
             output_override: request.output_override,
             overwrite: request.overwrite,
             cancelled: request.cancelled,
@@ -311,6 +317,7 @@ where
     let summary = crate::render::render_prepared_with_sink(
         &mut prepared.prepared,
         &RenderOptions {
+            frame_range: request.frame_range,
             output_override: request.output_override,
             overwrite: request.overwrite,
             cancelled: request.cancelled,
@@ -454,6 +461,8 @@ mod tests {
         let validated =
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
+            frame_range: None,
+            resolution: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -465,6 +474,7 @@ mod tests {
             &request,
             Vec::new(),
             PreparationTimings::default(),
+            None,
         )
         .expect("one private preparation succeeds");
         let workspace = tempfile::tempdir().expect("temporary output directory");
@@ -476,6 +486,8 @@ mod tests {
             let summary = render_prepared_project_with_sink(
                 &mut prepared,
                 RenderRequest {
+                    frame_range: None,
+                    resolution: None,
                     output_override: Some(output.clone()),
                     ..request.clone()
                 },
@@ -505,6 +517,8 @@ mod tests {
         let validated =
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
+            frame_range: None,
+            resolution: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -516,6 +530,7 @@ mod tests {
             &request,
             Vec::new(),
             PreparationTimings::default(),
+            None,
         )
         .expect("prepare CPU");
         let workspace = tempfile::tempdir().expect("temporary output directory");
@@ -527,6 +542,8 @@ mod tests {
             let summary = render_prepared_project_with_sink(
                 &mut prepared,
                 RenderRequest {
+                    frame_range: None,
+                    resolution: None,
                     output_override: Some(workspace.path().join(name)),
                     ..request.clone()
                 },
@@ -609,6 +626,8 @@ mod tests {
         let validated =
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
+            frame_range: None,
+            resolution: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -620,6 +639,7 @@ mod tests {
             &request,
             Vec::new(),
             PreparationTimings::default(),
+            None,
         )
         .expect("prepare CPU");
         let random = prepared.render_frame(0).expect("random frame");
@@ -630,6 +650,8 @@ mod tests {
         render_prepared_project_with_sink(
             &mut prepared,
             RenderRequest {
+                frame_range: None,
+                resolution: None,
                 output_override: Some(output),
                 ..request
             },
@@ -655,6 +677,8 @@ mod tests {
         let validated =
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
+            frame_range: None,
+            resolution: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -666,6 +690,7 @@ mod tests {
             &request,
             Vec::new(),
             PreparationTimings::default(),
+            None,
         )
         .expect("prepare CPU");
         let workspace = tempfile::tempdir().expect("temporary output directory");
@@ -674,6 +699,8 @@ mod tests {
         render_prepared_project_with_sink(
             &mut prepared,
             RenderRequest {
+                frame_range: None,
+                resolution: None,
                 output_override: Some(workspace.path().join("parity.mp4")),
                 ..request
             },

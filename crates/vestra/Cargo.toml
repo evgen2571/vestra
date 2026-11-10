@@ -27,6 +27,7 @@ tracing-subscriber = { version = "0.3", features = ["json"] }
 
 [[bench]]
 name = "animation_effects"
+path = "../../benchmarks/rust/animation_effects.rs"
 harness = false
 
 [lints]

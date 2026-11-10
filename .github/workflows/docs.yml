@@ -1,0 +1,100 @@
+name: Documentation
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'zensical.toml'
+      - 'overrides/**'
+      - 'scripts/check-site.py'
+      - 'tests/test_site_links.py'
+      - 'tests/test_site_navigation.py'
+      - 'tests/test_documentation_examples.py'
+      - 'examples/showcase/**'
+      - 'examples/tutorials/**'
+      - 'assets/**'
+      - 'benchmarks/**'
+      - 'scripts/check-docs.py'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'justfile'
+      - '.github/workflows/docs.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'docs/**'
+      - 'zensical.toml'
+      - 'overrides/**'
+      - 'scripts/check-site.py'
+      - 'tests/test_site_links.py'
+      - 'tests/test_site_navigation.py'
+      - 'tests/test_documentation_examples.py'
+      - 'examples/showcase/**'
+      - 'examples/tutorials/**'
+      - 'assets/**'
+      - 'benchmarks/**'
+      - 'scripts/check-docs.py'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'justfile'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Publish the reviewed develop branch to GitHub Pages'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Source-link tests compare the reviewed example commit with this checkout.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.9.8'
+          python-version: '3.13'
+      - name: Build website
+        run: uv run --no-project --with-requirements docs/requirements.txt zensical build --clean --strict
+      - name: Check source documentation links
+        run: uv run --no-project python scripts/check-docs.py
+      - name: Check generated links and media paths
+        run: uv run --no-project python scripts/check-site.py
+      - name: Test link checker
+        run: uv run --no-project --with pytest python -m pytest tests/test_site_links.py tests/test_site_navigation.py tests/test_documentation_examples.py -q
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/develop'
+        with:
+          path: site
+
+  deploy:
+    name: Publish reviewed site
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/deploy-pages@v4
+        id: deployment

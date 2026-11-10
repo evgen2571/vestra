@@ -9,6 +9,7 @@ use std::{
     },
 };
 
+use crate::output::OutputFormat;
 use crate::{EncoderSettings, FrameSink, MediaError, SinkResult, audio_graph, effective_parent};
 
 /// Keep the generated filtergraph comfortably below common command-line
@@ -31,9 +32,11 @@ fn x264_preset_for_crf(quality_crf: u8) -> &'static str {
 }
 
 fn add_h264_video_output(command: &mut Command, settings: &EncoderSettings) {
+    // Rawvideo EOF bounds selected clips; -frames:v can cut a padded audio tail short.
+    if settings.audio_range.is_none() {
+        command.args(["-frames:v", &settings.frame_count.to_string()]);
+    }
     command.args([
-        "-frames:v",
-        &settings.frame_count.to_string(),
         "-c:v",
         "libx264",
         "-preset",
@@ -57,6 +60,7 @@ pub struct FfmpegSink {
     filtergraph_file: Option<TemporaryFiltergraph>,
     static_image: Option<PathBuf>,
     static_frame_count: Option<u64>,
+    animation_writer: Option<std::thread::JoinHandle<Result<(), MediaError>>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,7 +72,40 @@ enum SinkState {
 
 impl FfmpegSink {
     pub fn start(settings: &EncoderSettings, output: &Path) -> Result<Self, MediaError> {
-        let mut command = Command::new("ffmpeg");
+        Self::start_with_executable(settings, output, None)
+    }
+
+    pub fn start_with_executable(
+        settings: &EncoderSettings,
+        output: &Path,
+        executable: Option<&Path>,
+    ) -> Result<Self, MediaError> {
+        let format = OutputFormat::from_path(output);
+        if format != OutputFormat::Mp4 {
+            crate::check_output_encoder_available(output, executable)?;
+            let (ticks, maximum, max_dimension) = match format {
+                OutputFormat::Gif => (100, 65535, 65535),
+                OutputFormat::Webp => (1000, 0xff_ffff, 16383),
+                OutputFormat::Mp4 => unreachable!(),
+            };
+            if settings.width == 0
+                || settings.height == 0
+                || settings.width > max_dimension
+                || settings.height > max_dimension
+                || settings.frame_count == 0
+            {
+                return Err(MediaError::AnimationEncoding(
+                    "dimensions or frame count exceed format limits".to_owned(),
+                ));
+            }
+            crate::webp_animation::frame_delay(
+                settings.frame_count - 1,
+                settings.frame_rate,
+                ticks,
+                maximum,
+            )?;
+        }
+        let mut command = Command::new(executable.unwrap_or_else(|| Path::new("ffmpeg")));
         let mut filtergraph_file = None;
         command
             .args([
@@ -89,11 +126,55 @@ impl FfmpegSink {
                 settings.frame_rate.0, settings.frame_rate.1
             ))
             .args(["-i", "pipe:0"]);
-        if let Some(audio_mix) = &settings.audio_mix {
+        if format != OutputFormat::Mp4 {
+            match format {
+                OutputFormat::Gif => {
+                    let final_delay = crate::webp_animation::frame_delay(
+                        settings.frame_count - 1,
+                        settings.frame_rate,
+                        100,
+                        65535,
+                    )?;
+                    // A palette per frame avoids buffering the timeline; full frames clear prior transparency.
+                    command.args([
+                        "-filter_complex_threads", "1", "-filter_complex",
+                        "[0:v]split[image][colours];[colours]palettegen=stats_mode=single:reserve_transparent=1[palette];[image][palette]paletteuse=new=1:alpha_threshold=128[gif]",
+                        "-map", "[gif]", "-an", "-c:v", "gif", "-gifflags", "-offsetting-transdiff",
+                        "-loop", "0", "-final_delay", &final_delay.to_string(),
+                    ]);
+                }
+                OutputFormat::Webp => {
+                    command.args([
+                        "-map",
+                        "0:v:0",
+                        "-an",
+                        "-c:v",
+                        "libwebp",
+                        "-lossless",
+                        "1",
+                        "-quality",
+                        "100",
+                        "-compression_level",
+                        "3",
+                        "-pix_fmt",
+                        "bgra",
+                        "-threads",
+                        "1",
+                        "-f",
+                        "image2pipe",
+                    ]);
+                }
+                OutputFormat::Mp4 => unreachable!(),
+            }
+        } else if let Some(audio_mix) = &settings.audio_mix {
             let audio = audio_graph::compile_with_options(
                 audio_mix,
                 settings.duration,
                 audio_graph::AudioGraphCompileOptions {
+                    output_range: settings
+                        .audio_range
+                        .as_ref()
+                        .map(|range| (range.start, range.end)),
                     first_audio_input_index: 1,
                 },
             )?;
@@ -103,9 +184,11 @@ impl FfmpegSink {
         } else {
             command.args(["-map", "0:v:0"]);
         }
-        add_h264_video_output(&mut command, settings);
-        if settings.audio_mix.is_some() {
-            command.args(["-c:a", "aac", "-b:a", "192k"]);
+        if format == OutputFormat::Mp4 {
+            add_h264_video_output(&mut command, settings);
+            if settings.audio_mix.is_some() {
+                command.args(["-c:a", "aac", "-b:a", "192k"]);
+            }
         }
         Self::spawn(
             command,
@@ -122,8 +205,14 @@ impl FfmpegSink {
         settings: &EncoderSettings,
         output: &Path,
         image: PathBuf,
+        executable: Option<&Path>,
     ) -> Result<Self, MediaError> {
-        let mut command = Command::new("ffmpeg");
+        if crate::is_animated_output(output) {
+            return Err(MediaError::AnimationEncoding(
+                "animated output requires streamed RGBA frames".to_owned(),
+            ));
+        }
+        let mut command = Command::new(executable.unwrap_or_else(|| Path::new("ffmpeg")));
         let mut filtergraph_file = None;
         command
             .args([
@@ -149,6 +238,10 @@ impl FfmpegSink {
                 audio_mix,
                 settings.duration,
                 audio_graph::AudioGraphCompileOptions {
+                    output_range: settings
+                        .audio_range
+                        .as_ref()
+                        .map(|range| (range.start, range.end)),
                     first_audio_input_index: 1,
                 },
             )?;
@@ -156,6 +249,9 @@ impl FfmpegSink {
                 add_audio(&mut command, &audio, settings.maximum_audio_sources, output)?;
         } else {
             command.args(["-map", "0:v:0"]);
+        }
+        if settings.audio_range.is_some() {
+            command.args(["-frames:v", &settings.frame_count.to_string()]);
         }
         add_h264_video_output(&mut command, settings);
         if settings.audio_mix.is_some() {
@@ -213,6 +309,7 @@ impl FfmpegSink {
         pipe_stdin: bool,
         pipe_progress: bool,
     ) -> Result<Self, MediaError> {
+        let format = OutputFormat::from_path(output);
         tracing::debug!(
             target: "vestra.encode",
             program = "ffmpeg",
@@ -222,20 +319,26 @@ impl FfmpegSink {
             height = settings.height,
             total_frames = settings.frame_count,
             fps = ?settings.frame_rate,
-            audio = settings.audio_mix.is_some(),
+            audio = format == OutputFormat::Mp4 && settings.audio_mix.is_some(),
             quality_crf = settings.quality_crf,
             preset = x264_preset_for_crf(settings.quality_crf),
             "encoder process spawning"
         );
+        if format == OutputFormat::Mp4 {
+            command.args(["-movflags", "+faststart"]);
+        }
+        if format == OutputFormat::Webp {
+            command.arg("pipe:1");
+        } else {
+            command.arg(output);
+        }
         let mut child = command
-            .args(["-movflags", "+faststart"])
-            .arg(output)
             .stdin(if pipe_stdin {
                 Stdio::piped()
             } else {
                 Stdio::null()
             })
-            .stdout(if pipe_progress {
+            .stdout(if pipe_progress || format == OutputFormat::Webp {
                 Stdio::piped()
             } else {
                 Stdio::null()
@@ -251,12 +354,12 @@ impl FfmpegSink {
             program = "ffmpeg",
             stage = "encode",
             output = %output.display(),
-            codec = "libx264",
+            codec = match format { OutputFormat::Mp4 => "libx264", OutputFormat::Gif => "gif", OutputFormat::Webp => "libwebp" },
             width = settings.width,
             height = settings.height,
             total_frames = settings.frame_count,
             fps = ?settings.frame_rate,
-            audio = settings.audio_mix.is_some(),
+            audio = format == OutputFormat::Mp4 && settings.audio_mix.is_some(),
             quality_crf = settings.quality_crf,
             preset = x264_preset_for_crf(settings.quality_crf),
             "encoder initialized"
@@ -296,6 +399,23 @@ impl FfmpegSink {
         } else {
             (None, None)
         };
+        let animation_writer = if format == OutputFormat::Webp {
+            let stdout = match child.stdout.take() {
+                Some(stdout) => stdout,
+                None => {
+                    drop(stdin);
+                    let _ = terminate_and_reap(&mut child);
+                    return Err(MediaError::MissingProgressOutput);
+                }
+            };
+            let path = output.to_path_buf();
+            let settings = settings.clone();
+            Some(std::thread::spawn(move || {
+                crate::webp_animation::mux(stdout, &path, &settings)
+            }))
+        } else {
+            None
+        };
         let expected_bytes = settings.width as usize * settings.height as usize * 4;
         let static_frame_count = static_image.as_ref().map(|_| settings.frame_count);
         Ok(Self {
@@ -310,6 +430,7 @@ impl FfmpegSink {
             filtergraph_file,
             static_image,
             static_frame_count,
+            animation_writer,
         })
     }
 
@@ -336,6 +457,8 @@ impl FfmpegSink {
         self.cleanup_filtergraph();
         self.cleanup_static_image();
         self.join_progress()?;
+        // Aborted streams are deliberately incomplete; still join the writer before cleanup.
+        let _ = self.join_animation_writer();
         self.join_stderr().map(|_| ())
     }
 
@@ -363,13 +486,22 @@ impl FfmpegSink {
         Ok(())
     }
 
+    fn join_animation_writer(&mut self) -> Result<(), MediaError> {
+        if let Some(writer) = self.animation_writer.take() {
+            writer.join().map_err(|_| {
+                MediaError::AnimationEncoding("WebP mux writer panicked".to_owned())
+            })??;
+        }
+        Ok(())
+    }
+
     fn finish_with_status(
         &mut self,
         status: std::process::ExitStatus,
     ) -> Result<SinkResult, MediaError> {
         self.child.take();
         self.join_progress()?;
-        let stderr = String::from_utf8_lossy(&self.join_stderr()?)
+        let mut stderr = String::from_utf8_lossy(&self.join_stderr()?)
             .trim()
             .to_owned();
         self.state = SinkState::Finished;
@@ -377,7 +509,9 @@ impl FfmpegSink {
         let static_frame_count = self.static_frame_count;
         let reported_static_frames = self.static_progress_frames();
         self.cleanup_static_image();
+        let animation_result = self.join_animation_writer();
         if status.success() {
+            animation_result?;
             tracing::debug!(
                 target: "vestra.encode",
                 stage = "finalize",
@@ -391,6 +525,9 @@ impl FfmpegSink {
                     .unwrap_or(self.expected_frame),
             })
         } else {
+            if let Err(error) = animation_result {
+                stderr.push_str(&format!("\n{error}"));
+            }
             tracing::debug!(
                 target: "vestra.encode",
                 stage = "finalize",
@@ -453,6 +590,7 @@ impl FrameSink for FfmpegSink {
                     .to_owned();
                 self.state = SinkState::Aborted;
                 self.cleanup_filtergraph();
+                let _ = self.join_animation_writer();
                 return Err(MediaError::ProcessFailed {
                     program: "FFmpeg",
                     status,

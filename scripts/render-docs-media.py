@@ -103,7 +103,7 @@ def main() -> None:
     for source_name, output_name, size, poster_time in EXAMPLES:
         asset_name = source_name.replace("_", "-")
         subprocess.run(
-            [sys.executable, str(ROOT / f"docs/assets/examples/{source_name}.py")],
+            [sys.executable, str(ROOT / f"examples/tutorials/{source_name}.py")],
             cwd=OUTPUT,
             check=True,
         )
@@ -239,15 +239,16 @@ def render_learning():
     manifest = {
         "program_sha256": {
             name: hashlib.sha256(
-                (ROOT / f"docs/assets/examples/{name}.py").read_bytes()
+                (ROOT / f"examples/tutorials/{name}.py").read_bytes()
             ).hexdigest()
             for name in programs
         },
         "input_sha256": {
-            name: hashlib.sha256(
-                (ROOT / f"docs/assets/examples/{name}").read_bytes()
-            ).hexdigest()
-            for name in ("landscape.jpg", "learning-inputs.txt")
+            name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+            for name in (
+                "assets/images/landscape-study.jpg",
+                "assets/images/learning-inputs.txt",
+            )
         },
         "stills": {},
     }
@@ -257,7 +258,7 @@ def render_learning():
         "motion-tile",
         "crt",
     )
-    effects = runpy.run_path(str(ROOT / "docs/assets/examples/effects_catalog.py"))
+    effects = runpy.run_path(str(ROOT / "examples/tutorials/effects_catalog.py"))
     for name in [*effects["effect_cases"](), "order"]:
         if name in motion or name == "original":
             continue
@@ -269,7 +270,7 @@ def render_learning():
             "backend": "cpu",
             "web_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(),
         }
-    groups = runpy.run_path(str(ROOT / "docs/assets/examples/group_placements.py"))
+    groups = runpy.run_path(str(ROOT / "examples/tutorials/group_placements.py"))
     image_path = ASSETS / "group-placements.webp"
     effects["save_still"](groups["project"], image_path)
     manifest["stills"]["group-placements"] = {
@@ -288,7 +289,7 @@ def render_learning():
         )
     for module in ("concepts_masks", "transition_comparisons", "audio_response"):
         subprocess.run(
-            [sys.executable, str(ROOT / f"docs/assets/examples/{module}.py")],
+            [sys.executable, str(ROOT / f"examples/tutorials/{module}.py")],
             cwd=OUTPUT,
             check=True,
         )

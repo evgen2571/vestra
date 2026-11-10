@@ -49,7 +49,7 @@ def builder() -> ProjectBuilder:
 
 def test_public_particle_authoring_serializes_schema_valid_source() -> None:
     project = builder()
-    audio = project.add_audio_asset("examples/assets/tone.wav")
+    audio = project.add_audio_asset("assets/fixtures/tone.wav")
     project.audio.add_track(id="music").add_clip(asset=audio, start=0, trim_end=1.0)
     size = project.scalar_property(1.0)
     size.modulate(project.audio.master.rms(), mode="multiply")
@@ -165,7 +165,7 @@ def test_audio_reactive_python_example_authors_valid_audio_material() -> None:
     data = namespace["project"].to_dict()
     assert not list(VALIDATOR.iter_errors(data))
     assert data["assets"] == [
-        {"id": "audio-000001", "type": "audio", "source": "examples/assets/tone.wav"}
+        {"id": "audio-000001", "type": "audio", "source": "assets/fixtures/tone.wav"}
     ]
     assert data["audio"]["tracks"][0]["clips"][0]["asset"] == "audio-000001"  # type: ignore[index]
 

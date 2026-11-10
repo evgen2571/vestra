@@ -28,7 +28,7 @@ def builder(*, output_audio: bool = False) -> ProjectBuilder:
 
 def test_audio_timeline_is_ordered_and_round_trips() -> None:
     project_builder = builder()
-    a = project_builder.add_audio_asset("examples/assets/tone.wav")
+    a = project_builder.add_audio_asset("assets/fixtures/tone.wav")
     music = project_builder.audio.add_track(id="music", gain=1.5)
     ambience = project_builder.audio.add_track(id="ambience", mute=True)
     first = music.add_clip(asset=a, start=0, trim_end=0.5)
@@ -51,7 +51,7 @@ def test_audio_timeline_is_ordered_and_round_trips() -> None:
 
 def test_audio_inspection_preserves_declaration_order_when_ids_are_unsorted() -> None:
     project_builder = builder()
-    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    asset = project_builder.add_audio_asset("assets/fixtures/tone.wav")
     zulu = project_builder.audio.add_track(id="zulu")
     alpha = project_builder.audio.add_track(id="alpha")
     zulu.add_clip(asset=asset, start=0, trim_end=0.5, id="z-clip")
@@ -222,7 +222,7 @@ def test_multi_clip_audio_renders(tmp_path: Path) -> None:
     project_builder = builder(output_audio=True)
     project_builder.base_directory = Path.cwd()
     project_builder.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
-    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    asset = project_builder.add_audio_asset("assets/fixtures/tone.wav")
     track = project_builder.audio.add_track()
     track.add_clip(asset=asset, start=0, trim_end=0.2)
     track.add_clip(asset=asset, start=0.1, trim_end=0.2)
@@ -236,7 +236,7 @@ def test_prepared_multi_clip_audio_renders_twice(tmp_path: Path) -> None:
     project_builder = builder(output_audio=True)
     project_builder.base_directory = Path.cwd()
     project_builder.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
-    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    asset = project_builder.add_audio_asset("assets/fixtures/tone.wav")
     music = project_builder.audio.add_track(id="music", gain=0.75)
     music.add_clip(asset=asset, start=0, trim_end=0.4)
     music.add_clip(asset=asset, start=0.12345, trim_end=0.5, gain=0.5)
@@ -262,7 +262,7 @@ def test_disabled_or_inaudible_multi_track_audio_produces_video_only(
     project_builder = builder(output_audio=output_audio)
     project_builder.base_directory = Path.cwd()
     project_builder.add_solid_color_clip(colour="#000000", start=0, duration=1, layer=0)
-    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    asset = project_builder.add_audio_asset("assets/fixtures/tone.wav")
     music = project_builder.audio.add_track(id="music", mute=track_mute)
     ambience = project_builder.audio.add_track(id="ambience", gain=0.0)
     music.add_clip(asset=asset, start=0, trim_end=0.2, gain=clip_gain)
@@ -285,7 +285,7 @@ def test_multi_input_render_cancellation_removes_temporary_output(tmp_path: Path
         base_directory=Path.cwd(),
     )
     project_builder.add_solid_color_clip(colour="#000000", start=0, duration=2, layer=0)
-    asset = project_builder.add_audio_asset("examples/assets/tone.wav")
+    asset = project_builder.add_audio_asset("assets/fixtures/tone.wav")
     first = project_builder.audio.add_track(id="first")
     second = project_builder.audio.add_track(id="second")
     first.add_clip(asset=asset, start=0, trim_end=0.8)

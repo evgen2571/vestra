@@ -38,10 +38,10 @@ particles` to render one category. Pass `--output-dir DIR` to keep outputs.
 | `python/high-level/` | The normal `Project`, `Composition`, `Layer`, and source API, including shape and text rendering. |
 | `python/authoring/` | Advanced `ProjectBuilder` examples for canonical authoring and inspection. |
 
-`assets/red.png`, `green.png`, and `blue.png` are shared image fixtures.
-`assets/tone.wav` is the shared audio fixture used by audio and signal
+`assets/fixtures/red.png`, `green.png`, and `blue.png` are shared image fixtures.
+`assets/fixtures/tone.wav` is the shared audio fixture used by audio and signal
 examples. `python/high-level/09_video_source.py` intentionally requires a
-user-supplied `examples/assets/clip.mp4`; it is not part of the bulk render
+user-supplied `assets/fixtures/clip.mp4`; it is not part of the bulk render
 run.
 
 [Code → Video](code-to-video/README.md) is a short Python scene with a native
@@ -69,7 +69,7 @@ Output depends on the example:
   preserves the matrix, palette-matching and seed options shown by `--help`.
 - Other high-level examples author a scene or prepare one CPU frame and print
   a short result. They do not save a video; the video-source example also needs
-  your own `examples/assets/clip.mp4` with at least six seconds of footage.
+  your own `assets/fixtures/clip.mp4` with at least six seconds of footage.
 - The advanced authoring examples demonstrate building, inspecting or preparing
   canonical projects. `07_music_mix.py`, `08_audio_reactive.py` and
   `09_spectrum2d.py` encode temporary videos to check their output, then remove

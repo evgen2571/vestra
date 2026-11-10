@@ -9,13 +9,14 @@ from vestra.effects import Saturation
 from vestra.sources import Circle, Color, Image, Rectangle, Text
 
 SHOWCASE = Path(__file__).resolve().parents[1]
+ASSETS = SHOWCASE.parents[1] / "assets"
 
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
     # Keep pixel-sized masks and type proportional in the smoke render.
     resolution_scale = size[0] / 1280
     project = Project(
-        size=size, fps=fps, duration=8, base_directory=SHOWCASE, quality=Quality.HIGH
+        size=size, fps=fps, duration=8, base_directory=ASSETS, quality=Quality.HIGH
     )
     project.root.add(Color("#ebe7df"), duration=8)
 
@@ -23,7 +24,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         layer = project.root.add(
             Text(
                 text,
-                font="assets/Manrope.ttf",
+                font="fonts/Manrope.ttf",
                 font_size=font_size * resolution_scale,
                 fill=colour,
             ),
@@ -70,7 +71,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     for index, cutout in enumerate(cutouts):
         card_x = cutout["card_x"]
         card = project.root.group(duration=8, z=index + 1)
-        photo = card.add(Image("assets/landscape.jpg", sizing="cover"), duration=8)
+        photo = card.add(Image("images/landscape.jpg", sizing="cover"), duration=8)
 
         photo.effects.add(Saturation(amount=cutout["saturation"]))
 

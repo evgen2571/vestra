@@ -18,10 +18,10 @@ ROOT = Path(__file__).resolve().parents[3]
 def main() -> None:
     project = Project(size=(160, 90), fps=12, duration=2, base_directory=ROOT)
     first = project.root.add(
-        Image("examples/assets/red.png", sizing="cover"), duration=1
+        Image("assets/fixtures/red.png", sizing="cover"), duration=1
     )
     second = project.root.add(
-        Image("examples/assets/blue.png", sizing="cover"), start=0.5, duration=1.5
+        Image("assets/fixtures/blue.png", sizing="cover"), start=0.5, duration=1.5
     )
 
     # The two images overlap from project second 0.5 to second 1.

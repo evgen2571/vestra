@@ -10,12 +10,16 @@ import platform
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import traceback
 
 from benchmarks.collector import host, reporting
 from benchmarks.comparisons.moviepy.comparison import digest, write_json
-from scripts.benchmark import ROOT, source_identity
-from scripts.benchmark_process import measure_process
+from benchmarks.benchmark import ROOT, source_identity
+from benchmarks.process import measure_process
+
+ACTIVITY_INTERVAL = 15
 
 
 def parser():
@@ -39,7 +43,7 @@ def parser():
     )
     result.add_argument(
         "--suite",
-        default="community-v1",
+        default="community",
         choices=tuple(
             json.loads((ROOT / "benchmarks/suites.json").read_text())["suites"]
         ),
@@ -52,7 +56,7 @@ def parser():
     result.add_argument(
         "--timeout",
         type=float,
-        default=900,
+        default=7200,
         help="per short suite/worker timeout in seconds",
     )
     result.add_argument("--build-timeout", type=float, default=7200)
@@ -132,7 +136,7 @@ def worker(args):
         write_json(args.result, data)
     elif args.worker == "build":
         if request["target"] == "benchmark":
-            from scripts.benchmark import build_benchmark
+            from benchmarks.benchmark import build_benchmark
 
             executable = str(build_benchmark(request["backend"]))
         elif request["target"] == "adapters":
@@ -235,13 +239,40 @@ class Collection:
         write_json(self.directory / "manifest.json", self.manifest)
 
     def execute(self, command, log, *, timeout=None, env=None, **kwargs):
-        measurement = measure_process(
-            command,
-            log,
-            timeout=timeout or self.args.timeout,
-            env=env or self.environment,
-            **kwargs,
+        started = time.monotonic()
+        stopped = threading.Event()
+
+        def activity():
+            while not stopped.wait(ACTIVITY_INTERVAL):
+                latest = "waiting for worker output"
+                try:
+                    with Path(log).open("rb") as stream:
+                        stream.seek(max(0, stream.seek(0, 2) - 2048))
+                        lines = stream.read().decode(errors="replace").splitlines()
+                    if lines:
+                        latest = " ".join(lines[-1].split())[-240:]
+                except OSError:
+                    pass  # The worker may not have created its log yet.
+                print(
+                    f"  Still working: {Path(log).stem}, {time.monotonic() - started:.0f}s; {reporting.sanitize(latest)}",
+                    flush=True,
+                )
+
+        monitor = threading.Thread(
+            target=activity, name="benchmark-activity", daemon=True
         )
+        monitor.start()
+        try:
+            measurement = measure_process(
+                command,
+                log,
+                timeout=timeout or self.args.timeout,
+                env=env or self.environment,
+                **kwargs,
+            )
+        finally:
+            stopped.set()
+            monitor.join()
         write_json(Path(log).with_suffix(".measurement.json"), measurement)
         if (
             measurement["returncode"]
@@ -262,7 +293,8 @@ class Collection:
         )
         self.manifest["tasks"].append(row)
         self.save()
-        print(f"Starting {name}", flush=True)
+        started = time.monotonic()
+        print(f"\nStarting {name} (step {len(self.manifest['tasks'])})", flush=True)
         try:
             result = function()
             row.update(
@@ -283,6 +315,13 @@ class Collection:
             row.update(status="incomplete", error="cancelled by user")
             self.save()
             raise
+        finally:
+            row["elapsed_seconds"] = round(time.monotonic() - started, 3)
+            self.save()
+            print(
+                f"Completed {name}: {row['status'].upper()} in {row['elapsed_seconds']:.1f}s",
+                flush=True,
+            )
 
     def skip(self, name, reason, *, unsupported=False):
         self.manifest["tasks"].append(
@@ -302,7 +341,7 @@ class Collection:
         self.execute(
             [
                 self.python,
-                str(ROOT / "scripts/collect-benchmarks.py"),
+                str(ROOT / "benchmarks/collect.py"),
                 "--worker",
                 "build",
                 "--request",
@@ -355,7 +394,7 @@ class Collection:
         self.execute(
             [
                 self.python,
-                str(ROOT / "scripts/collect-benchmarks.py"),
+                str(ROOT / "benchmarks/collect.py"),
                 "--worker",
                 "metadata",
                 "--result",
@@ -379,7 +418,7 @@ class Collection:
             self.execute(
                 [
                     self.python,
-                    str(ROOT / "scripts/benchmark.py"),
+                    str(ROOT / "benchmarks/benchmark.py"),
                     "run",
                     "--suite",
                     suite,
@@ -431,7 +470,7 @@ class Collection:
         self.execute(
             [
                 self.python,
-                str(ROOT / "scripts/benchmark.py"),
+                str(ROOT / "benchmarks/benchmark.py"),
                 "moviepy",
                 "run",
                 "--inputs",
@@ -439,9 +478,9 @@ class Collection:
                 "--engines",
                 engine,
                 "--width",
-                "640",
+                "1920",
                 "--height",
-                "360",
+                "1080",
                 "--warmups",
                 "0" if self.args.smoke else "1",
                 "--samples",
@@ -460,6 +499,13 @@ class Collection:
         args = self.args
         chosen = selected(args)
         if not args.prepared_directory:
+            print(
+                f"Vestra benchmark collection: {args.profile}{' (SMOKE: execution checks only)' if args.smoke else ''}\n"
+                f"Revision: {self.manifest['revision']}\n"
+                "First build can take tens of minutes. Activity is reported every 15 seconds.\n"
+                "Stages: check tools -> build -> render -> validate -> package ZIP\n",
+                flush=True,
+            )
             preflight = host.preflight(self.directory)
             write_json(self.directory / "preflight.json", preflight)
             print("Vestra benchmark preflight", flush=True)
@@ -496,7 +542,7 @@ class Collection:
                     self.python,
                     [
                         self.python,
-                        str(ROOT / "scripts/collect-benchmarks.py"),
+                        str(ROOT / "benchmarks/collect.py"),
                         *sys.argv[1:],
                         "--prepared-directory",
                         str(self.directory),
@@ -602,7 +648,7 @@ class Collection:
                     self.execute(
                         [
                             self.python,
-                            str(ROOT / "scripts/benchmark.py"),
+                            str(ROOT / "benchmarks/benchmark.py"),
                             "moviepy",
                             "verify",
                             *map(str, captures),
@@ -625,18 +671,18 @@ class Collection:
                     "moviepy-visual", "requires at least two successful engine captures"
                 )
         if chosen & {"cache", "sustained"}:
-            long_inputs = inputs.parent / "long-inputs" if args.smoke else inputs
+            long_inputs = inputs.parent / "long-inputs"
             source = long_inputs / "long.mp4"
 
             def prepare_long():
                 from benchmarks.collector.fixtures import long_source, portable_inputs
 
-                if args.smoke:
-                    portable_inputs(long_inputs, width=128, height=72)
-                    shutil.copy2(
-                        long_inputs / "manifest.json",
-                        self.directory / "long-input-manifest.json",
-                    )
+                size = (128, 72) if args.smoke else (640, 360)
+                portable_inputs(long_inputs, width=size[0], height=size[1], fps=30)
+                shutil.copy2(
+                    long_inputs / "manifest.json",
+                    self.directory / "long-input-manifest.json",
+                )
                 settings = json.loads((long_inputs / "manifest.json").read_text())[
                     "settings"
                 ]
@@ -773,7 +819,22 @@ class Collection:
         for task in tasks:
             print(f"{task['name']:<28} {task['status'].upper()}", flush=True)
         print(
-            f"\nArchive:\n{archive}\n\nSend this ZIP archive to the maintainer.",
+            "; ".join(
+                f"{sum(t['status'] == status for t in tasks)} {status}"
+                for status in (
+                    "passed",
+                    "failed",
+                    "incomplete",
+                    "skipped",
+                    "unsupported",
+                )
+            ),
+            flush=True,
+        )
+        print(
+            f"\nSend this file:\n{archive}\n\n"
+            "Open summary.md inside the ZIP for results and validation status.\n"
+            "Send the ZIP even if a task failed; it contains diagnostics. No upload occurs.",
             flush=True,
         )
         return 130 if cancelled else 1 if failed else 0

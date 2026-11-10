@@ -4,7 +4,7 @@ from pathlib import Path
 import runpy
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = runpy.run_path(str(ROOT / "docs/assets/examples/effects_catalog.py"))
+EXAMPLE = runpy.run_path(str(ROOT / "examples/tutorials/effects_catalog.py"))
 
 
 def test_every_catalog_effect_authors_a_valid_project():
@@ -40,7 +40,7 @@ def test_catalog_settings_match_the_runnable_constructors():
     import ast
     import re
 
-    tree = ast.parse((ROOT / "docs/assets/examples/effects_catalog.py").read_text())
+    tree = ast.parse((ROOT / "examples/tutorials/effects_catalog.py").read_text())
     cases = next(
         node
         for node in tree.body
@@ -89,3 +89,14 @@ def test_temporal_comparisons_show_both_rows_and_tile_fills_its_viewport():
                     bottom[i : i + 3] == backdrop for i in range(0, len(bottom), 4)
                 )
                 assert uncovered == 0, (seconds, uncovered)
+
+
+def test_downloaded_catalog_uses_the_adjacent_study_crop(tmp_path):
+    program = tmp_path / "effects_catalog.py"
+    program.write_bytes((ROOT / "examples/tutorials/effects_catalog.py").read_bytes())
+    photo = tmp_path / "landscape-study.jpg"
+    photo.write_bytes((ROOT / "assets/images/landscape-study.jpg").read_bytes())
+    downloaded = runpy.run_path(str(program))
+    assert downloaded["PHOTO"] == photo
+    frame = downloaded["make_project"]("gaussian-blur").render_frame(0.7, backend="cpu")
+    assert (frame.width, frame.height) == (640, 220)

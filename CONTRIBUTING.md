@@ -52,8 +52,7 @@ Choose the environment for your change:
   installs its executable through `imageio-ffmpeg`. Some optional
   media verification workflows use `ffprobe` as an independent reference.
 
-Run `just` to list commands. Coding agents should read [AGENTS.md](AGENTS.md);
-substantial changes follow the [plan convention](PLANS.md).
+Run `just` to list commands. Coding agents should read [AGENTS.md](AGENTS.md).
 
 ## 3. Make and test your change
 

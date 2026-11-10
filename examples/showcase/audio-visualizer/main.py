@@ -18,17 +18,18 @@ from vestra.sources import (
 )
 
 SHOWCASE = Path(__file__).resolve().parents[1]
+ASSETS = SHOWCASE.parents[1] / "assets"
 
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
     # Keep pixel-sized geometry proportional in the smaller smoke render.
     resolution_scale = size[0] / 1280
     project = Project(
-        size=size, fps=fps, duration=12, base_directory=SHOWCASE, quality=Quality.HIGH
+        size=size, fps=fps, duration=12, base_directory=ASSETS, quality=Quality.HIGH
     )
     project.root.add(Color("#141222"), duration=12)
     project.audio.track("synth").add(
-        "assets/synth.wav", trim_end=12, gain=0.85, fade_in=0.4, fade_out=1
+        "audio/synth.wav", trim_end=12, gain=0.85, fade_in=0.4, fade_out=1
     )
 
     # Map this recording's RMS range to a gentle multiplier, then bound peaks.
@@ -98,7 +99,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     heading = project.root.add(
         Text(
             "Spectrum",
-            font="assets/Manrope.ttf",
+            font="fonts/Manrope.ttf",
             font_size=45 * resolution_scale,
             fill="#f1efe5",
         ),
@@ -109,7 +110,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     caption = project.root.add(
         Text(
             "Audio-reactive spectrum and particles",
-            font="assets/Manrope.ttf",
+            font="fonts/Manrope.ttf",
             font_size=20 * resolution_scale,
             fill="#bba5eb",
         ),

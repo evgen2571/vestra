@@ -121,8 +121,8 @@ def test_complete_authoring_project_renders_frames_and_video_with_audio(tmp_path
         duration=2.5, base_directory=Path.cwd(), background="#101010",
     )
     image = builder.add_image_asset("tests/assets/wgpu-small-rgba.png")
-    blue = builder.add_image_asset("examples/assets/blue.png")
-    audio = builder.add_audio_asset("examples/assets/tone.wav")
+    blue = builder.add_image_asset("assets/fixtures/blue.png")
+    audio = builder.add_audio_asset("assets/fixtures/tone.wav")
     builder.add_solid_color_clip(colour="#102030", start=0, duration=2.5, layer=-1)
     outgoing = builder.add_image_clip(source=image, start=0, duration=2, layer=0, sizing=Sizing.stretch(width=16, height=12))
     incoming = builder.add_image_clip(source=blue, start=1.5, duration=1, layer=1, sizing=Sizing.cover())

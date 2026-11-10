@@ -222,7 +222,7 @@ mod tests {
 
     fn tone_path() -> String {
         format!(
-            "{}/../../examples/assets/tone.wav",
+            "{}/../../assets/fixtures/tone.wav",
             env!("CARGO_MANIFEST_DIR")
         )
     }

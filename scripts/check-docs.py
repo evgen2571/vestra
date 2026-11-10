@@ -17,7 +17,7 @@ def main() -> None:
         else Path(__file__).resolve().parents[1]
     )
     files = list(root.glob("*.md"))
-    for directory in ("docs", "examples", "benchmarks"):
+    for directory in ("docs", "examples", "benchmarks", "assets"):
         files.extend((root / directory).rglob("*.md"))
     checked = errors = 0
     for source in sorted(files):

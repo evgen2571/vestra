@@ -15,7 +15,7 @@
     {
       "id": "tone",
       "type": "audio",
-      "source": "../assets/tone.wav"
+      "source": "../../assets/fixtures/tone.wav"
     }
   ],
   "audio": {

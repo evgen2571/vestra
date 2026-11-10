@@ -575,7 +575,7 @@ fn selects_latest_pts(current: Option<i64>, candidate: i64, target: i64) -> bool
 }
 
 #[cfg(test)]
-#[path = "video_benchmarks.rs"]
+#[path = "../../../benchmarks/rust/media/video_benchmarks.rs"]
 mod benchmarks;
 
 #[cfg(test)]

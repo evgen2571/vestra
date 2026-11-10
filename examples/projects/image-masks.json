@@ -13,7 +13,7 @@
     "duration": 1
   },
   "assets": [
-    {"id": "green-mask", "type": "image", "source": "../assets/green.png"}
+    {"id": "green-mask", "type": "image", "source": "../../assets/fixtures/green.png"}
   ],
   "visual": {
     "clips": [

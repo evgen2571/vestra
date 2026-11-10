@@ -25,7 +25,7 @@ form a complete music-visualizer composition.
 
 ## Credits
 
-`assets/synth.wav` is an original sixteen-second synth loop by Vestra contributors,
+`assets/audio/synth.wav` is an original sixteen-second synth loop by Vestra contributors,
 dedicated to [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 [prepare-assets.py](../prepare-assets.py) generates 48 kHz, mono, 16-bit PCM with
 Python's standard library; the generator code remains MIT licensed. This example

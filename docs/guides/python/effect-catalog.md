@@ -514,8 +514,8 @@ see the [anchor coverage example](../../reference/effects.md#motion-tile-anchor-
 
 ## Complete example
 
-Save [effects_catalog.py](../../assets/examples/effects_catalog.py) and
-[landscape.jpg](../../assets/examples/landscape.jpg) in the same directory:
+Save [effects_catalog.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py) and
+[landscape-study.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg) in the same directory:
 
 ```bash
 python effects_catalog.py --effect gaussian-blur --still
@@ -529,10 +529,10 @@ hyphenated effect name. `PALETTE` in the settings is
 
 Photograph: “Landscape in Salzburger Land” by Dimitry Anikin, CC0; cropped from
 [the existing licensed input](https://commons.wikimedia.org/wiki/File:Landscape_in_Salzburger_Land.jpg).
-The light and motion graphics are original. [Input source record](../../assets/examples/learning-inputs.txt).
+The light and motion graphics are original. [Input source record](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/learning-inputs.txt).
 
 
 <span id="compare-and-reproduce"></span>
 
 Continue with [order-dependent processing](../../concepts/effects-transitions-and-animation.md#order-changes-the-result)
-or [composed treatments](effect-treatments.md) when combining effects.
+or [composed treatments](effects.md) when combining effects.

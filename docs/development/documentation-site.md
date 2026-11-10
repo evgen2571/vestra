@@ -47,11 +47,11 @@ provenance beside the example. Never hardcode a domain or `/assets/` in an inter
 Zensical 0.1.0 rebases raw HTML `src` and `href` paths from the Markdown source
 directory, like Markdown links, but leaves `poster` paths unchanged:
 
-| On `learn/first-animation.md` | Path |
+| On `getting-started/first-animation.md` | Path |
 | --- | --- |
 | Video `src` | `../assets/renders/first-animation.mp4` |
 | Video `poster` | `../../assets/renders/first-animation.webp` |
-| Generated page URL | `learn/first-animation/` |
+| Generated page URL | `getting-started/first-animation/` |
 
 The generated-site checker covers both asset paths; recheck this behavior when
 upgrading Zensical. `README.md` and `index.md` map to the same output location, so

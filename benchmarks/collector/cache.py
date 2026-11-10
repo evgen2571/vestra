@@ -140,7 +140,7 @@ def run(
     matrix["source_sha256"] = digest(source)
     fixture = json.loads(source.with_suffix(".fixture.json").read_text())
     budget = fixture["width"] * fixture["height"] * 4 * 8
-    from scripts.benchmark import ROOT
+    from benchmarks.benchmark import ROOT
 
     try:
         for name, requests in patterns(fixture["duration"], smoke=smoke).items():
@@ -169,7 +169,7 @@ def run(
                     if engine == "vestra"
                     else [
                         python,
-                        str(ROOT / "scripts/collect-benchmarks.py"),
+                        str(ROOT / "benchmarks/collect.py"),
                         "--worker",
                         "cache-moviepy",
                         "--request",
@@ -220,7 +220,7 @@ def run(
         # two-hour asset at distinct source offsets exercise actual worker pools.
         # It is separate from the isolated decoder cache A/B timings.
         from benchmarks.comparisons.moviepy.comparison import validate_output
-        from scripts.benchmark import require_backend
+        from benchmarks.benchmark import require_backend
 
         definition = placement_definition(128 if smoke else 640, 72 if smoke else 360)
         media = directory / "local/placements.mp4"
@@ -237,7 +237,7 @@ def run(
         measurement = execute(
             [
                 python,
-                str(ROOT / "scripts/collect-benchmarks.py"),
+                str(ROOT / "benchmarks/collect.py"),
                 "--worker",
                 "cache-placements",
                 "--request",

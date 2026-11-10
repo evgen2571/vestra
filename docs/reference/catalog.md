@@ -4,7 +4,7 @@
 
 Every reference topic is listed here by subject. Use the [reference overview](index.md)
 to match a task to a guide and its exact contract, or start with
-[your first render](../learn/first-render.md) if you are new to Vestra.
+[your first render](../getting-started/first-render.md) if you are new to Vestra.
 
 <span id="apis-and-features"></span>
 

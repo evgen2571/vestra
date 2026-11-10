@@ -44,8 +44,8 @@ codec, effect or editing task.
 | --- | --- | --- |
 | Default collector | How does this machine handle representative rendering and matched MoviePy edits? | [Editing and layers](workloads.md#editing) |
 | Canonical · 720p | How did the engine change on this machine? | [Rendering workloads](workloads.md#rendering-suites) |
-| Focused effects · 1080p | What does a particular treatment cost over the shared control? | [ASCII](workloads.md#ascii_video), [dither](workloads.md#dither_video), [CRT](workloads.md#crt_video) |
-| Sustained · optional | Does a one- or two-hour output finish, and how do resources behave over time? | [Actual one-hour output excerpt](workloads.md#sustained-v2) |
+| Focused effects · 1080p | What does a particular treatment cost over the shared control? | [Effect contact sheet](workloads.md#effects-at-a-glance) |
+| Sustained · optional | Does a one- or two-hour output finish, and how do resources behave over time? | [Endurance workload](workloads.md#sustained-v2) |
 | Decoder/cache · optional | Which frame-request sequences benefit from cache reuse? | [Probe descriptions](../development/performance-probes.md) |
 
 ## Run benchmarks

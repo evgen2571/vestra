@@ -139,24 +139,26 @@ uv run --no-sync python scripts/render-benchmark-previews.py
 ```
 
 Choose a fresh `--output target/benchmark-previews-NAME` for a repeat. The script
-renders one CPU output per unique suite workload at its maintained resolution,
-plus the portable MoviePy scenes and an actual one-hour sustained output. It
-uses the two-hour source made by repeating the bundled forest clip for the endurance workload. This
-can take several minutes and needs space for the native inputs and full output.
-It does not collect benchmark baselines. The inputs are shared with the showcases.
+renders the production edit and eight selected effect/control workloads on CPU
+at their maintained resolutions, plus the portable editing and layered scenes.
+It uses the bundled footage shared with the showcases. It does not collect
+benchmark baselines or run the endurance workload.
 
 Original MP4s, temporary projects and diagnostic records remain under the chosen
-ignored output directory. Only silent 640 × 360 MP4s, WebP posters, the gallery
-page and `docs/assets/benchmarks/previews.json` are committed. The sustained
-preview is the first twelve seconds of the full one-hour output. The manifest
+ignored output directory. Commit only three silent 640 × 360 MP4s and their WebP
+posters (`editing`, `layered`, `production_edit`), one effect contact sheet, the
+gallery page and `docs/assets/benchmarks/previews.json`. The 640 × 864 contact
+sheet combines frame 54 (1.8 seconds) from eight 1080p CPU renders, with labels
+drawn using the bundled Manrope font. Intermediate frames remain local. The manifest
 records the source revision/hashes, executable, FFmpeg, original checksums and
 dimensions, backend, poster time, preview duration and delivery hashes. Fine
 effect detail can change when downscaled; previews do not replace pixel tests.
 
-`python scripts/render-benchmark-previews.py --check` verifies gallery coverage,
-source freshness and delivery hashes without native dependencies. It runs in
-`just site-check` too. Inspect beginning/middle/end frames, transitions, masks,
-particles and subtle effects before accepting regenerated media.
+`python scripts/render-benchmark-previews.py --check` verifies catalog coverage,
+source freshness, delivery hashes and the exact set of committed assets without
+native dependencies. It runs in `just site-check` too. Inspect the contact sheet
+at desktop and mobile sizes, and beginning/middle/end frames, transitions and
+masks in the three videos before accepting regenerated media.
 
 The historical charts are derived from the retained Markdown tables:
 

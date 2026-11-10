@@ -154,7 +154,11 @@ impl PyRenderRequest {
     }
 
     #[new]
-    #[pyo3(signature = (output, *, backend = None, overwrite = false, preview = false, start = None, end = None))]
+    #[pyo3(signature = (output, *, backend = None, overwrite = false, preview = false, start = None, end = None, resolution = None, fps = None, quality = None))]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Python render options are keyword-only"
+    )]
     fn new(
         output: &Bound<'_, PyAny>,
         backend: Option<&PyBackendPreference>,
@@ -162,12 +166,22 @@ impl PyRenderRequest {
         preview: bool,
         start: Option<&Bound<'_, PyAny>>,
         end: Option<&Bound<'_, PyAny>>,
+        resolution: Option<&Bound<'_, PyAny>>,
+        fps: Option<&crate::prepared::PyFrameRate>,
+        quality: Option<&str>,
     ) -> PyResult<Self> {
         let output = conversion::path_from_python(output)?;
         let backend = backend.copied().unwrap_or(PyBackendPreference::Auto);
         Ok(Self {
             inner: NativeRenderRequest {
                 output: Some(output.clone()),
+                resolution: resolution
+                    .map(crate::prepared::resolution_from_python)
+                    .transpose()?,
+                frame_rate: fps.map(|rate| rate.inner),
+                quality: quality
+                    .map(crate::prepared::quality_from_python)
+                    .transpose()?,
                 overwrite,
                 preview,
                 backend: backend.native(),
@@ -202,6 +216,18 @@ impl PyRenderRequest {
     #[getter]
     fn preview(&self) -> bool {
         self.preview
+    }
+    #[getter]
+    fn resolution(&self) -> Option<(u32, u32)> {
+        self.inner.resolution
+    }
+    #[getter]
+    fn fps(&self) -> Option<crate::prepared::PyFrameRate> {
+        self.inner.frame_rate.map(Into::into)
+    }
+    #[getter]
+    fn quality(&self) -> Option<&'static str> {
+        self.inner.quality.map(crate::prepared::quality_name)
     }
 }
 

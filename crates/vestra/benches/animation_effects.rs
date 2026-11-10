@@ -88,6 +88,9 @@ fn main() {
     };
     project["output"]["width"] = width.into();
     project["output"]["height"] = height.into();
+    if let Ok(quality) = std::env::var("VESTRA_BENCH_QUALITY") {
+        project["output"]["quality"] = quality.into();
+    }
     if matches!(scenario.as_str(), "basic_colour" | "basic_composition") {
         project["visual"]["clips"][0]["effects"] = serde_json::json!([
             { "id": "brightness", "type": "brightness", "amount": { "base_value": 0.05 } },
@@ -274,11 +277,15 @@ fn main() {
         );
     }
     println!(
-        "benchmark_environment cpu_model={:?} cpu_logical_threads={} encoder=libx264 preset=ultrafast crf=30 pix_fmt=yuv420p",
+        "benchmark_environment cpu_model={:?} cpu_logical_threads={} encoder=libx264 authored_quality={} preview={} pix_fmt=yuv420p",
         cpu_model(),
         std::thread::available_parallelism()
             .map(std::num::NonZeroUsize::get)
             .unwrap_or(1),
+        project["output"]["quality"]
+            .as_str()
+            .expect("benchmark quality"),
+        summary.preview,
     );
     println!(
         "video_metrics sessions={} opens={} frame_requests={} actual_decodes={} seeks={} cache_hits={} cache_misses={} decode_time_us={} uploads={} upload_bytes={}",
@@ -374,10 +381,14 @@ fn main() {
             validation,
         );
     }
+    if std::env::var_os("VESTRA_BENCH_KEEP_OUTPUT").is_some() {
+        println!("benchmark_output={}", output.keep().display());
+    }
 }
 
 fn scenario_fixture(scenario: &str) -> &'static Path {
     match scenario {
+        "static_colour" => Path::new("benchmarks/projects/static-colour.json"),
         "masks" => Path::new("examples/projects/geometric-masks.json"),
         "mattes" => Path::new("examples/projects/track-matte.json"),
         "particles" => Path::new("examples/particles/sparks-bloom.json"),
@@ -735,7 +746,7 @@ fn render_once(
         RenderRequest {
             output: Some(output_path),
             overwrite: false,
-            preview: false,
+            preview: std::env::var_os("VESTRA_BENCH_PREVIEW").is_some(),
             backend: backend_preference,
             progress_mode: vestra::ProgressMode::Disabled,
             ..RenderRequest::default()

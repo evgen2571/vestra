@@ -32,12 +32,17 @@ impl PlanTopology {
     #[must_use]
     pub(super) fn from_plan(plan: &RenderPlan) -> Self {
         let summary = summarize_layers(&plan.layers);
+        let fitted =
+            usize::from(plan.canvas.fitted_extent() != (plan.canvas.width, plan.canvas.height));
+        let maximum_extent = plan
+            .canvas
+            .scaled_extent(summary.maximum_extent.0, summary.maximum_extent.1);
         Self {
-            compiled_layer_count: summary.compiled_layer_count,
-            compiled_group_count: summary.compiled_group_count,
+            compiled_layer_count: add(summary.compiled_layer_count, 2 * fitted),
+            compiled_group_count: add(summary.compiled_group_count, fitted),
             compiled_mask_count: summary.compiled_mask_count,
             compiled_matte_count: summary.compiled_matte_count,
-            required_group_depth: summary.required_group_depth,
+            required_group_depth: add(summary.required_group_depth, fitted),
             requires_auxiliary: summary.requires_auxiliary
                 || plan.post_effects.iter().any(|timed| {
                     compiled_effect_pass_requirements(&timed.effect).retains_original()
@@ -45,8 +50,8 @@ impl PlanTopology {
             has_masks: summary.has_masks,
             has_mask_feather: summary.has_mask_feather,
             maximum_extent: (
-                plan.canvas.width.max(summary.maximum_extent.0),
-                plan.canvas.height.max(summary.maximum_extent.1),
+                plan.canvas.width.max(maximum_extent.0),
+                plan.canvas.height.max(maximum_extent.1),
             ),
         }
     }
@@ -309,6 +314,43 @@ mod tests {
         assert!(!topology.requires_auxiliary());
         assert!(!topology.has_masks());
         assert!(!topology.has_mask_feather());
+    }
+
+    #[test]
+    fn runtime_resolution_scales_group_extents_and_reserves_fitted_viewport_depth() {
+        let mut plan = fixture("examples/projects/animation-effects.json");
+        plan.canvas.logical_width = 1280;
+        plan.canvas.logical_height = 720;
+        plan.canvas.width = 128;
+        plan.canvas.height = 72;
+        let child = plan.layers[0].clone();
+        plan.layers.truncate(1);
+        plan.layers[0].source = vestra_core::plan::CompiledVisualSource::Group(
+            std::sync::Arc::new(vestra_core::plan::CompiledComposition {
+                size: Some(vestra_core::project::GroupSize {
+                    width: 2200.0,
+                    height: 1000.0,
+                }),
+                layers: vec![child],
+                schedule: vestra_core::plan::ActiveSchedule::compile(&plan),
+                dependency: vestra_core::plan::TemporalDependency::Static,
+            }),
+        );
+        let native = PlanTopology::from_plan(&plan);
+        assert_eq!(native.maximum_extent(), (220, 100));
+        assert_eq!(native.required_group_depth(), 1);
+        plan.canvas.height = 128;
+        let fitted = PlanTopology::from_plan(&plan);
+        assert_eq!(fitted.maximum_extent(), (220, 128));
+        assert_eq!(fitted.required_group_depth(), 2);
+        assert_eq!(
+            fitted.compiled_group_count(),
+            native.compiled_group_count() + 1
+        );
+        assert_eq!(
+            fitted.compiled_layer_count(),
+            native.compiled_layer_count() + 2
+        );
     }
 
     #[test]

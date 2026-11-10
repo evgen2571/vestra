@@ -709,7 +709,8 @@ impl ComposeContext<'_> {
                     }
                 }
             }
-            self.surfaces.compose_mask_surface(layer.transform);
+            self.surfaces
+                .compose_mask_surface(mask.owner_transform.unwrap_or(layer.transform));
             self.surfaces.feather_mask_surface(mask.feather);
             self.surfaces
                 .combine_mask_coverage(mask.operation, mask.invert, mask.strength);

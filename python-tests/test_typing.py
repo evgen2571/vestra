@@ -62,6 +62,18 @@ if TYPE_CHECKING:
     )
     assert array_channel or sequence_count
     high_level_project.render("clip.mp4", start=0.25, end=0.75)
+    high_level_project.render_preview("preview.mp4", fps=12)
+    high_level_project.render(
+        "animation.webp", resolution=(320, 180), fps=(24000, 1001),
+        quality=vestra.authoring.Quality.HIGH,
+    )
+    options = PrepareOptions(resolution=(320, 180), fps=vestra.FrameRate(12), quality="preview")
+    native_request = vestra.RenderRequest(
+        "animation.gif", resolution=(320, 180), fps=vestra.FrameRate(12), quality="preview",
+    )
+    output_size: tuple[int, int] | None = native_request.resolution
+    output_rate: vestra.FrameRate | None = options.fps
+    assert output_size or output_rate
     device: AdapterDeviceType | None = (
         preparation_report.adapter.device_type
         if preparation_report.adapter is not None

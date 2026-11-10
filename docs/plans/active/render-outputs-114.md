@@ -44,9 +44,9 @@ codec/container additions.
   verify exact/lossy pixel contracts, alpha, ownership and random-access timing.
 - [x] Selected video ranges; verify boundaries, full-render agreement and audio
   synchronization.
-- [ ] Resolution/FPS/quality overrides and preview preset; preserve layout and
+- [x] Resolution/FPS/quality overrides and preview preset; preserve layout and
   effects while reducing actual rendering work.
-- [ ] GIF and animated WebP through bounded streaming media output;
+- [x] GIF and animated WebP through bounded streaming media output;
   verify palettes, transparency, availability, timing and cleanup.
 - [ ] Backend/output regression coverage, representative performance/memory
   measurements, documentation/examples and supported-wheel validation.
@@ -107,6 +107,31 @@ environments honestly; do not claim them from local Linux evidence.
   ffprobe confirms H.264, 320×180, 24/1 FPS, 24 frames, 1.0 seconds, PTS zero.
   Evidence: `target/range-visual-114/`; verification logs: `target/range-*-114.log`.
 
+- 2026-11-10: runtime SDK/Python resolution, FPS and quality overrides and
+  `render_preview()` wired without mutating authored data. API regressions
+  were observed failing before implementation; 24 focused CPU override tests
+  pass. Preview defaults cap longest side at 640, FPS at 15, and select
+  Preview encoder quality; explicit values take precedence.
+- GIF/WebP streaming implementation passes 130 media unit tests, seven animated
+  integration tests and three still integration tests (five manual benchmarks
+  ignored), all-target media Clippy, 12 public Python animation tests and a
+  native SDK full/range static-cache regression. Decoded GIF/WebP/reference
+  frames inspected under `target/animation-visual-114/`.
+- An integration run reached 1,526 passing Python tests plus 42 skips and two
+  assertions against metrics absent from Python. Those assertions now follow
+  public progress counters; native tests prove one actual cached static render.
+  A fresh complete suite is still required after final renderer changes.
+- Strict software discovery works in `nix develop .#wgpu-software`: Vulkan
+  llvmpipe (LLVM 21.1.8), Mesa 26.1.5, classification software. General-shell
+  device loss is not evidence against this configured adapter. Hardware remains
+  unverified.
+- Memory profiles use the existing process-tree sampler at 20 ms for 300 and
+  3,000 frames, 640×360/30 FPS. PNG steady RSS is flat at 45.15 MiB; long GIF
+  early-to-late 94.33→96.13 MiB and WebP 95.99→99.55 MiB. Publication frame
+  counts/timing and sampled pixels verified. Evidence under
+  `target/benchmark-results/render-outputs-114/`; this finite profile does not
+  establish multi-hour/large-file stability. Matched preview timings pending.
+
 ## Decisions and discoveries
 - 2026-11-09: isolated evaluation, random access, owned pixels and preview
   spatial scaling already exist; extend those seams instead of rewriting them.
@@ -124,10 +149,42 @@ environments honestly; do not claim them from local Linux evidence.
   must preserve authored layout using the shared geometry infrastructure;
   reducing `plan.canvas` dimensions alone is insufficient.
 
-## Completion / handoff
-Frame export slice committed as `ced4ba5`; shared range validation as `2771468`.
-Selected video ranges implemented and verified. Next implement runtime
-resolution/FPS/quality overrides and correct preview geometry through the shared
-CPU/WGPU geometry machinery. Preview improvements, animated images, performance/memory measurements,
-strict adapter checks, supported wheels, final contributor gate, issue update
-and PR remain. No issue checkboxes updated or PR opened yet.
+- 2026-11-10: canonical schema-v1 output paths remain MP4 defaults. Animation
+  destinations are runtime requests; high-level `render()` snapshots authored
+  settings and carries the actual path separately. Preflight continues to
+  validate all declared assets, including audio, for consistent error and
+  duration behavior. Animations omit audio encoding but retain visual analysis.
+- Different output aspect ratios use centered uniform fit, never stretch.
+  Global effects include final-canvas borders. Existing physical effect limits
+  produce explicit errors when upscaling exceeds supported kernels.
+- GIF uses bounded per-frame palettes and binary alpha; WebP streams lossless
+  still VP8L frames into a bounded RIFF mux rather than accumulating animation
+  state. Timing quantizes cumulative boundaries to format clocks.
+
+## Final verification and handoff
+- Commits: frame exports `ced4ba5`, shared range validation `2771468`, selected
+  video/audio ranges `0ad207d`. Overrides, animation, regression coverage and
+  documentation are implemented. Final `just check` passes: workspace build,
+  all-target/all-feature Clippy, tests, schema freshness and documentation links.
+  Final strict site build checks 15,987 generated links and passes ten tests.
+- Full Python suite: 1,528 passed, 42 skipped. Public typing passes. Installed
+  Linux wheel passes still, sequence, range/override, preview, GIF, WebP and
+  audio checks using packaged FFmpeg 7.0.2. Its clean environment omits optional
+  NumPy; the development suite verifies NumPy ownership and pixel contracts.
+- Strict software Vulkan: 782 core/common/CPU/WGPU library tests passed,
+  22 ignored; 12 resolution/parity tests passed with actual llvmpipe execution.
+  Maximum CPU/WGPU channel difference is one. Hardware GPU is unverified.
+- Effects preview median 5,929→857 ms (6.92×); FFV1 decode control
+  1,207→671 ms (1.80×). Full 1280×720/30 FPS/CRF23 versus preview
+  640×360/15 FPS/CRF30. Same-time encoded PSNR: effects 38.14–42.73 dB,
+  decode control 29.72–30.43 dB. Static MP4 medians 954→932 ms have overlapping
+  sample ranges; both retain looped-image encoding and identical sampled pixels.
+- Memory, exact commands, executable hashes, decoded output and timing records:
+  `target/benchmark-results/render-outputs-114/README.md`. These finite CPU
+  profiles do not establish hardware, multi-hour or large-file behavior.
+  Forty benchmark regression tests and 53 release-helper tests passed.
+- The intermittent executable-fixture `ETXTBSY` failure is fixed by creating
+  the fake executable in a child process. All seven animation integration tests
+  and 80 concurrent fixture repetitions pass; production code has no retry.
+- Remaining: commit/push, PR to `develop`, supported
+  OS wheel matrix, evidence-based issue checkbox update, and plan cleanup.

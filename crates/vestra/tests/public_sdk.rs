@@ -767,6 +767,7 @@ fn public_sdk_cpu_render_emits_ordered_terminal_event() {
                 preview: false,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -954,6 +955,7 @@ fn observer_cancellation_at_encoding_prevents_publication() {
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             |event| {
                 let cancel = matches!(
@@ -1005,6 +1007,7 @@ fn observer_cancellation_at_finalizing_prevents_publication() {
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             |event| {
                 let cancel = matches!(
@@ -1051,6 +1054,7 @@ fn static_render_does_not_report_ffmpeg_progress_as_rendering_progress() {
                 preview: false,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -1122,6 +1126,7 @@ fn observer_cancellation_at_encoding_removes_temporary_output_and_prevents_publi
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             |event| {
                 let cancel = matches!(
@@ -1185,6 +1190,7 @@ fn token_cancellation_from_progress_prevents_publication() {
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             &mut |event| {
                 if matches!(
@@ -1222,6 +1228,7 @@ fn multi_frame_progress_is_strictly_pre_completion_and_completed_is_post_publica
                 preview: true,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             &mut |event| events.push(event),
             &CancellationToken::new(),
@@ -1260,6 +1267,7 @@ fn completed_observer_cancellation_keeps_the_published_output_and_success() {
                 preview: false,
                 backend: BackendPreference::Cpu,
                 progress_mode: vestra::ProgressMode::Disabled,
+                ..RenderRequest::default()
             },
             |event| {
                 let control = if matches!(event, vestra::RenderEvent::Completed { .. }) {

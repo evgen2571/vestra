@@ -31,9 +31,9 @@ has precedence over those flags and supports target-specific filters such as
 
 | Option | Default and values |
 | --- | --- |
-| `--output PATH` | Unset. The project output path is used. |
+| `--output PATH` | Unset. The project output path is used. An override ending in `.gif` or `.webp` selects an animation. |
 | `--overwrite` | False. Required to replace an existing output. |
-| `--preview` | False. Requests preview output behavior. |
+| `--preview` | False. Caps longest side at 640 px, FPS at 15, and selects fast encoding. |
 | `--format human\|json` | `human`. |
 | `--progress auto\|terminal\|json\|none` | `auto`. JSON progress is JSONL. |
 | `--report PATH` | Unset. Writes a structured report on success or failure. |

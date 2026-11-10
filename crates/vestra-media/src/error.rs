@@ -38,6 +38,15 @@ pub enum MediaError {
     },
     #[error("{program} did not report a usable version")]
     Unavailable { program: &'static str },
+    #[error("FFmpeg encoder '{encoder}' is unavailable for {format} output")]
+    EncoderUnavailable {
+        encoder: &'static str,
+        format: &'static str,
+    },
+    #[error("cannot encode animation: {0}")]
+    AnimationEncoding(String),
+    #[error("cannot write animation: {0}")]
+    AnimationWrite(#[source] io::Error),
     #[error("{program} failed with status {status}: {stderr}")]
     ProcessFailed {
         program: &'static str,

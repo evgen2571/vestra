@@ -14,6 +14,7 @@ mod probe;
 mod sink;
 mod still;
 mod video;
+mod webp_animation;
 
 static FFMPEG_INIT: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
 
@@ -35,10 +36,10 @@ pub use audio_analysis::{MasterPcmSpec, analyze_master_audio, consume_master_pcm
 pub use audio_graph::seconds_to_samples;
 pub use error::{AudioAnalysisError, MediaError};
 pub use ffmpeg::FfmpegSink;
-pub use output::{OutputTarget, check_output, effective_parent};
+pub use output::{OutputTarget, check_output, effective_parent, is_animated_output};
 pub use probe::{
-    backend_available, check_ffmpeg_available, probe_audio_duration,
-    probe_audio_duration_cancellable,
+    backend_available, check_ffmpeg_available, check_output_encoder_available,
+    probe_audio_duration, probe_audio_duration_cancellable,
 };
 pub use sink::{FrameSink, SinkResult};
 pub use still::save_frame;

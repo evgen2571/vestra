@@ -83,7 +83,7 @@ git clone https://github.com/evgen2571/vestra.git
 cd vestra
 
 # Keep the example sources and input assets at the captured revision.
-git switch --detach bf527c93952b258f518ea6915551437ba629b545
+git switch --detach f4679ecdc4d7a45b6b56e5d106f873d3374492dd
 
 # Enter the native development environment and build the Python package once.
 nix develop

@@ -15,8 +15,8 @@ three different frames while the photograph slowly zooms underneath each one.
   <figcaption>A circle, a rounded rectangle and a rectangle rise into view and drift gently. The image in each cutout zooms independently. The left cutout is monochrome; the other two use different saturation settings. The cutouts fade out together at the end.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/compositing/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/compositing/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/compositing/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/compositing/render.mp4)
 
 ## Reproduce the example
 
@@ -55,7 +55,7 @@ Continue with [Masks](../guides/python/masks.md),
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/),
 [from Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Landscape_in_Salzburger_Land.jpg).
 The image was resized, cropped, zoomed, masked and colour-adjusted.
-The Manrope font is SIL OFL 1.1. The [example README](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/compositing/README.md#photo-source)
+The Manrope font is SIL OFL 1.1. The [example README](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/compositing/README.md#photo-source)
 records the photo checksum, resizing command and accompanying font notice.
 
 ## Preview details
@@ -63,7 +63,7 @@ records the photo checksum, resizing command and accompanying font notice.
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 2 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/compositing/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/compositing/README.md).
 The source render's SHA-256 is `382c4376de3ebfd5dc68cbe40239b00402da8a05d6db1ee478dc3642e5c2903b`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

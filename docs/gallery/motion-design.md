@@ -17,8 +17,8 @@ features as they appear.
   <figcaption>Cards and their inset labels move together. Valley footage is revealed through a rounded mask, then changes to a four-colour dithered image. A spectrum and pulsing ring finish the sequence. The preview is silent.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/readme-demo/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/readme-demo/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/readme-demo/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/readme-demo/render.mp4)
 
 ## Reproduce the example
 
@@ -64,7 +64,7 @@ For these techniques, see
 The valley clip is shared with the [benchmark workloads](../benchmarks/workloads.md#shared-footage).
 The footage is resized, reframed, masked and dithered.
 
-The original synth loop is CC0; Manrope is SIL OFL 1.1. Its [example credits](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/readme-demo/README.md#credits) link to
+The original synth loop is CC0; Manrope is SIL OFL 1.1. Its [example credits](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/readme-demo/README.md#credits) link to
 the original synth dedication, footage preparation and accompanying font license.
 
 ## Preview details
@@ -72,7 +72,7 @@ the original synth dedication, footage preparation and accompanying font license
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 1.7 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/readme-demo/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/readme-demo/README.md).
 The source render's SHA-256 is `fe91bfbfc12501f3f8b7dc68a97e227bc2fbc9801f23a82004567795cd6021bf`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

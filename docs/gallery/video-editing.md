@@ -16,8 +16,8 @@ A grouped title appears over the opening shot, and the final shot fades out.
   <figcaption>Three shots dissolve into each other with slow reframing. The title and its rule fade together, and the final shot fades out. The preview is silent.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/real-media-edit/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/real-media-edit/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/real-media-edit/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/real-media-edit/render.mp4)
 
 ## Reproduce the example
 
@@ -53,9 +53,9 @@ to adapt the sequence to your own footage.
 
 ## Credits
 
-The Manrope font is SIL OFL 1.1; the [shared font notice](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/README.md#shared-font)
+The Manrope font is SIL OFL 1.1; the [shared font notice](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/README.md#shared-font)
 includes its copyright and complete license.
-[Earlier Location Kenya copies](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
+[Earlier Location Kenya copies](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
 retain their CC BY 3.0 attribution requirements.
 
 ## Preview details
@@ -63,7 +63,7 @@ retain their CC BY 3.0 attribution requirements.
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 6 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/real-media-edit/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/real-media-edit/README.md).
 The source render's SHA-256 is `091e10cf2d19a84ddf0c9c0fabe12d83764606322272d94860ce44c1889d61b9`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

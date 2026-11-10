@@ -16,8 +16,8 @@ All three follow the same eased zoom, making the differences easy to see.
   <figcaption>The photograph slowly zooms in and out across all three panels. Halftone converts image detail into dots; ASCII converts it into a grid of characters. The preview is silent.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/lookbook/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/lookbook/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/lookbook/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/lookbook/render.mp4)
 
 ## Reproduce the example
 

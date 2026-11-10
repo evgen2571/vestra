@@ -91,6 +91,35 @@ local comparisons meaningful. Inspect and sanitize them before sharing, and
 avoid committing home paths, environment dumps or workstation descriptions.
 See [performance methodology](../docs/development/performance.md).
 
+For paired preview measurements, run the built `animation_effects` executable
+directly with the same scenario, authored dimensions and quality. Set
+`VESTRA_BENCH_PREVIEW=1` only for the preview run;
+`VESTRA_BENCH_QUALITY=balanced` selects the authored encoding quality without
+changing existing workload defaults. Use one warmup and at least three samples:
+
+```bash
+VESTRA_BENCH_SCENARIO=combined VESTRA_BENCH_WIDTH=1280 VESTRA_BENCH_HEIGHT=720 \
+VESTRA_BENCH_BACKEND=cpu VESTRA_BENCH_QUALITY=balanced VESTRA_BENCH_WARMUPS=1 \
+VESTRA_BENCH_SAMPLES=3 VESTRA_BENCH_REPORT=target/benchmark-results/full.json \
+VESTRA_BENCH_KEEP_OUTPUT=1 /absolute/path/to/animation_effects
+# Repeat with VESTRA_BENCH_PREVIEW=1 and a distinct report path.
+```
+
+`VESTRA_BENCH_KEEP_OUTPUT=1` prints and retains the private media directory for
+same-time decoded frame comparisons; remove it after inspection. Use
+`stylization_baseline` for the existing full-resolution FFV1 decode control.
+Records retain the actual dimensions/FPS, stage timings, decode counters and
+preview request. Full and preview are intentionally different workloads, so the
+strict before/after comparator rejects that pair. Report raw distributions and
+medians as a preset comparison, including spatial, temporal and encoding-quality
+differences. Generate media outside measurement and keep memory sampling in
+separate processes/runs using `scripts/benchmark_process.py`; finite-duration RSS
+plateaus do not establish multi-hour or large-file stability.
+The `static_colour` workload encodes ten seconds at 30 FPS and must report
+`static_visual_ffmpeg_fast_path_used=true`, one static-template population and
+zero raw frames pushed from Rust for 300 encoded frames. Public frame counters
+describe logical output frames; keep this full-range MP4 path as a separate control.
+
 The focused color/dither suite measures a single full-frame moving FFV1 video
 at 1920×1080, 30 fps and 90 frames. It records three separate workloads:
 `stylization_baseline` (no effects), `palette_video` (smooth palette mapping),

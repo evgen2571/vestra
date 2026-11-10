@@ -39,8 +39,8 @@ fn blur(coord: vec2<i32>) -> f32 {
     let half_width = clamp(params.radius, 0.0, 256.0) / 3.0;
     let extent = 2.0 * half_width + 1.0;
     let center = select(f32(coord.x), f32(coord.y), params.direction != 0u);
-    let first = i32(floor(center - half_width - 0.5));
-    let last = i32(ceil(center + half_width + 0.5));
+    let first = i32(floor(center - half_width));
+    let last = i32(ceil(center + half_width)) + 1;
     var value = 0.0;
     for (var index = first; index < last; index = index + 1) {
         let overlap = min(f32(index) + 0.5, center + half_width + 0.5)

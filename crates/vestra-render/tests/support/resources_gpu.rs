@@ -34,6 +34,8 @@ fn gpu_readback_preserves_padded_rows_when_an_adapter_is_available() {
         let mut plan = canonical.clone();
         plan.canvas.width = width;
         plan.canvas.height = 18;
+        plan.canvas.logical_width = plan.canvas.width;
+        plan.canvas.logical_height = plan.canvas.height;
         let frame =
             vestra_core::plan::evaluate(&plan, &[vestra_core::plan::ScheduledItem(image_layer)], 0)
                 .expect("renderer fixture evaluates");

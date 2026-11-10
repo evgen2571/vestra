@@ -134,10 +134,18 @@ fn effective_dimensions(
         CompiledSizing::Original => (source_width, source_height),
         CompiledSizing::Stretch { width, height } => (f64::from(*width), f64::from(*height)),
         CompiledSizing::Scale(scale) => (source_width * scale, source_height * scale),
-        CompiledSizing::Fit | CompiledSizing::Cover => {
-            let horizontal = f64::from(canvas_width) / source_width;
-            let vertical = f64::from(canvas_height) / source_height;
-            let factor = if matches!(sizing, CompiledSizing::Fit) {
+        CompiledSizing::Fit
+        | CompiledSizing::Cover
+        | CompiledSizing::FitTo { .. }
+        | CompiledSizing::CoverTo { .. } => {
+            let (width, height) = match sizing {
+                CompiledSizing::FitTo { width, height }
+                | CompiledSizing::CoverTo { width, height } => (*width, *height),
+                _ => (canvas_width, canvas_height),
+            };
+            let horizontal = f64::from(width) / source_width;
+            let vertical = f64::from(height) / source_height;
+            let factor = if matches!(sizing, CompiledSizing::Fit | CompiledSizing::FitTo { .. }) {
                 horizontal.min(vertical)
             } else {
                 horizontal.max(vertical)
@@ -826,6 +834,85 @@ mod tests {
                 geometry.visible_bounds(canvas_width, canvas_height),
                 visible_bounds(&geometry.transformed_corners, canvas_width, canvas_height)
             );
+        }
+    }
+
+    #[test]
+    fn reduced_output_sizing_preserves_authored_crop_and_rotated_source_coordinates() {
+        for (sizing, reduced_sizing) in [
+            (CompiledSizing::Original, CompiledSizing::Original),
+            (CompiledSizing::Scale(0.7), CompiledSizing::Scale(0.7)),
+            (
+                CompiledSizing::Stretch {
+                    width: 440,
+                    height: 190,
+                },
+                CompiledSizing::Stretch {
+                    width: 440,
+                    height: 190,
+                },
+            ),
+            (
+                CompiledSizing::Fit,
+                CompiledSizing::FitTo {
+                    width: 1280,
+                    height: 720,
+                },
+            ),
+            (
+                CompiledSizing::Cover,
+                CompiledSizing::CoverTo {
+                    width: 1280,
+                    height: 720,
+                },
+            ),
+        ] {
+            for cacheable_crop in [false, true] {
+                let crop = Crop {
+                    x: 0.1,
+                    y: 0.25,
+                    width: 0.6,
+                    height: 0.5,
+                };
+                let original_transform =
+                    transform(Point { x: -1.2, y: 0.8 }, 0.6, Point { x: 0.25, y: 0.75 });
+                let mut reduced_transform = original_transform;
+                reduced_transform.scale.x *= 0.5;
+                reduced_transform.scale.y *= 0.5;
+                let full = resolve_raster_geometry(
+                    IntrinsicSize::new(640, 360),
+                    crop,
+                    cacheable_crop,
+                    &sizing,
+                    original_transform,
+                    1280,
+                    720,
+                );
+                let reduced = resolve_raster_geometry(
+                    IntrinsicSize::new(640, 360),
+                    crop,
+                    cacheable_crop,
+                    &reduced_sizing,
+                    reduced_transform,
+                    640,
+                    360,
+                );
+                assert_eq!(full.source, reduced.source);
+                for (full, reduced) in full
+                    .transformed_corners
+                    .iter()
+                    .zip(reduced.transformed_corners)
+                {
+                    assert!((full.x * 0.5 - reduced.x).abs() < 1e-9);
+                    assert!((full.y * 0.5 - reduced.y).abs() < 1e-9);
+                }
+                for (x, y) in [(100.0, 50.0), (600.0, 300.0), (1200.0, 650.0)] {
+                    let logical = full.inverse.map(x, y);
+                    let resized = reduced.inverse.map(x * 0.5, y * 0.5);
+                    assert!((logical.x - resized.x).abs() < 1e-9);
+                    assert!((logical.y - resized.y).abs() < 1e-9);
+                }
+            }
         }
     }
 

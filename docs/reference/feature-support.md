@@ -8,6 +8,26 @@ requirement, rather than reduced renderer support.
 transition endpoint. `adapter-mediated` means high-level Python supplies that
 presentation; the canonical source cannot carry it directly.
 
+## Render outputs
+
+All outputs consume the same evaluated composition and prepared backend.
+
+| Output | Public path | Contract |
+| --- | --- | --- |
+| Owned RGBA8 frame | `render_frame`, prepared frame methods | Random-access time/index, straight alpha, independent bytes |
+| PNG / JPEG / static WebP | `Frame.save`, `render_frame`, `render_frames` | PNG/WebP alpha; JPEG over black; numbered sequences stream one frame at a time |
+| NumPy | `Frame.to_numpy`, `Project.get_frame` | Optional extra; owned writable contiguous `(height, width, 4)` uint8 |
+| MP4 and selected intervals | `render`, prepared `render_video` | H.264 with synchronized optional AAC; rational half-open range rules |
+| Resolution / FPS / quality | `render`, `prepare` | Runtime settings; centered fit; pixel-grid and existing effect-kernel limits apply |
+| Preview preset | `render_preview`, `preview=True` | Up to 640 px and 15 FPS, fast H.264 encoding, all effects retained |
+| GIF | `.gif` render destination | Local palette, binary alpha, centisecond timing, silent looping animation |
+| Animated WebP | `.webp` render destination | Lossless RGBA, millisecond timing, silent looping animation, bounded streaming mux |
+
+See [rendering and preparation](../guides/python/rendering-and-preparation.md)
+for exact selection, ownership, format limits and failure behavior. Output
+encoding is shared media execution; it does not broaden a source or effect's
+backend support listed below.
+
 ## Sources and group canvases
 
 | Feature | Python and canonical JSON | Presentation | CPU | WGPU |

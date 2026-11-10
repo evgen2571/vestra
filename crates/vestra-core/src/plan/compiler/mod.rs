@@ -41,6 +41,8 @@ use crate::plan::time::{effective_dimensions, to_nanos};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CompileOptions {
     pub preview: bool,
+    /// Runtime output size; authored coordinates remain unchanged.
+    pub resolution: Option<(u32, u32)>,
 }
 
 #[allow(
@@ -52,8 +54,33 @@ pub fn compile(
     options: CompileOptions,
 ) -> Result<RenderPlan, Diagnostic> {
     let project = validated.project;
-    let (width, height) =
-        effective_dimensions(project.output.width, project.output.height, options.preview);
+    let (width, height) = options.resolution.unwrap_or_else(|| {
+        effective_dimensions(project.output.width, project.output.height, options.preview)
+    });
+    if options.resolution.is_some() {
+        for (value, field) in [(width, "width"), (height, "height")] {
+            if !(2..=8192).contains(&value) || !value.is_multiple_of(2) {
+                return Err(Diagnostic::error(
+                    if field == "width" {
+                        "VESTRA-OUTPUT-WIDTH"
+                    } else {
+                        "VESTRA-OUTPUT-HEIGHT"
+                    },
+                    Category::Semantic,
+                    format!("runtime {field} must be an even integer in 2..=8192"),
+                    format!("/output/{field}"),
+                ));
+            }
+        }
+        if width > validated.limits.maximum_width || height > validated.limits.maximum_height {
+            return Err(Diagnostic::error(
+                "VESTRA-LIMIT-DIMENSIONS",
+                Category::Semantic,
+                "runtime output dimensions exceed configured resource limits",
+                "/output",
+            ));
+        }
+    }
     let background = parse_colour(&project.output.background).ok_or_else(|| {
         Diagnostic::error(
             "VESTRA-PLAN-BACKGROUND",
@@ -193,6 +220,8 @@ pub fn compile(
         canvas: Canvas {
             width,
             height,
+            logical_width: project.output.width,
+            logical_height: project.output.height,
             background,
             preview: options.preview,
         },

@@ -92,6 +92,12 @@ pub(crate) fn render_prepared_with_lifecycle(
     if prepared.plan.visual_dependency == vestra_core::plan::TemporalDependency::Static
         && !prepared.plan.canvas.preview
         && options.frame_range.is_none()
+        && !vestra_media::is_animated_output(
+            options
+                .output_override
+                .as_deref()
+                .unwrap_or(&prepared.plan.configured_output),
+        )
     {
         return render_static_ffmpeg(prepared, options, lifecycle);
     }

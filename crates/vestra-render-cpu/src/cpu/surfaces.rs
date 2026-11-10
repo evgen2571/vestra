@@ -245,8 +245,8 @@ impl EffectSurfacePool {
         for y in 0..height {
             for x in 0..width {
                 let center = if horizontal { x as f32 } else { y as f32 };
-                let first = (center - half_width - 0.5).floor() as i32;
-                let last = (center + half_width + 0.5).ceil() as i32;
+                let first = (center - half_width).floor() as i32;
+                let last = (center + half_width).ceil() as i32 + 1;
                 let mut value = 0.0;
                 for sample in first..last {
                     let overlap = (sample as f32 + 0.5).min(center + half_width + 0.5)
@@ -754,6 +754,25 @@ mod tests {
         assert!(cached.as_raw().iter().all(|&value| value == 0));
         drop(pool);
         assert!(cached.as_raw().iter().all(|&value| value == 0));
+    }
+
+    #[test]
+    fn fractional_box_feather_preserves_constant_coverage_and_symmetry() {
+        for half_width in [1.0 / 3.0, 4.0 / 3.0, 8.0 / 3.0] {
+            let mut output = vec![0.0; 17];
+            EffectSurfacePool::box_blur(&[1.0; 17], &mut output, 17, 1, half_width, true);
+            assert!(
+                (output[8] - 1.0).abs() < 1e-6,
+                "half width {half_width}: {}",
+                output[8]
+            );
+            let mut impulse = [0.0; 17];
+            impulse[8] = 1.0;
+            EffectSurfacePool::box_blur(&impulse, &mut output, 17, 1, half_width, true);
+            for offset in 1..8 {
+                assert!((output[8 - offset] - output[8 + offset]).abs() < 1e-6);
+            }
+        }
     }
 
     #[test]

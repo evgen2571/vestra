@@ -111,3 +111,18 @@ things. WGPU selection is not a hardware-acceleration claim.
 
 Use rustdoc for the complete signatures and trait bounds. This page records
 the stable navigation-level contract, not private renderer modules.
+
+## Output overrides and animation formats
+
+`RenderRequest` carries optional `resolution`, `frame_rate: FrameRate` and
+`quality: Quality` overrides. `preview: true` defaults to a 640 px longest side,
+at most 15 FPS and `Quality::Preview`; explicit fields take precedence.
+`PrepareOptions::with_resolution`, `with_frame_rate` and `with_quality` fix the
+same runtime settings for reusable preparation. They do not edit `Project`.
+A different aspect ratio fits centrally without stretching the composition.
+
+`PreparedVideoRenderRequest` and one-shot rendering select GIF and animated
+WebP from the destination extension, using the existing frame sink and atomic
+publication lifecycle. Both formats omit audio; visual audio analysis remains
+available. See the [format and timing contracts](../guides/python/rendering-and-preparation.md#export-gif-or-animated-webp)
+for palette, transparency, timing quantization and container limits.

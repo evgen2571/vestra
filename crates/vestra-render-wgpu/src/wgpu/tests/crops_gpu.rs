@@ -167,6 +167,7 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
     matte_frame.layers[1]
         .masks
         .push(vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
             input: vestra_core::plan::EvaluatedMaskInput::Source {
                 source: Box::new(video_source),
                 mode: crate::project::MaskCoverageMode::Alpha,

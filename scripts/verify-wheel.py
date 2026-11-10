@@ -77,6 +77,196 @@ def tone_correlation(
     return math.hypot(sine, cosine) / math.sqrt(energy * count)
 
 
+def decode_frames(
+    path: Path,
+    ffmpeg: str,
+    width: int,
+    height: int,
+    count: int,
+    fps: int | None = None,
+) -> bytes:
+    decoded = subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-i",
+            str(path),
+            "-map",
+            "0:v:0",
+            "-vf",
+            "showinfo",
+            "-vsync",
+            "0",
+            "-pix_fmt",
+            "rgba",
+            "-f",
+            "rawvideo",
+            "-",
+        ],
+        capture_output=True,
+        check=True,
+    )
+    assert len(decoded.stdout) == count * width * height * 4, path
+    dimensions = re.findall(rb"\bs:(\d+)x(\d+)\b", decoded.stderr)
+    assert dimensions == [(str(width).encode(), str(height).encode())] * count, path
+    timestamps = [
+        float(t) for t in re.findall(rb"pts_time:([-+\d.eE]+)", decoded.stderr)
+    ]
+    assert len(timestamps) == count and timestamps[0] == 0, path
+    if fps is not None:
+        assert all(
+            abs(actual - index / fps) < 0.00001
+            for index, actual in enumerate(timestamps)
+        ), (path, timestamps)
+    return decoded.stdout
+
+
+def webp_frames(
+    path: Path, width: int, height: int, count: int, fps: int
+) -> list[bytes]:
+    # Bundled FFmpeg can decode WebP stills but not every animated WebP container.
+    data = path.read_bytes()
+    assert data[:4] == b"RIFF" and data[8:12] == b"WEBP", path
+    assert int.from_bytes(data[4:8], "little") + 8 == len(data), path
+    frames = []
+    offset = 12
+    while offset < len(data):
+        assert offset + 8 <= len(data), path
+        tag, size = struct.unpack_from("<4sI", data, offset)
+        body = data[offset + 8 : offset + 8 + size]
+        assert len(body) == size, path
+        if tag == b"ANMF":
+            assert len(body) >= 16 and body[:6] == bytes(6), path
+            assert int.from_bytes(body[6:9], "little") + 1 == width, path
+            assert int.from_bytes(body[9:12], "little") + 1 == height, path
+            assert int.from_bytes(body[12:15], "little") == 1000 // fps, path
+            image = body[16:]
+            frames.append(b"RIFF" + struct.pack("<I", len(image) + 4) + b"WEBP" + image)
+        offset += 8 + size + size % 2
+    assert offset == len(data) and len(frames) == count, path
+    return frames
+
+
+def verify_output_apis(output_dir: Path, ffmpeg: str) -> None:
+    import vestra
+    from vestra.authoring import Quality
+
+    project = vestra.Project(size=(32, 16), fps=30, duration=2, background="#102030")
+    layer = project.root.add(vestra.Color("#ff8040"))
+    layer.opacity.keyframe(0, 0)
+    layer.opacity.keyframe(2, 1)
+    authored = project.snapshot().to_dict()
+    prepared = project.prepare(
+        backend="cpu", resolution=(16, 8), fps=vestra.FrameRate(4, 1)
+    )
+    frame = prepared.render_frame_number(4)
+    expected = frame.to_bytes()
+    assert (frame.width, frame.height, frame.frame_number) == (16, 8, 4)
+    for extension in ("png", "jpg", "webp"):
+        path = output_dir / f"still.{extension}"
+        frame.save(path)
+        pixels = decode_frames(path, ffmpeg, 16, 8, 1)
+        tolerance = 4 if extension == "jpg" else 0
+        assert max(abs(a - b) for a, b in zip(pixels, expected)) <= tolerance, path
+    direct = project.render_frame(
+        1, output_dir / "direct.png", backend="cpu", resolution=(16, 8), fps=4
+    )
+    assert direct.to_bytes() == expected
+    sequence = output_dir / "sequence"
+    assert (
+        project.render_frames(
+            directory=sequence,
+            times=[1.5, 0.5, 1.5],
+            backend="cpu",
+            resolution=(16, 8),
+            fps=(4, 1),
+        )
+        == 3
+    )
+    paths = sorted(sequence.glob("*.png"))
+    assert [path.name for path in paths] == [
+        f"frame_{index:06d}.png" for index in range(3)
+    ]
+    assert paths[0].read_bytes() == paths[2].read_bytes() != paths[1].read_bytes()
+    for path in paths:
+        decode_frames(path, ffmpeg, 16, 8, 1)
+
+    try:
+        import numpy as np
+    except ModuleNotFoundError as error:
+        if error.name != "numpy":
+            raise
+        print("Optional NumPy output check skipped: numpy is not installed")
+    else:
+        array = frame.to_numpy()
+        assert array.shape == (8, 16, 4) and array.dtype == np.uint8
+        assert array.strides == (64, 4, 1)
+        assert (
+            array.flags.owndata and array.flags.c_contiguous and array.flags.writeable
+        )
+        assert array.tobytes() == expected
+        array[:] = 0
+        prepared.render_frame_number(0)
+        assert frame.to_bytes() == expected and not array.any()
+        assert (
+            project.get_frame(1, backend="cpu", resolution=(16, 8), fps=4).tobytes()
+            == expected
+        )
+
+    selected = output_dir / "selected.mp4"
+    result = project.render(
+        selected,
+        start=0.5,
+        end=1.5,
+        preview=True,
+        resolution=(16, 8),
+        fps=(4, 1),
+        quality=Quality.HIGH,
+        backend="cpu",
+        show_progress=False,
+    )
+    assert (result.width, result.height, result.total_frames) == (16, 8, 4)
+    assert result.duration_seconds == 1
+    decoded = decode_frames(selected, ffmpeg, 16, 8, 4, 4)
+    references = b"".join(
+        prepared.render_frame_number(index).to_bytes() for index in range(2, 6)
+    )
+    assert max(abs(a - b) for a, b in zip(decoded, references)) <= 8
+    preview = output_dir / "preview.mp4"
+    result = project.render_preview(
+        preview, start=0.5, end=1.5, backend="cpu", show_progress=False
+    )
+    assert (result.width, result.height, result.total_frames) == (32, 16, 15)
+    decode_frames(preview, ffmpeg, 32, 16, 15, 15)
+
+    for extension in ("gif", "webp"):
+        animation = output_dir / f"animation.{extension}"
+        result = project.render(
+            animation,
+            start=0.5,
+            end=1.5,
+            resolution=(16, 8),
+            fps=4,
+            backend="cpu",
+            show_progress=False,
+        )
+        assert (result.width, result.height, result.total_frames) == (16, 8, 4)
+        assert result.duration_seconds == 1
+        if extension == "gif":
+            pixels = decode_frames(animation, ffmpeg, 16, 8, 4, 4)
+        else:
+            pixels = bytearray()
+            for index, image in enumerate(webp_frames(animation, 16, 8, 4, 4)):
+                still = output_dir / f"webp-frame-{index}.webp"
+                still.write_bytes(image)
+                pixels.extend(decode_frames(still, ffmpeg, 16, 8, 1))
+        assert max(abs(a - b) for a, b in zip(pixels, references)) <= 16, animation
+    assert project.snapshot().to_dict() == authored
+    print(
+        "Wheel output APIs passed: stills, sequences, range/overrides, preview, GIF, animated WebP"
+    )
+
+
 def verify(output_dir: Path, expected_version: str | None = None) -> None:
     import vestra
     from vestra import (
@@ -278,6 +468,7 @@ assert any(pixels[i:i+3] != bytes(3) for i in range(0, len(pixels), 4))
     assert early_440 > 0.5 and early_440 > early_880, (early_440, early_880)
     assert middle_440 > 0.05 and middle_880 > 0.05, (middle_440, middle_880)
     assert late_880 > 0.5 and late_880 > late_440, (late_880, late_440)
+    verify_output_apis(output_dir, ffmpeg)
 
     # Reload the published MP4 through the native libraries, then exercise raw
     # encoding and master analysis with the same no-system-tools environment.

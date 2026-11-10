@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -103,6 +104,42 @@ def test_benchmark_records_all_samples(tmp_path: Path) -> None:
 @pytest.mark.skipif(
     "VESTRA_BENCH_EXECUTABLE" not in os.environ, reason="requires release executable"
 )
+def test_preview_request_is_measured_and_changes_workload_identity(tmp_path: Path) -> None:
+    records = []
+    for preview in (False, True):
+        report = tmp_path / f"preview-{preview}.json"
+        environment = {
+            **os.environ,
+            "VESTRA_BENCH_BACKEND": "cpu",
+            "VESTRA_BENCH_SCENARIO": "short_sequence",
+            "VESTRA_BENCH_WIDTH": "64",
+            "VESTRA_BENCH_HEIGHT": "64",
+            "VESTRA_BENCH_WARMUPS": "0",
+            "VESTRA_BENCH_SAMPLES": "1",
+            "VESTRA_BENCH_QUALITY": "high",
+            "VESTRA_BENCH_REPORT": str(report),
+            "VESTRA_BENCH_VALIDATE": "1",
+        }
+        environment.pop("VESTRA_BENCH_PREVIEW", None)
+        if preview:
+            environment["VESTRA_BENCH_PREVIEW"] = "1"
+        subprocess.run([os.environ["VESTRA_BENCH_EXECUTABLE"]], env=environment, check=True)
+        record = json.loads(report.read_text())
+        assert record["runtime_request"] == {"preview": preview}
+        assert record["workload"]["output"]["quality"] == "high"
+        result = record["samples"][0]["result"]
+        assert result["render_backend"] == "cpu"
+        assert result["total_frames"] == (15 if preview else 24)
+        assert Fraction(result["frame_rate"]) == (15 if preview else 24)
+        assert record["validation"]["status"] == "passed"
+        records.append(record)
+    assert records[0]["workload"] == records[1]["workload"]
+    assert records[0]["workload_id"] != records[1]["workload_id"]
+
+
+@pytest.mark.skipif(
+    "VESTRA_BENCH_EXECUTABLE" not in os.environ, reason="requires release executable"
+)
 @pytest.mark.parametrize(
     "scenario,frames",
     [
@@ -112,6 +149,7 @@ def test_benchmark_records_all_samples(tmp_path: Path) -> None:
         ("particles", 30),
         ("production_edit", 360),
         ("video_heavy", 90),
+        ("static_colour", 300),
     ],
 )
 def test_modern_workloads_render(tmp_path: Path, scenario: str, frames: int) -> None:
@@ -143,6 +181,11 @@ def test_modern_workloads_render(tmp_path: Path, scenario: str, frames: int) -> 
         assert result["performance"]["video_actual_decodes"] > 0
     if scenario == "production_edit":
         assert result["audio_present"] is True
+    if scenario == "static_colour":
+        assert result["performance"]["static_visual_ffmpeg_fast_path_used"] is True
+        assert result["performance"]["static_visual_frame_cache_population_renders"] == 1
+        assert result["performance"]["encoder_video_input_mode"] == "looped_static_image"
+        assert result["performance"]["encoder_video_frames_pushed_from_rust"] == 0
 
 
 @pytest.mark.skipif(

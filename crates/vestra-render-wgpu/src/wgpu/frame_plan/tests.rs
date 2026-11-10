@@ -84,6 +84,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
     );
     frame.layers[0].masks = vec![
         vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
             input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 1 },
             operation: crate::project::MaskOperation::Intersect,
             invert: false,
@@ -92,6 +93,7 @@ fn mask_operations_are_planned_after_effects_in_declared_order() {
             transform,
         },
         vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
             input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 2 },
             operation: crate::project::MaskOperation::Replace,
             invert: false,
@@ -1553,6 +1555,7 @@ fn source_matte_restores_single_pass_effect_and_mask_into_effect_b() {
     frame.layers[0]
         .masks
         .push(vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
             input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 0 },
             operation: crate::project::MaskOperation::Intersect,
             invert: false,
@@ -1636,6 +1639,7 @@ fn sized_group_source_masks_render_into_the_owners_local_canvas() {
         },
     };
     let geometry_mask = vestra_core::plan::EvaluatedMask {
+        owner_transform: None,
         input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 0 },
         operation: crate::project::MaskOperation::Intersect,
         invert: false,
@@ -1650,6 +1654,7 @@ fn sized_group_source_masks_render_into_the_owners_local_canvas() {
     frame.layers[0]
         .masks
         .push(vestra_core::plan::EvaluatedMask {
+            owner_transform: None,
             input: vestra_core::plan::EvaluatedMaskInput::Source {
                 source: Box::new(EvaluatedSource::Group {
                     composition: vestra_core::plan::EvaluatedComposition {
@@ -1712,6 +1717,7 @@ fn feather_presents_owner_once_in_sized_contexts_and_retains_legacy_unsized_path
         frame.layers[0]
             .masks
             .push(vestra_core::plan::EvaluatedMask {
+                owner_transform: None,
                 input: vestra_core::plan::EvaluatedMaskInput::Shape { shape_index: 0 },
                 operation: crate::project::MaskOperation::Intersect,
                 invert: false,

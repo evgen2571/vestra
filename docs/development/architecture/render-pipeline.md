@@ -47,6 +47,27 @@ Group masks apply to the completed group result; child masks remain part of
 their child layers. The [effect pipeline](effect-pipeline.md#ordering-and-spaces)
 explains effect stages and coordinate spaces.
 
+## Runtime output settings
+
+One-shot rendering and reusable preparation accept runtime raster dimensions,
+FPS and encoder quality. FPS and quality are applied to an operation-local
+project copy before validation and compilation, preserving authored project data.
+The compiled canvas retains authored dimensions separately from output dimensions.
+Frame evaluation resolves local coordinates and motion against the authored
+canvas, then adapts presentation, masks and pixel-valued effect parameters before
+either backend rasterizes. Source rasters and video decoding keep their original
+resolution; composition and effect surfaces use the requested output density.
+
+Different aspect ratios add a centered fitted composition at output density.
+Global effects still run on the final canvas, including its background borders.
+Existing kernel/cell limits remain enforced; upscaling beyond a physical effect
+limit returns a diagnostic. The default-size path avoids this adaptation.
+
+GIF and animated WebP use the same ordered RGBA frame loop and media-owned sink
+as dynamic MP4. GIF uses per-frame palettes; WebP streams independent lossless
+frames into a bounded RIFF mux. Both omit encoded audio, retain required visual
+analysis, and use the normal temporary-output, abort and publication lifecycle.
+
 ## Completion, failure and reporting
 
 Writing frames, finalizing the temporary encoder output and publishing the

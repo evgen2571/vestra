@@ -70,6 +70,11 @@ pub(super) fn write(
         let source = asset["source"].as_str().expect("asset source");
         asset["source"] = command("git", &["hash-object", "--", source]).into();
     }
+    let preview = std::env::var_os("VESTRA_BENCH_PREVIEW").is_some();
+    let mut workload_id = serde_json::to_string(&workload).expect("workload identity");
+    if preview {
+        workload_id.push_str(";preview=true");
+    }
     let environment_variables: std::collections::BTreeMap<_, _> = std::env::vars()
         .filter(|(key, _)| {
             key.starts_with("VESTRA_") && !key.starts_with("VESTRA_BENCH_")
@@ -86,8 +91,9 @@ pub(super) fn write(
     let record = json!({
         "benchmark_schema_version": 1,
         "scenario": scenario,
-        "workload_id": serde_json::to_string(&workload).expect("workload identity"),
+        "workload_id": workload_id,
         "workload": workload,
+        "runtime_request": {"preview": preview},
         "warmups": warmups,
         "cache_scope": "new editor and preparation per sample; OS page cache uncontrolled",
         "command": std::env::args().collect::<Vec<_>>(),

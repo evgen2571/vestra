@@ -81,12 +81,20 @@ const fn gcd(mut left: u64, mut right: u64) -> u64 {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PrepareOptions {
     backend: RenderBackendPreference,
+    resolution: Option<(u32, u32)>,
+    frame_rate: Option<FrameRate>,
+    quality: Option<crate::Quality>,
 }
 
 impl PrepareOptions {
     #[must_use]
     pub const fn new(backend: RenderBackendPreference) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            resolution: None,
+            frame_rate: None,
+            quality: None,
+        }
     }
     #[must_use]
     pub const fn backend(&self) -> RenderBackendPreference {
@@ -95,6 +103,34 @@ impl PrepareOptions {
     #[must_use]
     pub const fn with_backend(mut self, backend: RenderBackendPreference) -> Self {
         self.backend = backend;
+        self
+    }
+    #[must_use]
+    pub const fn resolution(&self) -> Option<(u32, u32)> {
+        self.resolution
+    }
+    #[must_use]
+    pub const fn frame_rate(&self) -> Option<FrameRate> {
+        self.frame_rate
+    }
+    #[must_use]
+    pub const fn quality(&self) -> Option<crate::Quality> {
+        self.quality
+    }
+    /// Sets output dimensions while preserving the authored composition geometry.
+    #[must_use]
+    pub const fn with_resolution(mut self, width: u32, height: u32) -> Self {
+        self.resolution = Some((width, height));
+        self
+    }
+    #[must_use]
+    pub const fn with_frame_rate(mut self, frame_rate: FrameRate) -> Self {
+        self.frame_rate = Some(frame_rate);
+        self
+    }
+    #[must_use]
+    pub const fn with_quality(mut self, quality: crate::Quality) -> Self {
+        self.quality = Some(quality);
         self
     }
 }
@@ -648,6 +684,7 @@ impl PreparedProject {
             ));
         }
         let render_request = application::RenderRequest {
+            resolution: None,
             frame_range: (request.start != Duration::ZERO || request.end.is_some())
                 .then_some(frame_range),
             output_override: Some(request.output),

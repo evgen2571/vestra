@@ -133,21 +133,35 @@ snapshot.save(path)
 ## Preparation and rendering
 
 ```text title="High-level rendering signatures"
-project.prepare(*, backend="auto") -> PreparedProject
+project.prepare(*, backend="auto", resolution=None, fps=None, quality=None) -> PreparedProject
 project.render_frame(seconds=None, output=None, *, frame_number=None,
-                     backend="auto", overwrite=False) -> Frame
-project.get_frame(seconds=None, *, frame_number=None, backend="auto") -> NDArray[uint8]
+                     backend="auto", resolution=None, fps=None, overwrite=False) -> Frame
+project.get_frame(seconds=None, *, frame_number=None, backend="auto",
+                  resolution=None, fps=None) -> NDArray[uint8]
 project.render_frames(*, directory, times=None, indices=None, start=None,
-                      end=None, format="png", backend="auto", overwrite=False) -> int
+                      end=None, format="png", backend="auto", resolution=None, fps=None,
+                      overwrite=False) -> int
 project.render(output, *, backend="auto", overwrite=False, preview=False,
-               start=0, end=None, show_progress=True, on_progress=None,
+               resolution=None, fps=None, quality=None, start=0, end=None,
+               show_progress=True, on_progress=None,
                cancellation=None) -> RenderResult
+project.render_preview(output, **render_options) -> RenderResult
 ```
 
 `render_frame()` prepares on every call. Reuse `prepare()` for repeated frames or
 video renders. Backend preferences are `"auto"`, `"cpu"`, `"wgpu"` or
 `BackendPreference` values; see [backends](backends.md). Existing outputs require
 `overwrite=True`.
+
+`render()` selects MP4, GIF or animated WebP by extension. The preview preset
+uses a 640 px longest side, at most 15 FPS, and `Quality.PREVIEW`; explicit
+`resolution`, `fps`, and `quality` override the respective defaults. Dimensions
+are even integers in `2..=8192`, within configured resource limits, and preserve
+proportions with a centered fit. FPS accepts
+a positive integer, rational tuple, or `FrameRate`; quality is an authoring
+`Quality` enum. Prepared state fixes these settings without changing the project.
+See [overrides and previews](../guides/python/rendering-and-preparation.md#render-a-preview-or-change-output-settings)
+and [animation format contracts](../guides/python/rendering-and-preparation.md#export-gif-or-animated-webp).
 
 Video `start` and `end` select original project sample times in `[start, end)`.
 Both boundaries round up at rational FPS; an omitted end uses project duration.
@@ -183,8 +197,8 @@ editor.render(project, request, *, show_progress=True, on_progress=None, cancell
 
 | Options/request type | Construction and purpose |
 | --- | --- |
-| `PrepareOptions` | `PrepareOptions(*, backend=None)` selects preparation backend. |
-| `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False, start=None, end=None)` for one-shot `Editor.render`. |
+| `PrepareOptions` | `PrepareOptions(*, backend=None, resolution=None, fps=None, quality=None)` selects backend and runtime overrides. Native FPS is `FrameRate`; quality is `"preview"`, `"balanced"` or `"high"`. |
+| `RenderRequest` | `RenderRequest(output, *, backend=None, overwrite=False, preview=False, start=None, end=None, resolution=None, fps=None, quality=None)` for one-shot `Editor.render`. |
 | `PreparedVideoRenderRequest` | `PreparedVideoRenderRequest(output, *, overwrite=False, start=None, end=None)` for prepared video rendering. |
 
 Native request `start=None` means zero. Both request types expose read-only

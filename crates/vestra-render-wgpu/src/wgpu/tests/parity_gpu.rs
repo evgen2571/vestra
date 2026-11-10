@@ -357,6 +357,8 @@ fn gpu_effect_catalogue_parameter_counts_match_prepared_capacity() {
     // partial-alpha, sharp-edge, and nonuniform-colour source pixels.
     plan.canvas.width = 173;
     plan.canvas.height = 129;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     // Preparation allocates every reusable working role the cases below use.
     plan.layers[0].effects = vec![TimedEffect {
         start: 0,
@@ -394,6 +396,8 @@ fn gpu_spectrum2d_layout_and_style_parameter_counts_match_capacity() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 32;
     plan.canvas.height = 32;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     spectrum_style_cases(|frame, _, _| {
         let _ = plan_for_evaluated_effect_case(&plan, frame);
@@ -413,6 +417,8 @@ fn gpu_spectrum2d_brightness_parameter_count_matches_capacity() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
     let brightness = EvaluatedEffect::Brightness { amount: 0.12 };
@@ -434,6 +440,8 @@ fn gpu_spectrum2d_brightness_then_bloom_parameter_count_matches_capacity() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
     let brightness = EvaluatedEffect::Brightness { amount: 0.12 };
@@ -462,6 +470,8 @@ fn gpu_spectrum2d_bloom_parameter_count_matches_capacity() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
     frame.layers[0].effects = vec![EvaluatedEffect::Bloom {

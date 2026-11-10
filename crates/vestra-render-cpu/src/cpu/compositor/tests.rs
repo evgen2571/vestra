@@ -214,6 +214,7 @@ fn late_effect_mask_and_feather_activation_matches_fresh_frames_and_keeps_owned_
         }
         if phase >= 2 {
             owner.masks = vec![vestra_core::plan::EvaluatedMask {
+                owner_transform: None,
                 input: EvaluatedMaskInput::Source {
                     source: Box::new(EvaluatedSource::SolidColor {
                         colour: [255, 255, 255, 128],
@@ -836,6 +837,7 @@ fn sized_group_owned_mask_sources_preserve_local_extent_and_previous_coverage() 
             child.effects = vec![EvaluatedEffect::GaussianBlur { radius: 0.0 }];
             let source = sized_group(20 + index, size, vec![child]).source;
             vestra_core::plan::EvaluatedMask {
+                owner_transform: None,
                 input: EvaluatedMaskInput::Source {
                     source: Box::new(source),
                     mode: crate::project::MaskCoverageMode::Alpha,

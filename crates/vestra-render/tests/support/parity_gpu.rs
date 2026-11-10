@@ -1009,6 +1009,8 @@ fn gpu_spectrum2d_matches_cpu_for_fractional_zero_gap_bars() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let frame = spectrum_frame(vec![1.0, 1.0, 1.0], 0.0);
@@ -1046,6 +1048,8 @@ fn gpu_spectrum2d_brightness_matches_cpu_without_double_application() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
@@ -1068,6 +1072,8 @@ fn gpu_spectrum2d_brightness_then_bloom_matches_cpu() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
@@ -1103,6 +1109,8 @@ fn gpu_spectrum2d_frames_keep_distinct_in_flight_band_data() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 10;
     plan.canvas.height = 4;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     let frames = [
@@ -1142,6 +1150,8 @@ fn gpu_spectrum2d_layout_and_style_cases_match_cpu() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 32;
     plan.canvas.height = 32;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
     spectrum_style_cases(|frame, name, tolerance| {
@@ -1161,6 +1171,8 @@ fn gpu_spectrum2d_uses_the_existing_bloom_pipeline() {
     let mut base_plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     base_plan.canvas.width = 10;
     base_plan.canvas.height = 4;
+    base_plan.canvas.logical_width = base_plan.canvas.width;
+    base_plan.canvas.logical_height = base_plan.canvas.height;
     base_plan.compilation.effect_pass_count = 0;
     let mut frame = spectrum_frame(vec![1.0, 0.0, 0.0], 0.0);
     let without_plan = base_plan.clone();
@@ -1365,6 +1377,8 @@ fn gpu_matches_cpu_for_every_blend_mode_and_alpha_case_on_the_rgba_fixture() {
     let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     plan.canvas.width = 173;
     plan.canvas.height = 129;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     let mut upper = plan.layers[0].clone();
     upper.id = "overlapping-rgba-layer".to_owned();
     upper.opacity = vestra_core::plan::CompiledScalarProperty::authored(Track::new(1.0));
@@ -1807,6 +1821,8 @@ fn gpu_effect_catalogue_matches_cpu_on_the_rgba_fixture_when_an_adapter_is_avail
     // partial-alpha, sharp-edge, and nonuniform-colour source pixels.
     plan.canvas.width = 173;
     plan.canvas.height = 129;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     // Preparation allocates every reusable working role the cases below use.
     plan.layers[0].effects = vec![TimedEffect {
         start: 0,

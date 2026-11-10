@@ -46,8 +46,9 @@
               # libraries remain available for native diagnostics.
               PKG_CONFIG_PATH = lib.makeSearchPath "lib/pkgconfig" [ ffmpegDev ];
               LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-              LD_LIBRARY_PATH = lib.makeLibraryPath ([ ffmpegLib ]
-                ++ lib.optionals comparison [ pkgs.stdenv.cc.cc.lib pkgs.zlib pkgs.vulkan-loader pkgs.libglvnd ]);
+              # PyPI NumPy wheels also need the C++ runtime in Nix Python.
+              LD_LIBRARY_PATH = lib.makeLibraryPath ([ ffmpegLib pkgs.stdenv.cc.cc.lib ]
+                ++ lib.optionals comparison [ pkgs.zlib pkgs.vulkan-loader pkgs.libglvnd ]);
 
               shellHook = lib.optionalString softwareWgpu ''
                 export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.vulkan-loader pkgs.mesa ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

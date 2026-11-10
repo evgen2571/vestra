@@ -76,6 +76,22 @@ fn render_with_tolerance(
     compare_gpu: bool,
     tolerance: u8,
 ) -> Vec<RgbaImage> {
+    render_with_options(
+        project,
+        times,
+        compare_gpu,
+        tolerance,
+        CompileOptions::default(),
+    )
+}
+
+fn render_with_options(
+    project: Value,
+    times: &[u128],
+    compare_gpu: bool,
+    tolerance: u8,
+    options: CompileOptions,
+) -> Vec<RgbaImage> {
     let project: Project = serde_json::from_value(project).expect("sized-group project parses");
     let limits = ResourceLimits::default();
     let report = validate(&project, limits);
@@ -103,7 +119,7 @@ fn render_with_tolerance(
             90,
             &[],
         ),
-        CompileOptions::default(),
+        options,
     )
     .expect("sized-group plan compiles");
     let decoded = DecodedAssets::build(&plan).expect("sized-group assets decode");
@@ -153,6 +169,9 @@ fn render_with_tolerance(
         })
         .collect()
 }
+
+#[path = "resolution.rs"]
+mod resolution;
 
 fn golden(width: u32, height: u32, regions: &[(u32, u32, u32, u32, [u8; 4])]) -> RgbaImage {
     let mut expected = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 255]));

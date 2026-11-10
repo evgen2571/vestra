@@ -158,7 +158,8 @@ pub(in crate::wgpu) fn encode_parameters(
                     parameters::mask(
                         frame,
                         mask,
-                        plan.layers[*layer_index].transform,
+                        mask.owner_transform
+                            .unwrap_or(plan.layers[*layer_index].transform),
                         mask_extent(&plan.layers[*layer_index], (frame.width, frame.height)),
                         true,
                     )
@@ -374,7 +375,9 @@ pub(in crate::wgpu) fn encode_parameters(
                         crate::domain::Point { x: 0.5, y: 0.5 },
                     )
                 } else {
-                    plan.layers[*layer_index].transform
+                    plan.layers[*layer_index].masks[*mask_index]
+                        .owner_transform
+                        .unwrap_or(plan.layers[*layer_index].transform)
                 };
                 let extent = if presented {
                     (frame.width, frame.height)

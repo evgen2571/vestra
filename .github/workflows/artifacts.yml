@@ -162,7 +162,8 @@ jobs:
           python -m venv "$RUNNER_TEMP/wheel-venv"
           python="$RUNNER_TEMP/wheel-venv/bin/python"
           if [[ "$RUNNER_OS" == Windows ]]; then python="$RUNNER_TEMP/wheel-venv/Scripts/python.exe"; fi
-          "$python" -m pip install --only-binary=:all: dist/*.whl
+          wheel=(dist/*.whl)
+          "$python" -m pip install --only-binary=:all: "${wheel[0]}[numpy]"
           verifier="$PWD/scripts/verify-wheel.py"
           cd "$RUNNER_TEMP"
           "$python" "$verifier" --expected-version "$VERSION"

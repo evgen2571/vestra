@@ -91,6 +91,8 @@ fn cpu_work_elimination_benchmark() {
     let mut plan = fixture("examples/projects/animation-effects.json");
     plan.canvas.width = 1280;
     plan.canvas.height = 720;
+    plan.canvas.logical_width = plan.canvas.width;
+    plan.canvas.logical_height = plan.canvas.height;
     let image = EvaluatedLayer {
         compiled_layer_index: 40,
         visible: true,

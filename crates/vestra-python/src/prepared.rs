@@ -7,7 +7,7 @@ use std::{
 use pyo3::{
     exceptions::{PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyBool, PyBytes, PyInt, PyModule},
+    types::{PyAny, PyBool, PyBytes, PyInt, PyModule, PyTuple},
 };
 use vestra::{
     AdapterDeviceType as NativeAdapterDeviceType, AdapterInfo as NativeAdapterInfo,
@@ -37,18 +37,84 @@ pub(crate) struct PyPrepareOptions {
 #[pymethods]
 impl PyPrepareOptions {
     #[new]
-    #[pyo3(signature = (*, backend = None))]
-    fn new(backend: Option<&PyBackendPreference>) -> Self {
+    #[pyo3(signature = (*, backend = None, resolution = None, fps = None, quality = None))]
+    fn new(
+        backend: Option<&PyBackendPreference>,
+        resolution: Option<&Bound<'_, PyAny>>,
+        fps: Option<&PyFrameRate>,
+        quality: Option<&str>,
+    ) -> PyResult<Self> {
         let backend = backend.copied().unwrap_or(PyBackendPreference::Auto);
-        Self {
-            inner: NativePrepareOptions::new(backend.native()),
-            backend,
+        let mut inner = NativePrepareOptions::new(backend.native());
+        if let Some((width, height)) = resolution.map(resolution_from_python).transpose()? {
+            inner = inner.with_resolution(width, height);
         }
+        if let Some(rate) = fps {
+            inner = inner.with_frame_rate(rate.inner);
+        }
+        if let Some(quality) = quality.map(quality_from_python).transpose()? {
+            inner = inner.with_quality(quality);
+        }
+        Ok(Self { inner, backend })
     }
 
     #[getter]
     fn backend(&self) -> PyBackendPreference {
         self.backend
+    }
+    #[getter]
+    fn resolution(&self) -> Option<(u32, u32)> {
+        self.inner.resolution()
+    }
+    #[getter]
+    fn fps(&self) -> Option<PyFrameRate> {
+        self.inner.frame_rate().map(Into::into)
+    }
+    #[getter]
+    fn quality(&self) -> Option<&'static str> {
+        self.inner.quality().map(quality_name)
+    }
+}
+
+pub(crate) fn resolution_from_python(value: &Bound<'_, PyAny>) -> PyResult<(u32, u32)> {
+    let tuple = value
+        .cast::<PyTuple>()
+        .map_err(|_| PyTypeError::new_err("resolution must be a (width, height) tuple"))?;
+    if tuple.len() != 2 {
+        return Err(PyTypeError::new_err(
+            "resolution must be a (width, height) tuple",
+        ));
+    }
+    let mut size = [0; 2];
+    for (index, name) in ["width", "height"].into_iter().enumerate() {
+        size[index] = u32::try_from(u64_from_python(&tuple.get_item(index)?, name)?)
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "resolution {name} must be between 1 and 4294967295"
+                ))
+            })?;
+    }
+    Ok((size[0], size[1]))
+}
+
+pub(crate) fn quality_from_python(value: &str) -> PyResult<vestra::Quality> {
+    match value {
+        "preview" => Ok(vestra::Quality::Preview),
+        "balanced" => Ok(vestra::Quality::Balanced),
+        "high" => Ok(vestra::Quality::High),
+        _ => Err(PyValueError::new_err(
+            "quality must be preview, balanced or high",
+        )),
+    }
+}
+
+pub(crate) const fn quality_name(value: vestra::Quality) -> &'static str {
+    match value {
+        vestra::Quality::Preview => "preview",
+        vestra::Quality::Balanced => "balanced",
+        vestra::Quality::High => "high",
     }
 }
 
@@ -299,7 +365,7 @@ impl From<&NativeAdapterInfo> for PyAdapterInfo {
 )]
 #[derive(Clone, Copy)]
 pub(crate) struct PyFrameRate {
-    inner: NativeFrameRate,
+    pub(crate) inner: NativeFrameRate,
 }
 #[pymethods]
 impl PyFrameRate {

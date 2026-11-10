@@ -69,6 +69,7 @@ fn test_sink(script: &str) -> FfmpegSink {
         filtergraph_file: None,
         static_image: None,
         static_frame_count: None,
+        animation_writer: None,
     }
 }
 
@@ -763,6 +764,7 @@ fn finished_sink_rejects_further_writes_and_finishes() {
         filtergraph_file: None,
         static_image: None,
         static_frame_count: None,
+        animation_writer: None,
     };
     assert!(sink.write_frame(0, &[0; 4]).is_err());
     assert!(sink.finish().is_err());

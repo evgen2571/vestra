@@ -48,7 +48,7 @@ pub use vestra_core::effect_definition::{
 pub use vestra_core::plan_audio::MASTER_AUDIO_NYQUIST_HZ;
 pub use vestra_core::project::{
     AudioEffect, AudioFadeCurve, AudioGainInterpolation, Mask, MaskCoverageMode, MaskInput,
-    MaskOperation,
+    MaskOperation, Quality,
 };
 pub use vestra_core::{Category, Diagnostic, Severity};
 #[cfg(feature = "wgpu")]

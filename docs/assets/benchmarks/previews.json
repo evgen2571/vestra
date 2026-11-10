@@ -1,0 +1,701 @@
+{
+  "revision": "5cd40e8c7b50da343b17f781c4bdd6f78055d6c4",
+  "working_tree_modified": true,
+  "executable_sha256": "f9cdaa243f62b2775147356f347de0355b45546deeda35f7d0292d02470ab75e",
+  "suite_version": 2,
+  "inputs": {
+    "assets/footage/forest.mp4": "f9e5f8aff8e1dcc68b74ad0f9bd963377aa70d1d748346e3406c9cdef97bde9d",
+    "assets/footage/tear.mp4": "3df3ea5087e41d542f4de7274107d3e82628d1bd62e2546f9c29f7c6309adef0",
+    "assets/footage/valley.mp4": "5eaba1e79111975faa3738bb1aa70b95c907ac5b354f893935852a1e9ff63ace"
+  },
+  "sources": {
+    "assets/footage/manifest.json": "dc678e106cc09251235dfad9a5fa244c7837edd88feebfc72cd593b217b6a4f6",
+    "benchmarks/collector/fixtures.py": "a294f7a8c0a938980e98142b9d352d38f0ee26b7172a641641c0e8fab476817a",
+    "benchmarks/collector/sustained.py": "8c99da555c4122fa62ab82aa2505343a39afddf99466eafd3611e06e21054e24",
+    "benchmarks/comparisons/moviepy/workloads.py": "e1ef6e7f2f7ea1806cd23dfa2bc5590a5529a13ab3395830469da6c0e75d8b1c",
+    "benchmarks/projects/nested-groups.json": "09b6607a64ba7aed6d7a10573ef351d9602df0f2bd93438f3dd62f1b539a7fa1",
+    "benchmarks/projects/production-edit.json": "b902ab10206e20bc9f0f9b38637f37ed055e7436489cc159b520a1a5d6aaa4bf",
+    "benchmarks/projects/static-colour.json": "374363bbe0a478fd5d414d34787a490e10bf5243dd8c82cbaf5afdded1e95b35",
+    "benchmarks/suites.json": "651909f4023fef5e9a4a8d62824491f79959a52a2545da881186858be26b1d86",
+    "crates/vestra/benches/animation_effects.rs": "1966a632dd1678a9571c25b9bb27ed5156f725e192e6f0b4491dfa8d0eed3926",
+    "crates/vestra/benches/support/production.rs": "aee282f59bbe2bca341d3f1ef49789b8f823015b32b2139917bd86ad04e166e6",
+    "crates/vestra/benches/support/record.rs": "ceb9f35aaed1791bde7d445f4c6b77e0b974fc12b520901c5e418530917f0360",
+    "examples/compositing/blend-modes.json": "695ebb08bbb156d4d43ea8034c11e5746384bc7c0c7c4c489eed9932d65ea3b6",
+    "examples/compositing/global-post-effects.json": "6c089e17927d340e60364c9c5860d0e7dbd9c2a0284cc2c4f3b9363f32419c6a",
+    "examples/effects/ascii.json": "88c56943d2e0b5ad4a81ff9787f2ccec7a7da5de6686357cb8a3af2a634f4407",
+    "examples/effects/camera-shake.json": "746c54946159c0262099536975d3c173b0bb6f27acebb6eea95830dbc0266acf",
+    "examples/effects/chromatic-aberration.json": "b497aab7160f516d7f9f2135dddf358f9bcb7376b5b73eb9fb841dedddfc5d29",
+    "examples/effects/color-adjust.json": "2acc33cea6fc35f74a24d0d33c1a4c974d2004eb5259146af86001260b6efe26",
+    "examples/effects/crt.json": "8345b661c715e4d9552a2109982d303d987db062e7c3567c6f94be21b29868f6",
+    "examples/effects/directional-blur.json": "c09f6986e4dafc606ac7764f652362f53e2beba8cdc48eebea9a7a0985aa0c27",
+    "examples/effects/gaussian-blur.json": "4ff3ef60a0129867a66471d355e3823d3c0f19106945ab2944383c86f738212f",
+    "examples/effects/glow.json": "2908bca09bb684dbb487edca2f8a1608d83f3590ecc7ef8b4db3fcd65dc702ce",
+    "examples/effects/halftone.json": "fd4b0fdad6a39d690c83456510d8f7c66694a3fb83547480dd748288b94c07e3",
+    "examples/effects/motion-blur.json": "b73c526f515815bcddd84def70ea83c08811bcc06445e746574525efa0918838",
+    "examples/effects/ordered-dither.json": "2dfbd317d6e3be2492741b0672496994ea1c76504eb7ac66ab956e0da6799aa7",
+    "examples/effects/palette-map.json": "f12beea040b97f02a33641c17226e4a33880d1e2d39d56232e1ba439851a8fdb",
+    "examples/effects/pixel-sort-horizontal.json": "d9a1e5f8304be57d6f6ddc1cb30e6ca4b7bda421e85e206daed89cd52c3ee5ea",
+    "examples/effects/pixel-sort-vertical.json": "d39d4d9d4252d5f5500aad4eb94e72b2612f539072119454d874c660c9fc32bf",
+    "examples/effects/pseudo-ascii.json": "7332a3ab9a8dab1051240441078f755b993f53e4caa9072765337ec67205218b",
+    "examples/effects/sharpen.json": "8eb43cc5505c2d13147ee5964827647f02e489b665f42523dd1ec94cf0a372f9",
+    "examples/effects/vignette.json": "f3ffa72e48600e598f97fd33831b6cc5f0195efc9ea40ecc6ff1a8d8b68c4655",
+    "examples/effects/zoom-blur.json": "6879ef39649b9fb1264ebe101ea7223999185c21323fae6bde77022119b7c2c0",
+    "examples/particles/audio-appearance.json": "9e74e95edddd7244cbe1efda282fde01323965105af696146e3f914de89c6968",
+    "examples/particles/basic-point.json": "5a7f6d0347246696c4fa829e849406f8d187ea2d7727797cd9552056053215bd",
+    "examples/particles/expanded-motion.json": "4b84b28f6fd3990b87e7cd23c0cc54175d4d3bbb89644ac9c67c58b906f92dd2",
+    "examples/particles/lifetime-styling.json": "bfbc93b19cc976aed1edcd53369bc1952cede1bbad671a10bf5e6ca17895cb49",
+    "examples/particles/sparks-bloom.json": "8fd02007cfea0bd8bd07889df056eedd302aac02b75c743afac865876b486a5e",
+    "examples/projects/animation-effects.json": "bacbd2f597e7ee95decb2543fc97a119a929d4dd67f3fc1ec29c4db4eada96b5",
+    "examples/projects/audio-equal-power-crossfade.json": "0dde2dceae92625dc6da1f1dc84bf7834865b0aabbc9fb3e06b62c1c7f6493ae",
+    "examples/projects/audio-gain-automation.json": "35d9db92a3793cbdb97d0181493ac2bd79d06fe577b8d740402dbc6bb0b4c0e3",
+    "examples/projects/audio-static-mix.json": "f39891f3d055d4d4171b9271a9bd5a6523fd40c9856a04a9229e7f8fd0c08828",
+    "examples/projects/effects-showcase.json": "b63a87a0cfaf38896dd21a24d48310b5ad0ba0b7d14353de6542a7bd0dcdb2fe",
+    "examples/projects/geometric-masks.json": "4ee8cb8e6c9c238b3c090f6c84619185ccc961a26602985995c8549873f5647f",
+    "examples/projects/image-masks.json": "fa408029a1e792df02d93195f6051c2db0a592f24dc5718e070614d21608ae2d",
+    "examples/projects/readme-animation.json": "ebde6b937b73a69006b3108dc290799a47c74fcf8f96c7ec4ce6b80c6af7d47e",
+    "examples/projects/track-matte.json": "198e2061469d2fd9904a140dd8118cbe00ab26bf8432d3b973315b1623886142"
+  },
+  "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "workloads": {
+    "single_video": {
+      "suites": [
+        "smoke",
+        "canonical",
+        "community-v2"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "927ede95ef298ca7f895edfe4357fdb2751e90f04e2403484419aa720174c509",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "single_video.mp4": "5eabf7b2042a69a5a55c2d5850758f936f43c42c8e9d92927024132fe15240eb",
+        "single_video.webp": "af97a62f7837968d59f55f8eef59b69bc97d00d174181fe41d0d20637c07e5a0"
+      }
+    },
+    "mixed_dynamic": {
+      "suites": [
+        "smoke",
+        "canonical",
+        "community-v2"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "312582d7c6294beb647f69b23bccfb4999433cef77e1c90e43dc3ecb51cdbfeb",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "mixed_dynamic.mp4": "72e1c7c287860aa94daabd091093d7f0686d3009b84e6a0395c04bc753f662c5",
+        "mixed_dynamic.webp": "f7c67f3fd9486d76ebdab1b296a097fad829bf7232ef9704fc381d89bf0a8b6f"
+      }
+    },
+    "video_heavy": {
+      "suites": [
+        "smoke",
+        "canonical",
+        "community-v2"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "6549e5d9886c73d63d473decbce2407159efd84095ee7615436406664337ca71",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "video_heavy.mp4": "eec62d50cb49696084e9635ae2edff3b263e3b3f5044d0e8c9280538e8857426",
+        "video_heavy.webp": "2e1b5b6b7aa2bbbaad00dc31755103cc8d5a0e6d79c8add138b7d83785b47469"
+      }
+    },
+    "combined": {
+      "suites": [
+        "smoke",
+        "canonical"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 6.0,
+      "backend": "cpu",
+      "original_sha256": "cbac96ab94698646fdad384578bd02c4b33f249a40bbe6383056e7c6ad7b0216",
+      "poster_seconds": 3.5999999999999996,
+      "preview_seconds": 6.0,
+      "delivery_sha256": {
+        "combined.mp4": "9c70fa286c712ca5cd50ab260b972d89682e32f5cc2ec924e48afd18e309c83a",
+        "combined.webp": "1b30f1be13da16b2c0e3a6e897f5ed3fb051d5d2f3bbf8d3d394133bcd6f576a"
+      }
+    },
+    "masks": {
+      "suites": [
+        "smoke",
+        "canonical",
+        "community-v2"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 1.0,
+      "backend": "cpu",
+      "original_sha256": "e5ca73d0dcd6faed3a4637a98e25aaaf7174e6163f01759ed2fa3493a39f42ae",
+      "poster_seconds": 0.6,
+      "preview_seconds": 1.0,
+      "delivery_sha256": {
+        "masks.mp4": "d1f13e5e710dd7a1f70358e51af92b49f52d6b94d39f0edde1ba2333f2ad68bc",
+        "masks.webp": "634e8fa6cc8d5c80f02575492bb3f417cdb69140571bdbb25963513c5e593bc6"
+      }
+    },
+    "mattes": {
+      "suites": [
+        "smoke",
+        "canonical",
+        "community-v2"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 1.0,
+      "backend": "cpu",
+      "original_sha256": "0dd67ec3a67838e0f2760431c4181e9186768492fb730a43dcb14fbb8c5e5439",
+      "poster_seconds": 0.6,
+      "preview_seconds": 1.0,
+      "delivery_sha256": {
+        "mattes.mp4": "2346621cfe5a4a001f518b36f71b59651230785333611ed68f07ccfce639444c",
+        "mattes.webp": "4ea4828379bd452c0388c45820b77ab306f58bc4957566eba13e0a46f538be9d"
+      }
+    },
+    "nested_groups": {
+      "suites": [
+        "smoke",
+        "canonical"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "2e8c2e7202d0c7b851fc8ec0c62a1331431f71202e3c2a9a4824e171b786a186",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "nested_groups.mp4": "0b2302e997134905270f866a3ac8933a5d32bdf3d408590af156824a3288b9ab",
+        "nested_groups.webp": "b5f17ecca0b0434f12d2d32727508ddbe4e08adc839b2755e09aa67b20729e3f"
+      }
+    },
+    "particles": {
+      "suites": [
+        "smoke",
+        "canonical"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 1.0,
+      "backend": "cpu",
+      "original_sha256": "da728388bceb8497550ec8450af5f49f1b760b5b1c2a7ee184b5a7f4c25e68b4",
+      "poster_seconds": 0.15,
+      "preview_seconds": 1.0,
+      "delivery_sha256": {
+        "particles.mp4": "41c6617fc355741402703136190973850e4f5b1ebe4855873edee0931cd34281",
+        "particles.webp": "00e113185ac4de2c2a96a1870db38376a67212c178877193b58b100615a2b6c2"
+      }
+    },
+    "blend_modes": {
+      "suites": [
+        "smoke",
+        "canonical"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 5.0,
+      "backend": "cpu",
+      "original_sha256": "e6913a103218148b5f46e8b17fda287b84f9fd000baf2bf6485dc7455e25b8e0",
+      "poster_seconds": 3.0,
+      "preview_seconds": 5.0,
+      "delivery_sha256": {
+        "blend_modes.mp4": "bb5f35ddd1993dda3b1687c01a9d3a3b7e773ed0f4f2e6669239a295492f29b8",
+        "blend_modes.webp": "5d4ab340c91d9f22cb34d8f324e4879b2acc860b526f63657de00de46807dfd5"
+      }
+    },
+    "production_edit": {
+      "suites": [
+        "smoke",
+        "canonical",
+        "community-v2"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1280,
+      "height": 720,
+      "duration": 12.0,
+      "backend": "cpu",
+      "original_sha256": "8b3e3e3cb10eeaf296cb35a28624899620540394cbeb4bfefbeb139d502377f3",
+      "poster_seconds": 6,
+      "preview_seconds": 12.0,
+      "delivery_sha256": {
+        "production_edit.mp4": "5c59df8125382b40c243e7f86aeb3faec6b718195a37e9344ab3a1649ddeb8a3",
+        "production_edit.webp": "be7f3ed2782b6df5fcc3a4b86d8381ae3dd593db5e1fa8e60b5b43e4287b1b65"
+      }
+    },
+    "opaque_video": {
+      "suites": [
+        "row-copy-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 10.0,
+      "backend": "cpu",
+      "original_sha256": "e823cd0dc4875b770179d5fccdd3a1c94a41a989068e7ee94a25e6cb81c1fdf9",
+      "poster_seconds": 6.0,
+      "preview_seconds": 10.0,
+      "delivery_sha256": {
+        "opaque_video.mp4": "f93906ce7aa9624c537c8a11fb218ac87740cc64c8af8a8b7b2cc70a0cc020a7",
+        "opaque_video.webp": "d22f51695f0aa2df3ba7e53c0660f62bb73cff56184d1f904860676db568a448"
+      }
+    },
+    "ineligible_video": {
+      "suites": [
+        "row-copy-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 10.0,
+      "backend": "cpu",
+      "original_sha256": "2298e49c000fe5dd0e0b96528c6622b59036ad2e98091713719f147bf7ce5131",
+      "poster_seconds": 6.0,
+      "preview_seconds": 10.0,
+      "delivery_sha256": {
+        "ineligible_video.mp4": "6725e200e593d84f557020b0dcf32a0d760825b1c02cf780098d1930f0266721",
+        "ineligible_video.webp": "97dc0ad93715a793fe60deb2dc62546fd255187448f5ed009f2dbdf1bb6287cf"
+      }
+    },
+    "stylization_baseline": {
+      "suites": [
+        "stylization-smoke",
+        "stylization-1080p",
+        "stylized-effects-smoke",
+        "stylized-effects-1080p",
+        "dither-patterns-smoke",
+        "dither-patterns-1080p",
+        "chromatic-dither-smoke",
+        "chromatic-dither-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "4899520ed6fa26c22e3250c31809b967a789aacfeae2b610a41aa9c508fec1c7",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "stylization_baseline.mp4": "04cc9286bcbc332d3219a5b08a176ccfe23e89b79adf0a0cf1dfa832154244be",
+        "stylization_baseline.webp": "8895c9a243fff76fabb193873c0ff4ee57faa1f8073cbd68f825b689700c5977"
+      }
+    },
+    "palette_video": {
+      "suites": [
+        "stylization-smoke",
+        "stylization-1080p",
+        "stylized-effects-smoke",
+        "stylized-effects-1080p",
+        "palette-interpolation-smoke",
+        "palette-interpolation-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "207d867633ca64a469699e54b2217af3574abfb53e5d6f56fbedc98b16de5b15",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "palette_video.mp4": "69017acb95b5a7f4b29e6c8c5f744633e53a1f2546f290c9ff59b2ecdd878d05",
+        "palette_video.webp": "71150ca3666a2ffdf28436ac467cd4b85dcd9bf9505658bab3aac42c5d0288e4"
+      }
+    },
+    "oklab_palette_video": {
+      "suites": [
+        "palette-interpolation-smoke",
+        "palette-interpolation-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "99e5592033223807b655ad0e2626acf8c098087746cf91becde4be1413aa7c3e",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "oklab_palette_video.mp4": "632e229fb262034a105fb28aebcf4e4f977e50d65c2070acab80d43e787637e4",
+        "oklab_palette_video.webp": "3a7ad0772f21280d73fe97f3a0f48a34adf81f3505d98c73cf01411977ecfdd4"
+      }
+    },
+    "dither_video": {
+      "suites": [
+        "stylization-smoke",
+        "stylization-1080p",
+        "stylized-effects-smoke",
+        "stylized-effects-1080p",
+        "dither-patterns-smoke",
+        "dither-patterns-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "b24aed83de46cdb97545cf070cca8b5cbb1b5a22e26c0035bfe3e9c81173c038",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "dither_video.mp4": "220e341424519cc9fc524cc2da90efe3694e3e88d8fe40a9ef90c33c03b0485a",
+        "dither_video.webp": "a6e3fbc8e4f4c200aeacc081ee0c8dc3f9773879c50d6eb993d7636cd836ead2"
+      }
+    },
+    "blue_noise_video": {
+      "suites": [
+        "dither-patterns-smoke",
+        "dither-patterns-1080p",
+        "chromatic-dither-smoke",
+        "chromatic-dither-1080p",
+        "channel-dither-smoke",
+        "channel-dither-1080p",
+        "perceptual-dither-smoke",
+        "perceptual-dither-1080p",
+        "tonal-stops-smoke",
+        "tonal-stops-1080p",
+        "input-tone-smoke",
+        "input-tone-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "25690e0d6096a66888ac9c804e1911a14532b97d59ba6a2ba7fa8867e2cfd42d",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "blue_noise_video.mp4": "437630a710c1bb7dd469b0a7a79f4077a585edf569a939e387161fcd8485aff3",
+        "blue_noise_video.webp": "ce8e3db53a153838c17a4f1b6292a698240808302113de6914fd90ebc9c95f67"
+      }
+    },
+    "rgb_dither_video": {
+      "suites": [
+        "chromatic-dither-smoke",
+        "chromatic-dither-1080p",
+        "perceptual-dither-smoke",
+        "perceptual-dither-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "45c11ce49e047dcca0e4d909c67714077814b585640f8f0a78bbc368268358ff",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "rgb_dither_video.mp4": "d7af9fccb088f28ab41b87aadda7415456458eaf359a845f40bd0e3d91a2eef4",
+        "rgb_dither_video.webp": "df6c7025eb1fde29a425a795ebfbcb430df49b74f2613749cd33490f20cf2821"
+      }
+    },
+    "hue_dither_video": {
+      "suites": [
+        "chromatic-dither-smoke",
+        "chromatic-dither-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "c9090042fc36b5e64f88a21b78980e492654876500f736a5b23e632a1bc6c810",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "hue_dither_video.mp4": "9303a49cc54b1e82729e9fe69d3f44d5059a4dd10687f14a3a03e145ace74b9a",
+        "hue_dither_video.webp": "7d0bd6418fd195d5797d4013d32e97a4fb023c3675312d2627398b724fa4f459"
+      }
+    },
+    "channel_dither_video": {
+      "suites": [
+        "channel-dither-smoke",
+        "channel-dither-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "b6a4fb51cf6d495bff67a699cf690c41d7d353cd6af4460fd00525fdb3258a50",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "channel_dither_video.mp4": "3039e523a4922e643649a35da3d0db9c66f6bb843b796eeeb0a461b40a87fb86",
+        "channel_dither_video.webp": "12325e6a9d948239d6853a2af32bbafe719dd872fad3a0baaff28df8ba41b026"
+      }
+    },
+    "oklab_dither_video": {
+      "suites": [
+        "perceptual-dither-smoke",
+        "perceptual-dither-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "b418917c8888aca2430641fe6bdb0e4eb774728b546890b7bc6b692c344f1225",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "oklab_dither_video.mp4": "7f5a1a3d573f127491b83ad2a37e70aaf75e2f5ea37e5c142425b39106bec297",
+        "oklab_dither_video.webp": "9d26525a891f3b35cb4ce4afaa5aa1daae052f357657a69d5e1d06b25362716b"
+      }
+    },
+    "nonuniform_dither_video": {
+      "suites": [
+        "tonal-stops-smoke",
+        "tonal-stops-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "4c57ed43aeb4bb487808dda6883c29761ddf125ae6e5d1e9e95f80b850259974",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "nonuniform_dither_video.mp4": "bd825f181df2b86645625ef38cd00c7c24b4c5058d852f0bb394b1a343e1ef21",
+        "nonuniform_dither_video.webp": "f17aeffa79759d13370960064f5e22690423435ea68b9213b43f05662cc785a7"
+      }
+    },
+    "tone_dither_video": {
+      "suites": [
+        "input-detail-smoke",
+        "input-detail-1080p",
+        "input-tone-smoke",
+        "input-tone-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "70f0e4eb2d13ecfb554cdd2dda7b6875b31efd8241c6d3cbd51d39eee96cdfb1",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "tone_dither_video.mp4": "ba42a527f378aa26523535e6b1e561d930822e2d4c5358de12ad478f3b1843d4",
+        "tone_dither_video.webp": "0020625a3953fda0ebfc636b116822db21fced44bad556f7946662801c02e8b2"
+      }
+    },
+    "detail_dither_video": {
+      "suites": [
+        "input-detail-smoke",
+        "input-detail-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "63312317da532ce0599c25eb9c2f1dfa5f5481282489e32382474e26eb24a922",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "detail_dither_video.mp4": "823dec8026f79c315ebc823528fb96df4d710da75eaeb8aa8d0fae1f46061a13",
+        "detail_dither_video.webp": "16cf6e461a9bde67dea908b08b1226202d2c72e8c2bd8ea3520099aa4b4fce31"
+      }
+    },
+    "contrast_dither_video": {
+      "suites": [
+        "input-detail-smoke",
+        "input-detail-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "cff83178b8947acb3a22fde6b854b8d471f27c23a9ba4ec762d23e7a757d2d01",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "contrast_dither_video.mp4": "ab90c9f33295531ebdb72ecf0a21cd3436e4a9cadf6004e74b59eeb037953e7d",
+        "contrast_dither_video.webp": "6c29389a68bcdc8f094bcd30fcf59ad87d897bfe6508458d666a3d56d6976cf1"
+      }
+    },
+    "ascii_video": {
+      "suites": [
+        "stylized-effects-smoke",
+        "stylized-effects-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "15d0bcc4ce79affcd0d7fd09eb46ad529081dcd41d25b29d73dacfc5ddf6cf87",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "ascii_video.mp4": "91ce44f0f13bda25eb650a7f6c23bd352bb3014b8ffa4fd11f6e81d62b2e198c",
+        "ascii_video.webp": "7b6c5685f261d880da73efccc653462cbd1a945fec784cf44feccbd3d534db85"
+      }
+    },
+    "halftone_video": {
+      "suites": [
+        "stylized-effects-smoke",
+        "stylized-effects-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "eeb74bfc312e1f76602a6d0047a3cd2cd2d4c0991de90021be6a584cf8161a5e",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "halftone_video.mp4": "3529e63bdc6c27c9973903a26b5cc77bbc269bdaab6a49d751b1e0a3f2cccc78",
+        "halftone_video.webp": "79d901ae89de7c49fc48ac76bb7922227160b15f14d335cdb7f01f150209f1ef"
+      }
+    },
+    "sort_horizontal_video": {
+      "suites": [
+        "stylized-effects-smoke",
+        "stylized-effects-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "1c7e812b24cce5a1373f1dec33482c87cdcba4932ea60898e27908ddf0954471",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "sort_horizontal_video.mp4": "5a235bc1e015310981e93e0f3a9164683e900ef017ae278e00dee3845e87c3d2",
+        "sort_horizontal_video.webp": "837efe8d63ce3a3189b765f248c8178777f956f9d535ac41be88bb1fd42a35e9"
+      }
+    },
+    "sort_vertical_video": {
+      "suites": [
+        "stylized-effects-smoke",
+        "stylized-effects-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "930eb4c2d4bfaca7dfff17c91d8a38510127908b58008e452e67a86ae7fa0aa2",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "sort_vertical_video.mp4": "48da062700c9f936804c27f1ec7a7d08e454673dd3632dcf059e8775bedea0b6",
+        "sort_vertical_video.webp": "4c8fb602fac90120f4b0463a196a83cbc3b36c2ad57a5ffafe35e67c04ebf5e2"
+      }
+    },
+    "crt_video": {
+      "suites": [
+        "stylized-effects-smoke",
+        "stylized-effects-1080p"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/crates/vestra/benches/animation_effects.rs",
+      "width": 1920,
+      "height": 1080,
+      "duration": 3.0,
+      "backend": "cpu",
+      "original_sha256": "f1e9b5202a37ea2444e90f19886abc740e57417936aaec7292107f15bd7c4abf",
+      "poster_seconds": 1.7999999999999998,
+      "preview_seconds": 3.0,
+      "delivery_sha256": {
+        "crt_video.mp4": "34fa850f20b8db78459f73965e981b9d5dac0d14f4c54bba88208e8b7e5bf79c",
+        "crt_video.webp": "faf5bdb910c06a99c6a9f849552f694c617e781f766fdae6ec412c963247cd15"
+      }
+    },
+    "basic": {
+      "suites": [
+        "MoviePy comparison"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/benchmarks/comparisons/moviepy/workloads.py",
+      "width": 640,
+      "height": 360,
+      "duration": 10.0,
+      "backend": "cpu",
+      "original_sha256": "285f6acd003e3f2b872f2aa97f2b7d4107e9b33372cd282b3f8743137a5d9266",
+      "poster_seconds": 6.0,
+      "preview_seconds": 10.0,
+      "delivery_sha256": {
+        "basic.mp4": "e3e3939dbf3a4856ec1015be103e8a19f9eb5f32207c289d1c6fe7e38e402919",
+        "basic.webp": "6af369c9db58df1b44d0430dc9ae7f255275cab27f12e10b1fd451c0065acfb3"
+      }
+    },
+    "editing": {
+      "suites": [
+        "MoviePy comparison"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/benchmarks/comparisons/moviepy/workloads.py",
+      "width": 640,
+      "height": 360,
+      "duration": 12.0,
+      "backend": "cpu",
+      "original_sha256": "de427b4a3375880c10d21ff155cbf9f10471ea0514efeb9b48ec144a4b238c00",
+      "poster_seconds": 6,
+      "preview_seconds": 12.0,
+      "delivery_sha256": {
+        "editing.mp4": "249cc1ed3809078669300dae77d74a660bf0ea2b9c0fca036fa0dc285834b159",
+        "editing.webp": "c30fd36a1d0525d9a5a36ff6bbd308e4ddaeac991f191772a7153ee4f71816b3"
+      }
+    },
+    "layered": {
+      "suites": [
+        "MoviePy comparison"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/benchmarks/comparisons/moviepy/workloads.py",
+      "width": 640,
+      "height": 360,
+      "duration": 10.0,
+      "backend": "cpu",
+      "original_sha256": "f5bf9cbdb3ce9943aa9bb24e32cec53aafe2d74dba5bfa94510678b95fadfc05",
+      "poster_seconds": 6.0,
+      "preview_seconds": 10.0,
+      "delivery_sha256": {
+        "layered.mp4": "d9f0863bffaef2c25b421da8d38f4481c84c74534bc510c88f47ce2334b7b96b",
+        "layered.webp": "7b2287db39d68badd845db2e23c11c26bdd3077c18af7ff2c73e8280d4105a10"
+      }
+    },
+    "sustained-v2": {
+      "suites": [
+        "sustained"
+      ],
+      "definition": "https://github.com/evgen2571/vestra/blob/develop/benchmarks/collector/sustained.py",
+      "width": 640,
+      "height": 360,
+      "duration": 3600.0,
+      "backend": "cpu",
+      "original_sha256": "eac24192c6c7be14cc686cf3ab892bb023358f4d0b38f0e5eb2c9c50bf7d345e",
+      "poster_seconds": 6,
+      "preview_seconds": 12,
+      "delivery_sha256": {
+        "sustained-v2.mp4": "9e4d8e9900267e69b9953310814b2a9db376c13dd247172c07f1f78b097c6561",
+        "sustained-v2.webp": "cd9daa5e5cb971ed56de68afc1af7dc008efc997127bed4e28d2f98de6145d2a"
+      }
+    }
+  }
+}

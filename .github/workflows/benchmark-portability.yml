@@ -4,9 +4,12 @@ on:
   pull_request:
     paths:
       - 'benchmarks/**'
+      - 'assets/footage/**'
       - 'scripts/benchmark*.py'
       - 'scripts/collect-benchmarks.py'
+      - 'scripts/render-benchmark-*.py'
       - 'tests/test_benchmark_collector.py'
+      - 'tests/test_benchmark_previews.py'
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/benchmark-portability.yml'
@@ -27,4 +30,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - name: Test portable orchestration without a native Vestra build
-        run: uv run --no-project --python 3.13 --with pytest --with psutil==7.2.2 --with Pillow==11.3.0 python -m pytest tests/test_benchmark_collector.py tests/test_benchmark_compare.py tests/test_moviepy_comparison.py -q
+        run: uv run --no-project --python 3.13 --with pytest --with psutil==7.2.2 --with Pillow==11.3.0 python -m pytest tests/test_benchmark_collector.py tests/test_benchmark_compare.py tests/test_moviepy_comparison.py tests/test_benchmark_previews.py -q

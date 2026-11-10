@@ -151,8 +151,9 @@ and `just python-test` for Python tests. Run `just` to list available commands.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and
 [testing](docs/development/testing.md) for focused checks.
 Agents start with [AGENTS.md](AGENTS.md); benchmarks live in
-[benchmarks](benchmarks/README.md) with a
-[MoviePy comparison](https://github.com/evgen2571/vestra/blob/main/docs/benchmarks/vestra-vs-moviepy.md).
+[benchmarks](benchmarks/README.md): [results](docs/benchmarks/index.md),
+[workload previews](docs/benchmarks/workloads.md), and
+[one-command collection](benchmarks/COLLECTING.md).
 
 ## License
 

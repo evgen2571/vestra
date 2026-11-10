@@ -1,223 +1,57 @@
 # Benchmarks
 
-The ignored media `benchmark_audio_probing` compares the previous ffprobe JSON
-subprocess, native first-stream duration metadata, and the production decoded
-sample count on the same existing audio file:
+See what Vestra renders, how long it takes, and how to collect comparable results
+on another machine.
+
+**[See results](../docs/benchmarks/index.md)** ·
+**[Explore workloads](../docs/benchmarks/workloads.md)** ·
+**[Run benchmarks](COLLECTING.md)**
+
+## Collect results on your PC
+
+After the [one-time native tool setup](COLLECTING.md#install-tools-once), run from
+the checkout root:
 
 ```bash
-mkdir -p target/benchmark-results/audio-probing
-ffmpeg -v error -f lavfi -i 'sine=sample_rate=48000:duration=1800' -ac 2 \
-  target/benchmark-results/audio-probing/long.flac
-VESTRA_BENCH_AUDIO=target/benchmark-results/audio-probing/long.flac \
-  cargo test --release -p vestra-media benchmark_audio_probing -- --ignored --nocapture
+uv run --no-project --python 3.13 scripts/collect-benchmarks.py
 ```
 
-Run inside the native contributor environment. Repeat with short and long WAV,
-FLAC, MP3 and AAC/M4A fixtures, generating media outside measurement. Each method
-gets one warmup and five measured calls; the JSON line records raw milliseconds,
-file bytes and returned durations. Missing native stream duration is `null`, not
-a usable metadata result. Record toolchain, linked FFmpeg and reference ffprobe
-versions, CPU and cache state. Run without concurrent compilation or benchmarks;
-compare medians and ranges. These are probe timings, excluding rendering and
-encoding; faster metadata lookup does not establish sample-duration correctness.
+The collector builds this checkout, prepares the bundled footage, runs the short CPU
+and MoviePy comparisons, and tests hardware WGPU when an eligible adapter is
+available. It validates the outputs and writes results under
+`target/benchmark-results/`. Each run includes a readable `summary.md`,
+machine/revision information, raw samples and diagnostics.
 
-The focused `row-copy-1080p` suite measures ten seconds of deterministic H.264
-with two source-sized video presentations per frame, including an integer-clipped
-overlay. `opaque_video` uses unit opacity; `ineligible_video` uses 0.9. Run with
-`python scripts/benchmark.py run --suite row-copy-1080p --backend cpu --output target/benchmark-results/row-copy`.
-It uses one warmup and three one-shot encoded renders per workload. In this
-video-only scene `cpu_opaque_copy_fast_path_hits` counts row copies (there are
-no static cached layers); expect 600 eligible hits and zero ineligible hits.
-Use the same benchmark harness on a Phase 1 checkout for incremental comparison.
-The corrected Phase 2 measurements and their limitations are recorded in
-[PR #90](https://github.com/evgen2571/vestra/pull/90); filtered-reference timings
-do not measure incremental improvement over Phase 1 production sampling.
+The first build can take tens of minutes. Hour-long endurance and decoder-cache
+experiments are optional; they are not part of the default collection. Windows
+and macOS need native build tools: the single command does not install those.
 
-The ignored CPU `opaque_row_copy_benchmark` compares Phase 1 production sampling
-with row-copy/fallback at 720p, 1080p and 4K after exact pixel checks. Run in
-release mode with `VESTRA_RASTER_ROW_COPY_BENCH_OUTPUT` set to a JSON output path.
-`opacity_scan_benchmark` similarly measures alpha scans at 1080p/4K using
-`VESTRA_OPACITY_BENCH_OUTPUT`. These focused timings exclude decoding/encoding.
+## Choose a workflow
 
-The ignored media `video_access_benchmark_matrix` covers 30-second 1080p H.264
-(GOP 60), 60-second H.264 (GOP 300), and 30-second VFR H.264, all with B-frames.
-Set `VESTRA_VIDEO_ACCESS_BENCH_OUTPUT` to a fresh JSON path and run
-`cargo test --release -p vestra-media video_access_benchmark_matrix -- --ignored --nocapture --test-threads=1`.
-Baseline and candidate output files in the same directory reuse identical
-fixtures and external FFmpeg RGBA/ffprobe PTS references under `media/` (about
-9.1 GiB). One oracle/warmup pass precedes three timing passes at zero and 64 MiB
-cache budgets. Frame-request timings exclude open, teardown and oracle reads;
-open time and decoder/cache/memory counters are separate. Select one fixture
-with `VESTRA_VIDEO_ACCESS_BENCH_FIXTURE=typical-1080p|long-gop|vfr` if needed.
-After an oracle pass, `VESTRA_VIDEO_ACCESS_BENCH_MODE=timing` and
-`VESTRA_VIDEO_ACCESS_BENCH_PATTERN=sequential` isolate repeated sequential timing
-without rereading the full RGBA reference; discarded warmups are retained.
-Preserve executables from isolated builds: a shared Cargo target directory can
-reuse the other checkout's newer artifacts. Check revision and actual fast-path
-or seek behavior before accepting a comparison.
+| You want to… | Start here |
+| --- | --- |
+| Understand the published measurements | [Results and context](../docs/benchmarks/index.md) |
+| See each scene and its suite membership | [Workload gallery](../docs/benchmarks/workloads.md) |
+| Run on Windows, macOS or Linux | [Run benchmarks](COLLECTING.md) |
+| Measure a code change on the same machine | [Performance methodology](../docs/development/performance.md) |
+| Investigate a stage, effect, cache or decoder | [Specialist reference](REFERENCE.md) and [performance probes](../docs/development/performance-probes.md) |
+| Run the local-footage MoviePy workflow | [Comparison reference](comparisons/moviepy/README.md) |
 
-For one-command CPU, hardware WGPU and MoviePy collection with a shareable ZIP,
-see [Collect benchmark results](COLLECTING.md). Cache and sustained profiles are
-explicitly opt-in; the established local baseline workflow below is unchanged.
-
-The suite definition is in `suites.json`; representative projects are in
-`projects/`. The runner, Rust benchmark and comparison tests are maintained
-with the engine. Generated results belong under the ignored
-`target/benchmark-results/` directory.
-
-Capture a baseline on the machine where you will measure the candidate. The
-repository keeps suite definitions, projects and comparison tooling; personal
-machine captures are not distributed as performance targets.
+## Local regression comparison
 
 ```bash
 just benchmark-smoke target/benchmark-results/smoke
 just benchmark target/benchmark-results/before
-# Make one change and leave sources unchanged for the complete suite.
+# Make one optimization, keeping the machine and measurement settings matched.
 just benchmark target/benchmark-results/after
 just benchmark-compare target/benchmark-results/before/suite.json target/benchmark-results/after/suite.json
 ```
 
-Use a new directory for every run. The canonical CPU suite uses 1280×720,
-one warmup and five samples per workload. Hardware WGPU needs a separate
-baseline and confirmed hardware selection for every sample. Smoke verifies
-execution and is not performance evidence.
+Use new output directories. Smoke proves execution only. The strict comparator
+rejects incompatible workloads, environments and backend selections. Keep
+generated results under ignored `target/benchmark-results/`; cross-machine
+captures describe their hosts and cannot establish a code regression.
 
-The comparison rejects incompatible workload identities, definitions,
-environments and backend selections. Preserve the original local baseline;
-create a new named baseline when workloads or the environment change.
-
-Reports include machine, toolchain, revision and executable metadata to make
-local comparisons meaningful. Inspect and sanitize them before sharing, and
-avoid committing home paths, environment dumps or workstation descriptions.
-See [performance methodology](../docs/development/performance.md).
-
-For paired preview measurements, run the built `animation_effects` executable
-directly with the same scenario, authored dimensions and quality. Set
-`VESTRA_BENCH_PREVIEW=1` only for the preview run;
-`VESTRA_BENCH_QUALITY=balanced` selects the authored encoding quality without
-changing existing workload defaults. Use one warmup and at least three samples:
-
-```bash
-VESTRA_BENCH_SCENARIO=combined VESTRA_BENCH_WIDTH=1280 VESTRA_BENCH_HEIGHT=720 \
-VESTRA_BENCH_BACKEND=cpu VESTRA_BENCH_QUALITY=balanced VESTRA_BENCH_WARMUPS=1 \
-VESTRA_BENCH_SAMPLES=3 VESTRA_BENCH_REPORT=target/benchmark-results/full.json \
-VESTRA_BENCH_KEEP_OUTPUT=1 /absolute/path/to/animation_effects
-# Repeat with VESTRA_BENCH_PREVIEW=1 and a distinct report path.
-```
-
-`VESTRA_BENCH_KEEP_OUTPUT=1` prints and retains the private media directory for
-same-time decoded frame comparisons; remove it after inspection. Use
-`stylization_baseline` for the existing full-resolution FFV1 decode control.
-Records retain the actual dimensions/FPS, stage timings, decode counters and
-preview request. Full and preview are intentionally different workloads, so the
-strict before/after comparator rejects that pair. Report raw distributions and
-medians as a preset comparison, including spatial, temporal and encoding-quality
-differences. Generate media outside measurement and keep memory sampling in
-separate processes/runs using `scripts/benchmark_process.py`; finite-duration RSS
-plateaus do not establish multi-hour or large-file stability.
-The `static_colour` workload encodes ten seconds at 30 FPS and must report
-`static_visual_ffmpeg_fast_path_used=true`, one static-template population and
-zero raw frames pushed from Rust for 300 encoded frames. Public frame counters
-describe logical output frames; keep this full-range MP4 path as a separate control.
-
-The focused color/dither suite measures a single full-frame moving FFV1 video
-at 1920×1080, 30 fps and 90 frames. It records three separate workloads:
-`stylization_baseline` (no effects), `palette_video` (smooth palette mapping),
-and `dither_video` (fine Bayer8 dithering). All three use the same deterministic
-`testsrc2` input; no titles, shapes, audio or additional layers are included.
-Palette and dither color phase has an explicit three-second period. Media
-creation is outside measured render intervals. The canonical ten-scenario
-suite retains its settings and workload order.
-
-```bash
-python scripts/benchmark.py run --suite stylization-smoke --backend cpu --output target/benchmark-results/stylization-smoke
-python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-before
-# Repeat after a source-stable change with the same backend and machine.
-python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-after
-just benchmark-compare target/benchmark-results/stylization-before/suite.json target/benchmark-results/stylization-after/suite.json
-```
-
-The Full HD suite uses one warmup and three measured samples per scenario;
-`stylization-smoke` uses 128×72, no warmup and one sample. For hardware results,
-select `--backend hardware-wgpu` after adapter discovery and keep a separate
-baseline. The existing runner rejects CPU fallback and software adapters.
-The no-effects control reports its actual execution path, so use the recorded
-frame/decode/encode stages to interpret overhead rather than attributing all
-wall-time differences to shader execution.
-
-The complete suite uses that same footage and adds the canonical ASCII and halftone examples,
-horizontal and vertical bounded sorting, and seeded periodic CRT workloads. Effect settings come from the corresponding
-`examples/effects/` JSON, with procedural periods set to three seconds.
-The original three-workload suites retain their definitions for comparisons.
-
-```bash
-uv run --no-project python scripts/benchmark.py run --suite stylized-effects-smoke --backend cpu --output target/benchmark-results/effects-smoke
-uv run --no-project python scripts/benchmark.py run --suite stylized-effects-1080p --backend cpu --output target/benchmark-results/effects-cpu
-VESTRA_WGPU_BACKEND=gl uv run --no-project python scripts/benchmark.py run --suite stylized-effects-1080p --backend hardware-wgpu --output target/benchmark-results/effects-hardware
-```
-
-Both complete suites contain eight workloads; resolution, warmups and samples
-match their three-workload counterparts. ASCII preparation includes its cached
-bundled atlas. All samples retain preparation, decode, frame, encoding and
-resource measurements. Keep sources unchanged during each suite and run
-workloads serially, without concurrent compilation or other benchmarks.
-
-For a 4K resource/correctness smoke check, use the built benchmark directly
-with `VESTRA_BENCH_WIDTH=3840`, `VESTRA_BENCH_HEIGHT=2160`,
-`VESTRA_BENCH_SCENARIO=dither_video`, `VESTRA_BENCH_WARMUPS=0`, and
-`VESTRA_BENCH_SAMPLES=1`. This is not the versioned 1080p baseline.
-
-The `dither-patterns-smoke` and `dither-patterns-1080p` suites compare the same
-FFV1 control, legacy Bayer8, and stationary blue-noise dithering (`seed=37`).
-The 1080p suite uses one warmup and three measured 90-frame samples per workload.
-The original suites retain their workload lists so prior captures remain usable.
-Run these suites with the existing runner and either `cpu` or `hardware-wgpu`.
-
-The `chromatic-dither-smoke` and `chromatic-dither-1080p` suites compare the
-FFV1 control and blue noise in luminance, RGB and hue-aware modes, using the same
-editable four-color palette, seed, animation and sample settings. Their workload
-lists are separate so historical pattern and effect suites retain their meaning.
-
-The two-workload `channel-dither-smoke`/`channel-dither-1080p` suites compare
-luminance blue noise with independent four-level RGB channels (64 output colors).
-Both use the same generated FFV1 input, stationary blue-noise seed and sample
-settings. Channel mode ignores palette phase; the luminance mode retains its
-existing three-second palette cycle. The source remains identical.
-
-The three-workload `perceptual-dither-smoke`/`perceptual-dither-1080p` suites
-compare luminance, RGB and Oklab blue noise over that same input, palette, seed
-and procedural phase. They use the usual smoke/1080p warmup and sample counts.
-
-Benchmark samples explicitly include the selected adapter and Vestra's shared
-`performance_class`, even though ordinary SDK result JSON omits adapter data.
-Hardware verification uses this conservative classification; in particular,
-WSL Mesa GL can report `device_type=other` for a D3D12-backed NVIDIA GPU.
-Software, virtual and unknown classifications remain ineligible for hardware
-suites. Raw device metadata is retained alongside the classification.
-
-`tonal-stops-smoke` and `tonal-stops-1080p` compare the unchanged uniform
-blue-noise scenario with `nonuniform_dither_video`, using the same four colors
-at positions `(0, 0.18, 0.55, 1)`. The uneven-stop path searches at most 15
-intervals per pixel. Both scenarios retain the existing source, periodic palette
-animation, encoder and frame count.
-
-`palette-interpolation-smoke` and `palette-interpolation-1080p` compare RGB and
-Oklab gradient mapping with the existing periodic four-color palette video.
-Both use identical decode/encode settings; end-to-end results include output
-encoding cost and do not isolate inverse color-conversion shader cost.
-
-
-`input-tone-{smoke,1080p}` compares the same seeded blue-noise video with neutral
-input and with `input_exposure=0.5`, `input_gamma=1.5`. The active case includes
-its full-resolution `ColorAdjust` pass and retained source. These end-to-end
-measurements include decode/encode and output-dependent encoding cost.
-
-`input-detail-{smoke,1080p}` compares that tone case with fine detail
-(`input_detail=1.5`, radius `1`) and broad local contrast (`0.5`, radius `8`).
-The latter two include three additional full-resolution preparation passes.
-The 1080p suite uses one warmup and three measured samples per scenario; compare
-sample ranges and actual adapter metadata before drawing performance conclusions.
-
-The [MoviePy v2 comparison](comparisons/moviepy/README.md) adds three matched
-local-footage workloads with CPU/hardware runs, process-tree measurements and
-decoded-output validation through `scripts/benchmark.py moviepy`.
+The source of truth is [suites.json](suites.json), the
+[Rust workload builder](../crates/vestra/benches/animation_effects.rs), and the
+[shared MoviePy timelines](comparisons/moviepy/workloads.py).

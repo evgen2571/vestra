@@ -64,12 +64,11 @@ MIT-licensed code. The sRGB transfer function follows
 
 ## Showcase assets
 
-The current documentation checkout uses CC0 Shanghai footage, a CC0 landscape
-photo and original CC0 synthesized audio. Example media is documented beside
-the [showcase sources](https://github.com/evgen2571/vestra/tree/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase),
+The showcases use a CC0 landscape photo and original CC0 synthesized audio. Example media is documented beside
+the [showcase sources](https://github.com/evgen2571/vestra/tree/bf527c93952b258f518ea6915551437ba629b545/examples/showcase),
 including Manrope's accompanying OFL copy. These inputs are not bundled in wheels.
 Older Location Kenya footage copies remain CC BY 3.0; preserve their
-[source, license and modification credits](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
+[source, license and modification credits](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
 when redistributing them.
 
 ## Bundled text and ASCII glyph font

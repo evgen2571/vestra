@@ -16,8 +16,8 @@ the ring's size and the particle layer's opacity.
   <figcaption>Cyan-to-coral bars extend out from a ring, with particles drifting behind them. The ring expands and contracts with the soundtrack. The preview includes synthesized music and no speech.</figcaption>
 </figure>
 
-[Complete Python source](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/audio-visualizer/main.py){ .md-button }
-[Full-resolution render](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/audio-visualizer/render.mp4)
+[Complete Python source](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/audio-visualizer/main.py){ .md-button }
+[Full-resolution render](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/audio-visualizer/render.mp4)
 
 ## Reproduce the example
 
@@ -66,14 +66,14 @@ Start with [Audio and signals](../concepts/audio-and-signals.md), then see
 The original synth loop is dedicated to
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) by Vestra contributors.
 The graphics are original project work; the Manrope font is SIL OFL 1.1.
-See the [synth dedication and font notice](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/audio-visualizer/README.md#credits).
+See the [synth dedication and font notice](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/audio-visualizer/README.md#credits).
 
 ## Preview details
 
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 3 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/audio-visualizer/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/audio-visualizer/README.md).
 The source render's SHA-256 is `2abfd5976d5c948cc77aaec688fd73f6bd9044940ecc8b5718a313f9d97f4db5`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

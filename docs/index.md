@@ -19,11 +19,11 @@ hide:
 <p class="home-requirements">Python 3.11–3.14 · CPU or WGPU rendering · MP4 output</p>
 </div>
 <figure class="home-hero__preview">
-<video controls playsinline preload="metadata" width="640" height="360" poster="assets/gallery/motion-design.webp" aria-label="Vestra overview: animated cards, masked Shanghai footage with dithering, and a radial audio spectrum" aria-describedby="reel-caption">
+<video controls playsinline preload="metadata" width="640" height="360" poster="assets/gallery/motion-design.webp" aria-label="Vestra overview: animated cards, masked valley footage with dithering, and a radial audio spectrum" aria-describedby="reel-caption">
 <source src="assets/gallery/motion-design.mp4" type="video/mp4">
 <a href="assets/gallery/motion-design.mp4">Download the feature reel</a>.
 </video>
-<figcaption id="reel-caption">A ten-second render of animated cards, masked Shanghai footage, palette effects, and a radial audio spectrum. <a href="gallery/motion-design/">Source &amp; credits</a></figcaption>
+<figcaption id="reel-caption">A ten-second render of animated cards, masked valley footage, palette effects, and a radial audio spectrum. <a href="gallery/motion-design/">Source &amp; credits</a></figcaption>
 </figure>
 </div>
 
@@ -89,10 +89,10 @@ The introductory tutorials start with the rectangle's static layout, then add th
 <div class="home-gallery" markdown="0">
 <a href="gallery/visual-effects/" class="home-gallery__item"><img src="assets/gallery/visual-effects.webp" width="640" height="360" loading="lazy" alt="A landscape displayed as a photograph, halftone, and ASCII"><span><strong>Photo effects</strong><span>Halftone, ASCII, and group masks</span></span></a>
 <a href="gallery/audio-reactive/" class="home-gallery__item"><img src="assets/gallery/audio-reactive.webp" width="640" height="360" loading="lazy" alt="A cyan and coral radial spectrum surrounding a pulsing ring"><span><strong>Audio-reactive graphics</strong><span>Audio analysis, signals, and particles</span></span></a>
-<a href="gallery/video-editing/" class="home-gallery__item"><img src="assets/gallery/video-editing.webp" width="640" height="360" loading="lazy" alt="Shanghai skyline transitioning from daytime through blue hour to night"><span><strong>Video editing</strong><span>Video layers, reframing, and transitions</span></span></a>
+<a href="gallery/video-editing/" class="home-gallery__item"><img src="assets/gallery/video-editing.webp" width="640" height="360" loading="lazy" alt="Snowy valley footage with animated reframing"><span><strong>Video editing</strong><span>Video layers, reframing, and transitions</span></span></a>
 </div>
 
-[Browse all examples and their source code](gallery/index.md). Shanghai footage by [Yigang Yu](https://commons.wikimedia.org/wiki/File:Shanghai_Bund,_Lujiazui_Skyline_Timelapse.webm), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); trimmed, resized, reframed, and colour-adjusted. [Example credits](gallery/motion-design.md#credits).
+[Browse all examples and their source code](gallery/index.md), or see the same bundled footage in the [benchmark workloads](benchmarks/workloads.md).
 
 <div class="home-reference" markdown="1">
 

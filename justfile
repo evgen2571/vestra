@@ -138,18 +138,18 @@ showcase-style:
 comparison-style:
     uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
     uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
-    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py scripts/render-benchmark-previews.py scripts/render-benchmark-charts.py tests/test_benchmark_previews.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py scripts/render-benchmark-previews.py scripts/render-benchmark-charts.py tests/test_benchmark_previews.py
 
 # Collector contracts without building the project/native Python extension.
 collector-test:
-    uv run --no-project --python 3.13 --with pytest --with psutil==7.2.2 --with Pillow==11.3.0 python -m pytest tests/test_benchmark_collector.py tests/test_benchmark_compare.py tests/test_moviepy_comparison.py
+    uv run --no-project --python 3.13 --with pytest --with psutil==7.2.2 --with Pillow==11.3.0 python -m pytest tests/test_benchmark_collector.py tests/test_benchmark_compare.py tests/test_moviepy_comparison.py tests/test_benchmark_previews.py
 
 # Script regression tests; Pillow is isolated from Vestra's runtime dependencies.
 comparison-test:
     uv run --with 'Pillow==11.3.0' pytest tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
 
-# Reproduce the licensed footage selections and original soundtrack.
+# Verify bundled footage and reproduce the original soundtrack.
 showcase-assets:
     uv run python examples/showcase/prepare-assets.py
 
@@ -176,6 +176,7 @@ docs-build:
 # Check generated links, anchors and media at the GitHub Pages repository path.
 site-check: docs-build
     uv run --no-project python scripts/check-site.py
+    uv run --no-project python scripts/render-benchmark-previews.py --check
     uv run --no-project --with pytest python -m pytest tests/test_site_links.py tests/test_site_navigation.py tests/test_documentation_examples.py -q
 
 # Reproduce documentation previews from the checkout (requires python-sync + FFmpeg).

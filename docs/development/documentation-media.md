@@ -9,6 +9,7 @@ assets. Ordinary prose, navigation and theme changes need only the
 | Introductory tutorial previews | [Tutorial previews](#reproduce-tutorial-previews) | Native contributor environment, `ffmpeg` and `ffprobe`; CPU renders and web assets. |
 | Effect, audio, transition and group studies | [Visual learning studies](#reproduce-visual-learning-studies) | Native environment, `ffmpeg` and `ffprobe`; stills, videos, posters and manifest. |
 | Gallery delivery copies | [Gallery previews](#reproduce-gallery-previews) | FFmpeg and existing bundled renders; compact MP4/WebP copies. |
+| Benchmark workload previews | [Benchmark previews](#reproduce-benchmark-previews) | Native environment, source Python package, FFmpeg/FFprobe; actual workload outputs and compact delivery copies. |
 
 These commands replace generated delivery assets. Inspect actual output before
 committing, retain provenance and [asset credits](documentation.md#asset-credits),
@@ -126,3 +127,42 @@ are recorded beside the examples. To change the scenes, render their Python
 sources first, inspect the output and update the source/render/preview revision
 together. Naming, formatting and comment-only source cleanup does not require
 re-encoding unchanged scenes. No separate documentation branch is needed.
+
+## Reproduce benchmark previews
+
+The [workload gallery](../benchmarks/workloads.md) is generated from the existing
+benchmark builders and `benchmarks/suites.json`. Run from the native contributor
+environment after `just python-sync`:
+
+```bash
+uv run --no-sync python scripts/render-benchmark-previews.py
+```
+
+Choose a fresh `--output target/benchmark-previews-NAME` for a repeat. The script
+renders one CPU output per unique suite workload at its maintained resolution,
+plus the portable MoviePy scenes and an actual one-hour sustained output. It
+uses the two-hour source made by repeating the bundled forest clip for the endurance workload. This
+can take several minutes and needs space for the native inputs and full output.
+It does not collect benchmark baselines. The inputs are shared with the showcases.
+
+Original MP4s, temporary projects and diagnostic records remain under the chosen
+ignored output directory. Only silent 640 × 360 MP4s, WebP posters, the gallery
+page and `docs/assets/benchmarks/previews.json` are committed. The sustained
+preview is the first twelve seconds of the full one-hour output. The manifest
+records the source revision/hashes, executable, FFmpeg, original checksums and
+dimensions, backend, poster time, preview duration and delivery hashes. Fine
+effect detail can change when downscaled; previews do not replace pixel tests.
+
+`python scripts/render-benchmark-previews.py --check` verifies gallery coverage,
+source freshness and delivery hashes without native dependencies. It runs in
+`just site-check` too. Inspect beginning/middle/end frames, transitions, masks,
+particles and subtle effects before accepting regenerated media.
+
+The historical charts are derived from the retained Markdown tables:
+
+```bash
+uv run --no-project --with matplotlib==3.10.7 python scripts/render-benchmark-charts.py
+```
+
+Keep the numerical tables, date, hardware context and chart labels together.
+Regenerating a chart does not turn historical data into current measurements.

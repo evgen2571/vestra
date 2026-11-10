@@ -56,8 +56,8 @@ or a software/unknown adapter is a failed hardware run, never a CPU replacement.
 Keep `--extra benchmark` on sync/run commands so MoviePy remains installed.
 The locked benchmark extra replaces manual requirements installation. Package
 versions and the native extension hash are recorded; MoviePy's distribution is
-2.2.1 even though its internal version string says 2.1.2. For automatic portable
-footage and a shareable ZIP, use [the collector](../../COLLECTING.md).
+2.2.1 even though its internal version string says 2.1.2. For the portable benchmark workflow,
+use [the collector](../../COLLECTING.md).
 
 ## Inputs and equivalent operations
 
@@ -128,5 +128,4 @@ explicitly unverified.
 
 Generated renders, PNGs, raw records and logs stay under ignored `target/`.
 Only the compact shared inputs in `assets/footage/` are committed. Reports are
-machine-local and may contain paths in probe metadata; review before sharing,
-or use the collector's sanitized ZIP.
+machine-local and may contain paths in probe metadata.

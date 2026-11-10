@@ -57,7 +57,7 @@ animated grouped titles and audio; it does not represent every camera codec.
 Media generation and hashing are outside measured intervals. FFV1/WAV fixtures
 use bit-exact output and particles use explicit seeds.
 
-The script is also [directly callable](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md).
+The script is also [directly callable](https://github.com/evgen2571/vestra/blob/develop/benchmarks/REFERENCE.md).
 `--executable /absolute/path` skips building and records a caller-supplied
 executable; the caller must ensure it matches the sources. Keep raw local
 reports for review, without committing personal machine captures as portable
@@ -111,13 +111,13 @@ intentionally avoids preparation.
 | --- | --- | --- |
 | Which preparation stage, effect or random access changed? | [CPU stage probes](performance-probes.md#isolate-preparation-effects-or-random-access) | Prepared/null-sink SDK records |
 | Is hardware frame work or readback expensive? | [Local-canvas WGPU probe](performance-probes.md#local-canvas-allocation-probe) | Prepared-backend latency, staged throughput and texture bytes |
-| What does palette/dither add to moving video? | [Focused stylization suites](https://github.com/evgen2571/vestra/blob/develop/benchmarks/README.md) | Matched no-effect, palette and dither end-to-end records |
+| What does palette/dither add to moving video? | [Focused stylization suites](https://github.com/evgen2571/vestra/blob/develop/benchmarks/REFERENCE.md) | Matched no-effect, palette and dither end-to-end records |
 | Is memory growing or allocation work repeated? | [Sustained profiling](performance-probes.md#allocation-and-sustained-render-profiling) | External process time series alongside engine counters |
 | Does a cache budget change cost or pixels? | [Cache working sets](performance-probes.md#cache-working-set-and-native-worker-diagnostics) | Timing JSON, partition traces or cache-disabled pixel comparisons |
 | How do native decoder workers scale? | [Native worker sweep](performance-probes.md#native-worker-sweep) | External FFmpeg references; separate oracle and timing runs |
 
-The three-workload `stylization-1080p` suite uses the same generated full-frame
-`testsrc2` video for no effect, Palette Map and Ordered Dither: 1920×1080,
+The three-workload `stylization-1080p` suite uses the same bundled valley
+footage prepared as full-frame FFV1 for no effect, Palette Map and Ordered Dither: 1920×1080,
 30 fps, 90 frames, one warmup and three samples. Use `stylization-smoke` to
 check execution. Other effect/control suites and their exact workloads live in
 the linked benchmark reference. Report 4K correctness separately from versioned

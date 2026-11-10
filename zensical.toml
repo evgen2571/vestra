@@ -113,6 +113,12 @@ nav = [
     { "FFmpeg" = "troubleshooting/ffmpeg.md" },
     { "WGPU" = "troubleshooting/wgpu.md" },
   ] },
+  { "Benchmarks" = [
+    { "Overview" = "benchmarks/index.md" },
+    { "Workload gallery" = "benchmarks/workloads.md" },
+    { "Run benchmarks" = "benchmarks/collecting.md" },
+    { "Historical results" = "benchmarks/vestra-vs-moviepy.md" },
+  ] },
   { "Contributing" = [
     { "Contributing to Vestra" = "development/README.md" },
     { "Write documentation" = [
@@ -149,7 +155,6 @@ nav = [
       { "Performance probes" = "development/performance-probes.md" },
       { "Dithered palette look" = "development/stylization/dithered-palette-look.md" },
       { "Temporal diagnostics" = "development/stylization/temporal-diagnostics.md" },
-      { "Historical benchmark investigation" = "benchmarks/vestra-vs-moviepy.md" },
     ] },
     { "Releasing" = "development/releasing.md" },
   ] },

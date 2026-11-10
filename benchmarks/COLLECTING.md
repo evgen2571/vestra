@@ -1,9 +1,26 @@
-# Collect benchmark results
+# Run benchmarks
 
 The collector builds this checkout, runs benchmarks, checks their output, and
-creates **one ZIP to send to the maintainer**. It never uploads anything.
+writes results under `target/benchmark-results/`.
 The first build may take tens of minutes. Keep the computer plugged in, use a
 consistent power mode, and close other heavy applications during measurements.
+
+## Quick start
+
+1. Install the native tools for [Windows](#windows-x64) or
+   [macOS](#macos-apple-silicon-or-intel) once; Linux setup is below too.
+2. Clone the repository and check out the commit to measure.
+3. Run `uv run --no-project --python 3.13 scripts/collect-benchmarks.py`.
+4. Open `summary.md` in the run directory to inspect the results.
+
+The terminal reports task duration and an activity update every fifteen seconds
+while worker commands run. The summary shows execution/validation status,
+revision, machine information and render times. Full records and logs remain
+alongside it.
+
+Use the [workload gallery](../docs/benchmarks/workloads.md) to see what is rendered.
+The default collection keeps the existing short workloads; hour-long endurance
+runs are explicitly optional. One command still requires the native tools below.
 
 ## Install tools once
 
@@ -76,39 +93,39 @@ uv still manages the benchmark environment and all Python packages.
 The software-WGPU Nix shell deliberately selects a software adapter and cannot
 provide hardware performance results.
 
-## Collect and share
+## Run the suites
 
 The same command works in the Windows developer terminal, macOS Terminal and
 a Linux shell after native tools are installed:
 
 ```bash
-git clone -b develop https://github.com/evgen2571/vestra.git
+git clone https://github.com/evgen2571/vestra.git
 cd vestra
+git checkout COMMIT
 uv run --no-project --python 3.13 scripts/collect-benchmarks.py
 ```
 
-Until this implementation is merged, testers should clone with
-`-b feat/portable-benchmarks` instead of `-b develop` once the maintainer makes
-that branch available. The collector is currently under review on that branch.
+Replace `COMMIT` with the exact revision to measure. Use the same commit on every
+computer in a comparison. Use a clean checkout and keep its sources unchanged
+throughout the run. `git checkout` works in the Windows developer terminal too.
 
 Default collection runs the established ten-workload CPU smoke, a versioned
 640×360 community suite (six representative workloads, one warmup and three
 samples), all three MoviePy comparisons, and a separate hardware WGPU suite
-when Vestra discovers an eligible adapter. Shared moving footage is generated
-automatically. It does not use a personal footage directory.
-Portable patterns are generated at twice the input resolution and downsampled
-with bicubic filtering and a one-pixel Gaussian filter to retain motion/detail without single-pixel aliasing
-dominating the comparison between different render resamplers.
+when Vestra discovers an eligible adapter. The forest, valley and tear clips
+are bundled under `assets/footage/` and resized automatically; no separate asset
+collection or download is needed. Suite version 2 (`community-v2`) and
+`sustained-v2` use these inputs. Earlier generated-pattern measurements require
+their original checkout and cannot be compared directly with the new workloads.
 
-At the end, the terminal prints an archive under `target/benchmark-results/`,
-for example `vestra-bench-linux-20261029T120000Z-1234abcd.zip`. **Send that ZIP**,
-not the entire directory. Read `summary.md` inside it for actual pass/fail/skip
-statuses. Failures still produce archives and retain successful results.
+Results are written under `target/benchmark-results/`. Read `summary.md` in the
+run directory for actual pass/fail/skip statuses. Failed runs retain completed
+results and diagnostics.
 Exit 0 means required requested work completed; failures return 1, cancellation
 returns 130. Unavailable optional hardware is unsupported; explicitly requesting
 `--backend hardware-wgpu` makes missing eligible hardware a failure.
 
-## Other profiles
+## Optional profiles
 
 ```bash
 # Long-source cache access only; does not render two hours of output.
@@ -139,13 +156,12 @@ or failed WGPU results never become CPU replacements. CPU evidence is preserved.
 uses the original larger CPU suite. `--timeout` bounds each short suite/worker;
 `--build-timeout` defaults to two hours, `--sustained-timeout` to four hours per
 engine. Increase them on slower computers. `--retain-media` retains validated
-inputs and completed MoviePy/sustained media locally; it is always excluded
-from the ZIP. Canonical Rust benchmark outputs and the cache placement companion
-remain temporary. Ctrl+C terminates owned
-worker/FFmpeg trees, removes incomplete media, and packages partial diagnostics.
+inputs and completed MoviePy/sustained media locally. Canonical Rust benchmark
+outputs and the cache placement companion remain temporary. Ctrl+C terminates
+owned worker/FFmpeg trees, removes incomplete media, and preserves partial diagnostics.
 
 Smoke keeps the 640×360 MoviePy comparison canvas and reduces warmups/samples.
-Its dense moving pattern makes smaller canvases overly sensitive to the engines'
+Its detailed footage makes smaller canvases overly sensitive to the engines'
 known rounding and resampling differences under the existing visual tolerance.
 Cache and sustained smoke use a separate 128×72 two-hour source to bound decoding
 cost; the native cache A/B and MoviePy access workers share that exact source.
@@ -227,7 +243,7 @@ retention and cache warmup.
 ## Troubleshooting and privacy
 
 Missing tools are listed before expensive work, with setup guidance. Inspect
-`preflight.json` and `diagnostics/` inside a failed archive. Compiler checks
+`preflight.json` and `diagnostics/` in the run directory. Compiler checks
 catch missing SDK/linker environments; libclang needs a loadable library,
 not just a `clang` executable. If downloads fail, fix network/proxy access and
 retry; useful existing Cargo/uv downloads are cached. The collector's managed
@@ -239,11 +255,7 @@ using that environment's pinned Maturin backend. Each collection builds a fresh
 non-editable wheel, retaining Cargo's incremental cache. Development builds in
 the checkout cannot replace the collector's installed native extension.
 
-The archive allowlists JSON/JSONL/Markdown/log evidence, sanitizes home/private
-paths and credential-like fields, drops FFprobe tags and unapproved environment
-variables, and excludes media, images, binaries and local scratch. Review it
-before sharing, especially when using optional local footage with `--assets`.
-Original local logs/project snapshots may still contain absolute paths; only
-the ZIP is prepared for sharing. No full environment dump or automatic upload
-is collected. Native Windows/macOS execution requires platform testing; mocked
-platform checks do not establish native build or rendering success.
+Result records retain the versions and counters needed to interpret a run.
+Local logs and project snapshots may contain absolute paths. Native
+Windows/macOS execution requires platform testing; mocked platform checks do
+not establish native build or rendering success.

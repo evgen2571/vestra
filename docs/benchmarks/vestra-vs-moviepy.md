@@ -14,56 +14,38 @@ and the maintained [collection guide](https://github.com/evgen2571/vestra/blob/d
 The commands below reproduce the historical revision; the tables remain a dated
 record and are not updated with new-checkout results.
 
-## Environment and fairness
+Current suites use version 2 with bundled footage. This report retains the earlier
+workload definitions; new captures require a fresh baseline.
 
-- Host: AMD Ryzen 5 3600 (12 logical CPUs), 16 GiB RAM, Linux 6.18.59 x86_64, all CPUs 0–11 available.
-- Toolchain: Rust 1.95.0, Cargo 1.95.0, Python 3.13.17, uv 0.11.21, FFmpeg/ffprobe 8.1.2 (libx264), release profile.
-- Python packages: Vestra 0.1.3, MoviePy 2.2.1, NumPy 2.5.4, Pillow 11.3.0, psutil 7.2.2, imageio 2.38.1, imageio-ffmpeg 0.6.0.
-- WGPU: Vulkan NVIDIA GeForce GTX 1650 SUPER, discrete GPU, driver 595.71.05; llvmpipe was discovered but rejected as software.
-- CPU and WGPU runs used identical generated fixtures, suite definitions, 30 fps settings, FFmpeg/libx264 output validation, and serial execution. The MoviePy comparison used the same prepared forest/valley/tear inputs and 640x360 matched timelines.
-- Process resources are simultaneous process-tree RSS sampled by psutil every 20 ms for short comparisons and every 5 s for sustained runs. PSS was unavailable in the harness, so RSS is reported and is a lower-bound/shared-page-sensitive metric; GPU VRAM is not measured. CPU utilization is observed process-tree CPU time, with one core = 100%.
+## Reading these results
 
-## Reproduction commands
+[Benchmark overview](index.md) · [Workload previews](workloads.md) · [Collect a new result](collecting.md)
 
-From an existing clone, fetch the history and create a separate checkout of the
-recorded revision. Choose a new worktree directory; these commands preserve
-your current branch and working files:
+The three-shot edit and layered composition benefited from Vestra's CPU and GPU
+paths on this host. The basic export was already fast on CPU; GPU rendering did
+not improve it. Across Vestra's own workloads, GPU gains depended on the scene:
+`combined` improved while `video_heavy` was slower on hardware WGPU.
 
-```bash
-git fetch origin develop
-git worktree add --detach ../vestra-benchmark-34dec665 34dec665090aa5706a83eb8302d38f5d1801dbf5
-cd ../vestra-benchmark-34dec665
-nix develop .#comparison
-# Keep Cargo artifacts separate from any other checkout.
-export CARGO_TARGET_DIR="$PWD/target"
-uv run --no-project --python "$(command -v python3)" scripts/collect-benchmarks.py --profile all --hours 1 --suite canonical --backend auto --graphics-api vulkan --timeout 900 --sustained-timeout 14400 --output target/benchmark-results/full-collection
-```
-
-Use the Nix shell's Python so the interpreter and native extension share
-runtime libraries. The collector builds its own executables and creates a
-uniquely named result directory. To run an additional suite from the tables below, use the runner;
-this example selects `stylized-effects-1080p` and builds the matching executable:
-
-```bash
-VESTRA_BENCH_VALIDATE=1 uv run --no-project --python "$(command -v python3)" python scripts/benchmark.py run --suite stylized-effects-1080p --backend cpu --output target/benchmark-results/complete-suites/cpu/stylized-effects-1080p
-VESTRA_BENCH_VALIDATE=1 VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_HARDWARE_WGPU=1 uv run --no-project --python "$(command -v python3)" python scripts/benchmark.py run --suite stylized-effects-1080p --backend hardware-wgpu --output target/benchmark-results/complete-suites/hardware-wgpu/stylized-effects-1080p
-for benchmark in preparation_matrix effect_scaling_matrix random_access_matrix; do
-  VESTRA_RENDER_BENCH=1 cargo test --release --locked -p vestra --no-default-features --features cpu "$benchmark" -- --nocapture --test-threads=1
-done
-```
-
-Use a fresh output directory when repeating a direct suite. Hardware commands
-require a verified eligible adapter; CPU runs can be collected separately.
-Toolchain, driver and host differences can change the results even at the same
-revision. For current-checkout measurements and native setup, follow
-[benchmark collection](https://github.com/evgen2571/vestra/blob/develop/benchmarks/COLLECTING.md); keep new results separate
-from these historical tables.
-
-The historical collector archive was `target/benchmark-results/full-collection/vestra-bench-linux-20261031T130534Z-180e48c2.zip`. The direct suite executable hashes were recorded in each `suite.json` provenance and the collector diagnostics.
+Render time in seconds is the main comparison below: **lower is better**.
+These are dated results from one Linux host, not predictions for other machines.
+The workload gallery shows current definitions and is separate from this
+historical capture. [Environment](#environment-and-fairness) and
+[reproduction commands](#reproduction-commands) are retained below.
 
 ## Matched MoviePy v2 workloads
 
-The three matched scenarios are 640x360, 30 fps, 10 s (300 frames), silent H.264/yuv420p, CRF 23/veryfast. Inputs and output probes were identical. The verifier passed 135/135 sampled frames/regions; all nine output streams passed full decode and structural checks. Resampling/rounding differences are expected and are covered by the suite tolerance.
+The matched scenarios are 640x360, 30 fps: basic and layered are 10 s (300 frames), and editing is 12 s (360 frames). Outputs are silent H.264/yuv420p, CRF 23/veryfast. Inputs and output probes were identical. The verifier passed 135/135 sampled frames/regions; all nine output streams passed full decode and structural checks. Resampling/rounding differences are expected and are covered by the suite tolerance.
+
+![Historical matched MoviePy and Vestra render times in seconds; lower is better.](../assets/benchmarks/moviepy-times.svg)
+
+| Timeline | MoviePy CPU | Vestra CPU | Vestra hardware GPU |
+| --- | ---: | ---: | ---: |
+| Basic export | 0.997 s | 0.835 s | 1.064 s |
+| Three-shot edit | 8.652 s | 1.759 s | 1.239 s |
+| Layered composition | 4.227 s | 1.789 s | 1.305 s |
+
+<details markdown="1">
+<summary>Effective FPS, ratios and process memory</summary>
 
 | Scenario | MoviePy CPU wall s | Vestra CPU wall s | CPU ratio | Vestra WGPU wall s | WGPU ratio | MoviePy FPS | Vestra CPU FPS | Vestra WGPU FPS | MoviePy RSS MiB | Vestra CPU RSS MiB | WGPU RSS MiB |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -71,11 +53,22 @@ The three matched scenarios are 640x360, 30 fps, 10 s (300 frames), silent H.264
 | editing | 8.652 | 1.759 | 0.20x | 1.239 | 0.14x | 41.61 | 204.67 | 290.62 | 379.6 | 567.1 | 636.7 |
 | layered | 4.227 | 1.789 | 0.42x | 1.305 | 0.31x | 70.97 | 167.71 | 229.85 | 365.3 | 599.5 | 668.5 |
 
+</details>
+
 Variability is retained in the raw JSON. In the matched table, MoviePy CPU wall-time ranges were 1.00–1.11 s (basic), 8.35–8.85 s (editing), and 4.17–4.23 s (layered); Vestra CPU ranges were 0.83–0.89 s, 1.73–1.86 s, and 1.75–1.86 s. WGPU ranges are similarly recorded in `comparison.json`.
 
 ## Complete Vestra suite results
 
 Each row is the median of the versioned suite samples (canonical and collector community/canonical runs: 1 warmup + 5 or 3 samples as recorded; direct 1080p/community runs: 1 warmup + 3 samples). The smoke and subset suites in `suites.json` are aliases/control reductions of these unique workloads and were not rerun as duplicate performance captures. `wall` includes project preparation, decoding, frame work, encoding and publication. `frame_sum` is Vestra’s summed frame-work counter and can exceed wall time because worker work overlaps.
+
+![Historical CPU and hardware GPU render times for eight 1080p effect workloads; lower is better.](../assets/benchmarks/effect-times.svg)
+
+The chart compares the shared no-effect control with seven treatments in
+`stylized-effects-1080p`: 1920 × 1080, 30 fps, 90 frames per output. It is a
+Vestra CPU/GPU comparison; these effects are not MoviePy comparison workloads.
+
+<details markdown="1">
+<summary>All suite medians, effective FPS and backend ratios</summary>
 
 | Suite | Scenario | Resolution | CPU wall s | CPU FPS | WGPU wall s | WGPU FPS | WGPU/CPU |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -126,6 +119,8 @@ Each row is the median of the versioned suite samples (canonical and collector c
 | input-tone-1080p | tone_dither_video | 1920x1080 | 3.047 | 29.54 | 1.779 | 50.59 | 0.58x |
 | palette-interpolation-1080p | palette_video | 1920x1080 | 2.797 | 32.18 | 1.766 | 50.96 | 0.63x |
 | palette-interpolation-1080p | oklab_palette_video | 1920x1080 | 4.642 | 19.39 | 1.752 | 51.37 | 0.38x |
+
+</details>
 
 Notable effects: on CPU at 1920x1080, `ascii_video` is 6.345 s (14.18 FPS), `halftone_video` 6.007 s (14.98 FPS), `crt_video` 5.745 s (15.67 FPS), `contrast_dither_video` 7.654 s (11.76 FPS), and `oklab_palette_video` 4.642 s (19.39 FPS). On the same GPU these effects cluster at 1.71–1.85 s (roughly 49–53 FPS), so the CPU effect kernels are the dominant backend-specific loss.
 
@@ -209,9 +204,57 @@ All three gated internal benchmark tests (`preparation_matrix`, `effect_scaling_
 - CPU and WGPU stages overlap; summed `frame_sum`/stage counters are diagnostic, not additive wall-time components.
 - The first standalone 4K WGPU invocation omitted `VESTRA_BENCH_BACKEND=wgpu` and therefore selected CPU; it was discarded and rerun with the explicit backend. The reported 4K WGPU numbers are from the corrected run.
 
+## Environment and fairness
+
+- Host: AMD Ryzen 5 3600 (12 logical CPUs), 16 GiB RAM, Linux 6.18.59 x86_64, all CPUs 0–11 available.
+- Toolchain: Rust 1.95.0, Cargo 1.95.0, Python 3.13.17, uv 0.11.21, FFmpeg/ffprobe 8.1.2 (libx264), release profile.
+- Python packages: Vestra 0.1.3, MoviePy 2.2.1, NumPy 2.5.4, Pillow 11.3.0, psutil 7.2.2, imageio 2.38.1, imageio-ffmpeg 0.6.0.
+- WGPU: Vulkan NVIDIA GeForce GTX 1650 SUPER, discrete GPU, driver 595.71.05; llvmpipe was discovered but rejected as software.
+- CPU and WGPU runs used identical generated fixtures, suite definitions, 30 fps settings, FFmpeg/libx264 output validation, and serial execution. The MoviePy comparison used the same prepared forest/valley/tear inputs and 640x360 matched timelines.
+- Process resources are simultaneous process-tree RSS sampled by psutil every 20 ms for short comparisons and every 5 s for sustained runs. PSS was unavailable in the harness, so RSS is reported and is a lower-bound/shared-page-sensitive metric; GPU VRAM is not measured. CPU utilization is observed process-tree CPU time, with one core = 100%.
+
+## Reproduction commands
+
+From an existing clone, fetch the history and create a separate checkout of the
+recorded revision. Choose a new worktree directory; these commands preserve
+your current branch and working files:
+
+```bash
+git fetch origin develop
+git worktree add --detach ../vestra-benchmark-34dec665 34dec665090aa5706a83eb8302d38f5d1801dbf5
+cd ../vestra-benchmark-34dec665
+nix develop .#comparison
+# Keep Cargo artifacts separate from any other checkout.
+export CARGO_TARGET_DIR="$PWD/target"
+uv run --no-project --python "$(command -v python3)" scripts/collect-benchmarks.py --profile all --hours 1 --suite canonical --backend auto --graphics-api vulkan --timeout 900 --sustained-timeout 14400 --output target/benchmark-results/full-collection
+```
+
+Use the Nix shell's Python so the interpreter and native extension share
+runtime libraries. The collector builds its own executables and creates a
+uniquely named result directory. To run an additional suite from the tables above, use the runner;
+this example selects `stylized-effects-1080p` and builds the matching executable:
+
+```bash
+VESTRA_BENCH_VALIDATE=1 uv run --no-project --python "$(command -v python3)" python scripts/benchmark.py run --suite stylized-effects-1080p --backend cpu --output target/benchmark-results/complete-suites/cpu/stylized-effects-1080p
+VESTRA_BENCH_VALIDATE=1 VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_HARDWARE_WGPU=1 uv run --no-project --python "$(command -v python3)" python scripts/benchmark.py run --suite stylized-effects-1080p --backend hardware-wgpu --output target/benchmark-results/complete-suites/hardware-wgpu/stylized-effects-1080p
+for benchmark in preparation_matrix effect_scaling_matrix random_access_matrix; do
+  VESTRA_RENDER_BENCH=1 cargo test --release --locked -p vestra --no-default-features --features cpu "$benchmark" -- --nocapture --test-threads=1
+done
+```
+
+Use a fresh output directory when repeating a direct suite. Hardware commands
+require a verified eligible adapter; CPU runs can be collected separately.
+Toolchain, driver and host differences can change the results even at the same
+revision. For current-checkout measurements and native setup, follow
+[benchmark collection](https://github.com/evgen2571/vestra/blob/develop/benchmarks/COLLECTING.md); keep new results separate
+from these historical tables.
+
+The direct suite executable hashes were recorded in each `suite.json`
+provenance record and the collector diagnostics.
+
 ## Raw evidence locations
 
-- Full collector: `target/benchmark-results/full-collection/vestra-bench-linux-20261031T130534Z-180e48c2/` and its ZIP archive.
+- Full collector: `target/benchmark-results/full-collection/vestra-bench-linux-20261031T130534Z-180e48c2/`.
 - Additional suite matrices: `target/benchmark-results/complete-suites/cpu/` and `target/benchmark-results/complete-suites/hardware-wgpu/`.
 - 4K logs: `target/benchmark-results/complete-suites/4k-cpu-dither.log` and `4k-wgpu-dither.log`.
 - Internal controls: `target/benchmark-results/render-preparation.json`, `render-effect-scaling.json`, `render-random-access.json`.

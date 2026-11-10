@@ -19,7 +19,7 @@ For a smaller introduction, start with the
 
 ## [Layers, masks and audio signals](motion-design.md)
 
-Three scenes show grouped card animation, masked Shanghai footage with ordered
+Three scenes show grouped card animation, masked valley footage with ordered
 dithering, and an audio-reactive radial spectrum.
 
 </div>
@@ -48,11 +48,11 @@ and particle opacity. The preview includes the synthesized soundtrack.
 
 <div class="gallery-card" markdown>
 
-[![Shanghai skyline at blue hour with illuminated buildings reflected in the river](../assets/gallery/video-editing.webp)](video-editing.md)
+[![Snowy valley footage with animated reframing](../assets/gallery/video-editing.webp)](video-editing.md)
 
-## [A day-to-night video edit](video-editing.md)
+## [A three-shot video edit](video-editing.md)
 
-Three Shanghai shots use slow zooms, half-second dissolves, colour adjustments
+Forest, valley and water-drop shots use slow zooms, half-second dissolves, colour adjustments
 and a grouped title overlay.
 
 </div>
@@ -72,7 +72,8 @@ share the same zoom animation.
 
 ## Run the examples
 
-These projects load media and fonts from `examples/showcase/assets/`. The
+These projects load shared footage from `assets/footage/` and other media and
+fonts from `examples/showcase/assets/`. The
 sources and inputs are included in the documentation checkout. If you already
 have that checkout, enter `nix develop` and run `just python-sync` from its root.
 
@@ -83,7 +84,7 @@ git clone https://github.com/evgen2571/vestra.git
 cd vestra
 
 # Keep the example sources and input assets at the captured revision.
-git switch --detach fa0e95a1c896d01798f54e27d7e9bed3623734c7
+git switch --detach bf527c93952b258f518ea6915551437ba629b545
 
 # Enter the native development environment and build the Python package once.
 nix develop
@@ -91,12 +92,11 @@ just python-sync
 ```
 
 Source links, bundled inputs and full-resolution renders all use revision
-`fa0e95a1c896d01798f54e27d7e9bed3623734c7`. Its source cleanup preserves the scenes used for the existing previews;
-no media was regenerated for naming, layout or comment changes. A review checkout
-of this branch already contains that revision. Public commit links become
+`bf527c93952b258f518ea6915551437ba629b545`. The video-editing and masked-footage previews have been regenerated
+with the shared benchmark inputs. Public commit links become
 available when the reviewed commits are pushed.
 
-Each example's credits describe its inputs and preview. To make website delivery
+Each example describes its inputs and preview. To make website delivery
 copies from the bundled renders, follow [preview reproduction](../development/documentation.md#reproduce-gallery-previews);
 it uses this checkout and does not fetch a separate documentation branch.
 

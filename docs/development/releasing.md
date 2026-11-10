@@ -5,47 +5,6 @@ publication. A manual candidate run publishes nothing. A version tag runs the
 same checks, stages a GitHub prerelease with corresponding source, then waits
 for protected PyPI approval before marking the release complete.
 
-## Version and artifact contract
-
-The workspace version in `Cargo.toml` is the version for every Rust crate and
-the Python package. Maturin reads it from `vestra-python`; `pyproject.toml`
-keeps its dynamic version setting. Publication requires `v<workspace-version>`
-and verifies that the tag still identifies the tested commit before staging,
-PyPI publication and final promotion. Never move or reuse a published tag.
-
-`.github/workflows/artifacts.yml` is shared by release preparation and
-packaging-related PR checks. It builds:
-
-- Five `cp311-abi3` wheels: Linux x86_64/aarch64, macOS Intel/Apple Silicon,
-  and Windows x64. Each **same wheel** is installed in fresh CPython 3.11,
-  3.12, 3.13 and 3.14 environments, for 20 installed-wheel smoke jobs.
-- Five separate native CLI archives, named
-  `ve-<version>-<rust-target>.tar.gz` (Unix) or `.zip` (Windows), with SHA-256
-  sidecars, MIT license, third-party notices and dependency license texts.
-  CLI compilation selects `vestra-cli`, independently of Python bindings.
-- One Python sdist, installed and tested in a fresh environment.
-- Ten corresponding FFmpeg source ZIPs, one for each wheel/CLI build.
-  Separate Cargo target directories make source association explicit. No
-  equivalence between platform builds or wheel/CLI builds is assumed.
-- `release-manifest.json` with the exact commit and all artifact hashes,
-  plus `SHA256SUMS`. Inventory validation requires every target and verifies
-  each source ZIP's embedded binary hash and Vestra revision.
-
-The stable ABI reduces wheel builds from 20 to five without narrowing the
-supported CPython range. It does not support PyPy or free-threaded CPython.
-Stable-ABI calls and Python/native conversions can have additional overhead;
-`scripts/benchmark-python-abi.py` measures those boundaries independently of
-render throughput. Inspect measurements in the implementation PR rather than
-assuming every operation becomes faster.
-
-Installed-wheel checks cover metadata, typing files, native APIs, serialized
-projects, frame bytes, packaged fonts with empty font discovery, CPU rendering,
-H.264 video and AAC audio. CLI checks verify the archive checksum, extract it
-outside the checkout, run `version` and `validate`, render with CPU, and probe
-frames and presentation timestamps. Fresh smoke runners install runtime FFmpeg
-but no Vestra SDK for the CLI check. These checks establish CPU packaging
-correctness, not hardware GPU support.
-
 ## Maintainer release checklist
 
 1. Update the workspace version and release notes. Run
@@ -85,6 +44,55 @@ correctness, not hardware GPU support.
    promotes the prerelease only after PyPI succeeds. Edit generated release
    notes as needed. Do not create a complete public release before validation.
 
+## Version and artifact contract
+
+The workspace version in `Cargo.toml` is the version for every Rust crate and
+the Python package. Maturin reads it from `vestra-python`; `pyproject.toml`
+keeps its dynamic version setting. Publication requires `v<workspace-version>`
+and verifies that the tag still identifies the tested commit before staging,
+PyPI publication and final promotion. Never move or reuse a published tag.
+
+`.github/workflows/artifacts.yml` is shared by release preparation and
+packaging-related PR checks. It builds:
+
+- Five `cp311-abi3` wheels: Linux x86_64/aarch64, macOS Intel/Apple Silicon,
+  and Windows x64. Each wheel is installed in fresh CPython 3.11,
+  3.12, 3.13 and 3.14 environments, for 20 installed-wheel smoke jobs.
+- Five separate native CLI archives, named
+  `ve-<version>-<rust-target>.tar.gz` (Unix) or `.zip` (Windows), with SHA-256
+  sidecars, MIT license, third-party notices and dependency license texts.
+  CLI compilation selects `vestra-cli`, independently of Python bindings.
+- One Python sdist, installed and tested in a fresh environment.
+- Ten corresponding FFmpeg source ZIPs, one for each wheel/CLI build.
+  Separate Cargo target directories make source association explicit. No
+  equivalence between platform builds or wheel/CLI builds is assumed.
+- `release-manifest.json` with the exact commit and all artifact hashes,
+  plus `SHA256SUMS`. Inventory validation requires every target and verifies
+  each source ZIP's embedded binary hash and Vestra revision.
+
+Wheels use CPython's stable ABI: one wheel per platform supports CPython
+3.11–3.14. PyPy and free-threaded CPython are not supported.
+`scripts/benchmark-python-abi.py` measures Python/native conversion overhead
+separately from render throughput.
+
+## Artifact verification
+
+Installed-wheel checks cover metadata, typing files, native APIs, serialized
+projects, frame bytes, packaged fonts with empty discovery, native media loading,
+master analysis and both encoding paths. They verify H.264/AAC output, AAC
+decoding and tone timing, an executable path containing spaces, and executable
+selection retained by prepared sessions.
+
+These Python checks run before CLI runtime tools are installed, in a child
+process with an empty PATH, no FFmpeg override and no development library search
+paths. They do not use FFprobe. Codec failures fail the artifact gate.
+
+CLI checks verify the archive checksum, extract it outside the checkout, run
+`version` and `validate`, render with CPU, and probe frames and presentation
+timestamps. Fresh runners install runtime FFmpeg without the Vestra SDK for
+this check. Artifact checks establish CPU packaging correctness; GPU support
+requires separate adapter evidence.
+
 ## Failure and retry behavior
 
 Build, smoke or inventory failures prevent staging and publication. A failed or
@@ -98,11 +106,12 @@ hashes before skipping existing files, allowing a partial upload to resume
 while rejecting different builds under an existing filename. Before replacing
 any staged file, staging checks existing GitHub asset hashes and PyPI hashes;
 a rebuild cannot replace the corresponding source of already distributed binaries.
-A complete GitHub release cannot be overwritten by staging. If only promotion failed, rerun that
-job; do not start a new build or replace PyPI files. Release runs are serialized
-to avoid concurrent uploads. GitHub and PyPI are separate services, so publication
-is not atomic; a failed promotion can leave PyPI complete and GitHub prerelease
-pending until the job is retried.
+A complete GitHub release cannot be overwritten by staging.
+
+If only promotion failed, rerun that job; do not start a new build or replace
+PyPI files. Release runs are serialized to avoid concurrent uploads. GitHub and
+PyPI publication is not atomic: failed promotion can leave PyPI complete and
+the GitHub prerelease pending until the job is retried.
 
 ## Native compatibility and dependencies
 
@@ -114,12 +123,28 @@ Windows Server 2022. This is not exhaustive testing of older operating systems
 or GPUs. Native Windows/macOS PR smoke checks run for non-documentation changes;
 full artifact checks run for release/packaging changes and manual CI runs.
 
-Wheels and CLI executables statically link a bundled LGPL FFmpeg build for media
-probing and video decoding. Python encoding and audio processing use the executable installed by the
-`imageio-ffmpeg>=0.6,<0.7` dependency. CLI encoding still needs `ffmpeg` on PATH. `ffprobe` is optional for independent
-media verification. Source builds need Rust, a C toolchain, libclang, `make`,
-Git and NASM. The vendored `ffmpeg-sys-next` build recipe removes `-march=native`
-and fixes MSVC dependency parsing/archive response files.
+Wheels and CLI executables statically link bundled LGPL FFmpeg libraries for
+media probing and video decoding. Encoding and audio processing use a separate
+executable:
+
+<span id="python-executable-dependency"></span>
+
+| Caller | Executable selection |
+| --- | --- |
+| Python | Installed through `imageio-ffmpeg>=0.6,<0.7`, with `IMAGEIO_FFMPEG_EXE` for an override. |
+| Rust / CLI | `ffmpeg` on PATH by default. |
+| Independent output verification | Optional `ffprobe`; Vestra does not invoke it for runtime probing. |
+
+The dependency's executable is downloaded separately from the Vestra wheel;
+normal dependency resolution installs one copy. Smoke logs record executable
+sizes, `-version` and `-L` output for each target. See
+[NixOS troubleshooting](../troubleshooting/ffmpeg.md#nixos) for native runtime
+requirements; an executable running successfully does not prove that a manylinux
+extension can load on the same host.
+
+Source builds need Rust, a C toolchain, libclang, `make`, Git and NASM. The
+vendored `ffmpeg-sys-next` recipe removes `-march=native` and fixes MSVC dependency
+parsing and archive response files.
 
 ## Bundled-library source and licenses
 
@@ -146,8 +171,7 @@ such modifications. §6(a) permits complete work material as object code and/or
 source code, but source ZIPs alone do not demonstrate that recipients can relink
 the Rust binaries with modified FFmpeg. Before distribution, review the actual
 terms and verify a usable rebuild/relink route for each target, supplying any
-additional object material or instructions that route needs. This work does not
-certify legal compliance.
+additional object material or instructions that route needs.
 
 The source ZIP README describes rebuilding its FFmpeg tree and adapting the
 vendored fetch step to use modified source, followed by a clean Maturin or CLI
@@ -161,54 +185,33 @@ has not been validated as an LGPL-compliant relinking kit on all platforms;
 maintainer/legal review is still required. Keep source downloads accessible for
 as long as required by the chosen redistribution route.
 
+### Python executable licenses
+
+The `imageio-ffmpeg` Python wrapper is BSD-2-Clause. Its FFmpeg executables have
+separate licenses and enabled components from Vestra's linked LGPL libraries.
+For version 0.6.0:
+
+| Executable | Reported license / restriction |
+| --- | --- |
+| Linux and Windows | GPLv3-or-later; includes GPL codecs such as libx264. |
+| macOS ARM64 | GPLv2-or-later. |
+| macOS Intel | Built with `--enable-nonfree`; explicitly reports that it is not legally redistributable. |
+
+Do not mirror or bundle the macOS Intel executable with an application. Arrange
+a redistributable executable and dependency package, then select that build
+with `IMAGEIO_FFMPEG_EXE`. The override alone does not remove the installed
+dependency binary. Automatic installation downloads from the dependency's
+publisher; Vestra's wheel does not contain these executables.
+
+When updating or repackaging the dependency, inspect each platform's `-version`,
+`-L` and wheel notices, and review source and redistribution obligations. Keep
+the linked-library obligations above separate. The
+[third-party notices](https://github.com/evgen2571/vestra/blob/develop/THIRD_PARTY_NOTICES.md)
+and [imageio binary builds](https://github.com/imageio/imageio-binaries) provide
+the dependency records.
+
 Upstream references: [FFmpeg licensing](https://ffmpeg.org/legal.html),
 [LGPL 2.1 §6](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html#section6),
 [Maturin stable ABI](https://pyo3.rs/v0.29.0/building-and-distribution#py_limited_apiabi3),
 [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/)
 and [GitHub release uploads](https://cli.github.com/manual/gh_release_upload).
-
-## Python executable dependency
-
-Release-wheel smoke tests run on every target and Python version above, before
-installing CLI runtime tools. The verifier imports the installed extension in a
-child process with an empty PATH, no FFmpeg override and no development library
-search paths. It checks audio/video encoding, AAC decoding and tone timing,
-native media loading, master analysis, both encoder paths, an explicit executable
-with spaces in its path and prepared-session selection retention. FFprobe is not
-used. Codec failures fail the artifact gate rather than becoming support claims.
-
-imageio-ffmpeg 0.6.0 publishes wheels for all five Vestra targets. Its compressed
-wheel adds approximately 29.5 MB on Linux x86_64, 25.6 MB on Linux ARM64, 24.9 MB
-on macOS Intel, 21.1 MB on macOS ARM64 and 31.2 MB on Windows x64 (decimal MB).
-The Linux x86_64 executable occupies about 79.8 MB installed. The Vestra wheel
-does not contain a second copy; normal dependency resolution downloads it once.
-The local NixOS x86_64 Vestra wheel measured 21.9 MB. Inspect the release
-artifacts for portable wheel sizes, which vary by target and build configuration.
-
-The dependency's Python wrapper is BSD-2-Clause; its FFmpeg executables include
-GPL codecs such as libx264 and have their own redistribution terms. The Linux
-x86_64 0.6.0 executable reports FFmpeg 7.0.2 and GPLv3-or-later. Inspect each
-platform's `-version`, `-L` and wheel notices when updating the dependency.
-The smoke logs record these outputs and installed executable sizes for every
-target. FFmpeg versions and enabled components differ by target. Review source and
-redistribution obligations if mirroring or repackaging dependency wheels. This
-executable is separate from Vestra's statically linked LGPL build and its source
-archives; those existing obligations still apply. See
-[third-party notices](https://github.com/evgen2571/vestra/blob/develop/THIRD_PARTY_NOTICES.md) and the
-[imageio binary builds](https://github.com/imageio/imageio-binaries).
-
-The macOS Intel executable in imageio-ffmpeg 0.6.0 is a specific redistribution
-limitation: its `-version` lists `--enable-nonfree`, and `-L` says
-"This version of ffmpeg has nonfree parts compiled in. Therefore it is not
-legally redistributable." The Linux and Windows binaries report GPLv3-or-later;
-macOS ARM64 reports GPLv2-or-later. Automatic installation obtains these binaries
-from the dependency's publisher; Vestra's own wheel does not redistribute them.
-Do not mirror or bundle the macOS Intel executable with an application. For an
-application distribution, arrange a redistributable dependency/binary package
-and use `IMAGEIO_FFMPEG_EXE` to select your build. The override alone does not
-remove the installed dependency binary. Replacing the upstream build or
-maintaining our own FFmpeg distribution is outside this packaging workflow.
-
-See [NixOS troubleshooting](../troubleshooting/ffmpeg.md#nixos) for the separately
-checked executable and native-library boundary. A successful static FFmpeg run
-does not establish that a manylinux extension loads on an arbitrary NixOS host.

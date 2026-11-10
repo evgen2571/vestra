@@ -23,7 +23,7 @@ signatures, formats and feature topics, use the [full reference index](catalog.m
 | Connect two shots | [Transitions and presets](../guides/python/transitions-flashes-and-presets.md) | [Transitions](transitions.md), [presets and flashes](presets-and-flashes.md) |
 | Mix a soundtrack | [Audio](../guides/python/audio.md) | [Audio contracts](audio.md) |
 | Make graphics react to sound | [Signals and audio reactivity](../guides/python/signals-and-audio-reactivity.md) | [Signals](signals.md) |
-| Render frames or reuse preparation | [Rendering and preparation](../guides/python/rendering-and-preparation.md) | [Backends](backends.md) |
+| Render videos, frames or previews | [Rendering and preparation](../guides/python/rendering-and-preparation.md) | [Render outputs](render-outputs.md), [backends](backends.md) |
 
 ## Choose a source
 
@@ -42,7 +42,7 @@ Sources describe what a layer draws. Start with [shapes](sources/shape.md), [tex
 The Python API lowers to a canonical project model. You can also author that model directly or use the Rust SDK.
 
 - [JSON authoring](../guides/json-authoring.md) and [project-format reference](project-format.md).
-- [CLI quickstart](../getting-started/cli-quickstart.md), [rendering commands](../guides/cli/rendering.md), and [CLI reference](cli.md). The `ve` binary is built separately; installing the Python wheel does not install it.
+- [CLI quickstart](../getting-started/cli-quickstart.md), [rendering commands](../guides/cli/rendering.md), and [CLI reference](cli.md). Download a separate native CLI archive or build from source; installing the Python wheel does not install `ve`.
 - [Rust SDK](rust-sdk.md).
 
 ## Diagnose a problem

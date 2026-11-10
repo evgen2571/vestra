@@ -131,11 +131,9 @@ for the visual criteria.
 
 <span id="advanced-control-visual-acceptance-matrix"></span>
 
-## Historical freeze evidence
+## Support and verification
 
-The [2026-10-10 release-freeze matrix](https://github.com/evgen2571/vestra/blob/ba7c505a8a397e9a6a4c8db48c7ec2f44a5c6430/docs/development/stylization/temporal-diagnostics.md#advanced-control-visual-acceptance-matrix)
-retains the captured fixture names, visual observations and deferred controls.
-Its statuses describe that capture, not verification of today's checkout or a
-promise to implement the deferred controls. For a new change, use the current
-procedures above, [effect reference](../../reference/effects.md) and
-[support matrix](../../reference/feature-support.md).
+Use the [effect reference](../../reference/effects.md) for available controls
+and the [support matrix](../../reference/feature-support.md) for CPU and WGPU
+coverage. Run the procedures above when changing an effect; recorded evidence
+from an older revision does not verify the current checkout.

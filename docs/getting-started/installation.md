@@ -31,27 +31,6 @@ Run the same quickstart with `python quickstart.py`. Wheel users do not need
 Rust, a C compiler or NASM. If no wheel matches your platform/interpreter,
 pip may attempt a source build, which needs the tools below.
 
-## Choose a different FFmpeg executable
-
-Python uses the executable packaged by `imageio-ffmpeg`, even when a system
-FFmpeg is on `PATH`. To use your own build, set `IMAGEIO_FFMPEG_EXE` before
-preparing or rendering:
-
-```bash
-export IMAGEIO_FFMPEG_EXE=/absolute/path/to/ffmpeg
-```
-
-In PowerShell, use `$env:IMAGEIO_FFMPEG_EXE = 'C:\tools\ffmpeg.exe'`.
-Paths with spaces, relative paths and command names on `PATH` are accepted;
-an absolute path is recommended. Invalid overrides fail instead of silently
-selecting another executable. Prepared projects retain their selected path.
-Your build must support H.264 via `libx264`, AAC and Vestra's audio filters.
-
-The extension separately bundles native FFmpeg libraries for probing and video
-decoding. `ffprobe` is optional for independent media verification; Vestra does
-not invoke it at runtime. Import and semantic validation do not run FFmpeg.
-For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
-
 ## Supported Python versions and platforms
 
 Vestra supports CPython 3.11–3.14. Published wheels cover Linux x86_64
@@ -103,6 +82,27 @@ frameworks. A GPU and compatible driver are needed only for WGPU rendering;
 use `--render-backend cpu` for a first render. Release smoke coverage is Ubuntu
 24.04, macOS 15 and Windows Server 2022; older compatible systems are not
 exhaustively tested. Continue with the [CLI quickstart](cli-quickstart.md).
+
+## Choose a different FFmpeg executable
+
+Python uses the executable packaged by `imageio-ffmpeg`, even when a system
+FFmpeg is on `PATH`. To use your own build, set `IMAGEIO_FFMPEG_EXE` before
+preparing or rendering:
+
+```bash
+export IMAGEIO_FFMPEG_EXE=/absolute/path/to/ffmpeg
+```
+
+In PowerShell, use `$env:IMAGEIO_FFMPEG_EXE = 'C:\tools\ffmpeg.exe'`.
+Paths with spaces, relative paths and command names on `PATH` are accepted;
+an absolute path is recommended. Invalid overrides fail instead of silently
+selecting another executable. Prepared projects retain their selected path.
+Your build must support H.264 via `libx264`, AAC and Vestra's audio filters.
+
+The extension separately bundles native FFmpeg libraries for probing and video
+decoding. `ffprobe` is optional for independent media verification; Vestra does
+not invoke it at runtime. Import and semantic validation do not run FFmpeg.
+For failures, see [FFmpeg troubleshooting](../troubleshooting/ffmpeg.md).
 
 <a id="build-from-source--development"></a>
 

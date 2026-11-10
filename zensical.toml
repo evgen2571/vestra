@@ -99,6 +99,7 @@ nav = [
       { "Signals" = "reference/signals.md" },
     ] },
     { "Rendering contracts" = [
+      { "Render outputs" = "reference/render-outputs.md" },
       { "Backends" = "reference/backends.md" },
       { "Feature support" = "reference/feature-support.md" },
       { "Diagnostics" = "reference/diagnostics.md" },

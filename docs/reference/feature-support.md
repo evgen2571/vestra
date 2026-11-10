@@ -23,10 +23,10 @@ All outputs consume the same evaluated composition and prepared backend.
 | GIF | `.gif` render destination | Local palette, binary alpha, centisecond timing, silent looping animation |
 | Animated WebP | `.webp` render destination | Lossless RGBA, millisecond timing, silent looping animation, bounded streaming mux |
 
-See [rendering and preparation](../guides/python/rendering-and-preparation.md)
-for exact selection, ownership, format limits and failure behavior. Output
-encoding is shared media execution; it does not broaden a source or effect's
-backend support listed below.
+See [render outputs](render-outputs.md) for selection, ownership, format limits
+and failure behavior, or the [Python guide](../guides/python/rendering-and-preparation.md)
+for examples. Output encoding is shared media execution; it does not broaden
+a source or effect's backend support listed below.
 
 ## Sources and group canvases
 
@@ -123,5 +123,4 @@ establish parity.
 Stylization release examples include [a generated moving portrait](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/stylized-effects/README.md#fine-detail-reference-and-ascii-diagnosis)
 with three palette-independent dither looks and zero-source-mix ASCII checks.
 Verification uses the actual adapters named above; native Windows D3D12/Vulkan
-is unverified. Optional new ASCII calibration, halftone shapes, sorting metrics
-and CRT mask modes are deferred and are not exposed as supported controls.
+is unverified.

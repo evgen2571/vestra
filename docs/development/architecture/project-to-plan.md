@@ -83,7 +83,7 @@ prepared metadata. The staged loop evaluates/submits only those project frame
 indices and writes sink indices from zero. The reusable plan stays unchanged.
 The encoder's final audio mix retains project-time effects before trimming and
 rebasing; nearest-sample rounding uses the 48 kHz mixer grid. See
-[output range behavior](../../guides/python/rendering-and-preparation.md#export-part-of-the-timeline).
+[output range behavior](../../reference/render-outputs.md#ranges-and-frame-boundaries).
 
 ## Duration resolution and validation authority
 

@@ -186,11 +186,15 @@ early/middle/final positions to measure AV alignment, allowing justified codec
 delay and container/sample rounding. Matching stream durations alone cannot
 prove sync. Raw frame fidelity and encoded-media correctness are separate checks.
 
-Current output is MP4 with libx264 H264/yuv420p; quality controls CRF and an
-internal x264 preset. Hardware WGPU rendering does not imply hardware decode,
-hardware encoding or direct GPU-to-encoder transfer. Record actual renderer,
-adapter and encoder separately. Selected-range video, resumability and alternate
-output codecs remain proposals rather than established test targets.
+For MP4, check libx264 H.264/yuv420p output and optional AAC audio. Selected-range
+tests should compare the clip against the same project times in a full render,
+with zero-based output timestamps and synchronized audio. GIF and animated WebP
+need decoded-frame checks for timing, looping and transparency; see
+[render outputs](../reference/render-outputs.md) for their encoding policies and
+container limits.
+
+Hardware WGPU rendering does not imply hardware decoding, encoding or direct
+GPU-to-encoder transfer. Record the renderer, adapter and encoder separately.
 
 ### Exercise duration, size and failure boundaries
 

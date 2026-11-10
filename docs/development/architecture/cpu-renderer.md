@@ -118,13 +118,6 @@ allocation limits, and reserves nothing across prepared projects. Even one
 worker can exceed available memory; OOM and simultaneous-render risks remain.
 Accounting and lazy scratch allocation provide no admission guarantee.
 
-<span id="deferred-admission-policy"></span>
-
-[Whole-operation memory admission (#81)](https://github.com/evgen2571/vestra/issues/81)
-owns the deferred design and acceptance criteria: preparation/video costs,
-resource-lifetime reservations, concurrent operations, platform limits and a
-structured cannot-fit error. Those requirements are not current behavior.
-
 ## Memory accounting
 
 Resource reports describe named engine storage, not process RSS/PSS or a

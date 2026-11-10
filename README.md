@@ -1,8 +1,8 @@
 # Vestra
 
 Vestra is a video composition and rendering engine. You describe a video as a
-project — layers, sources, keyframes, effects, audio — and Vestra renders it to
-MP4 through a native Rust engine, on the CPU or GPU (WGPU). It ships as a
+project — layers, sources, keyframes, effects, audio — and Vestra renders it
+through a native Rust engine, on the CPU or GPU (WGPU). It ships as a
 Python library, with a canonical JSON format and a separate native `ve` CLI.
 
 ![Animated showcase: animation, media, compositing and audio-reactive graphics](examples/showcase/readme-demo/preview.gif)
@@ -58,11 +58,13 @@ the configured output path and backend readiness. `ve inspect` resolves media
 for a summary, while `prepare()` sets up reusable rendering. CPU and GPU share
 one evaluated plan.
 
-- Output is MP4 (H.264 + AAC) up to 8192×8192; even dimensions are required.
+- Export MP4 (H.264 + AAC), GIF, animated WebP, still images, image sequences
+  or NumPy arrays. Render a selected interval or use a smaller preview without
+  editing the project. See [render outputs](docs/reference/render-outputs.md)
+  for format and dimension limits.
 - Python installs an FFmpeg executable through `imageio-ffmpeg` for encoding
-  and audio processing; bundled
-  FFmpeg libraries handle media probing and video decoding. `ffprobe` is optional
-  for independent output inspection.
+  and audio processing; bundled FFmpeg libraries handle media probing and video
+  decoding. `ffprobe` is optional for independent output inspection.
 - `auto` uses WGPU when a usable adapter is found and falls back to CPU;
   `cpu` and `wgpu` force a renderer. WGPU coverage per feature is in the
   [feature matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md).

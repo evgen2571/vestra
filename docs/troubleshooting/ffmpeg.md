@@ -27,20 +27,17 @@ preparation; prepare again after changing the override.
 The separate native CLI and developer media tools still require `ffmpeg` on
 `PATH`. Run `ffmpeg -version` in the shell running those tools.
 
-### NixOS
-
-The imageio-ffmpeg 0.6.0 Linux x86_64 executable is static and was verified on
-NixOS 26.05. An installed Vestra wheel built on NixOS was also checked with
-`PATH` empty and `LD_LIBRARY_PATH` unset. This does not prove that a published
-manylinux extension loads on every NixOS configuration: native dynamic runtime
-dependencies remain separate from the FFmpeg executable. If your installation
-reports a missing ELF interpreter or shared library, use the repository's Nix
-development environment for a source build. You can select Nix's FFmpeg with
-`IMAGEIO_FFMPEG_EXE` if the packaged executable cannot run on your system.
-
 Media probing uses bundled FFmpeg libraries and does not require `ffprobe`.
 Some optional developer checks use `ffprobe` to verify output independently;
 install it when running those checks.
+
+### NixOS
+
+The FFmpeg executable and Vestra's native extension have separate runtime
+requirements. If the extension cannot load because of a missing ELF interpreter
+or shared library, use the repository's Nix development environment for a source
+build. If only the packaged executable cannot run, select Nix's FFmpeg with
+`IMAGEIO_FFMPEG_EXE`. Changing that override does not fix extension import errors.
 
 ## An existing asset does not decode
 

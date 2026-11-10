@@ -41,5 +41,4 @@ and [temporal diagnostics](stylization/temporal-diagnostics.md).
 
 Coding agents start with [AGENTS.md](https://github.com/evgen2571/vestra/blob/develop/AGENTS.md).
 [Repository skills](https://github.com/evgen2571/vestra/blob/develop/.agents/skills/README.md)
-route specialist verification; [PLANS.md](https://github.com/evgen2571/vestra/blob/develop/PLANS.md)
-describes substantial-work plans.
+route specialist verification.

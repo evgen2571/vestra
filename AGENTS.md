@@ -10,9 +10,6 @@ have to rediscover. Link to the source documentation instead of copying it.
   Stay on the assigned branch; pull requests target `develop`.
 - Read the source and tests before relying on a description of behavior. Read
   `README.md` and `CONTRIBUTING.md` when setup or contribution workflow matters.
-- For substantial cross-component work, use an active plan under
-  `docs/plans/active/` as described in [PLANS.md](PLANS.md). Small localized
-  fixes need no plan.
 - Load only the relevant repository skill from
   [.agents/skills/README.md](.agents/skills/README.md). Claude Code discovers
   the same skills through `.claude/skills/`.
@@ -89,8 +86,6 @@ existing seams and limits.
 - Define the contract, compile/evaluate, update renderer backends, then update
   authoring/serialization and tests as applicable. Public API, schema, CLI and
   diagnostics changes may require type stubs, schema checks and reference docs.
-- Keep durable decisions in the active plan. Before merging, move lasting
-  knowledge into permanent documentation and remove completed plans.
 - Do not push or publish unless explicitly requested. Use commits formatted as
   `type: short description` without phase numbers.
 - At handoff, state the files changed, checks run, limitations and any

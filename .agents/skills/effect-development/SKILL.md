@@ -5,8 +5,7 @@ description: "Use when implementing or modifying Vestra visual effects, WGSL ker
 
 # Develop a Vestra visual effect
 
-Follow [AGENTS.md](../../../AGENTS.md) and, for complex work,
-[PLANS.md](../../../PLANS.md). Read the
+Follow [AGENTS.md](../../../AGENTS.md). Read the
 [effect extension guide](../../../docs/development/extending/effect.md)
 and [effect pipeline](../../../docs/development/architecture/effect-pipeline.md).
 For stylization, use the [effect reference](../../../docs/reference/effects.md)

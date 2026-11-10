@@ -9,7 +9,6 @@ docs_dir = "docs"
 site_dir = "site"
 extra_css = ["assets/stylesheets/site.css"]
 exclude_docs = """
-/plans/
 /agents/
 requirements.txt
 """

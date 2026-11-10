@@ -127,9 +127,9 @@ Keep source, author, license, modifications and reproduction instructions beside
 the example that uses an asset: in its README for source inputs, and under
 **Credits** on its gallery page for site previews. Link to a shared input's record
 rather than copying attribution tables. Shared preparation and font provenance
-belong in the [showcase README](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/README.md#prepare-shared-inputs).
-The [photo cutouts](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/compositing/README.md#photo-source)
-and [video edit](https://github.com/evgen2571/vestra/blob/bf527c93952b258f518ea6915551437ba629b545/examples/showcase/real-media-edit/README.md#shared-inputs)
+belong in the [showcase README](https://github.com/evgen2571/vestra/blob/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/README.md#prepare-shared-inputs).
+The [photo cutouts](https://github.com/evgen2571/vestra/blob/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/compositing/README.md#photo-source)
+and [video edit](https://github.com/evgen2571/vestra/blob/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/real-media-edit/README.md#shared-inputs)
 show the convention and shared preparation workflow.
 
 Check the actual source terms before making license claims. Credit CC0 inputs

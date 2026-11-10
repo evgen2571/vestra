@@ -18,7 +18,10 @@ from vestra.sources import (
 )
 
 SHOWCASE = Path(__file__).resolve().parents[1]
+ASSETS = SHOWCASE.parents[1] / "assets"
 DURATION = 10
+FOOTAGE = SHOWCASE.parents[1] / "assets/footage"
+
 BACKGROUND, PAPER, MINT = "#101c24", "#f1efe5", "#b8e3bc"
 
 
@@ -29,13 +32,13 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         size=size,
         fps=fps,
         duration=DURATION,
-        base_directory=SHOWCASE,
+        base_directory=ASSETS,
         quality=Quality.HIGH,
         output_audio=False,
     )
     project.root.add(Color(BACKGROUND), z=-100)
     # Keep the analysis input audible in the mix; only the exported track is disabled.
-    project.audio.track("synth").add("assets/synth.wav", trim_end=DURATION)
+    project.audio.track("synth").add("audio/synth.wav", trim_end=DURATION)
     # Bound the RMS multiplier before smoothing so beats expand the ring gently.
     loudness = project.audio.signal.rms()
     scale_response = loudness.remap(input=(0.06, 0.14), output=(0.8, 1.25))
@@ -46,7 +49,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         layer = parent.add(
             Text(
                 text,
-                font="assets/Manrope.ttf",
+                font="fonts/Manrope.ttf",
                 font_size=font_size * resolution_scale,
                 fill=fill,
             ),
@@ -151,7 +154,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
 
     media = scene(3.2, 3.6, "Video + masks + palette effects")
     clip = media.group(duration=3.6)
-    footage = clip.add(Video("assets/city-2.mp4", sizing="cover"))
+    footage = clip.add(Video(str(FOOTAGE / "valley.mp4"), sizing="cover"))
     # The footage zoom and the group mask are independent; the group rotates both.
     footage.transform.scale = 0.46
     window = Rectangle(

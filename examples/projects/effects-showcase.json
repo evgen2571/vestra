@@ -16,12 +16,12 @@
     {
       "id": "red",
       "type": "image",
-      "source": "../assets/red.png"
+      "source": "../../assets/fixtures/red.png"
     },
     {
       "id": "blue",
       "type": "image",
-      "source": "../assets/blue.png"
+      "source": "../../assets/fixtures/blue.png"
     }
   ],
   "visual": {

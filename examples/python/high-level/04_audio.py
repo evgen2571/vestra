@@ -17,7 +17,7 @@ def main() -> None:
     project = Project(size=(160, 90), fps=12, duration=1, base_directory=ROOT)
     music = project.audio.track("music", gain=0.9)
     soundtrack = music.add(
-        "examples/assets/tone.wav",
+        "assets/fixtures/tone.wav",
         start=0.0,
         trim_end=1.0,
         fade_in=0.1,

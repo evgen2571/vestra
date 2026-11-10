@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 
-from scripts.benchmark import ROOT
+from benchmarks.benchmark import ROOT
 
 
 def executable(name, system=None):
@@ -181,7 +181,7 @@ def preflight(directory, *, build=True):
     check(
         "Python",
         lambda: sys.version if (3, 11) <= sys.version_info[:2] <= (3, 14) else None,
-        "Run uv run --no-project --python 3.13 scripts/collect-benchmarks.py",
+        "Run uv run --no-project --python 3.13 benchmarks/collect.py",
     )
     tools = {
         "uv": ["--version"],
@@ -201,7 +201,7 @@ def preflight(directory, *, build=True):
         check(
             name,
             lambda n=name, a=args: version([executable(n) or n, *a]),
-            f"Install {name} and put it on PATH; see benchmarks/COLLECTING.md.",
+            f"Install {name} and put it on PATH; see docs/benchmarks/collecting.md.",
         )
     if build:
         check(

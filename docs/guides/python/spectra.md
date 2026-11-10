@@ -131,7 +131,7 @@ limits, gradients and presets.
 
 ## Complete example
 
-[Download audio_response.py](../../assets/examples/audio_response.py) and run
+[Download audio_response.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/audio_response.py) and run
 `python audio_response.py`. It creates a four-second bass-and-melody WAV and
 replaces `audio-spectra.mp4`, plus the two
 [scalar response studies](signals-and-audio-reactivity.md). The clips stay in

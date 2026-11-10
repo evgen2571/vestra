@@ -1,8 +1,8 @@
 # Vestra and MoviePy v2 comparison
 
-This extends [the existing benchmark runner](../../../scripts/benchmark.py).
+This extends [the existing benchmark runner](../../benchmark.py).
 It compares three silent video timelines through the normal Python APIs, with
-1920×1080 / 30 fps output. It measures complete worker processes, including
+1920×1080 / 60 fps output. It measures complete worker processes, including
 Python startup/imports, project construction, media decoding, rendering,
 libx264 encoding, finalization and publication. Input preparation and output
 verification happen outside the measured intervals. These are editing workloads,
@@ -19,27 +19,25 @@ On other systems use the equivalent native environment with FFmpeg/FFprobe.
 nix develop .#comparison
 uv sync --locked --extra benchmark --extra dev
 
-# Fresh directory; defaults to ~/drive/Assets. No downloads or replacements.
-uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy prepare
-# Optional: --assets /path/to/Assets --inputs target/my-moviepy-inputs
+# Shared forest/valley/tear inputs are already bundled in assets/footage/.
 
 # Viability only; these timings are not performance evidence.
-uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run --width 320 --height 180 \
+uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy run --width 320 --height 180 \
   --warmups 0 --samples 1 --output target/moviepy-smoke
 
 # All three CPU workloads, one warmup + five measured samples per engine.
-VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run \
+VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy run \
   --output target/moviepy-cpu
 
 # Separate strict hardware run; select the API found by adapter discovery.
 just wgpu-list
-VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run \
+VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy run \
   --engines hardware-wgpu --output target/moviepy-hardware
 
 # Decode representative boundary/source frames, compare and create local sheets.
-uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy verify \
+uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy verify \
   target/moviepy-cpu target/moviepy-hardware --output target/moviepy-visuals
-uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy report \
+uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy report \
   target/moviepy-cpu target/moviepy-hardware \
   --verification target/moviepy-visuals/metrics.json > target/moviepy-report.md
 ```
@@ -58,19 +56,22 @@ or a software/unknown adapter is a failed hardware run, never a CPU replacement.
 Keep `--extra benchmark` on sync/run commands so MoviePy remains installed.
 The locked benchmark extra replaces manual requirements installation. Package
 versions and the native extension hash are recorded; MoviePy's distribution is
-2.2.1 even though its internal version string says 2.1.2. For automatic portable
-footage and a shareable ZIP, use [the collector](../../COLLECTING.md).
+2.2.1 even though its internal version string says 2.1.2. For the portable benchmark workflow,
+use [the collector](../../../docs/benchmarks/collecting.md).
 
 ## Inputs and equivalent operations
 
 Preparation uses the first 12 seconds of forest, valley and tear, center-cropped
-to 1280×720, CFR 30 fps, silent H.264/yuv420p, CRF 18 / veryfast, two encoder
+to 1920×1080, CFR 60 fps, silent H.264/yuv420p, CRF 23 / slow, two encoder
 threads, bicubic FFmpeg scaling and stripped metadata/bitexact flags. Resizing
 from these shared inputs is part of each engine's workload. `manifest.json`
-records exact commands, source/prepared SHA-256, probes and FFmpeg version.
-Identical bytes across different FFmpeg builds are not promised. Runs reject
-changed prepared files; missing/short/undecodable originals fail with an error.
-Originals remain read-only. Preparation is never part of the timing comparison.
+records checksums, frame counts and encoding settings. Runs reject changed
+prepared files. Preparation is never part of the timing comparison.
+
+By default, run/verify use `assets/footage/`, shared with the showcases. To
+prepare a different local collection, use `moviepy prepare --assets DIRECTORY
+--inputs target/my-moviepy-inputs` and pass that `--inputs` path to run/verify.
+Use a fresh output directory and collect a separate baseline for changed inputs.
 
 | Scenario | Timeline and operations |
 | --- | --- |
@@ -125,31 +126,6 @@ Other repetitions receive structural/full-decode validation, not exhaustive
 pixel comparisons. Reports without matching successful visual evidence are
 explicitly unverified.
 
-Generated MP4s, PNGs, prepared files, raw records and logs stay under ignored
-`target/`; do not commit them. Reports are machine-local and may contain source
-paths in probe metadata. Review before sharing. Collection footage licensing
-and permission to redistribute remain with the collection owner.
-
-## Collection inspection
-
-The initial collection was probed before selecting footage. Font archives were
-inspected for font members and OFL notices. Unused items remain untouched.
-
-| Original | Inspected media | Use |
-| --- | --- | --- |
-| `forward-fly-above-snow-forest.mp4` | H.264 2704×1520, 24000/1001 fps, 19.394 s; AAC 48 kHz stereo | Forest input; audio removed |
-| `forward-fly-through-road-to-snow-valley.mp4` | H.264 3840×2160, 25 fps, 31.240 s; no audio | Valley input |
-| `dropping-tear.mp4` | H.264 3840×2160, 24 fps, 16.583 s; no audio | Masked tear input |
-| `static-forest-dynamic-starry-sky.mp4` | H.264 3840×2160, 24 fps, 5.042 s; no audio | Too short for an unlooped 10 s shot |
-| `stars-on-black-background.jpg` | JPEG 7001×4001, YUV444 | Unused |
-| `city-mask.png` | PNG 3150×1816, RGBA | Unused; hard ellipse gives a closer engine match |
-| `Cinzel.zip`, `Lobster_Two.zip`, `Playwrite_AR_Guides.zip` | TrueType fonts and OFL notices | First two used by Code → Video only |
-| `＂Fragments＂ by @AERHEAD.mp3` | MP3 329.839 s, 48 kHz stereo, embedded PNG | Unused |
-| `＂IN MEMORIAM＂ by Onycs.mp3` | MP3 189.243 s, 48 kHz stereo, embedded PNG | Unused |
-
-The new projects do not depend on existing `examples/showcase/assets/` media.
-Those files are still used by the old showcases, so none is established as
-unused. If the old showcases are retired later, their city clips, landscape,
-synth soundtrack, font and rendered MP4/poster/preview derivatives are cleanup
-candidates after checking references, including the current root README. Leave
-the small `examples/assets/` fixtures used by canonical examples/tests in place.
+Generated renders, PNGs, raw records and logs stay under ignored `target/`.
+Only the compact shared inputs in `assets/footage/` are committed. Reports are
+machine-local and may contain paths in probe metadata.

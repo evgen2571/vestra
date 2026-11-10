@@ -20,6 +20,10 @@ tracing = "0.1"
 [dev-dependencies]
 tempfile = "3"
 
+[[example]]
+name = "benchmark_access"
+path = "../../benchmarks/rust/media/benchmark_access.rs"
+
 [lints.rust]
 unsafe_code = "forbid"
 unused_must_use = "deny"

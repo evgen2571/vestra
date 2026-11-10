@@ -177,7 +177,7 @@ mod tests {
                 &assets,
                 Path::new(concat!(
                     env!("CARGO_MANIFEST_DIR"),
-                    "/../../examples/assets"
+                    "/../../assets/fixtures"
                 )),
                 &mut errors,
                 &AtomicBool::new(false),

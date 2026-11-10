@@ -1,48 +1,168 @@
 ---
-description: Reuse a group snapshot or edit one child composition, with explicit local dimensions and timing.
+description: Build a group before placing it, follow its local coordinates and clock, and choose when to edit an owned child composition.
 ---
 
-# Use nested compositions
+# Use groups and nested compositions
 
-Choose a reusable `Group` when placing copies of the same artwork. Use
-`composition.group()` when you want to keep editing one owned child composition.
-Both compose children locally before placing their result in the parent. The
-[groups concept](../../concepts/groups-and-nesting.md) explains transforms,
-clipping and ownership visually.
-
-## Snapshot a reusable group
-
-A standalone `Group` is reusable visual content. Each `add()` snapshots the
-source, so placing the same group again creates independent children and
-presentation state:
+A group combines children into one visual result. Build a standalone `Group`,
+then place it with `project.root.add(group)`. Moving, scaling, rotating or fading
+that placement affects all its children together.
 
 <figure class="comparison" markdown="span">
-![Two placements of one card group. The right card's circle, title and underline rotate and fade together while the left copy stays upright and opaque.](../../assets/renders/group-placements.webp)
-<figcaption>Both copies use scale 0.8. Only the right placement changes rotation and opacity.</figcaption>
+![Two cards made from the same group: both contain a circle, title and underline. The right placement rotates and fades all three elements together; the left stays upright and opaque.](../../assets/renders/group-placements.webp)
+<figcaption>One completed source, two independent placements. The right card's rotation and opacity leave the left card unchanged.</figcaption>
 </figure>
 
 ```python
---8<-- "docs/assets/examples/group_placements.py"
+--8<-- "examples/tutorials/group_placements.py"
 ```
 
-Save the [complete example](../../assets/examples/group_placements.py) and run
-`python group_placements.py`. It replaces `group-placements.mp4` in the current
-directory. The graphics are original and use the bundled font.
+The [complete card example](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/group_placements.py) needs no assets.
+Run `python group_placements.py` to write `group-placements.mp4`; rerunning replaces
+it. Its graphics are original and use the bundled font.
 
-`Group.add()` returns a child placement with `transform`, `opacity`, `effects`,
-`masks`, and `blend_mode`. Child `start` is group-local seconds; omitted child
-`duration` inherits the containing placement's full lifetime, including for
-video children. Set `source_start` and `playback_rate` on video children to trim
-and retime them. `layer` controls child ordering and defaults to insertion order.
-Groups nest by adding another `Group`. Source [transform defaults](sources-and-layers.md)
-and individual placement overrides work on both `Group.add()` and
-`Composition.add()`.
+## Compose locally, then transform the result
 
-## Give reusable content local dimensions
+A group has its own canvas. Its children use positions relative to that canvas;
+the group's placement uses positions relative to its parent. The root canvas
+matches the project's output size. Within either canvas, `(0, 0)` is the
+top-left and `(1, 1)` is the bottom-right.
 
-Set `size=(width, height)` to position children independently of the output
-resolution. Dimensions are positive, finite pixel values; odd and
-fractional values are supported. The group's placement uses its parent's coordinates:
+<figure class="diagram" markdown="span">
+![The blue group's position 0.5, 0.5 centers it in the root. The gold child's position 0.25, 0.5 places it a quarter of the way across the group and halfway down. Callouts mark their center anchors.](../../assets/diagrams/groups-local-canvas.svg)
+<figcaption><code>position</code> uses the parent canvas: root for the group, group for the child.</figcaption>
+</figure>
+
+This new example matches the diagram. The small rectangle fades in after its
+panel appears:
+
+```python
+from vestra import Group, Project, Rectangle
+
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=5,
+    background="#101c27",
+)
+
+panel = Group(size=(320, 180))
+
+panel.add(
+    Rectangle(
+        width=320,
+        height=180,
+        fill="#263e4b",
+    )
+)
+
+marker = panel.add(
+    Rectangle(
+        width=100,
+        height=60,
+        fill="#e9bd72",
+    ),
+    position=(0.25, 0.5),
+    start=0.5,
+    duration=2,
+)
+
+# Animate the child before placement.
+# Adding the group copies this state.
+marker.opacity.keyframe(0, 0)
+marker.opacity.keyframe(0.5, 1)
+
+placed_panel = project.root.add(
+    panel,
+    position=(0.5, 0.5),
+    start=1,
+    duration=3,
+)
+```
+
+The default anchor is the center. The panel's `position=(0.5, 0.5)` centers it
+in the root. The marker's `position=(0.25, 0.5)` places its center a quarter of
+the way across the panel and halfway down. These values use different canvases;
+the marker's position is not measured against the root.
+
+Moving, scaling or rotating `placed_panel` transforms the completed group.
+The marker keeps its local `position=(0.25, 0.5)` and follows that transform.
+See [coordinates and anchors](../../concepts/coordinates-and-anchors.md) for placement rules.
+
+`size` sets the local canvas; it does not stretch child geometry. The marker is
+100 × 60 local pixels. An unsized `Group()` inherits its immediately enclosing
+canvas. A sized group nested inside another group starts a new coordinate space.
+
+## Child time starts with the group
+
+The same nesting applies to time. `start` is measured on the containing timeline;
+each placement's keyframes start from its own local zero. For the example above:
+
+| Project time | Panel time | Marker time | Visible result |
+| --- | --- | --- | --- |
+| 1 s | 0 s | Not started | Panel appears |
+| 1.5 s | 0.5 s | 0 s | Marker begins its fade at opacity 0 |
+| 2 s | 1 s | 0.5 s | Marker reaches opacity 1 |
+| 3.5 s | 2.5 s | End excluded | Marker disappears |
+| 4 s | End excluded | Inactive | Panel and all its children disappear |
+
+Subtract a placement's start to enter its clock:
+
+```text
+panel_time = project_time - 1
+marker_time = panel_time - 0.5
+```
+
+The marker's `0.5`-second opacity keyframe therefore lands at project second `2`.
+Moving `placed_panel.start` moves this whole sequence without rewriting any
+child starts or keyframes. The panel's lifetime clips its children even if their
+authored durations extend beyond it. [Timeline and time](../../concepts/timeline-and-time.md)
+covers media clocks, duration resolution and frame boundaries.
+
+<span id="choose-how-to-author-the-children"></span>
+
+## Standalone Group and root.group()
+
+These are two ways to author nested content, with the same local coordinate,
+time and clipping rules. A standalone `Group` is usually the straightforward
+starting point, even for content you place only once.
+
+| Choice | `Group(...)`, then `root.add(group)` | `root.group(...)` |
+| --- | --- | --- |
+| What you create | A source first, then a separate placement | One placement with an owned child composition immediately |
+| Add children | Build the source before placing it | Keep editing the placed scene through `scene.add()` or `scene.child` |
+| Reuse | Each `add(group)` copies the current children and their state | Author children directly for this one placement |
+| Local canvas | Set `size`, or inherit the parent if omitted | Inherits the parent; `group()` has no `size` argument |
+| Child ordering | `Group.add(..., layer=...)` | `scene.add(..., z=...)` |
+
+A standalone group is **a snapshot source**. Adding a child
+to `panel` or changing `marker` after `root.add(panel)` does not update an earlier
+placement. Edit the returned placement to move or fade that copy as a whole.
+Use `root.group()` when you need an editable child composition, for example to
+connect its children with `scene.child.transitions`.
+
+The [owned child recipe](#edit-a-child-composition-directly) below shows the alternative. Transitions using the group itself as an endpoint belong
+to its parent composition.
+
+## Clipping happens before the parent transform
+
+Children are clipped to their group's local canvas. Content outside it is lost
+before the group is transformed in its parent. Moving or shrinking the group
+cannot bring that clipped content back. Move the child inside the local canvas
+or enlarge the group when you need to preserve it. There is no overflow-visible
+option.
+
+Child effects run in the local canvas. Effects on the group run on its completed,
+transformed placement in the parent, so an outer blur can spread beyond its
+bounds. A group mask applies to the already-composited group and follows its
+placement. [Masks and mattes](../../concepts/masks-and-mattes.md) explain this distinction.
+
+For fractional sizes, resource limits and exact transform rules, see
+[nested composition reference](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
+
+## Nest a sized group
+
+Continue with the imports from the complete card example above:
 
 ```python
 card = Group(size=(600, 300))
@@ -75,17 +195,7 @@ card.add(badge, position=(0.75, 0.5))
 project.root.add(card, duration=5, position=(0.5, 0.5))
 ```
 
-Here the badge is placed at `(450, 150)` in the card and its circle is at
-`(60, 30)` in the badge. Unsized groups inherit the containing coordinate
-system. Existing unsized content requires no migration. Sizes survive source
-snapshots, reuse in projects with different resolutions, and owned mask
-serialization. Child-local timing and the project's FPS remain unchanged.
-
-Children clip to the local canvas **before** parent transforms. Scaling down a
-group cannot recover children already outside its local bounds. Size sets the
-canvas; it does not scale the rectangle or font geometry. See the
-[coordinate diagram](../../concepts/groups-and-nesting.md#compose-locally-then-transform-the-result)
-and [exact bounds rules](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
+The badge uses the card's local canvas. Add all children before placing the card.
 
 ## Edit a child composition directly
 
@@ -140,45 +250,3 @@ Groups remain supported as owned mask inputs.
 Nesting is recursive, subject to the project's validation limits. Keep a
 composition's timing explicit and validate after building deep or dynamically
 generated graphs.
-
-## Resource limits and exact bounds
-
-Default resource limits allow group canvases up to 8192 pixels per axis and
-67,108,864 pixels. Larger canvases require an explicit execution budget:
-
-```python
-from vestra import Project, ResourceLimits
-
-limits = ResourceLimits(
-    maximum_group_width=16_384,
-    maximum_group_pixels=640 * 360,
-)
-
-project = Project(
-    size=(640, 360),
-    fps=30,
-    duration=2,
-    resource_limits=limits,
-)
-
-strip = Group(size=(16_384, 2))
-strip.add(Rectangle(width=16_384, height=2, fill="#2563eb"))
-
-project.root.add(strip, scale=0.025)
-```
-
-The pixel budget must also cover unsized groups, which inherit the project canvas.
-Here the 640 × 360 project needs more pixels than the wide, two-pixel strip.
-
-The same limits apply to validation, preparation and rendering, including owned
-group masks. Budgets do not change coordinates, clipping or backend limits.
-
-Fractional dimensions use raster bounds rounded up to whole pixels while
-coordinates and anchors retain their authored units. Child effects use the
-local canvas; group effects use its completed placement in the parent. Group
-masks follow their owner, and sized group mask sources retain their own dimensions.
-See [exact coordinate and effect rules](../../reference/nested-compositions.md#sized-group-coordinates-and-bounds).
-
-The advanced builder accepts the same `size` keyword on
-`ProjectBuilder.add_group_clip(...)`. Both paths serialize an optional
-`"size": {"width": 600.0, "height": 300.0}` on the canonical group source.

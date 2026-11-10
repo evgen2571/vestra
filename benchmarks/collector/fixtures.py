@@ -1,12 +1,15 @@
-"""Deterministic moving inputs and sparse validation of long stream-copy sources."""
+"""Bundled moving inputs and sparse validation of long stream-copy sources."""
 
 import hashlib
 import json
 import math
 import subprocess
 
+from benchmarks.benchmark import ROOT
+
 from benchmarks.comparisons.moviepy.comparison import (
     digest,
+    load_inputs,
     validate_output,
     version,
     write_json,
@@ -24,9 +27,11 @@ def command(args, timeout=300):
     return result.stdout
 
 
-def portable_inputs(directory, *, width=640, height=360):
+def portable_inputs(directory, *, width=1920, height=1080, fps=60):
+    bundled = ROOT / "assets/footage"
+    source_manifest = load_inputs(bundled)
     directory.mkdir(parents=True, exist_ok=False)
-    settings = dict(width=width, height=height, fps=30, duration=12)
+    settings = dict(width=width, height=height, fps=fps, duration=12)
     manifest = dict(
         schema_version=1,
         generator_version=1,
@@ -35,31 +40,23 @@ def portable_inputs(directory, *, width=640, height=360):
         sources={},
         prepared={},
     )
-    # Supersample moving bars, discs and counters to avoid single-pixel aliasing
-    # dominating the comparison of different resamplers. Motion/detail remain;
-    # separate hue/flip transformations keep overlays distinct from the base.
-    for key, effect in {
-        "forest": "hue=h=0",
-        "valley": "hue=h=105,hflip",
-        "tear": "hue=h=230,vflip",
-    }.items():
+    for key, source in source_manifest["prepared"].items():
+        source_path = bundled / source["filename"]
         output = directory / f"{key}.mp4"
-        video_filter = f"{effect},scale={width}:{height}:flags=bicubic,gblur=sigma=1"
+        video_filter = f"fps={fps},scale={width}:{height}:flags=bicubic,setsar=1"
         args = [
             "ffmpeg",
             "-v",
             "error",
             "-nostdin",
             "-n",
-            "-f",
-            "lavfi",
             "-i",
-            f"testsrc2=size={width * 2}x{height * 2}:rate=30:duration=12",
+            source_path,
             "-vf",
             video_filter,
             "-an",
             "-frames:v",
-            "360",
+            str(12 * fps),
             "-c:v",
             "libx264",
             "-crf",
@@ -71,7 +68,7 @@ def portable_inputs(directory, *, width=640, height=360):
             "-threads",
             "2",
             "-g",
-            "60",
+            str(2 * fps),
             "-sc_threshold",
             "0",
             "-map_metadata",
@@ -84,13 +81,20 @@ def portable_inputs(directory, *, width=640, height=360):
         ]
         command(args)
         manifest["sources"][key] = dict(
-            generator="FFmpeg testsrc2", filter=video_filter, supersampling=2
+            filename=str(source_path.relative_to(ROOT)), sha256=source["sha256"]
         )
         manifest["prepared"][key] = dict(
             filename=output.name,
             sha256=digest(output),
             validation=validate_output(output, settings),
-            command=["<inputs>/" + output.name if a == output else a for a in args],
+            command=[
+                "<inputs>/" + output.name
+                if a == output
+                else "<repository>/" + str(source_path.relative_to(ROOT))
+                if a == source_path
+                else a
+                for a in args
+            ],
         )
     write_json(directory / "manifest.json", manifest)
     return manifest

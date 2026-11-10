@@ -4,7 +4,7 @@ description: Render videos and previews, export stills or arrays, and reuse prep
 
 # Render and prepare from Python
 
-Start with a `project` from the [first render tutorial](../../learn/first-render.md).
+Start with a `project` from the [first render tutorial](../../getting-started/first-render.md).
 The examples below use that project to export videos, images and arrays.
 Use `prepare()` when you need several outputs from the same project.
 
@@ -162,7 +162,7 @@ prepared project is released. Use `frame.to_bytes()` when NumPy is unnecessary.
 See [frame data](../../reference/render-outputs.md#frames-and-arrays) for layout
 and ownership details.
 
-The [complete frame export example](../../assets/examples/frame_exports.py)
+The [complete frame export example](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/frame_exports.py)
 creates a project, stills, selected frames, a sequence and an array. Run it with
 `python frame_exports.py` after installing `vestra[numpy]`. It replaces its
 outputs inside `frame-exports/` on each run.

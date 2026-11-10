@@ -12,8 +12,8 @@ from vestra.authoring import BlendMode, ProjectBuilder, Sizing
 
 def project() -> tuple[ProjectBuilder, object, object]:
     authored = ProjectBuilder(width=8, height=6, frame_rate=FrameRate(10, 1), output_path="out.mp4", duration=2, base_directory=".")
-    red = authored.add_image_asset("examples/assets/red.png")
-    blue = authored.add_image_asset("examples/assets/blue.png")
+    red = authored.add_image_asset("assets/fixtures/red.png")
+    blue = authored.add_image_asset("assets/fixtures/blue.png")
     return authored, authored.add_image_clip(source=red, start=0, duration=2, layer=0, sizing=Sizing.cover()), authored.add_image_clip(source=blue, start=0, duration=2, layer=0, sizing=Sizing.cover())
 
 

@@ -146,7 +146,7 @@ crossed evaluated thresholds select no pixels. Threshold crossings may look abru
 CRT uses inverse-curvature sampling, integrated scanlines, fixed output-pixel
 masks and continuous seeded grain/jitter. It does not create alpha. Periodic
 procedural animation is independent of source/audio playback. Recipes return
-ordinary editable effect chains; see [composed treatments](../guides/python/effect-treatments.md).
+ordinary editable effect chains; see [composed treatments](../guides/python/effects.md#apply-a-monitor-recipe).
 
 <span id="cinematic-ascii-and-pseudo-ascii"></span>
 

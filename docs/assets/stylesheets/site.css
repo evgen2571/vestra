@@ -79,6 +79,7 @@
   width: 100%;
   height: auto;
   border-radius: .6rem;
+  color-scheme: light;
 }
 .md-typeset video { aspect-ratio: auto; background: var(--vestra-surface); }
 .md-typeset figcaption {
@@ -250,7 +251,7 @@
   margin-inline: auto;
   color-scheme: light;
 }
-[data-md-color-scheme="slate"] .md-typeset img[src*="/diagrams/"] { color-scheme: dark; }
+[data-md-color-scheme="slate"] .md-typeset :is(figure img, img[src*="/diagrams/"]) { color-scheme: dark; }
 
 .md-typeset figure.comparison { max-width: 640px; margin-inline: auto; }
 /* Keep media at its authored size while allowing it to shrink on mobile. */

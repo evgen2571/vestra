@@ -191,5 +191,5 @@ transform or transition endpoint. Python supplies a presentation wrapper when
 its layer is transformed or used in a transition.
 
 For animation timing and interpolation, continue with
-[animation and keyframes](../../learn/animation.md). For reusable multi-part
+[animation and keyframes](../../getting-started/animation.md). For reusable multi-part
 content, continue with [nested compositions](nested-compositions.md).

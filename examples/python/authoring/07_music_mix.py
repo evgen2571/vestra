@@ -31,9 +31,9 @@ builder = ProjectBuilder(
     base_directory=root,
 )
 builder.add_solid_color_clip(colour="#101018", start=0, duration=3, layer=0)
-song_a = builder.add_audio_asset("examples/assets/tone.wav", id="song-a")
-song_b = builder.add_audio_asset("examples/assets/tone.wav", id="song-b")
-ambience = builder.add_audio_asset("examples/assets/tone.wav", id="ambience-source")
+song_a = builder.add_audio_asset("assets/fixtures/tone.wav", id="song-a")
+song_b = builder.add_audio_asset("assets/fixtures/tone.wav", id="song-b")
+ambience = builder.add_audio_asset("assets/fixtures/tone.wav", id="ambience-source")
 
 # Keep music and ambience on separate tracks for independent gain control.
 music = builder.audio.add_track(id="music", gain=1.0)

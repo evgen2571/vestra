@@ -13,17 +13,17 @@ hide:
 <h1>Video composition<br> in Python</h1>
 <p class="home-lead">Vestra is a Python library for composing and rendering video, backed by Rust. Combine footage, text, shapes, effects, and audio in a script.</p>
 <div class="home-actions">
-<a class="home-button home-button--primary" href="learn/first-render/">Render a shape</a>
+<a class="home-button home-button--primary" href="getting-started/first-render/">Render a shape</a>
 <a class="home-button" href="gallery/">Browse examples</a>
 </div>
 <p class="home-requirements">Python 3.11–3.14 · CPU or WGPU rendering · MP4 output</p>
 </div>
 <figure class="home-hero__preview">
-<video controls playsinline preload="metadata" width="640" height="360" poster="assets/gallery/motion-design.webp" aria-label="Vestra overview: animated cards, masked Shanghai footage with dithering, and a radial audio spectrum" aria-describedby="reel-caption">
+<video controls playsinline preload="metadata" width="640" height="360" poster="assets/gallery/motion-design.webp" aria-label="Vestra overview: animated cards, masked valley footage with dithering, and a radial audio spectrum" aria-describedby="reel-caption">
 <source src="assets/gallery/motion-design.mp4" type="video/mp4">
 <a href="assets/gallery/motion-design.mp4">Download the feature reel</a>.
 </video>
-<figcaption id="reel-caption">A ten-second render of animated cards, masked Shanghai footage, palette effects, and a radial audio spectrum. <a href="gallery/motion-design/">Source &amp; credits</a></figcaption>
+<figcaption id="reel-caption">A ten-second render of animated cards, masked valley footage, palette effects, and a radial audio spectrum. <a href="gallery/motion-design/">Source &amp; credits</a></figcaption>
 </figure>
 </div>
 
@@ -45,10 +45,10 @@ Because the composition is Python code, you can use data, loops, and functions t
 Three position keyframes move this rounded rectangle across the canvas and back. It renders on CPU and writes `quickstart.mp4` to the current directory; rerunning it replaces that file.
 
 ```python
---8<-- "docs/assets/examples/first_animation.py"
+--8<-- "examples/tutorials/first_animation.py"
 ```
 
-[Install Vestra](learn/installation.md), then follow the [first render tutorial](learn/first-render.md) for a complete, explained project.
+[Install Vestra](getting-started/installation.md), then follow the [first render tutorial](getting-started/first-render.md) for a complete, explained project.
 
 </div>
 <figure>
@@ -67,32 +67,32 @@ The introductory tutorials start with the rectangle's static layout, then add th
 <ol class="learning-path">
 <li>
 <span class="learning-path__step" aria-hidden="true">1</span>
-<h3><a href="learn/installation/">Install Vestra</a></h3>
-<p>Install the Python package and FFmpeg, then check your environment.</p>
+<h3><a href="getting-started/installation/">Install Vestra</a></h3>
+<p>Install the Python package, then check your environment.</p>
 </li>
 <li>
 <span class="learning-path__step" aria-hidden="true">2</span>
-<h3><a href="learn/first-render/">Render a shape</a></h3>
+<h3><a href="getting-started/first-render/">Render a shape</a></h3>
 <p>Define a canvas, place a rounded rectangle, and render a three-second MP4.</p>
 </li>
 <li>
 <span class="learning-path__step" aria-hidden="true">3</span>
-<h3><a href="learn/first-animation/">Animate the layers</a></h3>
+<h3><a href="getting-started/first-animation/">Animate the layers</a></h3>
 <p>Add eased position keyframes to move the rectangle right and back.</p>
 </li>
 </ol>
 
-[Animation and keyframes](learn/animation.md) explains interpolation, easing, and layer-local time in more detail.
+[Animation and keyframes](getting-started/animation.md) explains interpolation, easing, and layer-local time in more detail.
 
 ## Rendered examples
 
 <div class="home-gallery" markdown="0">
 <a href="gallery/visual-effects/" class="home-gallery__item"><img src="assets/gallery/visual-effects.webp" width="640" height="360" loading="lazy" alt="A landscape displayed as a photograph, halftone, and ASCII"><span><strong>Photo effects</strong><span>Halftone, ASCII, and group masks</span></span></a>
 <a href="gallery/audio-reactive/" class="home-gallery__item"><img src="assets/gallery/audio-reactive.webp" width="640" height="360" loading="lazy" alt="A cyan and coral radial spectrum surrounding a pulsing ring"><span><strong>Audio-reactive graphics</strong><span>Audio analysis, signals, and particles</span></span></a>
-<a href="gallery/video-editing/" class="home-gallery__item"><img src="assets/gallery/video-editing.webp" width="640" height="360" loading="lazy" alt="Shanghai skyline transitioning from daytime through blue hour to night"><span><strong>Video editing</strong><span>Video layers, reframing, and transitions</span></span></a>
+<a href="gallery/video-editing/" class="home-gallery__item"><img src="assets/gallery/video-editing.webp" width="640" height="360" loading="lazy" alt="Snowy valley footage with animated reframing"><span><strong>Video editing</strong><span>Video layers, reframing, and transitions</span></span></a>
 </div>
 
-[Browse all examples and their source code](gallery/index.md). Shanghai footage by [Yigang Yu](https://commons.wikimedia.org/wiki/File:Shanghai_Bund,_Lujiazui_Skyline_Timelapse.webm), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); trimmed, resized, reframed, and colour-adjusted. [Example credits](gallery/motion-design.md#credits).
+[Browse all examples and their source code](gallery/index.md), or see the same bundled footage in the [benchmark workloads](benchmarks/workloads.md).
 
 <div class="home-reference" markdown="1">
 

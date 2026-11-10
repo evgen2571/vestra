@@ -234,7 +234,7 @@ def test_cpu_render_evaluates_high_level_audio_signal_binding() -> None:
     project = vestra.Project(size=(8, 8), fps=4, duration=1, base_directory=".")
     layer = project.root.add(Color("#ff0000"), id="red")
     layer.opacity.bind(project.audio.signal.rms(), operation="replace")
-    clip = project.audio.track("tone").add("examples/assets/tone.wav", trim_end=1)
+    clip = project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
     clip.set_gain_automation(
         [
             vestra.AudioGainKeyframe(0, 0),

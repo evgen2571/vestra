@@ -17,20 +17,29 @@
       "width": 128,
       "height": 72,
       "warmups": 0,
-      "samples": 1
+      "samples": 1,
+      "fps": 60,
+      "quality": "high"
     },
     "canonical": {
-      "width": 1280,
-      "height": 720,
+      "width": 1920,
+      "height": 1080,
       "warmups": 1,
-      "samples": 5
+      "samples": 5,
+      "fps": 60,
+      "quality": "high"
     },
     "row-copy-1080p": {
       "width": 1920,
       "height": 1080,
       "warmups": 1,
       "samples": 3,
-      "scenarios": ["opaque_video", "ineligible_video"]
+      "scenarios": [
+        "opaque_video",
+        "ineligible_video"
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "stylization-smoke": {
       "width": 128,
@@ -41,7 +50,9 @@
         "stylization_baseline",
         "palette_video",
         "dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "stylization-1080p": {
       "width": 1920,
@@ -52,7 +63,9 @@
         "stylization_baseline",
         "palette_video",
         "dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "stylized-effects-smoke": {
       "width": 128,
@@ -68,7 +81,9 @@
         "sort_horizontal_video",
         "sort_vertical_video",
         "crt_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "stylized-effects-1080p": {
       "width": 1920,
@@ -84,7 +99,9 @@
         "sort_horizontal_video",
         "sort_vertical_video",
         "crt_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "dither-patterns-smoke": {
       "width": 128,
@@ -95,7 +112,9 @@
         "stylization_baseline",
         "dither_video",
         "blue_noise_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "dither-patterns-1080p": {
       "width": 1920,
@@ -106,7 +125,9 @@
         "stylization_baseline",
         "dither_video",
         "blue_noise_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "chromatic-dither-smoke": {
       "width": 128,
@@ -118,7 +139,9 @@
         "blue_noise_video",
         "rgb_dither_video",
         "hue_dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "chromatic-dither-1080p": {
       "width": 1920,
@@ -130,7 +153,9 @@
         "blue_noise_video",
         "rgb_dither_video",
         "hue_dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "channel-dither-smoke": {
       "width": 128,
@@ -140,7 +165,9 @@
       "scenarios": [
         "blue_noise_video",
         "channel_dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "channel-dither-1080p": {
       "width": 1920,
@@ -150,7 +177,9 @@
       "scenarios": [
         "blue_noise_video",
         "channel_dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "perceptual-dither-smoke": {
       "width": 128,
@@ -161,7 +190,9 @@
         "blue_noise_video",
         "rgb_dither_video",
         "oklab_dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "perceptual-dither-1080p": {
       "width": 1920,
@@ -172,7 +203,9 @@
         "blue_noise_video",
         "rgb_dither_video",
         "oklab_dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "tonal-stops-smoke": {
       "width": 128,
@@ -182,7 +215,9 @@
       "scenarios": [
         "blue_noise_video",
         "nonuniform_dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "tonal-stops-1080p": {
       "width": 1920,
@@ -192,23 +227,59 @@
       "scenarios": [
         "blue_noise_video",
         "nonuniform_dither_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "input-detail-smoke": {
-      "width": 128, "height": 72, "warmups": 0, "samples": 1,
-      "scenarios": ["tone_dither_video", "detail_dither_video", "contrast_dither_video"]
+      "width": 128,
+      "height": 72,
+      "warmups": 0,
+      "samples": 1,
+      "scenarios": [
+        "tone_dither_video",
+        "detail_dither_video",
+        "contrast_dither_video"
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "input-detail-1080p": {
-      "width": 1920, "height": 1080, "warmups": 1, "samples": 3,
-      "scenarios": ["tone_dither_video", "detail_dither_video", "contrast_dither_video"]
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "tone_dither_video",
+        "detail_dither_video",
+        "contrast_dither_video"
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "input-tone-smoke": {
-      "width": 128, "height": 72, "warmups": 0, "samples": 1,
-      "scenarios": ["blue_noise_video", "tone_dither_video"]
+      "width": 128,
+      "height": 72,
+      "warmups": 0,
+      "samples": 1,
+      "scenarios": [
+        "blue_noise_video",
+        "tone_dither_video"
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "input-tone-1080p": {
-      "width": 1920, "height": 1080, "warmups": 1, "samples": 3,
-      "scenarios": ["blue_noise_video", "tone_dither_video"]
+      "width": 1920,
+      "height": 1080,
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "blue_noise_video",
+        "tone_dither_video"
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "palette-interpolation-smoke": {
       "width": 128,
@@ -218,7 +289,9 @@
       "scenarios": [
         "palette_video",
         "oklab_palette_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
     "palette-interpolation-1080p": {
       "width": 1920,
@@ -228,11 +301,13 @@
       "scenarios": [
         "palette_video",
         "oklab_palette_video"
-      ]
+      ],
+      "fps": 60,
+      "quality": "high"
     },
-    "community-v1": {
-      "width": 640,
-      "height": 360,
+    "community": {
+      "width": 1920,
+      "height": 1080,
       "warmups": 1,
       "samples": 3,
       "scenarios": [
@@ -242,6 +317,38 @@
         "masks",
         "mattes",
         "production_edit"
+      ],
+      "fps": 60,
+      "quality": "high"
+    },
+    "effects": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 60,
+      "quality": "high",
+      "warmups": 1,
+      "samples": 3,
+      "scenarios": [
+        "opaque_video",
+        "ineligible_video",
+        "stylization_baseline",
+        "palette_video",
+        "oklab_palette_video",
+        "dither_video",
+        "blue_noise_video",
+        "rgb_dither_video",
+        "hue_dither_video",
+        "channel_dither_video",
+        "oklab_dither_video",
+        "nonuniform_dither_video",
+        "tone_dither_video",
+        "detail_dither_video",
+        "contrast_dither_video",
+        "ascii_video",
+        "halftone_video",
+        "sort_horizontal_video",
+        "sort_vertical_video",
+        "crt_video"
       ]
     }
   }

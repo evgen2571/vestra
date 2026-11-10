@@ -21,7 +21,7 @@ def builder() -> ProjectBuilder:
 
 def image_clip() -> tuple[ProjectBuilder, object]:
     authored = builder()
-    asset = authored.add_image_asset("examples/assets/red.png")
+    asset = authored.add_image_asset("assets/fixtures/red.png")
     return authored, authored.add_image_clip(source=asset, start=0, duration=2, layer=0)
 
 

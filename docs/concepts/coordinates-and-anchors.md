@@ -65,7 +65,7 @@ Rectangle widths, circle radii, line endpoints and polygon points describe
 source-local pixel geometry. A shape's geometry is static; animate its layer's
 transform to move, scale or rotate it. Stroke-only shapes use the same placement
 rules. See [shape reference](../reference/sources/shape.md) for each primitive's
-bounds and defaults, and [animation](../learn/animation.md) for property tracks.
+bounds and defaults, and [animation](../getting-started/animation.md) for property tracks.
 
 Images normally retain their intrinsic geometry; `fit`, `cover` and crop change
 how media uses the containing canvas. Text derives its bounds from layout.
@@ -76,9 +76,9 @@ transform to present that content.
 
 A child's normalized position uses its group's local canvas. The group's own
 placement uses the parent's canvas, and its transform acts on the completed
-children. Follow the [root and group coordinate diagram](groups-and-nesting.md#compose-locally-then-transform-the-result)
+children. Follow the [root and group coordinate diagram](../guides/python/nested-compositions.md#compose-locally-then-transform-the-result)
 to see the normalized positions used by a group and its child.
 
-Continue with [groups and nesting](groups-and-nesting.md) for local bounds and
+Continue with [groups and nesting](../guides/python/nested-compositions.md) for local bounds and
 clipping, or use the [source guide](../guides/python/sources-and-layers.md) to
 place media and text.

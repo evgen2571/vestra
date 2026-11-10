@@ -27,7 +27,7 @@ def main() -> None:
 
     # Luma multiplies the reveal by the image brightness; green is partly transparent.
     brightness_mask = card.masks.add(
-        Image(ROOT / "examples/assets/green.png"),
+        Image(ROOT / "assets/fixtures/green.png"),
         mode=MaskCoverageMode.LUMA,
         feather=4,
         id="image-luma",

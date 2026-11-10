@@ -7,6 +7,37 @@ use uuid::Uuid;
 
 use crate::MediaError;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OutputFormat {
+    Mp4,
+    Gif,
+    Webp,
+}
+
+impl OutputFormat {
+    pub(crate) fn from_path(path: &Path) -> Self {
+        match path.extension().and_then(|value| value.to_str()) {
+            Some(value) if value.eq_ignore_ascii_case("gif") => Self::Gif,
+            Some(value) if value.eq_ignore_ascii_case("webp") => Self::Webp,
+            _ => Self::Mp4,
+        }
+    }
+
+    pub(crate) fn extension(self) -> &'static str {
+        match self {
+            Self::Mp4 => "mp4",
+            Self::Gif => "gif",
+            Self::Webp => "webp",
+        }
+    }
+}
+
+/// Animated destinations omit audio and use the existing streamed frame loop.
+#[must_use]
+pub fn is_animated_output(path: &Path) -> bool {
+    OutputFormat::from_path(path) != OutputFormat::Mp4
+}
+
 #[must_use]
 pub fn effective_parent(path: &Path) -> &Path {
     path.parent()
@@ -50,8 +81,9 @@ impl OutputTarget {
             .file_stem()
             .and_then(|value| value.to_str())
             .unwrap_or("output");
+        let extension = OutputFormat::from_path(&path).extension();
         let temporary_path =
-            path.with_file_name(format!(".{stem}.vestra-{}.tmp.mp4", Uuid::new_v4()));
+            path.with_file_name(format!(".{stem}.vestra-{}.tmp.{extension}", Uuid::new_v4()));
         tracing::debug!(
             target: "vestra.output",
             output = %path.display(),

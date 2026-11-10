@@ -27,7 +27,7 @@ pub(super) fn estimated_worker_bytes(plan: &RenderPlan) -> u64 {
         .saturating_add(composition.temporary_frames);
     // Local canvases can exceed the output; conservatively size working buffers to the largest.
     let canvas_bytes = frame_bytes(plan.canvas.width, plan.canvas.height)
-        .max(largest_group_canvas_bytes(&plan.layers));
+        .max(largest_group_canvas_bytes(&plan.layers, plan.canvas));
     let mut bytes = canvas_bytes.saturating_mul(canvas_buffers);
     // Cursors retain current RGBA and scaler output; layer requests are serial,
     // so only one incoming RGBA conversion overlaps those retained buffers.
@@ -45,7 +45,10 @@ pub(super) fn estimated_worker_bytes(plan: &RenderPlan) -> u64 {
     bytes.saturating_add(incoming_bytes)
 }
 
-pub(super) fn largest_group_canvas_bytes(layers: &[CompiledLayer]) -> u64 {
+pub(super) fn largest_group_canvas_bytes(
+    layers: &[CompiledLayer],
+    canvas: vestra_core::plan::Canvas,
+) -> u64 {
     layers
         .iter()
         .flat_map(|layer| {
@@ -63,9 +66,11 @@ pub(super) fn largest_group_canvas_bytes(layers: &[CompiledLayer]) -> u64 {
                     group
                         .size
                         .map_or(0, |size| {
-                            frame_bytes(size.width.ceil() as u32, size.height.ceil() as u32)
+                            let (width, height) = canvas
+                                .scaled_extent(size.width.ceil() as u32, size.height.ceil() as u32);
+                            frame_bytes(width, height)
                         })
-                        .max(largest_group_canvas_bytes(&group.layers)),
+                        .max(largest_group_canvas_bytes(&group.layers, canvas)),
                 )
             } else {
                 None
@@ -114,13 +119,18 @@ fn storage_for_plan(plan: &RenderPlan) -> CompositionStorage {
             .collect(),
         ..CompositionStorage::default()
     };
+    let fitted =
+        usize::from(plan.canvas.fitted_extent() != (plan.canvas.width, plan.canvas.height));
+    if fitted != 0 {
+        storage.depths.insert(0);
+    }
     storage.record_effects(&plan.post_effects);
     storage.visit_layers(
         &plan.layers,
         Visit {
             origin: 0,
             span: (0, output_end),
-            depth: 0,
+            depth: fitted,
             temporary: 0,
             isolated: false,
         },
@@ -339,6 +349,8 @@ mod tests {
         let mut plan = fixture_plan();
         plan.canvas.width = 16;
         plan.canvas.height = 16;
+        plan.canvas.logical_width = plan.canvas.width;
+        plan.canvas.logical_height = plan.canvas.height;
         let mut child = plan.layers[0].clone();
         child.source = CompiledVisualSource::SolidColor { colour: [255; 4] };
         child.effects.clear();
@@ -497,6 +509,8 @@ mod tests {
         for (width, height, workers) in [(1_920, 1_080, 8), (2_560, 1_440, 6), (3_840, 2_160, 2)] {
             plan.canvas.width = width;
             plan.canvas.height = height;
+            plan.canvas.logical_width = plan.canvas.width;
+            plan.canvas.logical_height = plan.canvas.height;
             plan.videos[0].width = 17;
             plan.videos[0].height = 9;
             let small = estimated_worker_bytes(&plan);
@@ -572,6 +586,8 @@ mod tests {
         let mut plan = video_plan();
         plan.canvas.width = 1_920;
         plan.canvas.height = 1_080;
+        plan.canvas.logical_width = plan.canvas.width;
+        plan.canvas.logical_height = plan.canvas.height;
         plan.videos[0].width = 1_280;
         plan.videos[0].height = 720;
         let layer = plan.layers[0].clone();
@@ -624,6 +640,8 @@ mod tests {
         let mut plan = video_plan();
         plan.canvas.width = 1_920;
         plan.canvas.height = 1_080;
+        plan.canvas.logical_width = plan.canvas.width;
+        plan.canvas.logical_height = plan.canvas.height;
         let bytes = estimated_worker_bytes(&plan);
         let workers = super::super::backend::automatic_worker_count(&plan, 64);
         let mut unused = plan.layers[0].clone();

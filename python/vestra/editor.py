@@ -83,6 +83,14 @@ def _frame_rate(value: int | tuple[int, int] | _native.FrameRate) -> _native.Fra
     )
 
 
+def _quality_override(value: Quality | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, Quality):
+        raise TypeError("quality must be Quality or None")
+    return value.value
+
+
 def _backend(value: str | _native.BackendPreference) -> _native.BackendPreference:
     if isinstance(value, _native.BackendPreference):
         return value
@@ -827,11 +835,22 @@ class Project:
         return _native.Editor(resource_limits=self._resource_limits).validate(self.snapshot())
 
     def prepare(
-        self, *, backend: str | _native.BackendPreference = "auto"
+        self,
+        *,
+        backend: str | _native.BackendPreference = "auto",
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+        quality: Quality | None = None,
     ) -> _native.PreparedProject:
         """Decode media and initialize a renderer for repeated frame or video renders."""
         return _native.Editor(resource_limits=self._resource_limits).prepare(
-            self.snapshot(), _native.PrepareOptions(backend=_backend(backend))
+            self.snapshot(),
+            _native.PrepareOptions(
+                backend=_backend(backend),
+                resolution=resolution,
+                fps=None if fps is None else _frame_rate(fps),
+                quality=_quality_override(quality),
+            )
         )
 
     def render_frame(
@@ -841,6 +860,8 @@ class Project:
         *,
         frame_number: int | None = None,
         backend: str | _native.BackendPreference = "auto",
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
         overwrite: bool = False,
     ) -> _native.Frame:
         """Render one frame by time or index, optionally saving PNG/JPEG/WebP.
@@ -851,7 +872,7 @@ class Project:
         """
         if (seconds is None) == (frame_number is None):
             raise ValueError("supply exactly one of seconds or frame_number")
-        prepared = self.prepare(backend=backend)
+        prepared = self.prepare(backend=backend, resolution=resolution, fps=fps)
         if seconds is not None:
             frame = prepared.render_frame_seconds(seconds)
         else:
@@ -867,6 +888,8 @@ class Project:
         *,
         frame_number: int | None = None,
         backend: str | _native.BackendPreference = "auto",
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
     ) -> NDArray[np.uint8]:
         """Return an owned writable ``uint8[height, width, 4]`` RGBA array.
 
@@ -874,7 +897,9 @@ class Project:
         and strides ``(width * 4, 4, 1)``. Changing the array cannot change
         another frame or prepared renderer.
         """
-        return self.render_frame(seconds, frame_number=frame_number, backend=backend).to_numpy()
+        return self.render_frame(
+            seconds, frame_number=frame_number, backend=backend, resolution=resolution, fps=fps
+        ).to_numpy()
 
     def render_frames(
         self,
@@ -886,6 +911,8 @@ class Project:
         end: float | None = None,
         format: str = "png",
         backend: str | _native.BackendPreference = "auto",
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
         overwrite: bool = False,
     ) -> int:
         """Save ``frame_000000.ext``, … and return the number of images.
@@ -903,7 +930,7 @@ class Project:
             raise ValueError("format must be png, jpg, jpeg or webp")
         format = format.lower()
         target = Path(_path(directory, "directory"))
-        prepared = self.prepare(backend=backend)
+        prepared = self.prepare(backend=backend, resolution=resolution, fps=fps)
         report = prepared.preparation_report
         if times is not None:
             for seconds in times:
@@ -943,18 +970,23 @@ class Project:
         backend: str | _native.BackendPreference = "auto",
         overwrite: bool = False,
         preview: bool = False,
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+        quality: Quality | None = None,
         start: float = 0,
         end: float | None = None,
         show_progress: bool = True,
         on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
     ) -> _native.RenderResult:
-        """Render the project to an MP4 file and return a ``RenderResult``.
+        """Render the project to MP4, GIF or animated WebP and return a ``RenderResult``.
 
         ``backend`` is ``"auto"`` (WGPU when an adapter is available, otherwise
         CPU), ``"cpu"`` or ``"wgpu"``. An existing ``output`` is replaced only
         with ``overwrite=True``. ``preview=True`` caps the longest side at
-        640 px. A progress bar is shown on interactive terminals unless
+        640 px, caps FPS at 15, and selects fast encoding. Explicit ``resolution``,
+        ``fps`` and ``quality`` override those defaults without editing the project.
+        A progress bar is shown on interactive terminals unless
         ``show_progress=False``; ``on_progress`` receives ``RenderEvent``
         values instead. ``start``/``end`` select project sample times in
         ``[start, end)``; the encoded clip and trimmed audio start at zero.
@@ -966,12 +998,46 @@ class Project:
             backend=_backend(backend),
             overwrite=overwrite,
             preview=preview,
+            resolution=resolution,
+            fps=None if fps is None else _frame_rate(fps),
+            quality=_quality_override(quality),
             start=start,
             end=end,
         )
         return _native.Editor(resource_limits=self._resource_limits).render(
-            self.snapshot(output=output),
+            self.snapshot(),
             request,
+            show_progress=show_progress,
+            on_progress=on_progress,
+            cancellation=cancellation,
+        )
+
+    def render_preview(
+        self,
+        output: str | os.PathLike[str],
+        *,
+        backend: str | _native.BackendPreference = "auto",
+        overwrite: bool = False,
+        resolution: tuple[int, int] | None = None,
+        fps: int | tuple[int, int] | _native.FrameRate | None = None,
+        quality: Quality | None = None,
+        start: float = 0,
+        end: float | None = None,
+        show_progress: bool = True,
+        on_progress: Callable[[_native.RenderEvent], object] | None = None,
+        cancellation: _native.CancellationToken | None = None,
+    ) -> _native.RenderResult:
+        """Render with the 640 px, at most 15 FPS, fast-encoding preset."""
+        return self.render(
+            output,
+            backend=backend,
+            overwrite=overwrite,
+            preview=True,
+            resolution=resolution,
+            fps=fps,
+            quality=quality,
+            start=start,
+            end=end,
             show_progress=show_progress,
             on_progress=on_progress,
             cancellation=cancellation,

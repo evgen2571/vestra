@@ -25,7 +25,7 @@ fmt-check:
 release-check:
     uvx --from 'ruff>=0.12,<0.13' ruff check scripts/package-cli.py scripts/verify-cli.py scripts/verify-wheel.py scripts/benchmark-python-abi.py scripts/release-*.py tests/test_cli_release.py tests/test_release_*.py
     uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/package-cli.py scripts/verify-cli.py scripts/verify-wheel.py scripts/benchmark-python-abi.py scripts/release-*.py tests/test_cli_release.py tests/test_release_*.py
-    uv run --no-project --with pytest python -m pytest tests/test_cli_release.py tests/test_release_metadata.py tests/test_release_manifest.py tests/test_ffmpeg_source_archive.py -q
+    uv run --no-project --with pytest python -m pytest tests/test_cli_release.py tests/test_release_metadata.py tests/test_release_manifest.py tests/test_release_wheel.py tests/test_ffmpeg_source_archive.py -q
 
 # Run the inexpensive CI style checks.
 style: fmt-check lint-python showcase-style comparison-style docs-check gen-effects-check

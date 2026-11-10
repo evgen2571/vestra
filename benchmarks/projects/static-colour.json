@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "name": "Static MP4 fast-path benchmark",
+  "output": {
+    "path": "benchmark.mp4",
+    "width": 1280,
+    "height": 720,
+    "frame_rate": "30/1",
+    "background": "#101018",
+    "quality": "balanced",
+    "audio": false,
+    "duration_mode": "explicit",
+    "duration": 10
+  },
+  "assets": [],
+  "visual": {
+    "clips": [
+      {
+        "id": "colour",
+        "source": { "type": "solid_color", "colour": "#204060" },
+        "start": 0,
+        "duration": 10,
+        "layer": 0,
+        "opacity": { "base_value": 1 }
+      }
+    ]
+  }
+}

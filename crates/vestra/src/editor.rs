@@ -135,6 +135,7 @@ struct PreparationContext {
 /// The one internal preparation coordinator serves both public reusable
 /// preparation and the one-shot render path. Only preflight
 /// target selection differs; validation through backend construction is shared.
+#[derive(Clone, Copy)]
 enum InternalPreparationTarget<'a> {
     Public(PrepareOptions),
     OneShot(&'a SdkRenderRequest),
@@ -454,9 +455,10 @@ impl Editor {
                     "/output/path",
                 ));
             }
-            if let Err(error) =
-                vestra_media::check_ffmpeg_available(self.ffmpeg_executable.as_deref())
-            {
+            if let Err(error) = vestra_media::check_output_encoder_available(
+                &output,
+                self.ffmpeg_executable.as_deref(),
+            ) {
                 let message = self.ffmpeg_executable.as_ref().map_or_else(
                     || format!("FFmpeg is unavailable: {error}"),
                     |path| format!("FFmpeg is unavailable ({}): {error}", path.display()),
@@ -550,6 +552,24 @@ impl Editor {
         )
         .entered();
         let started = Instant::now();
+        let (frame_rate, quality, preview, resolution, silent) = match target {
+            InternalPreparationTarget::Public(options) => (
+                options.frame_rate(),
+                options.quality(),
+                false,
+                options.resolution(),
+                false,
+            ),
+            InternalPreparationTarget::OneShot(request) => (
+                request.frame_rate,
+                request.quality,
+                request.preview,
+                request.resolution,
+                vestra_media::is_animated_output(&Self::render_output_path(project, request)),
+            ),
+        };
+        let effective_project = project.with_render_overrides(frame_rate, quality, preview, silent);
+        let project = effective_project.as_ref();
         let validation_started = Instant::now();
         let validation = self.validate(project);
         let validation_elapsed = validation_started.elapsed();
@@ -614,6 +634,7 @@ impl Editor {
             validated,
             backend,
             preview,
+            resolution,
             PreparationContext {
                 warnings: warnings.clone(),
                 timings: PreparationTimings {
@@ -639,10 +660,12 @@ impl Editor {
         validated: ValidatedProject,
         backend: RenderBackendPreference,
         preview: bool,
+        resolution: Option<(u32, u32)>,
         context: PreparationContext,
     ) -> Result<application::PreparedRender, EditorError> {
         let request = RenderRequest {
             frame_range: None,
+            resolution,
             output_override: None,
             overwrite: false,
             preview,
@@ -885,6 +908,7 @@ impl Editor {
             }
         };
         let render_request = RenderRequest {
+            resolution: request.resolution,
             frame_range: (request.start != Duration::ZERO || request.end.is_some())
                 .then_some(frame_range),
             output_override: request.output,
@@ -1014,7 +1038,13 @@ impl Editor {
         })
     }
     fn estimated_total_frames(project: &Project, request: &SdkRenderRequest) -> Option<u64> {
-        let output = &project.canonical().output;
+        let effective = project.with_render_overrides(
+            request.frame_rate,
+            request.quality,
+            request.preview,
+            false,
+        );
+        let output = &effective.canonical().output;
         let duration = output.duration?;
         let duration_nanos = vestra_core::timeline::seconds_to_nanos(duration)?;
         let (numerator, denominator) = output.frame_rate.rational().ok()?;
@@ -1247,6 +1277,10 @@ impl EditorBuilder {
 #[derive(Clone, Debug, Default)]
 pub struct SdkRenderRequest {
     pub output: Option<PathBuf>,
+    /// Output raster size; the authored canvas remains the coordinate space.
+    pub resolution: Option<(u32, u32)>,
+    pub frame_rate: Option<crate::FrameRate>,
+    pub quality: Option<crate::Quality>,
     pub overwrite: bool,
     pub preview: bool,
     pub backend: RenderBackendPreference,
@@ -1257,6 +1291,21 @@ pub struct SdkRenderRequest {
 }
 
 impl SdkRenderRequest {
+    #[must_use]
+    pub const fn with_resolution(mut self, width: u32, height: u32) -> Self {
+        self.resolution = Some((width, height));
+        self
+    }
+    #[must_use]
+    pub const fn with_frame_rate(mut self, frame_rate: crate::FrameRate) -> Self {
+        self.frame_rate = Some(frame_rate);
+        self
+    }
+    #[must_use]
+    pub const fn with_quality(mut self, quality: crate::Quality) -> Self {
+        self.quality = Some(quality);
+        self
+    }
     #[must_use]
     pub const fn start(&self) -> Duration {
         self.start

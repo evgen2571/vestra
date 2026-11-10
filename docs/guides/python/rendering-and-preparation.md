@@ -38,7 +38,7 @@ result = project.render("clip.mp4", start=0.5, end=1.0, overwrite=True)
 `start` defaults to zero and an omitted `end` uses the project duration. Both
 bounds are seconds on the original project timeline. The half-open interval
 `[start, end)` selects frames whose sample times fall inside it: both boundaries
-round up to frame indices at the project's rational FPS. A range must satisfy
+round up to frame indices at the selected output's rational FPS. A range must satisfy
 `0 <= start < end <= duration` and contain at least one sampled frame.
 
 For example, at 10 FPS, `[0.25, 0.68)` selects project frames 3–6. The output
@@ -63,6 +63,97 @@ result = prepared.render_video(
     PreparedVideoRenderRequest("prepared-clip.mp4", start=0.5, end=1.0, overwrite=True)
 )
 ```
+
+## Render a preview or change output settings
+
+```python
+from vestra.authoring import Quality
+
+project.render_preview("preview.mp4", overwrite=True)
+project.render(
+    "small.mp4", resolution=(640, 360), fps=(24000, 1001),
+    quality=Quality.BALANCED, overwrite=True,
+)
+```
+
+The preview preset caps the longest side at 640 pixels, caps FPS at 15, and
+uses `Quality.PREVIEW` (H.264 CRF 30 with the `ultrafast` speed preset).
+`project.render(..., preview=True)` is equivalent. Explicit `resolution`, `fps`
+and `quality` take precedence over their respective preset defaults. Preview
+never increases a smaller project's dimensions or a lower frame rate.
+`Quality.BALANCED` uses CRF 23 / `veryfast`; `Quality.HIGH` uses CRF 18 / `medium`.
+These encoder controls apply to MP4; GIF quantization and lossless WebP use
+the format policies below.
+
+Overrides leave the authored project unchanged. `fps` accepts a positive integer,
+an `(numerator, denominator)` tuple or `vestra.FrameRate`. Frame indices and
+range boundaries use the selected output FPS; effects and keyframes continue
+to evaluate at the corresponding original project time. A lower FPS requests
+fewer output frames, including when rendering a selected interval.
+
+`resolution=(width, height)` accepts even integers in `2..=8192`, within
+configured resource limits, and changes actual composition surfaces and raster
+work. Source sizing, positions, rotations, groups, masks and pixel-valued effect
+sizes use the authored coordinate space. A different aspect ratio fits the
+composition centrally without stretching it; uncovered pixels use the project
+background. Global effects execute on the final canvas, including these borders.
+Small kernels and stylization cells round to the renderer's pixel grid. Upscaling
+can exceed an effect's existing physical kernel/cell limits; such requests fail
+with an explicit render diagnostic rather than silently clipping the effect.
+Changing aspect ratio with both a partially transparent background and a
+non-normal root blend mode is currently refused; use matching aspect ratios
+or an opaque/fully transparent background for that combination.
+Source decoding and prepared source rasters retain their native resolution, so
+preview speedups are smaller when decoding dominates.
+
+Frame access and sequences support the same spatial and FPS overrides:
+
+```python
+frame = project.render_frame(0.5, resolution=(320, 180), backend="cpu")
+project.render_frames(
+    directory="small-sequence", resolution=(320, 180), fps=12, overwrite=True,
+)
+prepared = project.prepare(backend="cpu", resolution=(320, 180), fps=12)
+```
+
+A prepared runtime fixes its dimensions and frame grid for its lifetime.
+Prepare again for different raster/FPS settings. Its video requests can select
+an output format and range without rebuilding resources.
+
+## Export GIF or animated WebP
+
+```python
+project.render("animation.gif", fps=15, start=0, end=0.5, overwrite=True)
+project.render("animation.webp", fps=24, start=0, end=0.5, overwrite=True)
+```
+
+The extension selects the animation format for `render()` and prepared
+`render_video()`. `frame.save("poster.webp")` still writes a static image.
+Both animations loop indefinitely, include no audio stream, and retain the
+original-time visual evaluation used by MP4. Audio analysis needed by visual
+effects still runs. An inaudible audio clip that determines an automatic project
+duration still needs media preflight.
+
+GIF generates a local palette for every frame, with up to 255 visible colors
+and one transparent entry. Alpha below 128 becomes transparent; other pixels
+become opaque. Full frames replace previous content to avoid transparent motion
+trails. GIF stores centisecond timestamps and accepts at most 100 FPS; readers
+can impose their own minimum playback delay.
+
+Animated WebP stores lossless full-canvas frames, including partial alpha, at
+millisecond timing and at most 1000 FPS. RGB beneath fully transparent pixels
+may be normalized by the encoder. Its canvas is limited to 16383 pixels per
+side and the RIFF container to 4 GiB. GIF dimensions and frame delays also
+respect their format limits. Rational frame boundaries are quantized to each
+format's clock; durations can differ from the requested rational duration by
+one clock tick. Extremely long individual delays are refused.
+
+Vestra streams frames, palettes and WebP container chunks through bounded
+buffers; it does not collect an entire animation in memory. Sequences likewise
+release each exported frame before requesting the next. Output disk use still
+grows with duration. Existing overwrite, cancellation, finalization and atomic
+publication rules apply to animations. FFmpeg is resolved automatically with
+the Python package; preflight reports a missing GIF or `libwebp` encoder clearly.
 
 ## Validate before rendering
 

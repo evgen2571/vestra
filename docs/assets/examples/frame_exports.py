@@ -27,3 +27,8 @@ print(pixels.shape, pixels.dtype, pixels.strides)
 
 result = project.render(output / "clip.mp4", start=0.5, end=1, overwrite=True)
 print(f"Saved {result.total_frames} selected video frames")
+
+project.render_preview(output / "preview.mp4", overwrite=True)
+project.render(output / "small.mp4", resolution=(160, 90), fps=12, overwrite=True)
+project.render(output / "animation.gif", fps=12, end=1, overwrite=True)
+project.render(output / "animation.webp", fps=12, end=1, overwrite=True)

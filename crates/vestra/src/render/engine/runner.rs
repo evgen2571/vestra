@@ -632,13 +632,15 @@ where
         timings.gpu_readback_wait_ms = Some(milliseconds(backend_timings.gpu_readback_wait));
         timings.row_repack_ms = Some(milliseconds(backend_timings.row_repack));
     }
+    let audio_present =
+        plan.encoder.audio_mix.is_some() && !vestra_media::is_animated_output(&output.final_path);
     Ok(RenderSummary {
         output_path: output.final_path,
         width: plan.canvas.width,
         height: plan.canvas.height,
         duration,
         frame_count: total_frames,
-        audio_present: plan.encoder.audio_mix.is_some(),
+        audio_present,
         preview: plan.canvas.preview,
         elapsed_ms: timings.operation_total_ms,
         timings,

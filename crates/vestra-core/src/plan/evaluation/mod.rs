@@ -12,6 +12,7 @@ use crate::{
 mod colour;
 pub(crate) mod effects;
 pub(crate) mod motion;
+mod resolution;
 pub(crate) mod transform;
 
 pub use effects::EvaluatedEffect;
@@ -70,6 +71,9 @@ pub struct EvaluatedMask {
     pub strength: f32,
     pub feather: f32,
     pub transform: Transform2D,
+    /// Runtime-scaled owner presentation, separate from source raster scaling.
+    /// Absent in manually constructed programs that use the layer transform.
+    pub owner_transform: Option<Transform2D>,
 }
 
 #[derive(Clone, Debug)]
@@ -231,17 +235,17 @@ pub fn evaluate_with_context(
         project_time,
         project_time,
         plan.frame_rate,
-        plan.canvas.width,
-        plan.canvas.height,
+        plan.canvas.logical_width,
+        plan.canvas.logical_height,
         crate::project::GroupSize {
-            width: f64::from(plan.canvas.width),
-            height: f64::from(plan.canvas.height),
+            width: f64::from(plan.canvas.logical_width),
+            height: f64::from(plan.canvas.logical_height),
         },
         true,
         plan.images.len() + plan.shapes.len() + plan.texts.len(),
         context,
     )?;
-    Ok(EvaluatedFrame {
+    let mut frame = EvaluatedFrame {
         time: project_time,
         background: plan.canvas.background,
         width: plan.canvas.width,
@@ -261,7 +265,9 @@ pub fn evaluate_with_context(
             })
             .collect::<Result<Vec<_>, _>>()?,
         evaluated_track_count,
-    })
+    };
+    resolution::apply(&mut frame, &plan.canvas, plan.visual_dependency)?;
+    Ok(frame)
 }
 
 #[allow(
@@ -346,6 +352,7 @@ fn evaluate_layers(
                 // above. Transform tracks are accounted for by evaluate_tracks.
                 evaluated_track_count += 2;
                 Ok(EvaluatedMask {
+                    owner_transform: None,
                     input: match &mask.input {
                         crate::plan::CompiledMaskInput::Shape { shape_index } => {
                             EvaluatedMaskInput::Shape {

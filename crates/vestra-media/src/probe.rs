@@ -39,6 +39,44 @@ pub fn check_ffmpeg_available(executable: Option<&Path>) -> Result<(), MediaErro
     check_executable(executable.unwrap_or_else(|| Path::new("ffmpeg")), "ffmpeg")
 }
 
+/// Checks the actual animation encoder in the selected (including packaged) FFmpeg.
+pub fn check_output_encoder_available(
+    output: &Path,
+    executable: Option<&Path>,
+) -> Result<(), MediaError> {
+    use crate::output::OutputFormat;
+    let format = OutputFormat::from_path(output);
+    let encoder = match format {
+        OutputFormat::Mp4 => return check_ffmpeg_available(executable),
+        OutputFormat::Gif => "gif",
+        OutputFormat::Webp => "libwebp",
+    };
+    let result = Command::new(executable.unwrap_or_else(|| Path::new("ffmpeg")))
+        .args(["-hide_banner", "-encoders"])
+        .output()
+        .map_err(|source| MediaError::ProcessStart {
+            program: "FFmpeg",
+            source,
+        })?;
+    if !result.status.success() {
+        return Err(MediaError::ProcessFailed {
+            program: "FFmpeg",
+            status: result.status,
+            stderr: String::from_utf8_lossy(&result.stderr).into_owned(),
+        });
+    }
+    if !String::from_utf8_lossy(&result.stdout)
+        .lines()
+        .any(|line| line.split_whitespace().nth(1) == Some(encoder))
+    {
+        return Err(MediaError::EncoderUnavailable {
+            encoder,
+            format: format.extension(),
+        });
+    }
+    Ok(())
+}
+
 pub fn backend_available() -> Result<(), MediaError> {
     check_ffmpeg_available(None)
 }

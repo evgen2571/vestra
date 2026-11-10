@@ -24,6 +24,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct RenderRequest {
     pub output_override: Option<PathBuf>,
+    pub resolution: Option<(u32, u32)>,
     pub frame_range: Option<std::ops::Range<u64>>,
     pub overwrite: bool,
     pub preview: bool,
@@ -194,6 +195,7 @@ pub(crate) fn prepare_project(
         &validated,
         CompileOptions {
             preview: request.preview,
+            resolution: request.resolution,
         },
     )
     .map_err(|diagnostic| ApplicationRenderError::Plan {
@@ -460,6 +462,7 @@ mod tests {
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
             frame_range: None,
+            resolution: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -484,6 +487,7 @@ mod tests {
                 &mut prepared,
                 RenderRequest {
                     frame_range: None,
+                    resolution: None,
                     output_override: Some(output.clone()),
                     ..request.clone()
                 },
@@ -514,6 +518,7 @@ mod tests {
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
             frame_range: None,
+            resolution: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -538,6 +543,7 @@ mod tests {
                 &mut prepared,
                 RenderRequest {
                     frame_range: None,
+                    resolution: None,
                     output_override: Some(workspace.path().join(name)),
                     ..request.clone()
                 },
@@ -621,6 +627,7 @@ mod tests {
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
             frame_range: None,
+            resolution: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -644,6 +651,7 @@ mod tests {
             &mut prepared,
             RenderRequest {
                 frame_range: None,
+                resolution: None,
                 output_override: Some(output),
                 ..request
             },
@@ -670,6 +678,7 @@ mod tests {
             load_and_validate(&fixture, &ValidationOptions::default()).expect("fixture validates");
         let request = RenderRequest {
             frame_range: None,
+            resolution: None,
             backend_preference: RenderBackendPreference::Cpu,
             cancelled: Arc::new(AtomicBool::new(false)),
             output_override: None,
@@ -691,6 +700,7 @@ mod tests {
             &mut prepared,
             RenderRequest {
                 frame_range: None,
+                resolution: None,
                 output_override: Some(workspace.path().join("parity.mp4")),
                 ..request
             },

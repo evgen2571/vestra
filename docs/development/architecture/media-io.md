@@ -84,6 +84,16 @@ media has no renderer type or crate dependency. `FfmpegSink` validates output
 order and expected buffer length before writing FFmpeg stdin. The SDK owns
 completion ordering, cancellation and scoped encoder-write overlap.
 
+The runtime destination selects MP4, GIF or animated WebP. GIF streams a local
+palette per frame and uses full-frame disposal; it does not retain an entire
+timeline for palette generation. WebP streams independently encoded lossless
+VP8L frames from FFmpeg's `libwebp` encoder into a media-owned RIFF writer.
+That writer copies bounded chunks directly to the temporary file, writes
+full-canvas no-blend `ANMF` frames, and patches the RIFF length on completion.
+It is joined before publication or cleanup. This avoids retaining animation
+state in `libwebp_anim`. Container clocks, size limits and transparency policies
+are documented in the [animation guide](../../guides/python/rendering-and-preparation.md#export-gif-or-animated-webp).
+
 Frame writing, encoder finalization and publication are deliberately separate. The sink writes a temporary target, finalizes the container, then `output` publishes it at the requested destination subject to overwrite policy. Each stage can fail and cleanup preserves the original destination where possible. Callers should use the stage, temporary path and destination in `RenderFailureContext` rather than assuming that "encoding completed" means the output exists.
 
 For frame selection, caching and concurrency contracts, see the [media pipeline](../media-pipeline.md).

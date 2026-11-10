@@ -179,6 +179,7 @@ impl FramePlanBuilder {
                 }
             };
             planned_layer.masks.push(vestra_core::plan::EvaluatedMask {
+                owner_transform: None,
                 input: vestra_core::plan::EvaluatedMaskInput::Source {
                     source: Box::new(isolated_source),
                     mode: match matte.mode {

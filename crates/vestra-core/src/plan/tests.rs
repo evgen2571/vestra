@@ -2307,3 +2307,57 @@ fn nested_palette_period_uses_child_time_and_signal_uses_root_time() {
         assert_eq!(*amount, 0.75);
     }
 }
+
+#[test]
+fn runtime_resolution_overrides_preview_without_changing_authored_coordinates_or_timing() {
+    let input = canonical_input();
+    let authored = (input.project.output.width, input.project.output.height);
+    let plan = compile(
+        input,
+        CompileOptions {
+            preview: true,
+            resolution: Some((128, 96)),
+        },
+    )
+    .expect("runtime resolution compiles");
+    assert_eq!((plan.canvas.width, plan.canvas.height), (128, 96));
+    assert_eq!((plan.encoder.width, plan.encoder.height), (128, 96));
+    assert_eq!(
+        (plan.canvas.logical_width, plan.canvas.logical_height),
+        authored
+    );
+    assert_eq!(
+        (plan.frame_rate, plan.frame_count, plan.duration),
+        ((24, 1), 144, 6.0)
+    );
+}
+
+#[test]
+fn runtime_resolution_reuses_dimension_and_resource_limit_contracts() {
+    for (resolution, code) in [
+        ((0, 64), "VESTRA-OUTPUT-WIDTH"),
+        ((64, 3), "VESTRA-OUTPUT-HEIGHT"),
+        ((8194, 64), "VESTRA-OUTPUT-WIDTH"),
+    ] {
+        let error = compile(
+            canonical_input(),
+            CompileOptions {
+                resolution: Some(resolution),
+                ..CompileOptions::default()
+            },
+        )
+        .expect_err("invalid runtime dimensions");
+        assert_eq!(error.code, code);
+    }
+    let mut input = canonical_input();
+    input.limits.maximum_width = 64;
+    let error = compile(
+        input,
+        CompileOptions {
+            resolution: Some((128, 96)),
+            ..CompileOptions::default()
+        },
+    )
+    .expect_err("runtime resource limit");
+    assert_eq!(error.code, "VESTRA-LIMIT-DIMENSIONS");
+}

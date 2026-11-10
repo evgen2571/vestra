@@ -48,6 +48,7 @@ validation and parser differences that schema acceptance alone cannot establish.
 
 ## Rendering and diagnosis
 
+- [Render outputs](render-outputs.md): formats, previews, frame selection and publication.
 - [Backends](backends.md): backend selection, adapters and parity expectations.
 - [Feature support](feature-support.md): current coverage and verification evidence.
 - [Diagnostics](diagnostics.md): diagnostic objects, codes and failure stages.

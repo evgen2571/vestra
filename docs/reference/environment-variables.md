@@ -8,6 +8,7 @@ verification controls are identified separately below.
 | Variable | Values and default | Scope |
 | --- | --- | --- |
 | `RUST_LOG` | A tracing filter understood by `tracing_subscriber`. Unset uses the CLI verbosity defaults. | CLI and Rust process logging. Takes precedence over `-v`, `-vv`, and `-vvv` when set. |
+| `IMAGEIO_FFMPEG_EXE` | FFmpeg executable path or command name. Unset uses the binary installed through `imageio-ffmpeg`. | Python encoding and audio processing. Set before preparing or rendering; prepared sessions retain the selected path. See [executable selection](../getting-started/installation.md#choose-a-different-ffmpeg-executable). |
 | `VESTRA_WGPU_BACKEND` | Case-insensitive `vulkan`, `gl`/`gles`, `metal`, `dx12`, or `browser_webgpu`. Unset or an unrecognized value lets wgpu consider all compiled backends. | WGPU adapter discovery. It does not select Vestra's CPU/WGPU render backend. |
 
 `VESTRA_WGPU_BACKEND` influences the graphics API used during WGPU adapter

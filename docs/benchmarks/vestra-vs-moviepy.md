@@ -199,29 +199,6 @@ The sustained test rendered the same 640x360/30 fps two-placement timeline for o
 
 All three gated internal benchmark tests (`preparation_matrix`, `effect_scaling_matrix`, `random_access_matrix`) passed. The effect-scaling run is a focused CPU control, not a MoviePy comparison.
 
-## Historical weaknesses and optimization priorities
-
-These were proposed follow-ups from the 2026-10-31 capture. They do not establish
-that a change is still needed, has been implemented, or will improve the current
-revision. Reproduce the relevant workload before choosing one.
-
-| Rank | Measured weakness | Evidence | Impact | Effort | Confidence | Concrete next step |
-|---:|---|---|---|---|---|---|
-| 1 | CPU full-frame effect kernels | 1080p CPU `contrast_dither_video` 7.654 s/11.76 FPS, ASCII 6.345 s/14.18 FPS; corresponding WGPU 1.78/1.73 s (~50 FPS). Internal effect scaling rises 11.12 → 66.78 ms/frame from 0→5 effects. | High for CPU effect-heavy work | Medium | High | SIMD/tile the existing CPU kernels (rayon-friendly contiguous tiles), eliminate intermediate full-frame copies, and use a profiler to confirm cache/memory bandwidth before changing algorithms. |
-| 2 | CPU compositing / eligibility path | `row-copy-1080p` opaque fast-path 4.629 s vs ineligible opacity 10.644 s (2.30x); WGPU is ~4.6–4.9 s for both, showing CPU path is the gap. | High for layered CPU video | Low–medium | High | Extend the existing opaque row-copy eligibility to more provably-opaque transforms and avoid generic blend surfaces when alpha is known. |
-| 3 | CPU end-to-end utilization and memory | Matched MoviePy comparison: Vestra CPU is 4.92x faster editing and 2.36x faster layered, but 467–629 MiB RSS versus MoviePy 224–398 MiB; sustained Vestra CPU 543 MiB RSS vs MoviePy 330 MiB. | Medium (throughput already better; memory matters for concurrency) | Medium | High | Profile allocator/copy sites and worker scratch retention; bound per-worker scratch/cache budgets and measure PSS/VRAM separately before tuning. |
-| 4 | GPU readback/row repack at 4K | Correct 4K WGPU dither smoke: 14.93 FPS, 398 MiB staging, 857 ms row repack, 1.95 GB texture uploads for 90 frames. | Medium for high-resolution WGPU | Medium | High | Keep frames GPU-resident through encoding where possible, batch/parallelize readback, and reduce row repacking/copies; validate hardware parity after each change. |
-| 5 | Decoder/cache behavior on non-reuse access | Cache-on is slower for sequential (53.311 vs 44.667 ms), repeated-frame (8.698 vs 8.384 ms), eviction (21.128 vs 18.149 ms), and repeated-placement (56.143 vs 45.425 ms); random seeking is neutral (170.203 vs 168.501 ms). | Medium for seek-heavy edits; low for reuse-heavy edits | Medium | Medium | Instrument decoder seeks/conversions and cache hit/eviction decisions; tune budget/admission by access pattern instead of increasing the budget blindly. |
-| 6 | Worker scaling evidence is incomplete | CPU sustained uses ~8.0 observed cores; no public worker-count control was benchmarked in this run, and the native worker sweep requires private fixtures. | Unknown | Medium | Low–medium | Run the existing `native_workers_1/2/4/8` ignored sweep with the documented external FFmpeg references before changing scheduling. |
-
-These priorities describe the recorded baseline; remeasure the current revision
-before choosing optimization work. They separate measured bottlenecks from
-hypotheses. No claim is made that a particular third-party library will improve
-results without profiling; plausible candidates for follow-up are
-`rayon`-aligned SIMD kernels already present in the Rust ecosystem,
-`ffmpeg-next`/FFmpeg hardware frames for reducing copies, and `wgpu`
-staging/readback APIs. Adding a library is not justified by these measurements alone.
-
 ## Limitations and unverified comparisons
 
 - MoviePy has no equivalent implementation of Vestra’s stylized effects, masks/mattes/particles suite scenarios, or WGPU backend. Those rows are Vestra-versus-Vestra-backend measurements; they are not MoviePy ratios.

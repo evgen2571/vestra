@@ -132,6 +132,8 @@ snapshot.save(path)
 
 ## Preparation and rendering
 
+### High-level requests
+
 ```text title="High-level rendering signatures"
 project.prepare(*, backend="auto", resolution=None, fps=None, quality=None) -> PreparedProject
 project.render_frame(seconds=None, output=None, *, frame_number=None,
@@ -153,38 +155,32 @@ video renders. Backend preferences are `"auto"`, `"cpu"`, `"wgpu"` or
 `BackendPreference` values; see [backends](backends.md). Existing outputs require
 `overwrite=True`.
 
-`render()` selects MP4, GIF or animated WebP by extension. The preview preset
-uses a 640 px longest side, at most 15 FPS, and `Quality.PREVIEW`; explicit
-`resolution`, `fps`, and `quality` override the respective defaults. Dimensions
-are even integers in `2..=8192`, within configured resource limits, and preserve
-proportions with a centered fit. FPS accepts
-a positive integer, rational tuple, or `FrameRate`; quality is an authoring
-`Quality` enum. Prepared state fixes these settings without changing the project.
-See [overrides and previews](../guides/python/rendering-and-preparation.md#render-a-preview-or-change-output-settings)
-and [animation format contracts](../guides/python/rendering-and-preparation.md#export-gif-or-animated-webp).
+| Argument | Contract |
+| --- | --- |
+| `output` | Video destination: `.mp4`, `.gif` or `.webp`. Still destination: `.png`, `.jpg`, `.jpeg` or `.webp`. |
+| `preview` | Caps the longest side at 640 px and FPS at 15; selects `Quality.PREVIEW`. Explicit settings override their respective defaults. |
+| `resolution` | Even integer width and height in `2..=8192`, within resource limits; centered fit preserves proportions. |
+| `fps` | Positive integer, rational tuple or `FrameRate`. |
+| `quality` | Authoring `Quality` enum; controls MP4 encoding. |
+| `start`, `end` | Seconds on the original timeline, selecting frames in `[start, end)`. Omitted end uses project duration. |
+| `seconds`, `frame_number` | Single-frame selectors; supply exactly one. Times select the containing frame; indices are zero-based. |
+| `times`, `indices` | Explicit sequence selection; exclusive with each other and continuous range bounds. Order and duplicates are retained. |
 
-Video `start` and `end` select original project sample times in `[start, end)`.
-Both boundaries round up at rational FPS; an omitted end uses project duration.
-Reversed, out-of-timeline and zero-sample intervals raise `VESTRA-RENDER-RANGE`.
-The clip's timestamps begin at zero and its duration is selected frames / FPS.
-Effects retain project time; the final audio mix is trimmed and rebased with
-sample rounding at 48 kHz. See [selected video ranges](../guides/python/rendering-and-preparation.md#export-part-of-the-timeline).
+Prepared state fixes output dimensions, FPS and quality without changing the
+authored project. `render_frames()` defaults to the whole timeline, saves
+`frame_000000.ext`, … in request order and returns a count. Video range timestamps
+start at zero while effects retain project time. See [render outputs](render-outputs.md)
+for exact range rounding, audio synchronization, alpha, publication and format limits.
 
-Single-frame methods require exactly one of `seconds` or `frame_number`.
-Times select the containing frame; frame indices are zero-based.
-`render_frames()` accepts a sequence of times, a sequence of indices, or a
-continuous range, with the whole timeline as the default. It saves
-`frame_000000.ext`, … in request order and returns a count. Ranges are half-open,
-round both boundaries up to frame indices, and reject empty/out-of-range
-requests. The formats are `png`, `jpg`, `jpeg`, and lossless static `webp`.
-See [still images, sequences and arrays](../guides/python/rendering-and-preparation.md#save-a-still-image-or-sequence)
-for publication, memory and alpha semantics.
+### Frame methods
 
-`Frame.save(output, *, overwrite=False)` encodes the same formats by extension.
-`Frame.to_numpy()` and `Project.get_frame()` require the `numpy` extra and
-return independent writable contiguous `uint8` arrays shaped `(height, width, 4)`.
-Pixels are top-to-bottom straight-alpha RGBA8; byte strides are `(width * 4, 4, 1)`.
-`Frame.to_bytes()` remains available without NumPy.
+`Frame.save(output, *, overwrite=False)` writes PNG, JPEG or lossless static
+WebP by extension. `Frame.to_numpy()` and `Project.get_frame()` require the
+`numpy` extra and return independent writable contiguous `uint8` arrays shaped
+`(height, width, 4)`. `Frame.to_bytes()` works without NumPy. See
+[frame data](render-outputs.md#frames-and-arrays) for pixel layout and ownership.
+
+### Native Editor
 
 ```text title="Native Editor signatures (project is a ProjectSnapshot)"
 Editor(*, resource_limits=None)

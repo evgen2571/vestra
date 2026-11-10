@@ -72,7 +72,7 @@ packaging-related PR checks. It builds:
 
 Wheels use CPython's stable ABI: one wheel per platform supports CPython
 3.11–3.14. PyPy and free-threaded CPython are not supported.
-`scripts/benchmark-python-abi.py` measures Python/native conversion overhead
+`benchmarks/python-abi.py` measures Python/native conversion overhead
 separately from render throughput.
 
 ## Artifact verification

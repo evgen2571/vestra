@@ -603,14 +603,14 @@ fn image_sizing_project(mode: &str) -> Value {
     let card = group("card", Some((12.0, 12.0)), vec![image]);
     let mut value = project(32, 24, vec![card]);
     value["assets"] =
-        json!([{"id": "blue", "type": "image", "source": "examples/assets/blue.png"}]);
+        json!([{"id": "blue", "type": "image", "source": "assets/fixtures/blue.png"}]);
     value
 }
 
 #[test]
 fn sized_group_image_fit_and_cover_use_local_canvas_dimensions() {
     let source =
-        image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets/blue.png"))
+        image::open(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixtures/blue.png"))
             .expect("blue fixture")
             .into_rgba8();
     let colour = source.get_pixel(100, 50).0;

@@ -15,10 +15,10 @@ requirements.txt
 nav = [
   { "Home" = "index.md" },
   { "Learn" = [
-    { "Installation" = "learn/installation.md" },
-    { "First render" = "learn/first-render.md" },
-    { "First animation" = "learn/first-animation.md" },
-    { "Animation & keyframes" = "learn/animation.md" },
+    { "Installation" = "getting-started/installation.md" },
+    { "First render" = "getting-started/first-render.md" },
+    { "First animation" = "getting-started/first-animation.md" },
+    { "Animation & keyframes" = "getting-started/animation.md" },
   ] },
   { "Guides" = [
     { "Python" = [
@@ -32,7 +32,6 @@ nav = [
         { "Visual catalog" = "guides/python/effect-catalog.md" },
         { "Palettes and dithering" = "guides/python/palettes-and-dithering.md" },
         { "ASCII" = "guides/python/ascii.md" },
-        { "Composed treatments" = "guides/python/effect-treatments.md" },
       ] },
       { "Transitions, flashes and presets" = "guides/python/transitions-flashes-and-presets.md" },
       { "Audio" = "guides/python/audio.md" },
@@ -46,15 +45,10 @@ nav = [
       { "Rendering with the CLI" = "guides/cli/rendering.md" },
       { "Logging and progress" = "guides/cli/logging-and-progress.md" },
     ] },
-    { "Additional setup and quickstarts" = [
-      { "Native installation" = "getting-started/installation.md" },
-      { "Python quickstart" = "getting-started/python-quickstart.md" },
-    ] },
   ] },
   { "Concepts" = [
     { "Authoring model" = "concepts/authoring-model.md" },
     { "Coordinates and anchors" = "concepts/coordinates-and-anchors.md" },
-    { "Groups and nesting" = "concepts/groups-and-nesting.md" },
     { "Timeline and time" = "concepts/timeline-and-time.md" },
     { "Masks and mattes" = "concepts/masks-and-mattes.md" },
     { "Effects, transitions and animation" = "concepts/effects-transitions-and-animation.md" },

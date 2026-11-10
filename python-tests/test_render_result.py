@@ -24,7 +24,7 @@ def audio_project() -> vestra.ProjectSnapshot:
                 "background": "#102030", "quality": "preview", "audio": True,
                 "duration_mode": "explicit", "duration": 1,
             },
-            "assets": [{"id": "tone", "type": "audio", "source": "assets/tone.wav"}],
+            "assets": [{"id": "tone", "type": "audio", "source": "assets/fixtures/tone.wav"}],
             "visual": {"clips": []},
             "audio": {"tracks": [{
                 "id": "tone", "gain": 1, "mute": False, "clips": [{
@@ -34,7 +34,7 @@ def audio_project() -> vestra.ProjectSnapshot:
                 }],
             }]},
         },
-        base_directory=Path("examples"),
+        base_directory=Path("."),
     )
 
 

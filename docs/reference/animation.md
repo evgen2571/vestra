@@ -83,5 +83,5 @@ within the property's supported range. In Python, property keyframes accept
 `Interpolation` or `CubicBezier` values, rather than strings.
 
 
-For a progressive explanation and rendered result, use [animation and keyframes](../learn/animation.md).
+For a progressive explanation and rendered result, use [animation and keyframes](../getting-started/animation.md).
 See [timeline and time](../concepts/timeline-and-time.md) for source and nested clocks.

@@ -1705,8 +1705,8 @@ fn encoder_startup_failure_leaves_prepared_state_ready() {
 #[test]
 fn prepared_visual_snapshot_ignores_later_source_file_changes() {
     let workspace = tempfile::tempdir().expect("temporary project directory");
-    let projects = workspace.path().join("projects");
-    let assets = workspace.path().join("assets");
+    let projects = workspace.path().join("examples/projects");
+    let assets = workspace.path().join("assets/fixtures");
     fs::create_dir_all(&projects).expect("project directory");
     fs::create_dir_all(&assets).expect("asset directory");
     let manifest = projects.join("project.json");
@@ -1716,7 +1716,7 @@ fn prepared_visual_snapshot_ignores_later_source_file_changes() {
         &manifest,
     )
     .expect("copy project fixture");
-    let source_assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets");
+    let source_assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixtures");
     fs::copy(source_assets.join("red.png"), assets.join("red.png")).expect("copy red image");
     fs::copy(source_assets.join("blue.png"), assets.join("blue.png")).expect("copy blue image");
 

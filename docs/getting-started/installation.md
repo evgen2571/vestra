@@ -14,22 +14,50 @@ uv run python -c "import vestra; print(vestra.__version__)"
 ```
 
 For a new project, run `uv init my-video`, then `cd my-video` first.
-Follow the [Python quickstart](python-quickstart.md), save its code as
-`quickstart.py`, and run `uv run python quickstart.py` to receive
-`quickstart.mp4`.
+Continue with [your first render](first-render.md) to encode an MP4.
 
 ## Install with pip
 
-In your chosen Python environment:
+Create and activate a virtual environment first:
+
+```bash
+python -m venv .venv
+```
+
+On macOS and Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+On Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+In that environment:
 
 ```bash
 python -m pip install vestra
 python -c "import vestra; print(vestra.__version__)"
 ```
 
-Run the same quickstart with `python quickstart.py`. Wheel users do not need
+Use `python` wherever the tutorials say `uv run python`. Wheel users do not need
 Rust, a C compiler or NASM. If no wheel matches your platform/interpreter,
 pip may attempt a source build, which needs the tools below.
+
+<span id="3-check-the-environment"></span>
+
+## Check the environment
+
+```bash
+uv run python -c "import vestra; print('Vestra', vestra.__version__)"
+```
+
+This checks the import; [your first render](first-render.md) checks encoding.
+For import and wheel errors, see [Python troubleshooting](../troubleshooting/python.md).
+The tutorials use `backend="cpu"` and need no GPU.
 
 ## Supported Python versions and platforms
 
@@ -201,4 +229,4 @@ cargo run -q -p vestra-cli -- version
 
 The binary is `target/debug/ve` (`ve.exe` on Windows). Add it to `PATH` if you
 want to use the short CLI commands. Continue with the
-[CLI quickstart](cli-quickstart.md) or [Python quickstart](python-quickstart.md).
+[CLI quickstart](cli-quickstart.md) or [Python quickstart](first-render.md).

@@ -1,4 +1,4 @@
-"""Small Video source example; provide examples/assets/clip.mp4 before running.
+"""Small Video source example; provide assets/fixtures/clip.mp4 before running.
 
 Run from the repository root: uv run python examples/python/high-level/09_video_source.py
 """
@@ -14,7 +14,7 @@ project = Project(
     base_directory=Path(__file__).resolve().parents[3],
 )
 
-video = project.root.add(Video("examples/assets/clip.mp4", sizing="cover"), duration=6)
+video = project.root.add(Video("assets/fixtures/clip.mp4", sizing="cover"), duration=6)
 title = project.root.add(
     Text("Vestra Video", font="tests/assets/VestraTest-Regular.ttf", font_size=42),
     duration=6,

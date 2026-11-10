@@ -9,7 +9,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 from benchmarks.comparisons.moviepy.comparison import digest, load_inputs, write_json
 from benchmarks.comparisons.moviepy.workloads import workload
-from scripts.benchmark import ROOT, require_backend
+from benchmarks.benchmark import ROOT, require_backend
 
 FRAMES = {
     "basic": [0, 1, 300, 599],

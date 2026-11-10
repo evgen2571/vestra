@@ -7,7 +7,7 @@ description: "Use when measuring Vestra rendering speed, GPU shader-pass cost, p
 
 Start with [performance](../../../docs/development/performance.md) and
 [benchmark documentation](../../../benchmarks/README.md).
-Reuse existing `scripts/benchmark.py`, `benchmarks/suites.json` and
+Reuse existing `benchmarks/benchmark.py`, `benchmarks/suites.json` and
 `just` recipes; do not add a second benchmark framework.
 
 ## Workflow

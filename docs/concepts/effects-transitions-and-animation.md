@@ -5,7 +5,7 @@ different problems. Choose the one that owns the change you want to make.
 
 | Feature | What it changes | Continue with |
 | --- | --- | --- |
-| Animation | A property over layer-local time | [Keyframes](../learn/animation.md) |
+| Animation | A property over layer-local time | [Keyframes](../getting-started/animation.md) |
 | Effect | The appearance of a layer or composed output | [Attach an effect](../guides/python/effects.md) |
 | Transition | Presentation of two sibling layers over an interval | [Transition comparisons](../guides/python/transitions-flashes-and-presets.md) |
 | Flash | A short root-owned color overlay | [Flashes](../reference/presets-and-flashes.md) |
@@ -46,8 +46,8 @@ settings. Only attachment order changes.
 </figure>
 
 The source, radius, palette and dither scale stay fixed. Only attachment order
-changes. [Complete example](../assets/examples/effects_catalog.py): keep
-[landscape.jpg](../assets/examples/landscape.jpg) beside it and run
+changes. [Complete example](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py): keep
+[landscape.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg) beside it and run
 `python effects_catalog.py --effect order --still` to replace `effect-order.webp`.
 The [catalog](../guides/python/effect-catalog.md) compares individual effects.
 
@@ -70,7 +70,7 @@ relationship between placement, overlap and progress.
 
 ## Interpolation
 
-The authoritative [animation explanation](../learn/animation.md) covers base
+The authoritative [animation explanation](../getting-started/animation.md) covers base
 values, destination-keyframe easing, holds, cubic Bézier curves and overshoot.
 Layer tracks use layer-local seconds; timed effects use effect-local seconds;
 transition channels use normalized progress. The first keyframe takes effect

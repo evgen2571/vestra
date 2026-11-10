@@ -692,5 +692,5 @@ impl CpuBackend {
 mod tests;
 
 #[cfg(test)]
-#[path = "work_elimination_benchmarks.rs"]
+#[path = "../../../../benchmarks/rust/cpu/work_elimination_benchmarks.rs"]
 mod work_elimination_benchmarks;

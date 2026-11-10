@@ -21,7 +21,7 @@ def test_smoke_suite_records_every_workload(
     tmp_path: Path, suite_name: str, expected_count: int
 ) -> None:
     """A completed suite records all workloads and compares with itself."""
-    script = Path(__file__).resolve().parents[1] / "scripts/benchmark.py"
+    script = Path(__file__).resolve().parents[1] / "benchmarks/benchmark.py"
     output = tmp_path / "run"
     subprocess.run(
         [

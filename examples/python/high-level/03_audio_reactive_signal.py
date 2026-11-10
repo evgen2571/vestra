@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def main() -> None:
     project = Project(size=(160, 90), fps=12, duration=1, base_directory=ROOT)
-    project.audio.track("music").add("examples/assets/tone.wav", trim_end=1.0)
+    project.audio.track("music").add("assets/fixtures/tone.wav", trim_end=1.0)
     background = project.root.add(Color("#304060"), duration=1)
 
     bloom = background.effects.add(Bloom(threshold=0.5, radius=2.0, intensity=0.2))

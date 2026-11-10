@@ -15,16 +15,16 @@ The example uses generated shapes, so it needs no images, fonts or audio files.
   <figcaption>Expected output: a three-second video of a static rectangle at 640 × 360 pixels, with no audio.</figcaption>
 </figure>
 
-Complete [installation](installation.md) first, including both FFmpeg checks.
+Complete [installation](installation.md) first, including the import check.
 The script uses the CPU backend, so it does not require a GPU.
 
 ## 1. Save the script
 
 In your Python project, create `first_render.py` with this complete example.
-You can also [download the Python file](../assets/examples/first_render.py).
+You can also [download the Python file](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/first_render.py).
 
 ```python title="first_render.py"
---8<-- "docs/assets/examples/first_render.py"
+--8<-- "examples/tutorials/first_render.py"
 ```
 
 ## 2. Render the video

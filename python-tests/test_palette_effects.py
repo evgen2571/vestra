@@ -240,7 +240,7 @@ def test_advanced_palette_failures_preserve_collection_and_ids(kind):
     effect = clip.effects.add_effect(
         kind, id="look", palette=["#000000", "#ffffff"], **arguments
     )
-    audio = builder.add_audio_asset("examples/assets/tone.wav")
+    audio = builder.add_audio_asset("assets/fixtures/tone.wav")
     builder.audio.add_track().add_clip(asset=audio, start=0)
     effect.parameter_track("phase").modulate(builder.audio.master.rms(), mode="add")
     assert effect.to_canonical()["phase"]["modifiers"][0]["operation"] == "add"

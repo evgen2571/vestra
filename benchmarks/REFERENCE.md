@@ -28,7 +28,7 @@ encoding; faster metadata lookup does not establish sample-duration correctness.
 The focused `row-copy-1080p` suite measures ten seconds of deterministic H.264
 with two source-sized video presentations per frame, including an integer-clipped
 overlay. `opaque_video` uses unit opacity; `ineligible_video` uses 0.9. Run with
-`python scripts/benchmark.py run --suite row-copy-1080p --backend cpu --output target/benchmark-results/row-copy`.
+`python benchmarks/benchmark.py run --suite row-copy-1080p --backend cpu --output target/benchmark-results/row-copy`.
 It uses one warmup and three one-shot encoded renders per workload. In this
 video-only scene `cpu_opaque_copy_fast_path_hits` counts row copies (there are
 no static cached layers); expect 600 eligible hits and zero ineligible hits.
@@ -61,7 +61,7 @@ reuse the other checkout's newer artifacts. Check revision and actual fast-path
 or seek behavior before accepting a comparison.
 
 For one-command CPU, hardware WGPU and MoviePy collection,
-see [Run benchmarks](COLLECTING.md). Cache and sustained profiles are
+see [Run benchmarks](../docs/benchmarks/collecting.md). Cache and sustained profiles are
 explicitly opt-in; the established local baseline workflow below is unchanged.
 
 The suite definition is in `suites.json`; representative projects are in
@@ -123,7 +123,7 @@ preview request. Full and preview are intentionally different workloads, so the
 strict before/after comparator rejects that pair. Report raw distributions and
 medians as a preset comparison, including spatial, temporal and encoding-quality
 differences. Generate media outside measurement and keep memory sampling in
-separate processes/runs using `scripts/benchmark_process.py`; finite-duration RSS
+separate processes/runs using `benchmarks/process.py`; finite-duration RSS
 plateaus do not establish multi-hour or large-file stability.
 The `static_colour` workload encodes ten seconds at 30 FPS and must report
 `static_visual_ffmpeg_fast_path_used=true`, one static-template population and
@@ -140,10 +140,10 @@ creation is outside measured render intervals. The canonical ten-scenario
 suite retains its settings and workload order.
 
 ```bash
-python scripts/benchmark.py run --suite stylization-smoke --backend cpu --output target/benchmark-results/stylization-smoke
-python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-before
+python benchmarks/benchmark.py run --suite stylization-smoke --backend cpu --output target/benchmark-results/stylization-smoke
+python benchmarks/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-before
 # Repeat after a source-stable change with the same backend and machine.
-python scripts/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-after
+python benchmarks/benchmark.py run --suite stylization-1080p --backend cpu --output target/benchmark-results/stylization-after
 just benchmark-compare target/benchmark-results/stylization-before/suite.json target/benchmark-results/stylization-after/suite.json
 ```
 
@@ -161,9 +161,9 @@ horizontal and vertical bounded sorting, and seeded periodic CRT workloads. Effe
 The original three-workload suites retain their definitions for comparisons.
 
 ```bash
-uv run --no-project python scripts/benchmark.py run --suite stylized-effects-smoke --backend cpu --output target/benchmark-results/effects-smoke
-uv run --no-project python scripts/benchmark.py run --suite stylized-effects-1080p --backend cpu --output target/benchmark-results/effects-cpu
-VESTRA_WGPU_BACKEND=gl uv run --no-project python scripts/benchmark.py run --suite stylized-effects-1080p --backend hardware-wgpu --output target/benchmark-results/effects-hardware
+uv run --no-project python benchmarks/benchmark.py run --suite stylized-effects-smoke --backend cpu --output target/benchmark-results/effects-smoke
+uv run --no-project python benchmarks/benchmark.py run --suite stylized-effects-1080p --backend cpu --output target/benchmark-results/effects-cpu
+VESTRA_WGPU_BACKEND=gl uv run --no-project python benchmarks/benchmark.py run --suite stylized-effects-1080p --backend hardware-wgpu --output target/benchmark-results/effects-hardware
 ```
 
 Both complete suites contain eight workloads; resolution, warmups and samples
@@ -230,4 +230,4 @@ sample ranges and actual adapter metadata before drawing performance conclusions
 
 The [MoviePy v2 comparison](comparisons/moviepy/README.md) adds three matched
 local-footage workloads with CPU/hardware runs, process-tree measurements and
-decoded-output validation through `scripts/benchmark.py moviepy`.
+decoded-output validation through `benchmarks/benchmark.py moviepy`.

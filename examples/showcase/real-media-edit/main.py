@@ -9,8 +9,9 @@ from vestra.effects import Saturation, Vignette
 from vestra.sources import Rectangle, Text, Video
 
 SHOWCASE = Path(__file__).resolve().parents[1]
+ASSETS = SHOWCASE.parents[1] / "assets"
 FOOTAGE = SHOWCASE.parents[1] / "assets/footage"
-FONT = "assets/Manrope.ttf"
+FONT = "fonts/Manrope.ttf"
 
 
 def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project:
@@ -20,7 +21,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         size=size,
         fps=fps,
         duration=14,
-        base_directory=SHOWCASE,
+        base_directory=ASSETS,
         quality=Quality.HIGH,
         output_audio=False,
     )

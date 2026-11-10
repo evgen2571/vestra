@@ -68,7 +68,7 @@ and local time. They serve different authoring needs: reusable content versus
 ongoing edits to one child composition.
 
 Continue with [coordinates and anchors](coordinates-and-anchors.md), then
-[groups and nesting](groups-and-nesting.md) to see how placement applies inside
+[groups and nesting](../guides/python/nested-compositions.md) to see how placement applies inside
 a group.
 
 ## Freeze the authored scene

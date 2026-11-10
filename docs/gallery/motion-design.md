@@ -54,7 +54,7 @@ the palette treatment after the footage is visible. The final scene combines
 `Spectrum2D` frequency analysis with an RMS signal bound to the ring's scale.
 
 For these techniques, see
-[Animation and keyframes](../learn/animation.md),
+[Animation and keyframes](../getting-started/animation.md),
 [Groups and nested compositions](../guides/python/nested-compositions.md),
 [Masks](../guides/python/masks.md), and
 [Audio-reactive authoring](../guides/python/signals-and-audio-reactivity.md).

@@ -81,7 +81,7 @@ Motion Canvas or MoviePy instead.
 ## Documentation
 
 [Installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)
-· [Python quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/python-quickstart.md)
+· [Python quickstart](https://github.com/evgen2571/vestra/blob/develop/docs/getting-started/first-render.md)
 · [CLI quickstart](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/cli-quickstart.md)
 · [Docs index](https://github.com/evgen2571/vestra/blob/main/docs/index.md)
 · [Python API](https://github.com/evgen2571/vestra/blob/main/docs/reference/python-api.md)
@@ -153,7 +153,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and
 Agents start with [AGENTS.md](AGENTS.md); benchmarks live in
 [benchmarks](benchmarks/README.md): [results](docs/benchmarks/index.md),
 [workload previews](docs/benchmarks/workloads.md), and
-[one-command collection](benchmarks/COLLECTING.md).
+[one-command collection](docs/benchmarks/collecting.md).
 
 ## License
 

@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix="vestra-example-") as directory:
         output_audio=False,
         base_directory=ROOT,
     )
-    photo = builder.add_image_asset("examples/assets/blue.png")
+    photo = builder.add_image_asset("assets/fixtures/blue.png")
     background = builder.add_image_clip(
         source=photo,
         start=0,

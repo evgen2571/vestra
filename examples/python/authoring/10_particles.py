@@ -20,7 +20,7 @@ project = ProjectBuilder(
     output_path="particles.mp4",
     duration=1.0,
 )
-audio_asset = project.add_audio_asset("examples/assets/tone.wav")
+audio_asset = project.add_audio_asset("assets/fixtures/tone.wav")
 music = project.audio.add_track(id="music")
 music.add_clip(asset=audio_asset, start=0, trim_end=1.0)
 project.add_particle_system_clip(

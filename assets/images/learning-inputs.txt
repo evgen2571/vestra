@@ -1,12 +1,12 @@
 Learning media inputs
 
-landscape.jpg: crop of "Landscape in Salzburger Land" by Dimitry Anikin.
+landscape-study.jpg: crop of "Landscape in Salzburger Land" by Dimitry Anikin.
 Source: https://commons.wikimedia.org/wiki/File:Landscape_in_Salzburger_Land.jpg
 License: CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
-The existing 1600px derivative is examples/showcase/assets/landscape.jpg.
-Full source/provenance: examples/showcase/compositing/README.md#photo-source.
+The existing 1600px derivative is assets/images/landscape.jpg.
+Full source/provenance: assets/images/README.md.
 This 640x220 crop is generated from that existing input (no new download):
-ffmpeg -i examples/showcase/assets/landscape.jpg -vf 'scale=640:-2,crop=640:220:0:100' -q:v 3 -map_metadata -1 docs/assets/examples/landscape.jpg
+ffmpeg -i assets/images/landscape.jpg -vf 'scale=640:-2,crop=640:220:0:100' -q:v 3 -map_metadata -1 assets/images/landscape-study.jpg
 
 The light graphics, moving striped object, comparison labels, audio waveform,
 control curves, and generated tone phrase are original project work under MIT.

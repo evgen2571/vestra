@@ -1,6 +1,6 @@
 # README quickstart
 
-[Python source](main.py) · [Rendered MP4](render.mp4) · [Tutorial](../../../docs/learn/first-animation.md)
+[Python source](main.py) · [Rendered MP4](render.mp4) · [Tutorial](../../../docs/getting-started/first-animation.md)
 
 ![A rounded rectangle with eased position keyframes](preview.gif)
 

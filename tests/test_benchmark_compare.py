@@ -10,14 +10,21 @@ from pathlib import Path
 import pytest
 
 SPEC = importlib.util.spec_from_file_location(
-    "benchmark", Path(__file__).resolve().parents[1] / "scripts/benchmark.py"
+    "benchmark", Path(__file__).resolve().parents[1] / "benchmarks/benchmark.py"
 )
 benchmark = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(benchmark)
 
 
 @pytest.mark.parametrize(
-    "name", ["examples/effects/ascii.json", "assets/footage/forest.mp4"]
+    "name",
+    [
+        "examples/effects/ascii.json",
+        "assets/footage/forest.mp4",
+        "benchmarks/rust/animation_effects.rs",
+        "benchmarks/benchmark.py",
+        "benchmarks/process.py",
+    ],
 )
 def test_fixture_changes_invalidate_benchmark_source_identity(
     tmp_path, monkeypatch, name

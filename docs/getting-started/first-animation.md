@@ -75,10 +75,10 @@ Save this as `first_animation.py`. It is a complete copy of the quickstart
 example from the repository's README showcase. You do not need to run or
 import `first_render.py`.
 
-[Download first_animation.py](../assets/examples/first_animation.py)
+[Download first_animation.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/first_animation.py)
 
 ```python title="first_animation.py"
---8<-- "docs/assets/examples/first_animation.py"
+--8<-- "examples/tutorials/first_animation.py"
 ```
 
 Run it in your project environment:

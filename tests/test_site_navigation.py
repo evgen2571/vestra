@@ -51,10 +51,10 @@ def test_public_pages_have_navigation_context() -> None:
         )
     )
     assert pages(sections["Learn"]) == [
-        "learn/installation.md",
-        "learn/first-render.md",
-        "learn/first-animation.md",
-        "learn/animation.md",
+        "getting-started/installation.md",
+        "getting-started/first-render.md",
+        "getting-started/first-animation.md",
+        "getting-started/animation.md",
     ]
     assert pages(sections["Contributing"])[:2] == [
         "development/README.md",

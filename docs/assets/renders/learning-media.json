@@ -1,14 +1,14 @@
 {
   "program_sha256": {
-    "effects_catalog": "cd774022bb496bc79cc5483816424d5cce1550609c9a2327d346283ce406cc0d",
+    "effects_catalog": "5d4e29dbfaec0911222052fbe6241fdd2bd3272418f9a1fc3dd9b51072f5e14f",
     "concepts_masks": "824aa5c32850760a3953ffc40bbdbe4b8c802d4e2e132b6356abb9d3e2035403",
     "transition_comparisons": "280977cdf8ed1142b9ed1f256ea9c4941b39484374cd990ccccd10859c605baa",
     "audio_response": "fe7be774865322ecf99a58dca2461a272c644e782565847ae7c3e459fdc930dc",
     "group_placements": "15a410f6064846c587e919b007de4a42cfdfd11939f42480262b75d2673e6864"
   },
   "input_sha256": {
-    "landscape.jpg": "551efde1b9a96fdbeb1d7dc91af1aa0bd0e3ae035cd3ba15b38afcc5ca949b51",
-    "learning-inputs.txt": "ed0611fa835d95f1ab9060021f3a68c0e61f0b8b49ecad2476f921752711f420"
+    "assets/images/landscape-study.jpg": "551efde1b9a96fdbeb1d7dc91af1aa0bd0e3ae035cd3ba15b38afcc5ca949b51",
+    "assets/images/learning-inputs.txt": "8ef7ca6ce54f5e255f4fe226da7f92dc51329e9006b706d7270fd349649d9555"
   },
   "stills": {
     "effect-brightness": {
@@ -294,5 +294,19 @@
     "audio": false,
     "web_sha256": "0b53493c3048bfb8326a67a7ed2dbb02e7fa4e90c7c6b9834816b061a5699ea4",
     "poster_sha256": "eaab3fbce84732f4be07a47bcbddefd83d1a4ab57bbffcad2cb0a979670e618b"
+  },
+  "source_relocation": {
+    "note": "Tutorial programs and inputs relocated; the effect program only changes input-path lookup. Original hashes and delivery media are retained.",
+    "program_sha256": {
+      "effects_catalog": "cd774022bb496bc79cc5483816424d5cce1550609c9a2327d346283ce406cc0d",
+      "concepts_masks": "824aa5c32850760a3953ffc40bbdbe4b8c802d4e2e132b6356abb9d3e2035403",
+      "transition_comparisons": "280977cdf8ed1142b9ed1f256ea9c4941b39484374cd990ccccd10859c605baa",
+      "audio_response": "fe7be774865322ecf99a58dca2461a272c644e782565847ae7c3e459fdc930dc",
+      "group_placements": "15a410f6064846c587e919b007de4a42cfdfd11939f42480262b75d2673e6864"
+    },
+    "input_sha256": {
+      "landscape.jpg": "551efde1b9a96fdbeb1d7dc91af1aa0bd0e3ae035cd3ba15b38afcc5ca949b51",
+      "learning-inputs.txt": "ed0611fa835d95f1ab9060021f3a68c0e61f0b8b49ecad2476f921752711f420"
+    }
   }
 }

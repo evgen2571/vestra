@@ -48,18 +48,18 @@ video_source = layer.source_start + layer_local × layer.playback_rate
 layer's position on the timeline or retime its presentation keyframes. A position
 keyframe at local second `1` is reached at project second `3` in this example.
 For interpolation and values before/after keyframes, use the authoritative
-[animation guide](../learn/animation.md#layer-local-time).
+[animation guide](../getting-started/animation.md#layer-local-time).
 
 ## Nested time
 
 A group's children have a clock that starts at zero when the group appears.
 Subtract each placement's start to enter its local clock; keyframes then use
-that placement's own elapsed time. The [worked group example](groups-and-nesting.md#child-time-starts-with-the-group)
+that placement's own elapsed time. The [worked group example](../guides/python/nested-compositions.md#child-time-starts-with-the-group)
 aligns project, group and child time with an opacity animation. Its group lifetime
 clips the children even if they have longer authored durations.
 
 Transitions between child siblings use the child's composition clock. They do
-not use project timestamps. See [groups and nesting](groups-and-nesting.md) and
+not use project timestamps. See [groups and nesting](../guides/python/nested-compositions.md) and
 [the transition guide](../guides/python/transitions-flashes-and-presets.md).
 
 ## Duration is not an end timestamp

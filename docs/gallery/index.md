@@ -9,7 +9,7 @@ rendered with Vestra, the source code, and instructions for rendering it from
 a checkout.
 
 For a smaller introduction, start with the
-[first render tutorial](../learn/first-render.md).
+[first render tutorial](../getting-started/first-render.md).
 
 <div class="gallery-grid" markdown>
 
@@ -72,8 +72,7 @@ share the same zoom animation.
 
 ## Run the examples
 
-These projects load shared footage from `assets/footage/` and other media and
-fonts from `examples/showcase/assets/`. The
+These projects load shared media and fonts from `assets/`. The
 sources and inputs are included in the documentation checkout. If you already
 have that checkout, enter `nix develop` and run `just python-sync` from its root.
 

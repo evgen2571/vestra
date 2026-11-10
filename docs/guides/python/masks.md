@@ -15,7 +15,7 @@ For the coverage model, read [masks and mattes](../../concepts/masks-and-mattes.
 </figure>
 
 The lower examples show two circles combined with union and subtract. The
-[complete procedural comparison](../../assets/examples/concepts_masks.py)
+[complete procedural comparison](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/concepts_masks.py)
 needs no image files. You can
 also [download its three-second MP4](../../assets/renders/concepts-masks.mp4).
 
@@ -197,7 +197,7 @@ and [reference equations](../../reference/masks.md).
 
 `strength`, `feather` and mask transforms support the ordinary property tracks
 and signal bindings. Their animation uses the owning layer's local time. Refer
-to [animation and keyframes](../../learn/animation.md) for interpolation rather
+to [animation and keyframes](../../getting-started/animation.md) for interpolation rather
 than changing source geometry. Moving the layer moves its owned masks together;
 moving `mask.transform` changes the reveal within it.
 
@@ -222,7 +222,7 @@ children and direct image/video sizing restrictions, see
 
 ## Complete example
 
-[concepts_masks.py](../../assets/examples/concepts_masks.py) builds the four
+[concepts_masks.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/concepts_masks.py) builds the four
 coverage cases without external images. Run `python concepts_masks.py` to write
 `concepts-masks.mp4`; rerunning replaces the file. The same artwork reaches each
 placement, so the comparison isolates coverage before adding animation.

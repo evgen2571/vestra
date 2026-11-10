@@ -9,7 +9,7 @@ from statistics import median
 import uuid
 import zipfile
 
-from scripts.benchmark import ROOT
+from benchmarks.benchmark import ROOT
 
 VARIABLES = {
     "VESTRA_WGPU_BACKEND",

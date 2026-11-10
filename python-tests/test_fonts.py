@@ -128,7 +128,7 @@ def _collection(*fonts: bytes) -> bytes:
 
 
 def test_collection_uses_intended_nonzero_face_and_persistent_asset(tmp_path, monkeypatch):
-    other = ROOT / "examples/showcase/assets/Manrope.ttf"
+    other = ROOT / "assets/fonts/Manrope.ttf"
     collection = tmp_path / "fonts.ttc"
     collection.write_bytes(_collection(FONT.read_bytes(), other.read_bytes()))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))

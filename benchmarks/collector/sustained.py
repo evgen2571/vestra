@@ -12,7 +12,7 @@ from benchmarks.comparisons.moviepy.workloads import (
     workload,
 )
 from benchmarks.collector.fixtures import frame_at
-from scripts.benchmark import ROOT, require_backend
+from benchmarks.benchmark import ROOT, require_backend
 
 
 def definition(duration, width=640, height=360):
@@ -146,7 +146,7 @@ def run(
             record["measurement"] = execute(
                 [
                     python,
-                    str(ROOT / "scripts/collect-benchmarks.py"),
+                    str(ROOT / "benchmarks/collect.py"),
                     "--worker",
                     "sustained",
                     "--request",

@@ -16,8 +16,8 @@ sys.path.insert(0, str(ROOT))
 
 from benchmarks.collector import cache, collect, fixtures, host, reporting, sustained  # noqa: E402
 from benchmarks.comparisons.moviepy.comparison import load_inputs  # noqa: E402
-from scripts.benchmark import require_backend, suite_configuration  # noqa: E402
-from scripts.benchmark_process import measure_process  # noqa: E402
+from benchmarks.benchmark import require_backend, suite_configuration  # noqa: E402
+from benchmarks.process import measure_process  # noqa: E402
 
 
 @pytest.mark.parametrize(
@@ -50,7 +50,7 @@ def test_bootstrap_has_no_native_or_moviepy_import():
         [
             sys.executable,
             "-c",
-            "import runpy, sys; sys.argv=['collect-benchmarks.py','--help']; runpy.run_path('scripts/collect-benchmarks.py',run_name='__main__')",
+            "import runpy, sys; sys.argv=['collect-benchmarks.py','--help']; runpy.run_path('benchmarks/collect.py',run_name='__main__')",
         ],
         cwd=ROOT,
         capture_output=True,
@@ -58,7 +58,7 @@ def test_bootstrap_has_no_native_or_moviepy_import():
     )
     assert result.returncode == 0
     assert "--profile" in result.stdout
-    source = (ROOT / "scripts/collect-benchmarks.py").read_text()
+    source = (ROOT / "benchmarks/collect.py").read_text()
     assert "dependencies = []" in source
 
 
@@ -126,7 +126,7 @@ def test_missing_native_dependencies(monkeypatch, tmp_path, system):
     assert report["status"] == "failed"
     rows = {r["name"]: r for r in report["checks"]}
     assert rows["cargo"]["status"] == "failed"
-    assert "COLLECTING" in rows["cargo"]["guidance"]
+    assert "docs/benchmarks/collecting.md" in rows["cargo"]["guidance"]
     assert (
         "MSVC" in rows["C/C++ compiler and linker"]["guidance"]
         or "Windows" in rows["C/C++ compiler and linker"]["guidance"]
@@ -746,7 +746,7 @@ def test_real_collector_end_to_end(tmp_path):
     result = subprocess.run(
         [
             sys.executable,
-            str(ROOT / "scripts/collect-benchmarks.py"),
+            str(ROOT / "benchmarks/collect.py"),
             "--profile",
             "all",
             "--smoke",

@@ -10,7 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from scripts import benchmark  # noqa: E402
+from benchmarks import benchmark  # noqa: E402
 
 
 def comparison():
@@ -294,7 +294,8 @@ def test_timeout_terminates_worker_children(tmp_path):
         state = stat.read_text().split(") ", 1)[1]
     except (FileNotFoundError, ProcessLookupError):
         return  # The killed child was already reaped.
-    assert state.startswith("Z")
+    # Linux can expose a zombie (Z) or a dead task (X) before /proc disappears.
+    assert state.split()[0] in {"Z", "X"}
 
 
 def test_summary_rejects_nonfinite_measurement():

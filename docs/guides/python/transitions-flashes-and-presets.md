@@ -145,7 +145,7 @@ its interval; it does not rewrite their authored tracks. Position and rotation
 contribute offsets, scale contributes a multiplier, and opacity multiplies the
 authored opacity. Transition effects join the endpoint's effect processing.
 
-Use [ordinary keyframes](../../learn/animation.md) for one layer's independent
+Use [ordinary keyframes](../../getting-started/animation.md) for one layer's independent
 motion on its own clock. You can manually animate two layers to form a cut,
 but you then own both sets of seconds, lifetimes and synchronization. A reusable
 `CustomTransition` instead expresses endpoint channels with `Animate(...)`
@@ -171,7 +171,7 @@ structure is separate from media preflight.
 
 ## Complete example
 
-[transition_comparisons.py](../../assets/examples/transition_comparisons.py)
+[transition_comparisons.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/transition_comparisons.py)
 builds both scenes and runs the four definitions. Run
 `python transition_comparisons.py` to replace `transition-{crossfade,push,zoom,blur}.mp4`
 in the current directory. The graphics are original and use the bundled font.

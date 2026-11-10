@@ -541,8 +541,8 @@ fn public_cpu_wgpu_parity_covers_audio_reactive_project_when_an_adapter_is_avail
           "schema_version": 1,
           "output": {"path": "unused.mp4", "width": 32, "height": 32, "frame_rate": "30/1", "background": "#101018", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
           "assets": [
-            {"id": "red", "type": "image", "source": "examples/assets/red.png"},
-            {"id": "tone", "type": "audio", "source": "examples/assets/tone.wav"}
+            {"id": "red", "type": "image", "source": "assets/fixtures/red.png"},
+            {"id": "tone", "type": "audio", "source": "assets/fixtures/tone.wav"}
           ],
           "audio": {"tracks": [{"id": "music", "clips": [{"id": "tone-clip", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 1}]}]},
           "visual": {"clips": [{
@@ -663,7 +663,7 @@ fn public_sdk_loads_validates_preflights_and_inspects_without_cli() {
 fn public_sdk_prepares_and_renders_a_complete_audio_project() {
     let directory = tempdir().expect("temporary directory");
     let project = vestra::Project::from_json(
-        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":16,"height":16,"frame_rate":"30/1","background":"#000000","quality":"preview","audio":true,"duration_mode":"explicit","duration":2},"assets":[{"id":"tone","type":"audio","source":"examples/assets/tone.wav"}],"audio":{"tracks":[{"id":"music","gain":0.8,"clips":[{"id":"outgoing","asset":"tone","start":0,"trim_start":0,"trim_end":1.5,"fade_out":0.5,"fade_out_curve":"equal_power"},{"id":"incoming","asset":"tone","start":1,"trim_start":0,"trim_end":1.5,"fade_in":0.5,"fade_in_curve":"equal_power","gain_automation":{"keyframes":[{"time":0,"gain":0,"interpolation":"linear"},{"time":0.25,"gain":1,"interpolation":"hold"}]}}]},{"id":"ambience","gain":0.2,"clips":[{"id":"bed","asset":"tone","start":0,"trim_start":0,"trim_end":2}]}]},"visual":{"clips":[{"id":"canvas","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":2,"layer":0,"opacity":{"base_value":1}}]}}"##,
+        r##"{"schema_version":1,"output":{"path":"unused.mp4","width":16,"height":16,"frame_rate":"30/1","background":"#000000","quality":"preview","audio":true,"duration_mode":"explicit","duration":2},"assets":[{"id":"tone","type":"audio","source":"assets/fixtures/tone.wav"}],"audio":{"tracks":[{"id":"music","gain":0.8,"clips":[{"id":"outgoing","asset":"tone","start":0,"trim_start":0,"trim_end":1.5,"fade_out":0.5,"fade_out_curve":"equal_power"},{"id":"incoming","asset":"tone","start":1,"trim_start":0,"trim_end":1.5,"fade_in":0.5,"fade_in_curve":"equal_power","gain_automation":{"keyframes":[{"time":0,"gain":0,"interpolation":"linear"},{"time":0.25,"gain":1,"interpolation":"hold"}]}}]},{"id":"ambience","gain":0.2,"clips":[{"id":"bed","asset":"tone","start":0,"trim_start":0,"trim_end":2}]}]},"visual":{"clips":[{"id":"canvas","source":{"type":"solid_color","colour":"#000000"},"start":0,"duration":2,"layer":0,"opacity":{"base_value":1}}]}}"##,
         fixture("."),
     )
     .expect("schema-v1 audio project");
@@ -699,7 +699,7 @@ fn public_sdk_prepares_canonical_audio_reactive_video_without_output_audio() {
         {
           "schema_version": 1,
           "output": {"path": "unused.mp4", "width": 16, "height": 16, "frame_rate": "30/1", "background": "#000000", "quality": "preview", "audio": false, "duration_mode": "explicit", "duration": 1},
-          "assets": [{"id": "tone", "type": "audio", "source": "examples/assets/tone.wav"}],
+          "assets": [{"id": "tone", "type": "audio", "source": "assets/fixtures/tone.wav"}],
           "audio": {"tracks": [{"id": "music", "clips": [{"id": "tone-clip", "asset": "tone", "start": 0, "trim_start": 0, "trim_end": 1}]}]},
           "visual": {"clips": [{
             "id": "canvas", "source": {"type": "solid_color", "colour": "#000000"}, "start": 0, "duration": 1, "layer": 0,

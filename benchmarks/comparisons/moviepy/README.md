@@ -1,6 +1,6 @@
 # Vestra and MoviePy v2 comparison
 
-This extends [the existing benchmark runner](../../../scripts/benchmark.py).
+This extends [the existing benchmark runner](../../benchmark.py).
 It compares three silent video timelines through the normal Python APIs, with
 1920×1080 / 60 fps output. It measures complete worker processes, including
 Python startup/imports, project construction, media decoding, rendering,
@@ -22,22 +22,22 @@ uv sync --locked --extra benchmark --extra dev
 # Shared forest/valley/tear inputs are already bundled in assets/footage/.
 
 # Viability only; these timings are not performance evidence.
-uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run --width 320 --height 180 \
+uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy run --width 320 --height 180 \
   --warmups 0 --samples 1 --output target/moviepy-smoke
 
 # All three CPU workloads, one warmup + five measured samples per engine.
-VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run \
+VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy run \
   --output target/moviepy-cpu
 
 # Separate strict hardware run; select the API found by adapter discovery.
 just wgpu-list
-VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy run \
+VESTRA_WGPU_BACKEND=vulkan uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy run \
   --engines hardware-wgpu --output target/moviepy-hardware
 
 # Decode representative boundary/source frames, compare and create local sheets.
-uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy verify \
+uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy verify \
   target/moviepy-cpu target/moviepy-hardware --output target/moviepy-visuals
-uv run --locked --extra benchmark --extra dev python scripts/benchmark.py moviepy report \
+uv run --locked --extra benchmark --extra dev python benchmarks/benchmark.py moviepy report \
   target/moviepy-cpu target/moviepy-hardware \
   --verification target/moviepy-visuals/metrics.json > target/moviepy-report.md
 ```
@@ -57,7 +57,7 @@ Keep `--extra benchmark` on sync/run commands so MoviePy remains installed.
 The locked benchmark extra replaces manual requirements installation. Package
 versions and the native extension hash are recorded; MoviePy's distribution is
 2.2.1 even though its internal version string says 2.1.2. For the portable benchmark workflow,
-use [the collector](../../COLLECTING.md).
+use [the collector](../../../docs/benchmarks/collecting.md).
 
 ## Inputs and equivalent operations
 

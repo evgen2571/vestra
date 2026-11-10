@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_example(name):
-    path = ROOT / f"docs/assets/examples/{name}.py"
+    path = ROOT / f"examples/tutorials/{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

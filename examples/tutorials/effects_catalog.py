@@ -1,6 +1,7 @@
 """Render source/treatment comparisons with a photograph and procedural scenes.
 
-Keep landscape.jpg beside this file. Source and license: learning-inputs.txt.
+In a checkout, use the shared assets/images/landscape-study.jpg. For a standalone
+download, keep landscape-study.jpg beside this file. See assets/images/README.md.
 
 Run with --effect gaussian-blur (or any key in effect_cases()). Outputs are
 written to the current directory; rerunning replaces the named output.
@@ -41,7 +42,9 @@ from vestra.effects import (
 SIZE = (640, 520)
 SCENE = (640, 220)
 DURATION = 3
-PHOTO = Path(__file__).with_name("landscape.jpg")
+PHOTO = Path(__file__).resolve().parents[2] / "assets/images/landscape-study.jpg"
+if not PHOTO.is_file():
+    PHOTO = Path(__file__).with_name("landscape-study.jpg")
 PALETTE = ("#101b32", "#476b80", "#d6a46b", "#fff2cf")
 
 

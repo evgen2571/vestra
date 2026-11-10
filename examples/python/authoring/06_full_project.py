@@ -20,7 +20,7 @@ builder = ProjectBuilder(
 )
 # Register inputs once so multiple clips can reuse them.
 photo = builder.add_image_asset("tests/assets/wgpu-small-rgba.png")
-music_file = builder.add_audio_asset("examples/assets/tone.wav")
+music_file = builder.add_audio_asset("assets/fixtures/tone.wav")
 
 builder.add_solid_color_clip(colour="#102030", start=0, duration=2.5, layer=-1)
 outgoing = builder.add_image_clip(

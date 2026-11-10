@@ -110,7 +110,7 @@ constraints and other transforms.
 
 ## Complete example
 
-[Download audio_response.py](../../assets/examples/audio_response.py) and run:
+[Download audio_response.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/audio_response.py) and run:
 
 ```bash
 python audio_response.py

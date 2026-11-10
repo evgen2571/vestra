@@ -3,6 +3,17 @@
 High-level Python supports reusable `Group` sources and owned `CompositionLayer`
 placements. Both lower to the canonical visual source with type `group`.
 
+## Reusable source construction
+
+`Group.add()` returns a child placement with `transform`, `opacity`, `effects`,
+`masks`, and `blend_mode`. Child `start` is group-local seconds; omitted child
+`duration` inherits the containing placement's full lifetime, including for
+video children. Set `source_start` and `playback_rate` on video children to trim
+and retime them. `layer` controls child ordering and defaults to insertion order.
+Groups nest by adding another `Group`. Source [transform defaults](../guides/python/sources-and-layers.md)
+and individual placement overrides work on both `Group.add()` and
+`Composition.add()`.
+
 ## Placement and local time
 
 ```text title="Owned composition placement signature"
@@ -91,6 +102,36 @@ not override CPU allocation or WGPU texture limits.
 Owned mask-source validation reports the actual `masks/.../input/source` JSON
 pointer, including invalid group sizes. Diagnostic codes and messages follow
 the same group-size contract as ordinary groups.
+
+### Request a larger canvas
+
+This standalone example raises the width budget; the pixel budget covers both
+the root canvas and the narrow group:
+
+```python
+from vestra import Group, Project, Rectangle, ResourceLimits
+
+limits = ResourceLimits(
+    maximum_group_width=16_384,
+    maximum_group_pixels=640 * 360,
+)
+
+project = Project(
+    size=(640, 360),
+    fps=30,
+    duration=2,
+    resource_limits=limits,
+)
+
+strip = Group(size=(16_384, 2))
+strip.add(Rectangle(width=16_384, height=2, fill="#2563eb"))
+
+project.root.add(strip, scale=0.025)
+```
+
+The advanced builder accepts the same `size` keyword on
+`ProjectBuilder.add_group_clip(...)`. Both authoring paths serialize the optional
+canonical group `size` object.
 
 ## Compatibility
 

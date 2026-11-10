@@ -72,7 +72,7 @@ Children use time measured from the beginning of their group. The card starts
 at second 1 of the project, so its stripe appears at second 1.25. The group's
 rotation runs over its own three-second duration and affects both rectangles.
 Finish building `card` before placing it: `add(card)` copies its current contents.
-The [groups concept](../../concepts/groups-and-nesting.md) shows local coordinates,
+The [groups concept](nested-compositions.md) shows local coordinates,
 local time and the difference from `root.group()`. Use
 [nested compositions](nested-compositions.md) for reuse and direct child editing.
 

@@ -141,7 +141,7 @@ curves with similarly named keywords.
     [interpolation reference](../reference/animation.md)
     for the canonical JSON form and validation rules.
 
-[Download the runnable comparison](../assets/examples/keyframes.py), then run
+[Download the runnable comparison](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/keyframes.py), then run
 `uv run python keyframes.py` to create `keyframes.mp4`. It uses the same
 installation as the tutorials, has no external assets or audio, and replaces
 that filename on each run. The complete source is below.
@@ -149,7 +149,7 @@ that filename on each run. The complete source is below.
 ??? example "Complete comparison source"
 
     ```python title="keyframes.py"
-    --8<-- "docs/assets/examples/keyframes.py"
+    --8<-- "examples/tutorials/keyframes.py"
     ```
 
 ## Layer-local time

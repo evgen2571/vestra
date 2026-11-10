@@ -84,9 +84,9 @@ fourteen-second edit. GIF previews intentionally omit audio.
 
 ## Shared font
 
-All five larger scenes use `assets/Manrope.ttf`, Copyright 2018 The Manrope
+All five larger scenes use `assets/fonts/Manrope.ttf`, Copyright 2018 The Manrope
 Project Authors (https://github.com/googlefonts/manrope). The unmodified variable
-font was renamed on disk. Its complete [SIL OFL 1.1](assets/Manrope-OFL.txt)
+font was renamed on disk. Its complete [SIL OFL 1.1](../../assets/fonts/Manrope-OFL.txt)
 accompanies the bundled file; retain that copyright notice and license when
 redistributing the font. Videos and posters display rendered text and do not
 redistribute the font file.

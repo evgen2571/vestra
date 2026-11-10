@@ -13,6 +13,7 @@ from pathlib import Path
 from statistics import median
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 
 def source_identity() -> str:
@@ -32,11 +33,9 @@ def source_identity() -> str:
                 (
                     "crates/",
                     ".cargo/",
-                    "benchmarks/projects/",
+                    "benchmarks/",
                     "examples/effects/",
                     "python/",
-                    "benchmarks/comparisons/",
-                    "benchmarks/collector/",
                     "assets/footage/",
                 )
             )
@@ -49,9 +48,9 @@ def source_identity() -> str:
                 "pyproject.toml",
                 "uv.lock",
                 "rust-toolchain.toml",
-                "scripts/benchmark.py",
-                "scripts/benchmark_process.py",
-                "scripts/collect-benchmarks.py",
+                "benchmarks/benchmark.py",
+                "benchmarks/process.py",
+                "benchmarks/collect.py",
                 "benchmarks/suites.json",
             }
         ):
@@ -166,7 +165,7 @@ def measure_process(
     interval: float = 0.02,
 ) -> dict:
     """Use the portable process-tree sampler shared with collection."""
-    from scripts.benchmark_process import measure_process as portable_measure
+    from benchmarks.process import measure_process as portable_measure
 
     return portable_measure(
         command, log_path, timeout=timeout, env=env, interval=interval

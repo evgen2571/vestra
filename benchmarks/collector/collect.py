@@ -16,8 +16,8 @@ import traceback
 
 from benchmarks.collector import host, reporting
 from benchmarks.comparisons.moviepy.comparison import digest, write_json
-from scripts.benchmark import ROOT, source_identity
-from scripts.benchmark_process import measure_process
+from benchmarks.benchmark import ROOT, source_identity
+from benchmarks.process import measure_process
 
 ACTIVITY_INTERVAL = 15
 
@@ -136,7 +136,7 @@ def worker(args):
         write_json(args.result, data)
     elif args.worker == "build":
         if request["target"] == "benchmark":
-            from scripts.benchmark import build_benchmark
+            from benchmarks.benchmark import build_benchmark
 
             executable = str(build_benchmark(request["backend"]))
         elif request["target"] == "adapters":
@@ -341,7 +341,7 @@ class Collection:
         self.execute(
             [
                 self.python,
-                str(ROOT / "scripts/collect-benchmarks.py"),
+                str(ROOT / "benchmarks/collect.py"),
                 "--worker",
                 "build",
                 "--request",
@@ -394,7 +394,7 @@ class Collection:
         self.execute(
             [
                 self.python,
-                str(ROOT / "scripts/collect-benchmarks.py"),
+                str(ROOT / "benchmarks/collect.py"),
                 "--worker",
                 "metadata",
                 "--result",
@@ -418,7 +418,7 @@ class Collection:
             self.execute(
                 [
                     self.python,
-                    str(ROOT / "scripts/benchmark.py"),
+                    str(ROOT / "benchmarks/benchmark.py"),
                     "run",
                     "--suite",
                     suite,
@@ -470,7 +470,7 @@ class Collection:
         self.execute(
             [
                 self.python,
-                str(ROOT / "scripts/benchmark.py"),
+                str(ROOT / "benchmarks/benchmark.py"),
                 "moviepy",
                 "run",
                 "--inputs",
@@ -542,7 +542,7 @@ class Collection:
                     self.python,
                     [
                         self.python,
-                        str(ROOT / "scripts/collect-benchmarks.py"),
+                        str(ROOT / "benchmarks/collect.py"),
                         *sys.argv[1:],
                         "--prepared-directory",
                         str(self.directory),
@@ -648,7 +648,7 @@ class Collection:
                     self.execute(
                         [
                             self.python,
-                            str(ROOT / "scripts/benchmark.py"),
+                            str(ROOT / "benchmarks/benchmark.py"),
                             "moviepy",
                             "verify",
                             *map(str, captures),

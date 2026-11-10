@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 def main() -> None:
     project = Project(size=(320, 180), fps=24, duration=2, base_directory=ROOT)
     content = project.root.add(
-        Image(ROOT / "examples/assets/red.png"),
+        Image(ROOT / "assets/fixtures/red.png"),
         duration=2,
         id="tiled-content",
     )
@@ -53,7 +53,7 @@ def main() -> None:
     content.set_matte(matte, mode=MatteMode.ALPHA)
 
     group = project.root.group("radial-group", duration=2, z=1)
-    blue_panel = group.add(Image(ROOT / "examples/assets/blue.png"), duration=2)
+    blue_panel = group.add(Image(ROOT / "assets/fixtures/blue.png"), duration=2)
     blue_panel.effects.add(RadialBlur(amount=10, center=(0.45, 0.55)))
 
     report = project.validate()

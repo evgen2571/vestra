@@ -64,7 +64,7 @@ project.render("ascii.mp4", backend="cpu", overwrite=True)
 
 Run the combined blocks with `python ascii.py`. It writes two seconds to
 `ascii.mp4`, replacing it on a rerun. To compare with the catalog photograph, save
-[landscape.jpg](../../assets/examples/landscape.jpg) beside [effects_catalog.py](../../assets/examples/effects_catalog.py) and run
+[landscape.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg) beside [effects_catalog.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py) and run
 `python effects_catalog.py --effect ascii --still`.
 
 ## Use a font or geometric marks

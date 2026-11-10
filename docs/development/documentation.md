@@ -5,7 +5,7 @@ description: Preview the Vestra documentation site, author readable examples, an
 
 # Documentation authoring
 
-A reader should leave a page able to make something, understand a decision, or find an exact contract. Choose that purpose before writing. The [first animation](../learn/first-animation.md) and [keyframes guide](../learn/animation.md) set the standard for new learning content.
+A reader should leave a page able to make something, understand a decision, or find an exact contract. Choose that purpose before writing. The [first animation](../getting-started/first-animation.md) and [keyframes guide](../getting-started/animation.md) set the standard for new learning content.
 
 ## Preview without building the engine
 
@@ -45,6 +45,17 @@ For media seek checks, see the [preview-server playback limitation](documentatio
 
 Keep API inventories in reference pages. Link to them when a learner needs more detail. **Learn** contains the introductory sequence, **Guides** organizes tasks by topic, **Concepts** explains the model, and **Reference** gives exact contracts. Put pages in the appropriate navigation section in `zensical.toml`; retain a useful sidebar context on individual gallery pages. When extending a page, reconsider its order and purpose; split or rewrite it if the new material would bury the main task.
 
+### Ownership of recurring topics
+
+| Topic | Maintained home | Other pages |
+| --- | --- | --- |
+| Installation and first Python render | `getting-started/` | Link here for setup and supported platforms. |
+| Effect usage and recipes | `guides/python/effects.md` | The visual catalog shows selected settings checked against its runnable program. |
+| Effect contracts | `reference/effects.md` | Concepts explain the processing diagram and link to contracts. |
+| Effect defaults, bounds, scope and stage | Generated `reference/effect-parameters.md` | Regenerate with `just gen-effects`; link rather than copying inventories. |
+| Groups, local coordinates and time | `guides/python/nested-compositions.md` | `reference/nested-compositions.md` owns exact bounds, limits and canonical form. |
+| Benchmark setup | `benchmarks/collecting.md` | The repository benchmark README indexes programs; other pages link to this procedure. |
+
 ### Write reference pages for lookup
 
 Start with what the API does and when to use it. Label signatures as inventories,
@@ -82,15 +93,18 @@ presented as runnable Python.
 
 Show imports, setup, rendering, the run command, and the output filename. State when a rerun overwrites an output. Keep optional GPU setup out of a beginner's first render.
 
-Store complete tutorial programs in `docs/assets/examples/`. Include them directly in fenced code blocks with `pymdownx.snippets`, and offer the same file as a download:
+Store complete tutorial programs in `examples/tutorials/` and shared inputs in
+`assets/`; `docs/assets/` contains only site delivery media and styling. Include
+programs directly with `pymdownx.snippets` and link downloads to the maintained
+file on `raw.githubusercontent.com/evgen2571/vestra/develop/`:
 
-Put the directive `--8<-- "docs/assets/examples/first_animation.py"` on its own line inside a fenced Python block.
+Put the directive `--8<-- "examples/tutorials/first_animation.py"` on its own line inside a fenced Python block.
 
 The include path is relative to the repository root. The introductory animation is an exact download copy of `examples/showcase/quickstart/main.py`; `just site-check` checks that they match. Do not maintain a separate, subtly different copy of the complete example in Markdown. Small excerpts are useful when they explain one change; check that they still match the full program. Keep the maintained examples formatted and linted:
 
 ```bash
-uvx --from 'ruff>=0.12,<0.13' ruff check docs/assets/examples scripts/render-docs-media.py
-uvx --from 'ruff>=0.12,<0.13' ruff format --check docs/assets/examples scripts/render-docs-media.py
+uvx --from 'ruff>=0.12,<0.13' ruff check examples/tutorials scripts/render-docs-media.py
+uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/tutorials scripts/render-docs-media.py
 ```
 
 `just site-check` also parses Python snippet syntax and checks the introductory

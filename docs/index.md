@@ -13,7 +13,7 @@ hide:
 <h1>Video composition<br> in Python</h1>
 <p class="home-lead">Vestra is a Python library for composing and rendering video, backed by Rust. Combine footage, text, shapes, effects, and audio in a script.</p>
 <div class="home-actions">
-<a class="home-button home-button--primary" href="learn/first-render/">Render a shape</a>
+<a class="home-button home-button--primary" href="getting-started/first-render/">Render a shape</a>
 <a class="home-button" href="gallery/">Browse examples</a>
 </div>
 <p class="home-requirements">Python 3.11–3.14 · CPU or WGPU rendering · MP4 output</p>
@@ -45,10 +45,10 @@ Because the composition is Python code, you can use data, loops, and functions t
 Three position keyframes move this rounded rectangle across the canvas and back. It renders on CPU and writes `quickstart.mp4` to the current directory; rerunning it replaces that file.
 
 ```python
---8<-- "docs/assets/examples/first_animation.py"
+--8<-- "examples/tutorials/first_animation.py"
 ```
 
-[Install Vestra](learn/installation.md), then follow the [first render tutorial](learn/first-render.md) for a complete, explained project.
+[Install Vestra](getting-started/installation.md), then follow the [first render tutorial](getting-started/first-render.md) for a complete, explained project.
 
 </div>
 <figure>
@@ -67,22 +67,22 @@ The introductory tutorials start with the rectangle's static layout, then add th
 <ol class="learning-path">
 <li>
 <span class="learning-path__step" aria-hidden="true">1</span>
-<h3><a href="learn/installation/">Install Vestra</a></h3>
-<p>Install the Python package and FFmpeg, then check your environment.</p>
+<h3><a href="getting-started/installation/">Install Vestra</a></h3>
+<p>Install the Python package, then check your environment.</p>
 </li>
 <li>
 <span class="learning-path__step" aria-hidden="true">2</span>
-<h3><a href="learn/first-render/">Render a shape</a></h3>
+<h3><a href="getting-started/first-render/">Render a shape</a></h3>
 <p>Define a canvas, place a rounded rectangle, and render a three-second MP4.</p>
 </li>
 <li>
 <span class="learning-path__step" aria-hidden="true">3</span>
-<h3><a href="learn/first-animation/">Animate the layers</a></h3>
+<h3><a href="getting-started/first-animation/">Animate the layers</a></h3>
 <p>Add eased position keyframes to move the rectangle right and back.</p>
 </li>
 </ol>
 
-[Animation and keyframes](learn/animation.md) explains interpolation, easing, and layer-local time in more detail.
+[Animation and keyframes](getting-started/animation.md) explains interpolation, easing, and layer-local time in more detail.
 
 ## Rendered examples
 

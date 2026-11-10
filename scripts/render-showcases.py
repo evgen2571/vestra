@@ -36,9 +36,10 @@ def prepare_offline(directory: Path) -> None:
     """Keep fixture inputs separate from the real, licensed showcase footage."""
     assets = directory / "assets"
     assets.mkdir()
-    for name in ("Manrope.ttf", "landscape.jpg"):
-        shutil.copyfile(SHOWCASE / "assets" / name, assets / name)
-    load(SHOWCASE / "prepare-assets.py").write_audio(assets / "synth.wav")
+    for name in ("fonts/Manrope.ttf", "images/landscape.jpg"):
+        (assets / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "assets" / name, assets / name)
+    load(SHOWCASE / "prepare-assets.py").write_audio(assets / "audio/synth.wav")
     footage = directory / "footage"
     footage.mkdir()
     for number, name in enumerate(("forest", "valley", "tear"), 1):
@@ -137,7 +138,7 @@ def main() -> None:
             prepare_offline(base)
         for name, duration in SCENES.items():
             module = load(SHOWCASE / name / "main.py")
-            module.SHOWCASE = base
+            module.ASSETS = base / "assets" if args.offline else ROOT / "assets"
             module.FOOTAGE = (
                 base / "footage" if args.offline else ROOT / "assets/footage"
             )

@@ -39,11 +39,11 @@ def test_guide_snippets_author_valid_projects(page, tmp_path, monkeypatch):
     assets = tmp_path / "assets"
     assets.mkdir()
     for name in ("photo.png", "one.png", "two.png"):
-        shutil.copyfile(ROOT / "examples/assets/red.png", assets / name)
+        shutil.copyfile(ROOT / "assets/fixtures/red.png", assets / name)
     for name in ("character.png", "gradient.png", "alpha.png"):
-        shutil.copyfile(ROOT / "examples/assets/green.png", tmp_path / name)
+        shutil.copyfile(ROOT / "assets/fixtures/green.png", tmp_path / name)
     shutil.copyfile(ROOT / "tests/assets/VestraTest-Regular.ttf", assets / "MyFont.ttf")
-    shutil.copyfile(ROOT / "examples/assets/tone.wav", assets / "music.wav")
+    shutil.copyfile(ROOT / "assets/fixtures/tone.wav", assets / "music.wav")
     monkeypatch.chdir(tmp_path)
     renders = []
 
@@ -57,7 +57,7 @@ def test_guide_snippets_author_valid_projects(page, tmp_path, monkeypatch):
     if page.stem == "effect-catalog":
         # Catalog blocks show constructor settings; setup lives in the linked source.
         namespace.update(
-            runpy.run_path(str(ROOT / "docs/assets/examples/effects_catalog.py"))
+            runpy.run_path(str(ROOT / "examples/tutorials/effects_catalog.py"))
         )
     for index, code in enumerate(snippets(page)):
         exec(compile(code, f"{page.name}:snippet-{index + 1}", "exec"), namespace)
@@ -83,7 +83,14 @@ def test_guide_snippets_author_valid_projects(page, tmp_path, monkeypatch):
 def test_nested_group_example_places_the_badge() -> None:
     namespace = {}
     page = ROOT / "docs/guides/python/nested-compositions.md"
-    for code in snippets(page)[:3]:
+    namespace.update(
+        runpy.run_path(str(ROOT / "examples/tutorials/group_placements.py"))
+    )
+    codes = snippets(page)
+    start = next(
+        i for i, code in enumerate(codes) if "card = Group(size=(600, 300))" in code
+    )
+    for code in codes[start : start + 2]:
         exec(code, namespace)
     clips = namespace["project"].snapshot().to_dict()["visual"]["clips"]
     card = next(
@@ -99,9 +106,11 @@ def test_nested_group_example_places_the_badge() -> None:
 
 def test_group_concept_coordinates_and_clocks_match_rendered_output():
     namespace = {}
-    page = ROOT / "docs/concepts/groups-and-nesting.md"
-    for code in snippets(page):
-        exec(code, namespace)
+    page = ROOT / "docs/guides/python/nested-compositions.md"
+    code = next(
+        code for code in snippets(page) if "panel = Group(size=(320, 180))" in code
+    )
+    exec(code, namespace)
     project = namespace["project"]
     assert project.validate().is_valid
     prepared = project.prepare(backend="cpu")
@@ -122,7 +131,7 @@ def test_group_concept_coordinates_and_clocks_match_rendered_output():
 def test_card_study_keeps_source_and_placements_independent():
     from vestra import Circle
 
-    example = runpy.run_path(str(ROOT / "docs/assets/examples/group_placements.py"))
+    example = runpy.run_path(str(ROOT / "examples/tutorials/group_placements.py"))
     project = example["project"]
     before = project.snapshot().to_dict()
     # A later source edit must not update either already-placed card.

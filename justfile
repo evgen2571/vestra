@@ -23,8 +23,8 @@ fmt-check:
 
 # Lint and test release helpers without building the native engine.
 release-check:
-    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/package-cli.py scripts/verify-cli.py scripts/verify-wheel.py scripts/benchmark-python-abi.py scripts/release-*.py tests/test_cli_release.py tests/test_release_*.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/package-cli.py scripts/verify-cli.py scripts/verify-wheel.py scripts/benchmark-python-abi.py scripts/release-*.py tests/test_cli_release.py tests/test_release_*.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/package-cli.py scripts/verify-cli.py scripts/verify-wheel.py benchmarks/python-abi.py scripts/release-*.py tests/test_cli_release.py tests/test_release_*.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/package-cli.py scripts/verify-cli.py scripts/verify-wheel.py benchmarks/python-abi.py scripts/release-*.py tests/test_cli_release.py tests/test_release_*.py
     uv run --no-project --with pytest python -m pytest tests/test_cli_release.py tests/test_release_metadata.py tests/test_release_manifest.py tests/test_release_wheel.py tests/test_ffmpeg_source_archive.py -q
 
 # Run the inexpensive CI style checks.
@@ -119,27 +119,27 @@ examples *args='--validate-only':
 
 # Run a CPU smoke benchmark into a new output directory.
 benchmark-smoke output:
-    uv run --no-project python scripts/benchmark.py run --suite smoke --output "$1"
+    uv run --no-project python benchmarks/benchmark.py run --suite smoke --output "$1"
 
 # Run a canonical benchmark; backend is cpu or hardware-wgpu.
 benchmark output backend='cpu':
-    uv run --no-project python scripts/benchmark.py run --suite canonical --output "$1" --backend "$2"
+    uv run --no-project python benchmarks/benchmark.py run --suite canonical --output "$1" --backend "$2"
 
 # Compare two saved benchmark suite JSON files.
 benchmark-compare before after:
-    uv run --no-project python scripts/benchmark.py compare "$1" "$2"
+    uv run --no-project python benchmarks/benchmark.py compare "$1" "$2"
 
 # Check Python examples and showcase scripts without importing the native extension.
 showcase-style:
-    uvx --from 'ruff>=0.12,<0.13' ruff check examples/python examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py tests/test_documentation_examples.py python-tests/test_documentation_examples.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/python examples/showcase scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py tests/test_documentation_examples.py python-tests/test_documentation_examples.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check examples/python examples/showcase examples/tutorials scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py tests/test_documentation_examples.py python-tests/test_documentation_examples.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check examples/python examples/showcase examples/tutorials scripts/render-showcases.py scripts/check-docs.py scripts/archive-ffmpeg-source.py tests/test_showcase_assets.py tests/test_documentation_links.py tests/test_ffmpeg_source_archive.py tests/test_documentation_examples.py python-tests/test_documentation_examples.py
 
 # Check the external comparison and Code to Video authoring tools.
 comparison-style:
-    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
-    uvx --from 'ruff>=0.12,<0.13' ruff check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py scripts/render-benchmark-previews.py scripts/render-benchmark-charts.py tests/test_benchmark_previews.py
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check scripts/benchmark_process.py scripts/collect-benchmarks.py benchmarks/collector tests/test_benchmark_collector.py scripts/render-benchmark-previews.py scripts/render-benchmark-charts.py tests/test_benchmark_previews.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check benchmarks/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check benchmarks/benchmark.py benchmarks/comparisons/moviepy examples/code-to-video tests/test_moviepy_comparison.py tests/test_moviepy_visual_validation.py tests/test_code_to_video.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check benchmarks/process.py benchmarks/collect.py benchmarks/collector tests/test_benchmark_collector.py benchmarks/render-previews.py benchmarks/render-charts.py tests/test_benchmark_previews.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check benchmarks/process.py benchmarks/collect.py benchmarks/collector tests/test_benchmark_collector.py benchmarks/render-previews.py benchmarks/render-charts.py tests/test_benchmark_previews.py
 
 # Collector contracts without building the project/native Python extension.
 collector-test:
@@ -176,7 +176,7 @@ docs-build:
 # Check generated links, anchors and media at the GitHub Pages repository path.
 site-check: docs-build
     uv run --no-project python scripts/check-site.py
-    uv run --no-project python scripts/render-benchmark-previews.py --check
+    uv run --no-project python benchmarks/render-previews.py --check
     uv run --no-project --with pytest python -m pytest tests/test_site_links.py tests/test_site_navigation.py tests/test_documentation_examples.py -q
 
 # Reproduce documentation previews from the checkout (requires python-sync + FFmpeg).

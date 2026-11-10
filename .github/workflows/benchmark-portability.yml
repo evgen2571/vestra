@@ -4,10 +4,7 @@ on:
   pull_request:
     paths:
       - 'benchmarks/**'
-      - 'assets/footage/**'
-      - 'scripts/benchmark*.py'
-      - 'scripts/collect-benchmarks.py'
-      - 'scripts/render-benchmark-*.py'
+      - 'assets/**'
       - 'tests/test_benchmark_collector.py'
       - 'tests/test_benchmark_previews.py'
       - 'pyproject.toml'

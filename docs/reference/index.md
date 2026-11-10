@@ -8,7 +8,7 @@ description: Find Vestra's Python API, guides, source types, effects, JSON forma
 # Reference overview
 
 Find a task below for a practical guide and its exact contract. For an introduction,
-start with [your first render](../learn/first-render.md). For a complete list of
+start with [your first render](../getting-started/first-render.md). For a complete list of
 signatures, formats and feature topics, use the [full reference index](catalog.md).
 
 ## Work in Python

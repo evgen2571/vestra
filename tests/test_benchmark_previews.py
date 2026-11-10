@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_catalog_covers_every_maintained_workload_once():
-    script = runpy.run_path(str(ROOT / "scripts/render-benchmark-previews.py"))
+    script = runpy.run_path(str(ROOT / "benchmarks/render-previews.py"))
     suites = json.loads((ROOT / "benchmarks/suites.json").read_text())
     expected = set(suites["scenarios"])
     for suite in suites["suites"].values():
@@ -19,12 +19,12 @@ def test_catalog_covers_every_maintained_workload_once():
 
 
 def test_committed_previews_and_gallery_match_provenance():
-    script = runpy.run_path(str(ROOT / "scripts/render-benchmark-previews.py"))
+    script = runpy.run_path(str(ROOT / "benchmarks/render-previews.py"))
     script["check"]()
 
 
 def test_gallery_keeps_only_three_featured_videos_and_one_effect_sheet():
-    script = runpy.run_path(str(ROOT / "scripts/render-benchmark-previews.py"))
+    script = runpy.run_path(str(ROOT / "benchmarks/render-previews.py"))
     manifest = json.loads((ROOT / "docs/assets/benchmarks/previews.json").read_text())
     page = script["gallery"](manifest)
     videos = {
@@ -49,7 +49,7 @@ def test_gallery_keeps_only_three_featured_videos_and_one_effect_sheet():
 
 
 def test_unexpected_generated_media_is_rejected(monkeypatch, tmp_path):
-    script = runpy.run_path(str(ROOT / "scripts/render-benchmark-previews.py"))
+    script = runpy.run_path(str(ROOT / "benchmarks/render-previews.py"))
     check = script["check"]
     monkeypatch.setitem(check.__globals__, "ASSETS", tmp_path)
     (tmp_path / "obsolete.mp4").touch()
@@ -58,7 +58,7 @@ def test_unexpected_generated_media_is_rejected(monkeypatch, tmp_path):
 
 
 def test_preview_source_hashes_ignore_checkout_line_endings(tmp_path):
-    script = runpy.run_path(str(ROOT / "scripts/render-benchmark-previews.py"))
+    script = runpy.run_path(str(ROOT / "benchmarks/render-previews.py"))
     source = tmp_path / "fixture.json"
     source.write_bytes(b'{\n  "frames": 90\n}\n')
     expected = script["source_digest"](source)
@@ -69,7 +69,7 @@ def test_preview_source_hashes_ignore_checkout_line_endings(tmp_path):
 
 
 def test_gallery_check_uses_utf8_on_legacy_windows_locales(monkeypatch):
-    script = runpy.run_path(str(ROOT / "scripts/render-benchmark-previews.py"))
+    script = runpy.run_path(str(ROOT / "benchmarks/render-previews.py"))
     read_text = Path.read_text
 
     def windows_read(path, encoding=None, errors=None):

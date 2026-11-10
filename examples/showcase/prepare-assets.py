@@ -52,7 +52,7 @@ def main() -> None:
         help="generate audio without checking bundled footage",
     )
     args = parser.parse_args()
-    write_audio(ROOT / "assets/synth.wav")
+    write_audio(ROOT.parents[1] / "assets/audio/synth.wav")
     if args.audio_only:
         return
     load_inputs(ROOT.parents[1] / "assets/footage")

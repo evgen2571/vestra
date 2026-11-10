@@ -23,7 +23,7 @@ project = ProjectBuilder(
     background="#101018",
     base_directory=ROOT,
 )
-background_asset = project.add_image_asset("examples/assets/green.png")
+background_asset = project.add_image_asset("assets/fixtures/green.png")
 background = project.add_image_clip(
     source=background_asset,
     start=0,
@@ -31,7 +31,7 @@ background = project.add_image_clip(
     layer=0,
     sizing=Sizing.cover(),
 )
-audio_asset = project.add_audio_asset("examples/assets/tone.wav")
+audio_asset = project.add_audio_asset("assets/fixtures/tone.wav")
 audio_track = project.audio.add_track(id="music")
 
 audio_track.add_clip(asset=audio_asset, start=0, trim_end=3)

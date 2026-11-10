@@ -9,6 +9,7 @@ from vestra.effects import Ascii, Halftone
 from vestra.sources import Color, Image, Rectangle, Text
 
 SHOWCASE = Path(__file__).resolve().parents[1]
+ASSETS = SHOWCASE.parents[1] / "assets"
 DURATION = 6
 
 
@@ -19,7 +20,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         size=size,
         fps=fps,
         duration=DURATION,
-        base_directory=SHOWCASE,
+        base_directory=ASSETS,
         quality=Quality.HIGH,
     )
     project.root.add(Color("#101c24"))
@@ -28,7 +29,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
         layer = project.root.add(
             Text(
                 text,
-                font="assets/Manrope.ttf",
+                font="fonts/Manrope.ttf",
                 font_size=font_size * resolution_scale,
                 fill=colour,
             ),
@@ -59,7 +60,7 @@ def build_project(size: tuple[int, int] = (1280, 720), fps: int = 30) -> Project
     )
     for name, panel_x, effect in treatments:
         group = project.root.group(duration=DURATION)
-        photo = group.add(Image("assets/landscape.jpg", sizing="cover"))
+        photo = group.add(Image("images/landscape.jpg", sizing="cover"))
         if effect is not None:
             photo.effects.add(effect)
 

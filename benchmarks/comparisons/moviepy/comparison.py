@@ -1,4 +1,4 @@
-"""External comparison adapter for scripts/benchmark.py; generated evidence is local."""
+"""External comparison adapter for benchmarks/benchmark.py; generated evidence is local."""
 
 import argparse
 import hashlib
@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median, pstdev
 
-from scripts.benchmark import ROOT, measure_process, require_backend, source_identity
+from benchmarks.benchmark import ROOT, measure_process, require_backend, source_identity
 from benchmarks.comparisons.moviepy.workloads import (
     adapter_class as adapter_class,
     render_moviepy,
@@ -407,7 +407,7 @@ def run(args):
                     print(f"Rendering {stem}", flush=True)
                     command = [
                         sys.executable,
-                        str(ROOT / "scripts/benchmark.py"),
+                        str(ROOT / "benchmarks/benchmark.py"),
                         "moviepy",
                         "worker",
                         "--inputs",

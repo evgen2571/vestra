@@ -5,7 +5,7 @@ import json
 import math
 import subprocess
 
-from scripts.benchmark import ROOT
+from benchmarks.benchmark import ROOT
 
 from benchmarks.comparisons.moviepy.comparison import (
     digest,

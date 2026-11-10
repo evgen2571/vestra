@@ -47,7 +47,7 @@ The title and its thin rule live in one group, so a single opacity track fades
 the overlay together. Saturation and vignette are applied to each footage layer.
 
 See [Sources and layers](../guides/python/sources-and-layers.md),
-[Animation and keyframes](../learn/animation.md), and
+[Animation and keyframes](../getting-started/animation.md), and
 [Rendering and preparation](../guides/python/rendering-and-preparation.md)
 to adapt the sequence to your own footage.
 

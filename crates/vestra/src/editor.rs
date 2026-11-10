@@ -1379,7 +1379,7 @@ mod tests {
                     "audio": false, "duration_mode": "explicit", "duration": 1},
                 "assets": [
                     {"id": "tone", "type": "audio", "source": format!(
-                        "{}/../../examples/assets/tone.wav", env!("CARGO_MANIFEST_DIR")
+                        "{}/../../assets/fixtures/tone.wav", env!("CARGO_MANIFEST_DIR")
                     )},
                     {"id": "missing", "type": "audio", "source": "missing.wav"}
                 ],

@@ -155,9 +155,9 @@ Source fingerprint: `3449b023fea2223f1c3a7493eee1106bfa13fac365e42831360416e6937
 Use the same source and input fingerprint, native environment, graphics API and settings. Run serially:
 
 ```bash
-uv run --no-project --python 3.13 scripts/collect-benchmarks.py --suite canonical --graphics-api vulkan --timeout 7200
-VESTRA_BENCH_VALIDATE=1 python scripts/benchmark.py run --suite effects --backend cpu --output target/benchmark-results/effects-cpu
-VESTRA_BENCH_VALIDATE=1 VESTRA_WGPU_BACKEND=vulkan python scripts/benchmark.py run --suite effects --backend hardware-wgpu --output target/benchmark-results/effects-gpu
+uv run --no-project --python 3.13 benchmarks/collect.py --suite canonical --graphics-api vulkan --timeout 7200
+VESTRA_BENCH_VALIDATE=1 python benchmarks/benchmark.py run --suite effects --backend cpu --output target/benchmark-results/effects-cpu
+VESTRA_BENCH_VALIDATE=1 VESTRA_WGPU_BACKEND=vulkan python benchmarks/benchmark.py run --suite effects --backend hardware-wgpu --output target/benchmark-results/effects-gpu
 ```
 
 The default collector includes smoke checks and structural/decoded-frame validation. For direct suite runs, set `VESTRA_BENCH_VALIDATE=1` for both CPU and hardware WGPU. Raw logs preserve the actual adapter and every measured sample.

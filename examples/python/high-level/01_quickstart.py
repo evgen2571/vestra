@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[3]
 def build_project() -> Project:
     project = Project(size=(160, 90), fps=12, duration=1, base_directory=ROOT)
     background = project.root.add(
-        Image("examples/assets/red.png", sizing="cover"),
+        Image("assets/fixtures/red.png", sizing="cover"),
         duration=1,
         id="background",
     )

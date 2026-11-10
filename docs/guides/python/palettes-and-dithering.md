@@ -30,8 +30,8 @@ look = photo.effects.add(
 
 This example needs your own `assets/photo.png`. It continues through the
 remaining Python blocks. Keep the returned `look` handle when adjusting it.
-For the photographic comparison download [the catalog source](../../assets/examples/effects_catalog.py)
-and [landscape.jpg](../../assets/examples/landscape.jpg), then run
+For the photographic comparison download [the catalog source](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py)
+and [landscape.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg), then run
 `python effects_catalog.py --effect ordered-dither --still`.
 
 `PaletteMap(mode="gradient")` interpolates between tonal colors;

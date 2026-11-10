@@ -870,7 +870,7 @@ fn cpu_mixed_static_and_video_sources_render_through_one_layer_pipeline() {
     )
     .expect("mixed source fixture parses");
     let image_path =
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets/red.png");
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixtures/red.png");
     let asset_paths = std::collections::BTreeMap::from([
         ("image".to_owned(), image_path),
         ("video".to_owned(), std::path::PathBuf::from("fixture.mp4")),
@@ -2467,7 +2467,7 @@ fn cancellation_does_not_block_on_cpu_completion() {
     assert!(backend.verify_idle().is_err());
 }
 
-#[path = "native_worker_benchmarks.rs"]
+#[path = "../../../../benchmarks/rust/cpu/native_worker_benchmarks.rs"]
 mod native_worker_benchmarks;
 #[test]
 fn preview_preserves_authored_shape_geometry() {

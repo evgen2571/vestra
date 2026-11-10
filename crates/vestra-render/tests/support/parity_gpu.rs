@@ -120,7 +120,7 @@ fn render_project_parity(
     assets.insert("tone".to_owned(), std::path::PathBuf::from("tone.wav"));
     assets.insert(
         "blue".to_owned(),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets/blue.png"),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixtures/blue.png"),
     );
     let mut durations = std::collections::BTreeMap::new();
     durations.insert("tone".to_owned(), 2.0);
@@ -326,7 +326,7 @@ fn motion_tile_parity_project(variant: &str) -> crate::project::Project {
     let assets = if variant == "group-tile" {
         Vec::new()
     } else {
-        vec![json!({"id": "blue", "type": "image", "source": "examples/assets/blue.png"})]
+        vec![json!({"id": "blue", "type": "image", "source": "assets/fixtures/blue.png"})]
     };
     serde_json::from_value(json!({
         "schema_version": 1,

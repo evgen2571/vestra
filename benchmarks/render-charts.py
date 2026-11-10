@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plot the published Markdown measurements; never collect new timings.
 
-uv run --no-project --with matplotlib==3.10.7 python scripts/render-benchmark-charts.py
+uv run --no-project --with matplotlib==3.10.7 python benchmarks/render-charts.py
 """
 
 from pathlib import Path

@@ -83,7 +83,7 @@ git clone https://github.com/evgen2571/vestra.git
 cd vestra
 
 # Keep the example sources and input assets at the captured revision.
-git switch --detach bf527c93952b258f518ea6915551437ba629b545
+git switch --detach e6191c1e567d8e66e73f1fe299ccc15fe64711df
 
 # Enter the native development environment and build the Python package once.
 nix develop
@@ -91,7 +91,7 @@ just python-sync
 ```
 
 Source links, bundled inputs and full-resolution renders all use revision
-`bf527c93952b258f518ea6915551437ba629b545`. The video-editing and masked-footage previews have been regenerated
+`e6191c1e567d8e66e73f1fe299ccc15fe64711df`. The video-editing and masked-footage previews have been regenerated
 with the shared benchmark inputs. Public commit links become
 available when the reviewed commits are pushed.
 

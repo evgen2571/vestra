@@ -12,7 +12,7 @@ The scenes, resolution and frame rate matter as much as the hardware. These meas
 
 ## Measured on this machine
 
-Captured on **10 November 2026**, using a Ryzen 5 3600 and GTX 1650 SUPER with Vulkan. The report records the exact develop revision, source fingerprint, sample counts and validation.
+The matched editing comparisons were captured on **10 November 2026**, using a Ryzen 5 3600 and GTX 1650 SUPER with Vulkan. Native video results were captured on **15 November 2026** on the same hardware. The report records revisions, sample counts, provenance and validation.
 
 <figure class="comparison" markdown="span">
 ![Measured render times for basic export, editing and layered composition, with MoviePy CPU, Vestra CPU and hardware GPU shown separately. Lower is better.](../assets/benchmarks/moviepy-times.svg)

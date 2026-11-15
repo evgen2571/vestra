@@ -96,6 +96,17 @@ masks and track mattes. Hidden unused video must not be decoded, but hiding a
 matte source does not remove its consumer's need for coverage. Compiled video
 slots distinguish separate placements and nested timelines.
 
+Each read slot keeps its decoder cursor across submissions, independently of
+other placements of the same asset and their draw order. Identical asset/time
+requests within a submission share immutable decoded pixels without rebinding
+those cursors. One primary cursor per used asset retains its share of the RGBA
+cache budget and can be reused by serial placements. Additional cursors open on
+demand with RGBA caching disabled and retire as soon as their slots are no longer
+read. Session count is bounded by used assets plus concurrent reads, rather than
+historical placements; native lookahead and current images still cost memory
+per cursor outside the RGBA cache budget. Retired decoder counters remain in the
+cumulative statistics; retained-memory gauges include only live sessions.
+
 Native decoder sessions run on owner threads. WGPU enables a session hint that
 permits one additional native frame to be decoded after a successful reply.
 Queued demand takes priority. At most two pending native frames are retained;

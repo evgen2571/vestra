@@ -190,3 +190,240 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
     assert_eq!(frame_requests.load(Ordering::Relaxed), 6);
     assert_eq!(output.get_pixel(0, 0).0, [0, 0, 0, 0]);
 }
+
+#[derive(Default)]
+struct CursorTrace {
+    requests: Vec<Vec<f64>>,
+    budgets: Vec<u64>,
+    live: usize,
+}
+
+struct CursorFactory(Arc<std::sync::Mutex<CursorTrace>>);
+struct CursorSession {
+    trace: Arc<std::sync::Mutex<CursorTrace>>,
+    id: usize,
+    metrics: vestra_render_common::VideoDecoderMetrics,
+    previous: f64,
+}
+
+impl Drop for CursorSession {
+    fn drop(&mut self) {
+        self.trace.lock().unwrap().live -= 1;
+    }
+}
+
+impl crate::VideoDecoderFactory for CursorFactory {
+    fn open(
+        &self,
+        _asset: &vestra_core::plan::VideoAsset,
+        budget: u64,
+    ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
+        let mut trace = self.0.lock().unwrap();
+        let id = trace.requests.len();
+        trace.requests.push(Vec::new());
+        trace.budgets.push(budget);
+        trace.live += 1;
+        Ok(Box::new(CursorSession {
+            trace: Arc::clone(&self.0),
+            id,
+            metrics: vestra_render_common::VideoDecoderMetrics {
+                cache_bytes_retained: budget.min(4),
+                cache_bytes_peak: budget.min(4),
+                current_frame_bytes_retained: 4,
+                working_buffer_bytes_retained: 8,
+                ..Default::default()
+            },
+            previous: 0.0,
+        }))
+    }
+}
+
+impl crate::VideoDecoderSession for CursorSession {
+    fn frame_at(&mut self, seconds: f64) -> Result<crate::VideoFrame, String> {
+        self.trace.lock().unwrap().requests[self.id].push(seconds);
+        self.metrics.frame_requests += 1;
+        self.metrics.seeks += u64::from(seconds < self.previous);
+        self.previous = seconds;
+        Ok(crate::VideoFrame {
+            pts: (seconds * 1000.0).round() as i64,
+            pixels: Arc::new(RgbaImage::from_pixel(
+                1,
+                1,
+                image::Rgba([(seconds * 40.0).round() as u8, 0, 0, 255]),
+            )),
+        })
+    }
+
+    fn metrics(&self) -> vestra_render_common::VideoDecoderMetrics {
+        self.metrics
+    }
+}
+
+#[test]
+fn gpu_concurrent_video_cursors_follow_placements_and_retire_when_inactive() {
+    use crate::render::RenderBackend;
+    use std::{
+        collections::BTreeMap,
+        path::{Path, PathBuf},
+    };
+    use vestra_core::plan::{PlanCompileInput, ScheduledItem, evaluate};
+
+    let project = crate::project::Project::from_json(&serde_json::json!({
+        "schema_version": 1,
+        "output": {"path": "cursors.mp4", "width": 3, "height": 1,
+            "frame_rate": "4/1", "background": "#00000000", "quality": "preview",
+            "audio": false, "duration_mode": "automatic"},
+        "assets": [{"id": "video", "type": "video", "source": "video.mp4"}],
+        "visual": {"clips": (0..3).map(|index| serde_json::json!({
+            "id": format!("clip-{index}"),
+            "source": {"type": "video", "asset": "video"},
+            "start": 0, "duration": 2, "layer": index,
+            "source_start": if index == 1 {2.0} else {0.0},
+            "playback_rate": if index == 1 {0.5} else {1.0},
+            "sizing": {"mode": "original"},
+            "transform": {"position": {"base_value": {"x": (index as f64 + 0.5) / 3.0, "y": 0.5}},
+                "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+                "scale": {"base_value": {"x": 1, "y": 1}},
+                "rotation_degrees": {"base_value": 0}},
+            "opacity": {"base_value": 1}
+        })).collect::<Vec<_>>()}
+    }).to_string()).expect("cursor project parses");
+    let paths = BTreeMap::from([("video".to_owned(), PathBuf::from("video.mp4"))]);
+    let durations = BTreeMap::from([("video".to_owned(), 4.0)]);
+    let dimensions = BTreeMap::from([("video".to_owned(), (1, 1))]);
+    let plan = vestra_core::plan::compile(
+        PlanCompileInput::new(
+            &project,
+            Default::default(),
+            Path::new("."),
+            &paths,
+            &BTreeMap::new(),
+            2.0,
+            (3, 1),
+            8,
+            &[],
+        )
+        .with_video_durations(&durations)
+        .with_video_dimensions(&dimensions),
+        Default::default(),
+    )
+    .expect("cursor project compiles");
+    let trace = Arc::new(std::sync::Mutex::new(CursorTrace::default()));
+    let decoded = crate::DecodedAssets::build_with_video_factory(
+        &plan,
+        Some(Arc::new(CursorFactory(Arc::clone(&trace)))),
+    )
+    .expect("cursor assets prepare");
+    let Some(mut backend) = wgpu_backend_or_skip(&plan, decoded) else {
+        return;
+    };
+    let mut output = RgbaImage::new(3, 1);
+    for time in [0, 250_000_000, 500_000_000] {
+        let mut frame = evaluate(
+            &plan,
+            &[ScheduledItem(0), ScheduledItem(1), ScheduledItem(2)],
+            time,
+        )
+        .expect("cursor frame evaluates");
+        if time == 250_000_000 {
+            frame.layers.reverse();
+        }
+        backend
+            .render_frame(&frame, &mut output)
+            .expect("cursor frame renders");
+        let seconds = time as f64 / 1e9;
+        assert_eq!(
+            output.get_pixel(0, 0).0,
+            [(seconds * 40.0).round() as u8, 0, 0, 255]
+        );
+        assert_eq!(
+            output.get_pixel(1, 0).0,
+            [((2.0 + seconds * 0.5) * 40.0).round() as u8, 0, 0, 255]
+        );
+        assert_eq!(output.get_pixel(2, 0), output.get_pixel(0, 0));
+    }
+    assert_eq!(
+        backend.stats().video_seek_count,
+        0,
+        "independent forward timelines must not seek backward"
+    );
+    assert_eq!(
+        backend.stats().video_decoder_open_count,
+        2,
+        "equal source/time reads share work"
+    );
+    assert_eq!(
+        backend.stats().video_frame_requests,
+        7,
+        "one preparation read plus two reads per frame"
+    );
+    assert_eq!(
+        trace.lock().unwrap().budgets,
+        vec![plan.limits.maximum_cache_bytes, 0]
+    );
+
+    let mut divergent = evaluate(
+        &plan,
+        &[ScheduledItem(0), ScheduledItem(1), ScheduledItem(2)],
+        750_000_000,
+    )
+    .unwrap();
+    if let vestra_core::plan::EvaluatedSource::Video { source_time, .. } =
+        &mut divergent.layers[2].source
+    {
+        *source_time = 1.5;
+    }
+    backend.render_frame(&divergent, &mut output).unwrap();
+    assert_eq!(output.get_pixel(2, 0).0, [60, 0, 0, 255]);
+    assert_eq!(backend.stats().video_decoder_open_count, 3);
+    assert_eq!(
+        trace.lock().unwrap().budgets,
+        vec![plan.limits.maximum_cache_bytes, 0, 0]
+    );
+    assert_eq!(backend.stats().video_current_frame_bytes_retained, 12);
+    assert_eq!(backend.stats().video_decoder_buffer_bytes_retained, 24);
+
+    // Removing the primary placement must not reassign the surviving timeline.
+    let frame = evaluate(&plan, &[ScheduledItem(1)], 1_000_000_000).unwrap();
+    backend.render_frame(&frame, &mut output).unwrap();
+    assert_eq!(backend.stats().video_seek_count, 0);
+    let frame = evaluate(&plan, &[], 1_250_000_000).unwrap();
+    backend.render_frame(&frame, &mut output).unwrap();
+    assert_eq!(
+        trace.lock().unwrap().live,
+        1,
+        "only the asset's primary cursor survives idle frames"
+    );
+    assert_eq!(backend.stats().video_decoder_session_count, 1);
+    assert_eq!(
+        backend.stats().video_frame_requests,
+        11,
+        "retired metrics remain cumulative"
+    );
+
+    assert_eq!(backend.stats().video_cache_bytes_retained, 4);
+    assert_eq!(backend.stats().video_cache_bytes_peak, 4);
+    assert_eq!(backend.stats().video_current_frame_bytes_retained, 4);
+    assert_eq!(backend.stats().video_decoder_buffer_bytes_retained, 8);
+
+    // Explicit seeks remain correct, including reactivation after retirement.
+    for time in [1_250_000_000, 250_000_000] {
+        let frame = evaluate(
+            &plan,
+            &[ScheduledItem(0), ScheduledItem(1), ScheduledItem(2)],
+            time,
+        )
+        .unwrap();
+        backend.render_frame(&frame, &mut output).unwrap();
+        assert_eq!(
+            output.get_pixel(0, 0).0[0],
+            (time as f64 / 1e9 * 40.0).round() as u8
+        );
+        assert_eq!(
+            output.get_pixel(1, 0).0[0],
+            ((2.0 + time as f64 / 1e9 * 0.5) * 40.0).round() as u8
+        );
+    }
+    drop(backend);
+    assert_eq!(trace.lock().unwrap().live, 0);
+}

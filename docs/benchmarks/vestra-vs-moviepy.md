@@ -1,6 +1,6 @@
 # Vestra and MoviePy benchmarks
 
-Measured on 10 November 2026 using a Ryzen 5 3600 and GTX 1650 SUPER with Vulkan. All short outputs use 1920 × 1080 at 60 fps.
+Measured on 10 and 15 November 2026 using a Ryzen 5 3600 and GTX 1650 SUPER with Vulkan. All short outputs use 1920 × 1080 at 60 fps.
 
 <!-- Chart context: 10 Nov 2026 · 1920 × 1080 · 60 fps -->
 
@@ -47,7 +47,7 @@ All published streams passed structural checks and full decode. Independent sour
 
 ## Native rendering and effect controls
 
-Every output uses 1920 × 1080 at 60 fps and the high quality tier (libx264 CRF 18 / medium). Canonical workloads use one warmup and five samples; the complete effects/control suite uses one warmup and three. The wall interval includes loading, preparation, rendering, encoding and publication. This scope differs from the process-based MoviePy table above.
+Every output uses 1920 × 1080 at 60 fps and the high quality tier (libx264 CRF 18 / medium). `single_video`, `mixed_dynamic`, `video_heavy` and `production_edit` use one measured sample with no warmup, captured on 15 November 2026. The remaining canonical workloads use one warmup and five samples; the complete effects/control suite uses one warmup and three, captured on 10 November 2026. The wall interval includes loading, preparation, rendering, encoding and publication. This scope differs from the process-based MoviePy table above.
 
 Native video timelines and effect controls use prepared lossless FFV1 inputs; the two row-copy controls use H.264. The matched editing comparisons above use H.264 inputs and a different output preset. Compare the CPU/GPU pair within each row.
 
@@ -58,20 +58,20 @@ The effect chart shows three-second outputs (180 frames). Other scenario duratio
 </figure>
 
 <details markdown="1">
-<summary>All 30 native workload medians and ranges</summary>
+<summary>All 30 native workload results and sample ranges</summary>
 
 | Suite | Scenario | Resolution | CPU wall s | CPU FPS | WGPU wall s | WGPU FPS | WGPU/CPU |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| canonical | single_video | 1920×1080 | 12.263 | 14.68 | 9.214 | 19.54 | 0.75x |
-| canonical | mixed_dynamic | 1920×1080 | 22.065 | 8.16 | 13.033 | 13.81 | 0.59x |
-| canonical | video_heavy | 1920×1080 | 41.835 | 4.30 | 375.164 | 0.48 | 8.97x |
+| canonical | single_video | 1920×1080 | 12.854 | 14.00 | 9.579 | 18.79 | 0.75x |
+| canonical | mixed_dynamic | 1920×1080 | 22.874 | 7.87 | 13.410 | 13.42 | 0.59x |
+| canonical | video_heavy | 1920×1080 | 41.206 | 4.37 | 19.334 | 9.31 | 0.47x |
 | canonical | combined | 1920×1080 | 24.863 | 14.48 | 4.327 | 83.20 | 0.17x |
 | canonical | masks | 1920×1080 | 0.751 | 79.89 | 0.884 | 67.87 | 1.18x |
 | canonical | mattes | 1920×1080 | 0.682 | 87.98 | 0.990 | 60.61 | 1.45x |
 | canonical | nested_groups | 1920×1080 | 7.810 | 23.05 | 2.385 | 75.47 | 0.31x |
 | canonical | particles | 1920×1080 | 1.013 | 59.23 | 1.077 | 55.71 | 1.06x |
 | canonical | blend_modes | 1920×1080 | 2.386 | 125.73 | 2.239 | 133.99 | 0.94x |
-| canonical | production_edit | 1920×1080 | 70.010 | 10.28 | 45.893 | 15.69 | 0.66x |
+| canonical | production_edit | 1920×1080 | 70.977 | 10.14 | 44.780 | 16.08 | 0.63x |
 | effects | opaque_video | 1920×1080 | 12.748 | 47.07 | 11.186 | 53.64 | 0.88x |
 | effects | ineligible_video | 1920×1080 | 25.185 | 23.82 | 10.812 | 55.49 | 0.43x |
 | effects | stylization_baseline | 1920×1080 | 13.682 | 13.16 | 10.838 | 16.61 | 0.79x |
@@ -93,18 +93,18 @@ The effect chart shows three-second outputs (180 frames). Other scenario duratio
 | effects | sort_vertical_video | 1920×1080 | 17.171 | 10.48 | 10.753 | 16.74 | 0.63x |
 | effects | crt_video | 1920×1080 | 20.892 | 8.62 | 10.949 | 16.44 | 0.52x |
 
-| Scenario | CPU sample range | Hardware GPU sample range |
+| Scenario | CPU samples | Hardware GPU samples |
 | --- | ---: | ---: |
-| single_video | 12.165–12.445 s | 9.197–9.392 s |
-| mixed_dynamic | 21.951–22.411 s | 12.994–13.207 s |
-| video_heavy | 41.437–42.093 s | 371.336–379.166 s |
+| single_video | 12.854 s (single sample) | 9.579 s (single sample) |
+| mixed_dynamic | 22.874 s (single sample) | 13.410 s (single sample) |
+| video_heavy | 41.206 s (single sample) | 19.334 s (single sample) |
 | combined | 24.576–25.158 s | 4.181–4.434 s |
 | masks | 0.736–0.772 s | 0.882–0.908 s |
 | mattes | 0.673–0.701 s | 0.967–1.003 s |
 | nested_groups | 7.667–7.955 s | 2.116–2.486 s |
 | particles | 0.993–1.073 s | 1.064–1.099 s |
 | blend_modes | 2.288–2.447 s | 2.133–2.341 s |
-| production_edit | 69.899–70.396 s | 45.820–46.150 s |
+| production_edit | 70.977 s (single sample) | 44.780 s (single sample) |
 | opaque_video | 12.593–13.168 s | 10.722–11.337 s |
 | ineligible_video | 24.977–25.317 s | 10.617–11.266 s |
 | stylization_baseline | 13.638–13.794 s | 10.730–10.873 s |
@@ -128,7 +128,7 @@ The effect chart shows three-second outputs (180 frames). Other scenario duratio
 
 </details>
 
-The concurrent-video scene is a decode bottleneck: its median is 375.164 s on WGPU versus 41.835 s on CPU. In the first measured WGPU sample, 2 shared asset decoders made 119 seeks and decoded 8,432 frames for a 180-frame output. CPU used 24 worker-local decoder sessions, 16 seeks and 4,275 decodes. WGPU shares a decoder when placements read the same asset at different timestamps; CPU gives those simultaneous reads separate cursors. These counters support a decoder bottleneck, rather than measuring GPU shader cost in isolation. No renderer optimization was applied during this capture.
+The concurrent-video scene renders 180 frames in 19.334 s on WGPU versus 41.206 s on CPU. WGPU used 3 decoder sessions, 1 seek and 576 decoded frames; CPU used 24 worker-local decoder sessions, 16 seeks and 4,275 decoded frames. WGPU keeps independent cursors for placements reading different source times and shares immutable frames for identical requests. Extra cursors use no RGBA cache and retire when inactive. These end-to-end times include decoding and encoding; they do not isolate GPU shader cost.
 
 ## Environment and interpretation
 
@@ -138,15 +138,15 @@ The concurrent-video scene is a decode bottleneck: its median is 375.164 s on WG
 - Inputs are the three shared bundled clips, prepared as 1080p60 CFR. Original footage is approximately 24–25 fps, so frame-rate conversion repeats source frames. Generating input files, building the engine and validating outputs are outside measured intervals.
 - GPU means WGPU rendering. Decoding and H.264 encoding still run on CPU. Startup, readback and encoding costs remain part of the reported wall time.
 - Short process comparisons sample simultaneous process-tree RSS every 20 ms. Sampled RSS can miss peaks and double-count shared pages; PSS and GPU VRAM were not measured. Native engine counters are separate partial accounting.
-- One capture describes this host and workload. Sample ranges show run variability; they do not establish statistical significance or predict other hardware.
+- These captures describe this host and workload. Sample ranges show run variability; the four video workloads have only a single observation per backend. Neither establishes statistical significance or predicts other hardware.
 - Endurance rendering and decoder/cache profiles were excluded from this capture.
 
 <details markdown="1">
 <summary>Capture provenance and reporting corrections</summary>
 
-Engine baseline: `develop` at `d570c38d7aacafafb183bf8657f063e00f704344`, with the benchmark settings and shared-footage changes described here.
+The 10 November measurements use `develop` at `d570c38d7aacafafb183bf8657f063e00f704344`, with the benchmark settings and shared-footage changes described here. The four video workloads measured on 15 November use renderer code committed as `919f0f7`; their single samples replace the earlier values and have no measured range.
 
-Source fingerprint: `3449b023fea2223f1c3a7493eee1106bfa13fac365e42831360416e6937ac263`. Sources stayed unchanged throughout collection. After capture, the collector default timeout was raised to 7200 seconds and the derived FPS calculation was corrected; this capture already explicitly used that timeout, and neither correction changes rendering or measured wall times. Timing records, input hashes, process measurements and validation evidence remain locally under `target/benchmark-results/`.
+The 10 November source fingerprint is `3449b023fea2223f1c3a7493eee1106bfa13fac365e42831360416e6937ac263`. Sources stayed unchanged throughout collection. After capture, the collector default timeout was raised to 7200 seconds and the derived FPS calculation was corrected; this capture already explicitly used that timeout, and neither correction changes rendering or measured wall times. Timing records, input hashes, process measurements and validation evidence remain locally under `target/benchmark-results/`.
 
 </details>
 

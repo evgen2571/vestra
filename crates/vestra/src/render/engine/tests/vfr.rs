@@ -146,3 +146,111 @@ fn create_vfr_fixture(directory: &Path) -> std::path::PathBuf {
     assert!(status.success(), "ffmpeg failed to create VFR video");
     video
 }
+
+#[cfg(all(feature = "cpu", feature = "wgpu"))]
+#[test]
+fn gpu_concurrent_native_vfr_timelines_preserve_pixels_without_cache() {
+    let directory = tempfile::tempdir().expect("VFR fixture directory");
+    let video_path = create_vfr_fixture(directory.path());
+    let project_path = directory.path().join("concurrent-vfr.json");
+    let project = serde_json::json!({
+        "schema_version": 1,
+        "output": {"path": "output.mp4", "width": 32, "height": 16,
+            "frame_rate": "100/1", "background": "#00000000", "quality": "preview",
+            "audio": false, "duration_mode": "automatic"},
+        "assets": [{"id": "vfr", "type": "video", "source": video_path}],
+        "visual": {"clips": (0..2).map(|index| serde_json::json!({
+            "id": format!("vfr-{index}"), "source": {"type": "video", "asset": "vfr"},
+            "start": 0, "duration": 0.46, "layer": index,
+            "source_start": if index == 0 {0.05} else {0.50},
+            "playback_rate": if index == 0 {1.5} else {0.5},
+            "sizing": {"mode": "original"}, "opacity": {"base_value": 1},
+            "transform": {"position": {"base_value": {"x": 0.25 + index as f64 * 0.5, "y": 0.5}},
+                "anchor": {"base_value": {"x": 0.5, "y": 0.5}},
+                "scale": {"base_value": {"x": 1, "y": 1}}, "rotation_degrees": {"base_value": 0}}
+        })).collect::<Vec<_>>()}
+    });
+    fs::write(&project_path, project.to_string()).expect("VFR project");
+    let validated = load_and_validate(&project_path, &ValidationOptions::default()).unwrap();
+    let mut plan = plan::compile(&validated, plan::CompileOptions::default()).unwrap();
+    plan.limits.maximum_cache_bytes = 0;
+    let mut cpu = prepare_for_video(
+        plan.clone(),
+        RenderBackendPreference::Cpu,
+        validated.video_metadata.clone(),
+        None,
+    )
+    .unwrap();
+    let mut gpu = match prepare_for_video(
+        plan,
+        RenderBackendPreference::Wgpu,
+        validated.video_metadata.clone(),
+        None,
+    ) {
+        Ok(prepared) => prepared,
+        Err(error)
+            if std::env::var_os("VESTRA_REQUIRE_WGPU").is_none()
+                && matches!(
+                    error.diagnostic.code.as_str(),
+                    "WGPU-ADAPTER-NOT-FOUND" | "WGPU-NO-COMPATIBLE-ADAPTER"
+                ) =>
+        {
+            eprintln!("WGPU_RUNTIME_SKIPPED {}", error.diagnostic.message);
+            return;
+        }
+        Err(error) => panic!(
+            "native WGPU preparation failed: {}",
+            error.diagnostic.message
+        ),
+    };
+    let adapter = gpu.backend.adapter().expect("WGPU adapter");
+    eprintln!("WGPU_RUNTIME_EXECUTED {adapter:?}");
+    if std::env::var_os("VESTRA_REQUIRE_HARDWARE_WGPU").is_some() {
+        assert!(adapter.performance_class().is_proven_hardware());
+    }
+    let red = [255, 0, 0, 255];
+    let green = [0, 128, 0, 255];
+    let blue = [0, 0, 255, 255];
+    let yellow = [255, 255, 0, 255];
+    for (number, left, right) in [
+        (3, red, blue),
+        (10, green, blue),
+        (25, green, blue),
+        (37, blue, blue),
+        (45, yellow, yellow),
+    ] {
+        let expected = cpu.render_frame(number).unwrap();
+        let actual = gpu.render_frame(number).unwrap();
+        assert_pixel_near(&actual.rgba, left);
+        assert_pixel_near(&actual.rgba[16 * 4..], right);
+        assert!(
+            actual
+                .rgba
+                .iter()
+                .zip(&expected.rgba)
+                .all(|(a, b)| a.abs_diff(*b) <= 2)
+        );
+    }
+    let stats = gpu.backend_stats();
+    assert_eq!(
+        stats.video_seek_count, 0,
+        "overlapping forward timelines never seek backward"
+    );
+    assert!(
+        stats.video_actual_decodes <= 10,
+        "each cursor decodes the four-frame fixture at most once"
+    );
+    assert_eq!(stats.video_decoder_session_count, 2);
+    assert_eq!(stats.video_cache_bytes_retained, 0);
+    for number in [3, 37, 10, 45] {
+        let expected = cpu.render_frame(number).unwrap();
+        let actual = gpu.render_frame(number).unwrap();
+        assert!(
+            actual
+                .rgba
+                .iter()
+                .zip(&expected.rgba)
+                .all(|(a, b)| a.abs_diff(*b) <= 2)
+        );
+    }
+}

@@ -93,6 +93,11 @@ fn public_sdk_prepares_canonical_audio_reactive_video_without_output_audio() {
 #[test]
 fn prepared_cpu_video_counters_exclude_previous_operations() {
     let directory = tempdir().expect("temporary directory");
+    // Warm every auto-selected worker before checking decoder reuse in the next operation.
+    let total_frames =
+        u64::try_from(std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get))
+            .expect("CPU count fits u64")
+            .max(2);
     let status = std::process::Command::new("ffmpeg")
         .args([
             "-v",
@@ -114,7 +119,7 @@ fn prepared_cpu_video_counters_exclude_previous_operations() {
         serde_json::json!({
             "schema_version": 1,
             "output": {"path": "unused.mp4", "width": 16, "height": 16,
-                "frame_rate": 2, "background": "#000000", "quality": "preview",
+                "frame_rate": total_frames, "background": "#000000", "quality": "preview",
                 "audio": false, "duration_mode": "explicit", "duration": 1},
             "assets": [{"id": "video", "type": "video", "source": "clip.mp4"}],
             "visual": {"clips": [{"id": "clip", "source": {"type": "video", "asset": "video"},
@@ -139,12 +144,12 @@ fn prepared_cpu_video_counters_exclude_previous_operations() {
         );
     }
     for result in &results {
-        assert_eq!(result.total_frames, 2);
+        assert_eq!(result.total_frames, total_frames);
         assert_eq!(result.render_backend, "cpu");
-        assert_eq!(result.performance.video_frame_requests, 2);
+        assert_eq!(result.performance.video_frame_requests, total_frames);
         assert_eq!(
             result.performance.video_cache_hits + result.performance.video_cache_misses,
-            2
+            total_frames
         );
     }
     let first = &results[0].performance;
@@ -152,10 +157,10 @@ fn prepared_cpu_video_counters_exclude_previous_operations() {
     assert!(first.video_actual_decodes > 0);
     assert!(second.video_actual_decodes <= first.video_actual_decodes);
     assert!(first.video_decoder_open_count > 0);
-    assert_eq!(
-        second.video_decoder_open_count,
-        first.video_decoder_open_count
-    );
+    assert_eq!(first.video_decoder_open_count, first.pipeline_depth as u64);
+    assert_eq!(second.video_decoder_open_count, 0);
+    assert_eq!(first.video_decoder_session_count, first.pipeline_depth);
+    assert_eq!(second.video_decoder_session_count, first.pipeline_depth);
 }
 
 #[test]

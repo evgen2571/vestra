@@ -387,10 +387,12 @@ fn gpu_pipeline_depths_produce_identical_ordered_frames_when_an_adapter_is_avail
         })
         .collect::<Vec<_>>();
     let mut outputs = Vec::new();
+    let mut resources = Vec::new();
     for depth in [1, 2, 3] {
-        let Some(gpu) = wgpu_backend_or_skip_depth(&plan, Arc::clone(&decoded), depth) else {
+        let Some(mut gpu) = wgpu_backend_or_skip_depth(&plan, Arc::clone(&decoded), depth) else {
             return;
         };
+        resources.push((gpu.stats(), gpu.resource_estimates()));
         let (frames_out, snapshot) = render_staged_sequence(gpu, &frames);
         assert_eq!(snapshot.configured_pipeline_depth, depth);
         assert_eq!(snapshot.allocated_slot_count, depth);
@@ -398,6 +400,30 @@ fn gpu_pipeline_depths_produce_identical_ordered_frames_when_an_adapter_is_avail
             assert!(snapshot.parameter_slot_reuse_count > 0);
         }
         outputs.push(frames_out);
+    }
+    let (baseline, baseline_estimates) = &resources[0];
+    assert!(baseline.bind_group_count > 0);
+    for ((stats, estimates), depth) in resources.iter().zip([1, 2, 3]) {
+        assert_eq!(stats.bind_group_count, baseline.bind_group_count * depth);
+        assert_eq!(stats.readback_buffer_count, depth);
+        assert_eq!(
+            stats.readback_buffer_bytes,
+            baseline.readback_buffer_bytes * depth as u64
+        );
+        assert_eq!(
+            estimates.parameter_buffer_bytes,
+            baseline_estimates.parameter_buffer_bytes * depth as u64
+        );
+        assert_eq!(stats.output_texture_count, baseline.output_texture_count);
+        assert_eq!(stats.source_texture_count, baseline.source_texture_count);
+        assert_eq!(
+            estimates.working_texture_bytes,
+            baseline_estimates.working_texture_bytes
+        );
+        assert_eq!(
+            estimates.source_texture_bytes,
+            baseline_estimates.source_texture_bytes
+        );
     }
     assert_eq!(outputs[0], outputs[1]);
     assert_eq!(outputs[1], outputs[2]);

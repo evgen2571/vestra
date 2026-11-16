@@ -36,6 +36,8 @@ Python / Rust / canonical JSON authoring
 | High-level Python | `python/vestra/effects/`, authoring and lowering |
 | Generated project schema | `schemas/project.schema.json` |
 
+### Catalog and semantic ownership
+
 Core owns authored/evaluated semantics; backends must not reinterpret defaults.
 The `effect_definition` and `plan` facades preserve existing Rust paths. Keep
 catalog entries authoritative: enum variants, wire names, kind/class/stage,
@@ -49,6 +51,8 @@ scalar/plain-track fields. Ten palette input fields retain their existing
 `preserve_authored_track` exception. Typed point normalization and authored
 active intervals also derive from field declarations. These traversal choices
 are distinct from frame-time identity and resource decisions.
+
+### Backend contracts and shared resources
 
 Common owns one kernel/order/private-bit/operation declaration. CPU binds
 support to typed dispatch; WGPU binds support, record type, label and ordered

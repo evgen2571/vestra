@@ -9,6 +9,22 @@ in the [parameter reference](../reference/effect-parameters.md).
 These details describe the current implementation, including fixed-point
 rounding and resource costs; they are not prerequisites for attaching an effect.
 
+## Find the processing contract
+
+| Algorithm | Input → processing → output | Detail to verify |
+| --- | --- | --- |
+| [Motion Tile](#stages-and-motion-tile-sampling) | Sized/cropped RGBA → virtual repeat/mirror sampling → transformed layer. | Negative-coordinate seams, original anchor and alpha. |
+| [Palette/dither](#palette-mapping-and-dithering) | RGBA → detail, tone, analysis and quantization → palette/channel color blended with original. | Fixed-point ties, palette order, alpha and optional pass costs. |
+| [Halftone](#halftone-cell-analysis) | RGBA → rotated-cell means → antialiased dots with original pixel alpha. | Partial cells, screen membership and dot coverage. |
+| [PixelSort](#bounded-sorting) | RGBA → eligible runs in fixed blocks → stable sorted pixels blended with input. | Threshold endpoints, ties, transparent run breaks and bounded work. |
+| [CRT](#crt-sampling-and-temporal-behavior) | RGBA plus owner-local time/seed → curvature, scanlines, masks and temporal modulation → alpha-aware output. | Sampling lattice, transparent borders and frame-order independence. |
+| [ASCII](#ascii-and-pseudo-ascii) | RGBA plus prepared glyph atlas → cell tone/edges → antialiased glyph or geometric coverage. | Grid rounding, glyph failures, atlas limits and alpha intersection. |
+
+Use the generated [effect parameters](../reference/effect-parameters.md) for
+complete control inventories. The sections below explain the numerical choices
+and resource behavior behind them; [verification](#verification) maps those
+choices to the existing checks.
+
 ## Stages and Motion Tile sampling
 
 ### Effect order and time domains
@@ -62,11 +78,12 @@ their optional work; a larger analysis cell does not imply a smaller texture.
 
 ### Tonal stops and quantization
 
-By default, tonal palette modes map encoded RGB luminance to uniformly spaced stops.
-For those modes author colors from dark to light; the palette is not sorted automatically.
-Colors may use `#RRGGBB` or opaque `#RRGGBBFF`; transparent palette colors are
-rejected. The source alpha remains unchanged, including transparent pixels.
-`amount=0` preserves the source and `amount=1` applies the full color mapping.
+| Input rule | Contract |
+| --- | --- |
+| Tonal palette order | Author dark to light; the palette is not sorted automatically. Default stops are uniformly spaced in encoded RGB luminance. |
+| Colors | `#RRGGBB` or opaque `#RRGGBBFF`; transparent palette colors are rejected. |
+| Alpha | Source alpha remains unchanged, including transparent pixels. |
+| Final amount | `0` preserves the source; `1` applies full color mapping. |
 
 `stops=None` preserves the original uniform mapping byte for byte. For `gradient`
 or `nearest`, supply one static position per authored color, for example
@@ -202,14 +219,19 @@ smallest squared distance in encoded RGB byte space. `PaletteMode.NEAREST_HUE`
 (`nearest_hue`) uses integer HSV distance. These modes accept arbitrary color
 order, preserve exact palette colors, and resolve equal distances to the first
 authored entry. Neither mode performs linear-light or perceptual conversion.
-HSV value is the maximum channel, saturation is `floor(255 * (max-min) / max)`
-(zero for gray), and hue uses a wrapped 1530-step circle. Hue sectors are
-`255*(g-b)/range`, `510+255*(b-r)/range`, or `1020+255*(r-g)/range` for a maximum
-red, green, or blue channel respectively; signed division truncates toward zero.
-The hue-distance component is the shortest wrapped difference divided by three,
-then multiplied by the smaller saturation and divided by 255, with each division
-truncated. Squared hue, saturation and value differences are summed. Hue therefore
-has no influence when either color is gray. Colors stay within byte gamut.
+The integer HSV distance is computed as follows:
+
+1. Value is the maximum channel. Saturation is
+   `floor(255 * (max-min) / max)`, or zero for gray.
+2. Hue uses a wrapped 1530-step circle. Its sectors are `255*(g-b)/range`,
+   `510+255*(b-r)/range`, or `1020+255*(r-g)/range` for a maximum red, green or
+   blue channel respectively. Signed division truncates toward zero.
+3. The hue-distance component is the shortest wrapped difference divided by
+   three, multiplied by the smaller saturation and divided by 255. Each division
+   truncates. Sum squared hue, saturation and value differences.
+
+Hue therefore has no influence when either color is gray. Colors stay within
+byte gamut.
 
 In these two chromatic modes, Ordered Dither chooses the two nearest palette
 entries. If their squared distances are `d0 <= d1`, the second entry's probability
@@ -224,17 +246,15 @@ pixels retain the same policy as the legacy modes.
 
 `PaletteMode.NEAREST_OKLAB` (`nearest_oklab`) matches an arbitrary authored
 palette by squared Euclidean distance in a deterministic integer approximation
-of [Oklab](https://bottosson.github.io/posts/oklab/). Encoded RGB input is interpreted
-as sRGB/D65: decode each byte with the standard sRGB transfer function to a
-Q16 linear value, rounded half up. The 256-entry table is generated at 60-decimal
-precision. Oklab's linear-sRGB matrices are rounded to Q15; each row's largest
-absolute coefficient is adjusted to preserve its sum (one for LMS/lightness,
-zero for chroma). LMS sums round half up to Q16, cube roots round to Q10 using
-integer binary search, and the final Lab matrix rounds ties away from zero.
-Lab coordinates have 1/1024 resolution; a/b use a storage bias of 512, which
-cancels in distance calculations. No inverse conversion or gamut mapping is
-needed: output always selects authored opaque palette bytes and preserves
-source alpha. The authored order is retained.
+of [Oklab](https://bottosson.github.io/posts/oklab/).
+
+| Conversion stage | Numerical rule |
+| --- | --- |
+| Decode encoded RGB as sRGB/D65 | Standard sRGB transfer to Q16 linear values, rounded half up. The 256-entry table is generated at 60-decimal precision. |
+| Linear-sRGB matrix | Q15 coefficients; adjust each row's largest absolute coefficient to preserve its sum (one for LMS/lightness, zero for chroma). |
+| LMS and cube root | Round LMS sums half up to Q16; use integer binary search for Q10 cube roots. |
+| Final Lab matrix | Round ties away from zero. Coordinates have 1/1024 resolution; a/b storage bias of 512 cancels in distances. |
+| Select output | Authored opaque palette bytes in authored order, with source alpha preserved; no inverse conversion or gamut mapping is needed. |
 
 An exact RGB palette match takes precedence over feature-distance ties, so
 nearby colors that share rounded Lab coordinates still preserve their exact
@@ -278,21 +298,35 @@ and post-effect collections, plus the generic descriptor-backed `add_effect`.
 
 ## Halftone cell analysis
 
-`Halftone` (`halftone`) offers `mode="luminance"`, `"source"`, or `"rgb"`;
-`cell_size=6` (2–64 output pixels), `angle_degrees=15` (finite degrees),
-`softness=0.5` (0–2 pixels), `foreground="#ffffff"`,
-`background="#000000"` (opaque colors), `invert=False`, and `amount=1` (0–1).
-Continuous numeric controls are bindable scalar properties. The rotated lattice
-starts at the composition canvas origin, after the layer transform. RGB screens
-have fixed 60-degree channel offsets. Each screen cell uses the alpha-weighted
-mean of **all actual pixel centers** inside that rotated cell, including clipped
-border cells; fully transparent RGB contributes nothing. Cell membership uses
+`Halftone` (`halftone`) converts cell tone into dot coverage after the layer
+transform.
+
+| Control | Default | Units or accepted values |
+| --- | --- | --- |
+| `mode` | `"luminance"` | `"luminance"`, `"source"`, `"rgb"`. |
+| `cell_size` | `6` | 2–64 output pixels. |
+| `angle_degrees` | `15` | Finite degrees. |
+| `softness` | `0.5` | 0–2 output pixels. |
+| `foreground`, `background` | `"#ffffff"`, `"#000000"` | Opaque colors. |
+| `invert`, `amount` | `False`, `1` | Boolean; amount in `[0, 1]`. |
+
+Continuous numeric controls are bindable scalar properties.
+
+1. Anchor the rotated lattice at the composition canvas origin. RGB mode adds
+   fixed 60-degree offsets between its screens.
+2. Average **all actual pixel centers** in each cell, including clipped border
+   cells. Means are alpha-weighted; fully transparent RGB contributes nothing.
+3. Store byte-quantized means in a bounded analysis temporary.
+4. Resolve antialiased dots with the original pixel alpha. No blur pass or
+   frame history is used.
+
+### Cell membership and dot geometry
+
+Cell membership uses
 shared Q16 lattice coefficients and integer pixel-center coordinates, preventing
 GPU fused floating-point arithmetic from changing diagonal boundary ties. Cell
 size and direction coefficients use 16 fractional bits; antialiased dots remain
-floating-point geometry. One analysis pass
-stores byte-quantized means in a bounded temporary; one resolve pass draws dots
-with the original pixel alpha. No blur pass or frame history is used. Dot radius
+floating-point geometry. Dot radius
 is proportional to the square root of tone and reaches cell corners at white.
 `softness=0` preserves intentionally hard print geometry; positive softness
 smooths dot coverage analytically. Continuous cell-size/angle changes move the
@@ -300,29 +334,44 @@ lattice; membership changes remain stateless and discrete at pixel boundaries.
 
 ## Bounded sorting
 
-`PixelSort` (`pixel_sort`) has `direction="horizontal"` or `"vertical"`,
-`order="ascending"` or `"descending"`, `lower_threshold=0.15` and
-`upper_threshold=0.9` (bindable 0–1), `segment_length=64` (integer 2–256), and
-bindable `amount=1` (0–1). Fixed blocks start at pixel zero on each row/column.
-Within each block, contiguous eligible runs sort complete RGBA pixels by
-`54*R + 183*G + 19*B`. Thresholds include their endpoints; alpha-zero and
-ineligible pixels break runs. Equal integer luminance preserves original order
-in either sort direction. Partial final blocks are bounded. Authored reversed
-thresholds are invalid; crossing evaluated thresholds selects no pixels.
-`amount` blends source and sorted pixels in premultiplied space. Sorting keeps
+`PixelSort` (`pixel_sort`) sorts bounded runs rather than the entire frame.
+
+| Control | Default | Units or accepted values |
+| --- | --- | --- |
+| `direction` | `"horizontal"` | `"horizontal"` or `"vertical"`. |
+| `order` | `"ascending"` | `"ascending"` or `"descending"`. |
+| `lower_threshold`, `upper_threshold` | `0.15`, `0.9` | Bindable `[0, 1]`. |
+| `segment_length` | `64` | Integer 2–256 pixels. |
+| `amount` | `1` | Bindable `[0, 1]`. |
+
+1. Divide each row/column into fixed blocks starting at pixel zero. Bound the
+   final partial block to its actual extent.
+2. Find contiguous eligible runs. Threshold endpoints are included;
+   alpha-zero and ineligible pixels break runs.
+3. Sort complete RGBA pixels by `54*R + 183*G + 19*B`, preserving original
+   order for equal integer luminance in either sort direction.
+4. Blend source and sorted pixels by `amount` in premultiplied space.
+
+Authored reversed thresholds are invalid; crossing evaluated thresholds selects
+no pixels. Sorting keeps
 sharp edges intentionally; threshold crossings may create deliberate glitch
 motion. The GPU sorts up to 256 pixels with 64 lanes and 7 KiB shared memory,
 without a GPU readback or whole-frame staging allocation.
 
 ## CRT sampling and temporal behavior
 
-`Crt` (`crt`) defaults to `amount=1`, `curvature=0.08` (0–0.5),
-`scanline_strength=0.2` (0–1), `scanline_spacing=2` (1–8 output pixels),
-`mask_strength=0.15` (0–1), `mask_spacing=1` (integer 1–6 pixels),
-`grain=0.025` (0–0.25), `jitter=0.35` (0–8 pixels), `flicker=0.025`
-(0–0.25), `rolling_strength=0.06` (0–1), `rolling_width=0.12`
-(0.01–1 of canvas height), `phase=0` (finite cycles), `period=None`
-(optional positive finite seconds), and `seed=0` (unsigned 64-bit integer).
+`Crt` (`crt`) samples the source through an inverse curved screen, then applies
+pixel-anchored screen patterns and continuous procedural modulation.
+
+| Control | Default | Units or accepted range |
+| --- | --- | --- |
+| `amount`, `curvature` | `1`, `0.08` | `[0, 1]`; `[0, 0.5]`. |
+| `scanline_strength`, `scanline_spacing` | `0.2`, `2` | `[0, 1]`; 1–8 output pixels. |
+| `mask_strength`, `mask_spacing` | `0.15`, `1` | `[0, 1]`; integer 1–6 output pixels. |
+| `grain`, `jitter`, `flicker` | `0.025`, `0.35`, `0.025` | `[0, 0.25]`; 0–8 pixels; `[0, 0.25]`. |
+| `rolling_strength`, `rolling_width` | `0.06`, `0.12` | `[0, 1]`; 0.01–1 of canvas height. |
+| `phase`, `period`, `seed` | `0`, `None`, `0` | Finite cycles; optional positive finite seconds; unsigned 64-bit integer. |
+
 All numeric controls except mask spacing, period and seed are bindable.
 
 ### Sampling, alpha and procedural time
@@ -442,3 +491,23 @@ crossfade of incompatible font or character configurations is promised.
 See the [ASCII JSON example](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/effects/ascii.json),
 [pseudo-ASCII example](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/effects/pseudo-ascii.json), and
 [looping showcase](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/stylized-effects/README.md).
+
+## Verification
+
+Start with [effect checks](effect-testing.md); add rendered specimens for the
+numerical or resource rule you change. Preserve the distinction between
+structural coverage and actual image evidence.
+
+| Changed rule | Evidence to collect |
+| --- | --- |
+| Defaults, bounds, scopes or serialization | Core validation/compilation specimens, schema freshness and Python compatibility checks. |
+| Sampling, rounding or alpha | CPU pixel regressions, including transparent hidden RGB, partial cells/borders and identity settings. |
+| WGSL records, passes or resources | Adapter-free registration/layout/plan checks, then actual WGPU frames. Parsing a shader does not verify its pixels. |
+| Time, phase or seed | Same frame requested in different orders, period endpoints and keyframe/signal cases. |
+| Backend parity | Compare CPU and WGPU frames with the documented tolerance; record adapter, API and driver. |
+| Cost or retained resources | Representative [performance measurements](performance.md), including active optional passes and repeated prepared-state reuse. |
+
+Use [GPU validation](gpu-validation.md) for software and hardware procedures.
+Software WGPU proves only that path's correctness; unavailable hardware checks
+remain unverified. The [support matrix](../reference/feature-support.md) records
+the current evidence and limits.

@@ -4,7 +4,46 @@ description: Audio timeline time domains, effect scopes, output policy and cross
 
 # Audio
 
+Use tracks to place source excerpts on the project timeline, and clip, track
+or master effects to choose the processing scope. For an existing `project`
+and a source file containing at least five seconds of audio:
+
+```python
+music = project.audio.track("music", gain=0.9)
+clip = music.add("assets/music.wav", start=2, trim_start=1, trim_end=5)
+```
+
+The selected source seconds 1–5 play from project second 2. See
+[add audio](../guides/python/audio.md) for a complete rendering task and
+[audio and signals](../concepts/audio-and-signals.md) for analysis.
+
+## Python placement
+
+```text title="Signature summary (gain, fades, mute and IDs listed below)"
+project.audio.track(identifier=None, *, id=None, mute=False, gain=1.0)
+track.add(path, *, start=0.0, trim_start=0.0, trim_end=None, ...)
+```
+
+| Parameter | Default | Units or constraints |
+| --- | --- | --- |
+| Track `identifier` / `id` | Generated ID. | Supply at most one; non-empty and unique in the audio timeline. |
+| Clip `path` | Required. | Audio path; relative paths use the project base directory. |
+| Clip `id` | Generated ID. | Non-empty and unique across the audio timeline's clips. |
+| `start` | `0.0` | Non-negative project seconds. |
+| `trim_start`, `trim_end` | `0.0`, `None` | Source-media seconds; an explicit end must follow the start. Omitted end uses decoded source duration. |
+| Track/clip `gain`, `mute` | `1.0`, `False` | Non-negative finite multiplier; boolean mute. |
+| `fade_in`, `fade_out` | `0.0` | Non-negative clip-relative durations in seconds. |
+| `fade_in_curve`, `fade_out_curve` | `AudioFadeCurve.LINEAR` | `LINEAR` or `EQUAL_POWER`. |
+
+Construction/assignment rejects invalid values and duplicate IDs. Canonical
+validation checks timeline and effect relationships; preflight resolves media
+and duration. Valid authoring values alone do not establish media readiness.
+
+## Canonical JSON
+
 The optional canonical `audio` object has ordered tracks and master effects.
+Python paths register asset references during lowering; canonical clips use
+asset IDs rather than Python source paths.
 
 | Object | Contents and defaults |
 | --- | --- |
@@ -13,9 +52,6 @@ The optional canonical `audio` object has ordered tracks and master effects.
 | Clip | ID, asset/source, `start`, `trim_start`, optional `trim_end`, `gain=1`, `mute=false`, fades, optional gain automation and clip effects. |
 
 See [project format](project-format.md#audio) for the canonical object fields.
-
-For practical setup, see [add audio](../guides/python/audio.md). For analysis
-and visual consumers, see [audio and signals](../concepts/audio-and-signals.md).
 
 ## Timing and validation
 
@@ -43,11 +79,11 @@ failure cases and native path restrictions.
 
 ## Effects
 
-| Type | Parameters | Scope and duration |
+| Type / Python constructor | Parameters | Scope and duration |
 | --- | --- | --- |
-| `parametric_eq` | `frequency_hz` >0 through 24000, `gain_db` -24..24, `q` >0 through 100 | clip, track, master; preserves duration |
-| `bass_boost` | `gain_db=6` from 0..24, `frequency_hz=100` from 20..250 | clip, track, master; preserves duration |
-| `playback_speed` | `rate` 0.25..4 | clip only; transforms duration |
+| `parametric_eq` / `ParametricEq` | Required `frequency_hz` >0 through 24000 Hz, `gain_db` -24..24 dB, `q` >0 through 100 | clip, track, master; preserves duration |
+| `bass_boost` / `BassBoost` | `gain_db=6` from 0..24 dB, `frequency_hz=100` from 20..250 Hz | clip, track, master; preserves duration |
+| `playback_speed` / `PlaybackSpeed` | Required `rate` 0.25..4; dimensionless speed multiplier | clip only; transforms duration |
 
 Effects execute in stack order. High-level Python exposes `ParametricEq`,
 `BassBoost`, `PlaybackSpeed`, and `AudioEffectStack`; advanced canonical

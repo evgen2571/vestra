@@ -16,7 +16,13 @@ Common preparation creates immutable image/shape/text pixels and glyph atlases s
 
 ## Frame execution
 
-A frame then dispatches evaluated sources, including images, video frames, shapes, text, Spectrum2D, particles and recursively evaluated groups. Shared geometry and crop adaptation feed CPU sampling/compositing work; tiny-skia shape rasterization belongs to common preparation. Ordered layers and effect passes are composited into the output surface; nested compositions render their child-local work before their parent presentation is applied.
+1. Dispatch the evaluated sources: images, video frames, shapes, text,
+   Spectrum2D, particles or recursively evaluated groups.
+2. Adapt shared geometry and crop for sampling/compositing. Shape rasterization
+   with tiny-skia already belongs to common preparation.
+3. Run ordered layer/effect work into the output surface. A nested composition
+   completes its child-local work before parent presentation is applied.
+4. Return an owned RGBA frame for the caller or SDK media write.
 
 ## Ownership and caching
 

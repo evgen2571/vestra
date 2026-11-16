@@ -64,9 +64,11 @@ For process-memory measurements, include the renderer and owned FFmpeg child
 processes, name the platform metric (for example RSS/high-water RSS), sampling
 interval and collection method, and state whether peaks are simultaneous or
 per-process maxima. GPU working-set counters are estimates, not device-resident
-memory measurements. The benchmark runner currently records engine counters;
-process-memory captures need external tooling and must not be presented as a
-built-in report field. Missing measurements are unavailable, not zero.
+memory measurements. The canonical `just benchmark` runner records engine
+counters; process-memory captures for that runner need external tooling. The
+[portable collector](../benchmarks/collecting.md) also records the sampled
+process-tree metrics described below. Missing measurements are unavailable,
+not zero.
 
 Inspect the [stage timings](performance.md#measurement-scope) alongside process
 samples to distinguish renderer work from decode, encoding and publication.
@@ -81,6 +83,27 @@ described in [validation layers](../reference/project-format.md#validation-layer
 Report actual duration/frame count and output bytes: short smoke runs prove
 execution, not multi-hour stability or large-file behavior. Changes involving
 encoded output also need [media verification](media-pipeline.md#verify-encoded-output).
+
+### Collector resource sampling
+
+The [portable collector](../benchmarks/collecting.md) uses psutil to sample
+simultaneous process-tree RSS, including observed FFmpeg descendants. Interpret
+its resource records with these limits:
+
+| Metric | Scope and limit |
+| --- | --- |
+| Process-tree RSS | Shared pages may be counted more than once; sampled peaks are lower bounds. RSS is not GPU VRAM. |
+| CPU utilization | Observed-tree estimate with one core at 100%; short-lived children may be missed. |
+| Missing measurements | Stored as null, never zero. |
+| Sustained time series | Five-second samples (100 milliseconds in smoke), progress where exposed, output size and file-handle counts. |
+| Decoder/cache counters | Final Vestra totals; live counters are unavailable. |
+
+Compare early, steady and late throughput alongside RSS, buffering, allocator
+retention and cache warmup. Memory growth alone does not prove a leak. The
+collector's sustained workload avoids duration-dependent audio analysis; it
+does not establish constant memory for arbitrary audio-heavy projects. A
+three-second smoke proves neither multi-hour stability nor files larger than
+4 GiB.
 
 ## Cache working-set and native worker diagnostics
 
@@ -105,6 +128,49 @@ modes outside performance/resource controls. Supported controls are mixed8,
 mixed10, mixed25, mixed50 (`mixed-layers-N`) and `static-image`, all at 720p/30
 frames. Dynamic controls require the same eight automatic workers; the static
 control uses one. These are test-only budget controls.
+
+### Collector cache and decoder methodology
+
+Use the [collection guide](../benchmarks/collecting.md#optional-profiles) to run
+the optional cache profile. Its two-hour source repeats a detailed moving
+12-second H264 segment by stream copying: storage is roughly 600 times the
+segment size, without a two-hour encode. Preparation decodes all presentation
+timestamps, checks stream-copy boundaries and compares early/middle/late seek
+pixels. This takes time even when no endurance output is requested.
+
+The access matrix uses a single native worker and the existing isolated
+decoded-RGBA cache option, with zero versus eight-frame budgets per decoder.
+Static, bitmap and crop caches are unchanged and are not attributed to this
+option. A separate correctness pass compares exact bytes against a
+cache-disabled reference before timing.
+
+| Request pattern | What it exercises |
+| --- | --- |
+| Sequential access | Decoder cursor reuse with little need for LRU hits |
+| Same-frame holds | Current-frame retention, which also works with zero LRU budget |
+| Local backward reuse | Reuse of decoded frames within the cache budget |
+| Seeded random access | Fixed requests across the long source |
+| Budget overflow and revisits | Explicit working sets larger than the cache; native eviction counts are unavailable |
+| Two decoder sessions at different offsets | Isolated session reuse for repeated placements |
+
+A separate three-second public-API encoded render places that same source
+concurrently at offsets zero and six seconds. It exercises the CPU worker-pool
+placement policy; keep its wall time separate from the isolated decoder-access
+A/B measurements. The sustained profile also uses two moving placements, with
+opacity, brightness and animated positioning, at 640×360 / 30 fps. Cache and
+sustained smoke share the same 128×72 two-hour source to bound decoding cost.
+
+Forward jumps in the native decoder decode intervening frames; backward
+requests seek. Random long-source access can therefore be expensive enough to
+hit a worker timeout. Low sequential cache-hit counts are expected. The
+collector measures this behavior without changing the engine.
+
+MoviePy public `get_frame` latency and process memory are separate observations;
+there are no equivalent native cache/decode counters to report. Initial
+`VideoFileClip` opens are reported separately; internal decoder/process reopen
+counts are unavailable. Keep three conclusions separate: native cache
+correctness, native A/B benefit for a particular request pattern, and MoviePy
+end-to-end access latency.
 
 ### Native worker sweep
 

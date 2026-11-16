@@ -1,15 +1,6 @@
-use std::{
-    path::PathBuf,
-    sync::{
-        Condvar, Mutex, OnceLock,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
+use std::path::PathBuf;
 
-static NATIVE_RENDER_INVOCATIONS: AtomicUsize = AtomicUsize::new(0);
-static CALLBACK_PYTHON_ATTACHMENTS: AtomicUsize = AtomicUsize::new(0);
-
-use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyModule};
+use pyo3::{prelude::*, types::PyModule};
 use vestra::{
     CancellationToken as NativeCancellationToken, Editor as NativeEditor, EditorError,
     PreparedVideoRenderRequest as NativePreparedRequest, Project as NativeProject,
@@ -735,7 +726,8 @@ impl CallbackState {
             return RenderObserverControl::Continue;
         };
         let terminal = event.is_terminal();
-        CALLBACK_PYTHON_ATTACHMENTS.fetch_add(1, Ordering::Relaxed);
+        #[cfg(feature = "test-support")]
+        crate::test_support::render::record_callback_attachment();
         // Rendering runs detached from Python so decoding, composition, and
         // encoding do not monopolize the interpreter. Reattach only for the
         // callback, where Python owns the callable and any exception it raises.
@@ -779,8 +771,10 @@ pub(crate) fn render_prepared(
     let cancellation =
         cancellation.map_or_else(NativeCancellationToken::new, |token| token.inner.clone());
     match prepared.video_operation(py, move |native| {
-        wait_for_video_render_test_barrier()?;
-        NATIVE_RENDER_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
+        #[cfg(feature = "test-support")]
+        crate::test_support::render::wait_for_video_render_test_barrier()?;
+        #[cfg(feature = "test-support")]
+        crate::test_support::render::record_render_invocation();
         let (result, callback_error) = if let Some(progress) = progress {
             let mut state = CallbackState::new(Some(progress));
             let result = native.render_video_with_observer(
@@ -830,7 +824,8 @@ pub(crate) fn render_one_shot(
     // rendering is detached, while callbacks briefly reattach the interpreter
     // in CallbackState::observe.
     let invocation = py.detach(|| {
-        NATIVE_RENDER_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
+        #[cfg(feature = "test-support")]
+        crate::test_support::render::record_render_invocation();
         if let Some(progress) = progress {
             let mut state = CallbackState::new(Some(progress));
             let result = editor.render_with_observer(
@@ -861,107 +856,6 @@ pub(crate) fn render_one_shot(
         }
     });
     finish_invocation(py, invocation)
-}
-
-#[derive(Default)]
-struct VideoRenderTestBarrier {
-    armed: bool,
-    entered: bool,
-    released: bool,
-}
-
-fn video_render_test_barrier() -> &'static (Mutex<VideoRenderTestBarrier>, Condvar) {
-    static BARRIER: OnceLock<(Mutex<VideoRenderTestBarrier>, Condvar)> = OnceLock::new();
-    BARRIER.get_or_init(|| {
-        (
-            Mutex::new(VideoRenderTestBarrier::default()),
-            Condvar::new(),
-        )
-    })
-}
-
-fn wait_for_video_render_test_barrier() -> Result<(), crate::prepared::SlotError> {
-    let (lock, wake) = video_render_test_barrier();
-    let mut state = lock
-        .lock()
-        .map_err(|_| crate::prepared::SlotError::Poisoned)?;
-    if !state.armed {
-        return Ok(());
-    }
-    state.armed = false;
-    state.entered = true;
-    wake.notify_all();
-    while !state.released {
-        state = wake
-            .wait(state)
-            .map_err(|_| crate::prepared::SlotError::Poisoned)?;
-    }
-    state.entered = false;
-    state.released = false;
-    Ok(())
-}
-
-fn video_render_synchronization_error() -> PyErr {
-    PyRuntimeError::new_err("video render test synchronization was poisoned")
-}
-
-#[pyfunction]
-fn _test_arm_video_render() -> PyResult<()> {
-    let (lock, _) = video_render_test_barrier();
-    let mut state = lock
-        .lock()
-        .map_err(|_| video_render_synchronization_error())?;
-    state.armed = true;
-    state.entered = false;
-    state.released = false;
-    Ok(())
-}
-
-#[pyfunction]
-fn _test_wait_until_video_render_entered(py: Python<'_>) -> PyResult<()> {
-    py.detach(|| {
-        let (lock, wake) = video_render_test_barrier();
-        let state = lock
-            .lock()
-            .map_err(|_| video_render_synchronization_error())?;
-        let _state = wake
-            .wait_while(state, |state| !state.entered)
-            .map_err(|_| video_render_synchronization_error())?;
-        Ok(())
-    })
-}
-
-#[pyfunction]
-fn _test_release_video_render() -> PyResult<()> {
-    let (lock, wake) = video_render_test_barrier();
-    let mut state = lock
-        .lock()
-        .map_err(|_| video_render_synchronization_error())?;
-    state.released = true;
-    wake.notify_all();
-    Ok(())
-}
-
-#[pyfunction]
-fn _test_reset_native_render_invocation_count() -> PyResult<()> {
-    NATIVE_RENDER_INVOCATIONS.store(0, Ordering::Relaxed);
-    Ok(())
-}
-
-#[pyfunction]
-fn _test_native_render_invocation_count() -> PyResult<usize> {
-    Ok(NATIVE_RENDER_INVOCATIONS.load(Ordering::Relaxed))
-}
-
-#[pyfunction]
-fn _test_reset_callback_attach_count() -> PyResult<()> {
-    CALLBACK_PYTHON_ATTACHMENTS.store(0, Ordering::Relaxed);
-    Ok(())
-}
-
-#[pyfunction]
-fn _test_callback_attach_count() -> PyResult<usize> {
-    Ok(CALLBACK_PYTHON_ATTACHMENTS.load(Ordering::Relaxed))
 }
 
 fn finish_invocation(py: Python<'_>, invocation: Invocation) -> PyResult<PyRenderResult> {
@@ -995,21 +889,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyRenderPerformance>()?;
     module.add_class::<PyRenderFailureContext>()?;
     module.add_class::<PyRenderFailureStage>()?;
-    module.add_function(wrap_pyfunction!(_test_arm_video_render, module)?)?;
-    module.add_function(wrap_pyfunction!(
-        _test_wait_until_video_render_entered,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(_test_release_video_render, module)?)?;
-    module.add_function(wrap_pyfunction!(
-        _test_reset_native_render_invocation_count,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        _test_native_render_invocation_count,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(_test_reset_callback_attach_count, module)?)?;
-    module.add_function(wrap_pyfunction!(_test_callback_attach_count, module)?)?;
     Ok(())
 }

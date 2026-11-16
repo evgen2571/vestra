@@ -252,36 +252,7 @@ impl WgpuBackend {
             "WGPU source resources prepared"
         );
         let mut slots = Vec::with_capacity(pipeline_depth);
-        let per_slot_bind_group_count = {
-            let parameter_buffer = context.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("vestra frame parameters"),
-                size: parameter_buffer_bytes,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            let bind_groups = FrameBindGroups::create(
-                &context.device,
-                &pipelines,
-                &frame,
-                &sources,
-                &parameter_buffer,
-            );
-            let count = bind_groups.persistent_created();
-            slots.push(FrameSlotResources {
-                parameters: FrameParameterArena::new(alignment, parameter_buffer_bytes),
-                parameter_buffer,
-                particle_instances: Vec::new(),
-                particle_pixels: Vec::new(),
-                particle_upload_bytes: Vec::new(),
-                particle_uploads: Vec::new(),
-                particle_buffer: None,
-                particle_upload_buffer: None,
-                bind_groups,
-                uses: 0,
-            });
-            count
-        };
-        while slots.len() < pipeline_depth {
+        for _ in 0..pipeline_depth {
             let parameter_buffer = context.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("vestra frame parameters"),
                 size: parameter_buffer_bytes,
@@ -308,6 +279,7 @@ impl WgpuBackend {
                 uses: 0,
             });
         }
+        let per_slot_bind_group_count = slots[0].bind_groups.persistent_created();
         let readback = ReadbackRing::new(
             &context.device,
             &frame,

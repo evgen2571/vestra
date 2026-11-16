@@ -89,7 +89,7 @@ The introductory tutorials start with the rectangle's static layout, then add th
 </li>
 <li>
 <span class="learning-path__step" aria-hidden="true">2</span>
-<h3><a href="getting-started/installation/">Install Vestra</a></h3>
+<h3><a href="getting-started/first-render/">Render a shape</a></h3>
 <p>Define a canvas, place a rounded rectangle, and render a three-second MP4.</p>
 </li>
 <li>

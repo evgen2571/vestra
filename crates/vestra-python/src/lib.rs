@@ -3,10 +3,7 @@
     reason = "PyO3 method signatures are clearer without const"
 )]
 
-use std::{
-    path::PathBuf,
-    sync::{Condvar, Mutex, OnceLock},
-};
+use std::path::PathBuf;
 
 use pyo3::{
     create_exception,
@@ -25,6 +22,8 @@ mod inspection;
 mod prepared;
 mod project;
 mod render;
+#[cfg(feature = "test-support")]
+mod test_support;
 
 pub(crate) use diagnostics::{
     PyCategory, PyDiagnostic, PyPreflightReport, PySeverity, PyValidationReport, diagnostic_tuple,
@@ -235,63 +234,6 @@ fn configure_logging(
     })
 }
 
-#[derive(Default)]
-struct DetachBarrier {
-    entered: bool,
-    released: bool,
-}
-
-fn detach_barrier() -> &'static (Mutex<DetachBarrier>, Condvar) {
-    static BARRIER: OnceLock<(Mutex<DetachBarrier>, Condvar)> = OnceLock::new();
-    BARRIER.get_or_init(|| (Mutex::new(DetachBarrier::default()), Condvar::new()))
-}
-
-/// Private debug-only test hook. It exercises the same `Python::detach` path
-/// used by production operations without exposing a supported package API.
-fn synchronization_error(operation: &str) -> PyErr {
-    PyRuntimeError::new_err(format!("GIL test synchronization {operation} was poisoned"))
-}
-
-#[pyfunction]
-fn _test_wait_while_detached(py: Python<'_>) -> PyResult<()> {
-    py.detach(|| {
-        let (lock, wake) = detach_barrier();
-        let mut state = lock.lock().map_err(|_| synchronization_error("lock"))?;
-        state.released = false;
-        state.entered = true;
-        wake.notify_all();
-        while !state.released {
-            state = wake
-                .wait(state)
-                .map_err(|_| synchronization_error("condition wait"))?;
-        }
-        state.entered = false;
-        state.released = false;
-        Ok(())
-    })
-}
-
-#[pyfunction]
-fn _test_wait_until_detached_entered(py: Python<'_>) -> PyResult<()> {
-    py.detach(|| {
-        let (lock, wake) = detach_barrier();
-        let state = lock.lock().map_err(|_| synchronization_error("lock"))?;
-        let _state = wake
-            .wait_while(state, |state| !state.entered)
-            .map_err(|_| synchronization_error("condition wait"))?;
-        Ok(())
-    })
-}
-
-#[pyfunction]
-fn _test_release_detached_wait() -> PyResult<()> {
-    let (lock, wake) = detach_barrier();
-    let mut state = lock.lock().map_err(|_| synchronization_error("lock"))?;
-    state.released = true;
-    wake.notify_all();
-    Ok(())
-}
-
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("VestraError", module.py().get_type::<VestraError>())?;
@@ -337,9 +279,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(effect_definitions, module)?)?;
     module.add_function(wrap_pyfunction!(audio_effect_definitions, module)?)?;
     module.add_function(wrap_pyfunction!(configure_logging, module)?)?;
-    module.add_function(wrap_pyfunction!(_test_wait_while_detached, module)?)?;
-    module.add_function(wrap_pyfunction!(_test_wait_until_detached_entered, module)?)?;
-    module.add_function(wrap_pyfunction!(_test_release_detached_wait, module)?)?;
+    #[cfg(feature = "test-support")]
+    test_support::register(module)?;
     module.add(
         "__all__",
         PyList::new(

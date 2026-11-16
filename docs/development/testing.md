@@ -32,7 +32,8 @@ just python-test python-tests/TEST.py
 ```
 
 `just test TEST_FILTER -- --nocapture` forwards arguments to the workspace Rust
-runner. `just python-test` syncs the editable package, imports the extension,
+runner. `just python-test` rebuilds the editable package with the non-default
+`vestra-python/test-support` Cargo feature, imports the extension,
 runs pytest and then compileall. Use the repository's Nix/uv workflow for native
 Python work.
 
@@ -226,3 +227,9 @@ workflows. Manual runs execute all checks. Failed or cancelled jobs fail the gat
 
 CI's WGPU evidence is [software correctness](gpu-validation.md#verify-software-safe-correctness).
 Hardware validation and visual inspection remain separate checks.
+
+The `test-support` feature contains private `_test_*` synchronization hooks for
+Python concurrency and GIL tests. `just python-test` enables it via Maturin
+`build-args=--features=test-support` and uses `uv run --no-sync` to retain that
+build. Normal wheel builds omit it; installed-wheel verification rejects any
+`_test_*` export. Use `just python-sync` for a normal development build.

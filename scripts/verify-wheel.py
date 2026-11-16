@@ -269,6 +269,10 @@ def verify_output_apis(output_dir: Path, ffmpeg: str) -> None:
 
 def verify(output_dir: Path, expected_version: str | None = None) -> None:
     import vestra
+    import vestra._native as native
+
+    controls = [name for name in dir(native) if name.startswith("_test_")]
+    assert not controls, f"shipping wheel contains test controls: {controls}"
     from vestra import (
         BackendPreference,
         Editor,

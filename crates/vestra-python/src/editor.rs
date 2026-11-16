@@ -150,7 +150,8 @@ impl PyEditor {
         let editor = self.runtime_editor(py)?;
         let options = options.map_or_else(vestra::PrepareOptions::default, |value| value.inner);
         match py.detach(|| {
-            if !prepared::wait_for_test_barrier() {
+            #[cfg(feature = "test-support")]
+            if !crate::test_support::prepared::wait_for_test_barrier() {
                 return Err(None);
             }
             editor.prepare(&project.inner, options).map_err(Some)

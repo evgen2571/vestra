@@ -50,10 +50,11 @@ python-sync:
     uv sync --locked --extra dev
 
 # Run Python tests; optionally pass pytest arguments.
-python-test *args: python-sync
-    uv run python -c 'import vestra'
-    uv run pytest "$@"
-    uv run python -m compileall -q python/vestra
+python-test *args:
+    uv sync --locked --extra dev --reinstall-package vestra --config-setting build-args=--features=test-support
+    uv run --no-sync python -c 'import vestra'
+    uv run --no-sync pytest "$@"
+    uv run --no-sync python -m compileall -q python/vestra
 
 # Validate the schema and compare it with generated output.
 schema-check: schema-validation schema-freshness

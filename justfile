@@ -13,13 +13,13 @@ check:
 fmt:
     cargo fmt --all
     rustfmt --edition 2024 crates/vestra-core/src/effects/*.rs
-    uvx --from 'ruff>=0.12,<0.13' ruff format python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/*.py tests/test_effect_generation.py
 
 # Check formatting without changing files.
 fmt-check:
     cargo fmt --all -- --check
     rustfmt --edition 2024 --check crates/vestra-core/src/effects/*.rs
-    uvx --from 'ruff>=0.12,<0.13' ruff format --check python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
+    uvx --from 'ruff>=0.12,<0.13' ruff format --check python/vestra/sources/base.py python/vestra/sources/__init__.py scripts/generate-effects.py scripts/effects/*.py tests/test_effect_generation.py
 
 # Lint and test release helpers without building the native engine.
 release-check:
@@ -39,7 +39,7 @@ lint-rust:
 
 # Lint the maintained Python package.
 lint-python:
-    uvx --from 'ruff>=0.12,<0.13' ruff check python/vestra scripts/generate-effects.py scripts/effects/python_metadata.py tests/test_effect_generation.py
+    uvx --from 'ruff>=0.12,<0.13' ruff check python/vestra scripts/generate-effects.py scripts/effects/*.py tests/test_effect_generation.py
 
 # Run Rust tests; optionally pass Cargo/test arguments.
 test *args:

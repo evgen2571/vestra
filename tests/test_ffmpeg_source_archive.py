@@ -1,5 +1,6 @@
 """Corresponding-source archives keep edits and omit machine paths/build junk."""
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -185,14 +186,22 @@ def test_search_root_rejects_missing_or_ambiguous_builds(tmp_path: Path, count: 
 
 @pytest.mark.skipif(shutil.which("cargo") is None, reason="requires Cargo")
 @pytest.mark.parametrize("kind", ["cli", "wheel"])
-def test_release_cleanup_removes_stale_ffmpeg_feature_builds(tmp_path: Path, kind: str):
+@pytest.mark.parametrize("cache_hit", ["true", "false"])
+def test_release_cleanup_removes_stale_ffmpeg_feature_builds(
+    tmp_path: Path, kind: str, cache_hit: str
+):
     fixture = source_tree(tmp_path / "fixture")
     (tmp_path / "Cargo.toml").write_text(
         '[package]\nname="ffmpeg-sys-next"\nversion="8.1.0"\nedition="2021"\n'
         "[features]\nresampling=[]\n"
     )
     (tmp_path / "src").mkdir()
-    (tmp_path / "src/lib.rs").touch()
+    (tmp_path / "src/lib.rs").write_text(
+        'pub const SOURCE: &str = include_str!(concat!(env!("OUT_DIR"), "/ffmpeg-8.1/configure"));\n'
+    )
+    (tmp_path / "src/main.rs").write_text(
+        'fn main() { print!("{}", ffmpeg_sys_next::SOURCE); }\n'
+    )
     (tmp_path / "build.rs").write_text(
         """fn main() {
     let fixture = std::env::var("FFMPEG_ARCHIVE_FIXTURE").unwrap();
@@ -231,6 +240,17 @@ def test_release_cleanup_removes_stale_ffmpeg_feature_builds(tmp_path: Path, kin
         build + ["--features", "resampling"], cwd=tmp_path, env=environment, check=True
     )
     assert len(list((tmp_path / f"target/{kind}").rglob("config.mak"))) == 2
+    # A restored cache can contain both Cargo's old and new build layouts.
+    restored_sources = []
+    restored_fingerprints = []
+    for layout in ("ffmpeg-sys-next-restored", "ffmpeg-sys-next/restored"):
+        restored = tmp_path / f"target/{kind}/{target}/release/build/{layout}/out"
+        restored_source = source_tree(restored).rename(restored / "ffmpeg-8.1")
+        restored_sources.append(restored_source)
+        fingerprint = tmp_path / f"target/{kind}/{target}/release/.fingerprint/{layout}"
+        fingerprint.mkdir(parents=True)
+        (fingerprint / "stale").touch()
+        restored_fingerprints.append(fingerprint)
     unrelated = tmp_path / f"target/{kind}/{target}/release/deps/libunrelated.rlib"
     unrelated.touch()
     unused = tmp_path / ("target/wheel" if kind == "cli" else "target/cli")
@@ -264,20 +284,28 @@ os.execv({cargo!r}, [{cargo!r}, *sys.argv[1:]])
     step = workflow.partition("      - name: Clear outdated bundled FFmpeg builds\n")[2]
     step = step.split("\n      - ", 1)[0]
     cleanup = textwrap.dedent(step.partition("        run: |\n")[2])
+    if (
+        "if: steps.build-cache.outputs.cache-hit != 'true'" in step
+        and cache_hit == "true"
+    ):
+        cleanup = ":"
     subprocess.run(
         ["bash", "-euo", "pipefail", "-c", cleanup],
         cwd=tmp_path,
         env=cleanup_environment,
         check=True,
     )
+    assert all(not source.exists() for source in restored_sources)
+    assert all(not fingerprint.exists() for fingerprint in restored_fingerprints)
     assert unrelated.exists()
     assert (unused / "restored-cache").exists()
     subprocess.run(
         build + ["--features", "resampling"], cwd=tmp_path, env=environment, check=True
     )
 
-    artifact = tmp_path / "vestra.whl"
-    artifact.write_bytes(b"resampling binary\n")
+    executable = "ffmpeg-sys-next.exe" if sys.platform == "win32" else "ffmpeg-sys-next"
+    artifact = tmp_path / f"target/{kind}/{target}/release" / executable
+    assert subprocess.check_output([str(artifact)]) == b"resampling source\n"
     output = tmp_path / "source.zip"
     result = subprocess.run(
         [
@@ -295,7 +323,14 @@ os.execv({cargo!r}, [{cargo!r}, *sys.argv[1:]])
     )
     assert result.returncode == 0, result.stderr
     with zipfile.ZipFile(output) as bundle:
-        assert bundle.read("ffmpeg/configure") == b"resampling source\n"
+        assert bundle.read("ffmpeg/configure") == subprocess.check_output(
+            [str(artifact)]
+        )
+        info = json.loads(bundle.read("BUILD.json"))
+        assert (
+            info["artifacts"][0]["sha256"]
+            == hashlib.sha256(artifact.read_bytes()).hexdigest()
+        )
 
 
 def test_missing_artifact_does_not_create_source_archive(tmp_path: Path):
@@ -313,3 +348,23 @@ def test_source_archive_cannot_overwrite_associated_artifact(tmp_path: Path):
     with pytest.raises(ValueError, match="must not overwrite"):
         archive.archive(source, artifact, artifacts=[artifact])
     assert artifact.read_bytes() == b"original binary\n"
+
+
+@pytest.mark.skipif(shutil.which("rustc") is None, reason="requires Rust")
+def test_linux_packaging_uses_the_cached_host_compiler(tmp_path: Path):
+    workflow = (SCRIPT.parents[1] / ".github/workflows/artifacts.yml").read_text()
+    step = workflow.partition("      - name: Identify the build toolchain\n")[2]
+    step = step.split("\n      - ", 1)[0]
+    command = step.partition("        run: ")[2].strip()
+    output = tmp_path / "toolchain-output"
+    subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", command],
+        env=dict(os.environ, GITHUB_OUTPUT=str(output)),
+        check=True,
+    )
+    version = subprocess.check_output(["rustc", "--version"], text=True).split()[1]
+    assert output.read_text() == f"version={version}\n"
+    build = workflow.partition("      - name: Build wheel and portable Linux CLI\n")[2]
+    build = build.split("\n      - ", 1)[0]
+    assert "rust-toolchain: ${{ steps.build-toolchain.outputs.version }}" in build
+    assert "prefix-key: artifacts-v2" in workflow

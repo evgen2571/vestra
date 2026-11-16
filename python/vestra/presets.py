@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from .editor import Layer
+    from ._composition import Layer
 
 PresetKind = Literal[
     "slow_drift", "zoom_punch", "impact", "heavy_impact", "focus_reveal"

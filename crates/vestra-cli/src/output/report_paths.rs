@@ -16,30 +16,39 @@ pub(crate) fn validate_render_report_path(
         protected.push(output.to_path_buf());
     }
     // Inspect source paths even when typed loading or semantic validation will fail.
-    if let Some(value) = fs::read(project)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-    {
-        if output.is_none()
-            && let Some(path) = value["output"]["path"].as_str()
-        {
-            protected.push(root.join(path));
-        }
-        if let Some(assets) = value["assets"].as_array() {
-            for asset in assets {
-                if let Some(source) = asset["source"].as_str() {
-                    protected.push(root.join(source));
+    let discovered = fs::read(project)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| {
+            serde_json::from_slice::<serde_json::Value>(&bytes).map_err(|error| error.to_string())
+        });
+    match discovered {
+        Ok(value) => {
+            if output.is_none()
+                && let Some(path) = value["output"]["path"].as_str()
+            {
+                protected.push(root.join(path));
+            }
+            if let Some(assets) = value["assets"].as_array() {
+                for asset in assets {
+                    if let Some(source) = asset["source"].as_str() {
+                        protected.push(root.join(source));
+                    }
                 }
             }
         }
+        Err(error) => match fs::symlink_metadata(report) {
+            Ok(_) => {
+                return Err(format!(
+                    "cannot discover protected inputs: {error}; refusing to replace an existing report path"
+                ));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("cannot inspect report path: {error}")),
+        },
     }
     let check = || -> io::Result<()> {
-        let normalized_report = normalize(report)?;
-        let report_identity = file_identity(report)?;
         for path in protected {
-            if normalized_report == normalize(&path)?
-                || report_identity.is_some() && report_identity == file_identity(&path)?
-            {
+            if paths_alias(report, &path)? {
                 return Err(io::Error::other(format!(
                     "report path '{}' aliases protected file '{}'",
                     report.display(),
@@ -52,7 +61,40 @@ pub(crate) fn validate_render_report_path(
     check().map_err(|error| format!("cannot use report path: {error}"))
 }
 
+fn paths_alias(left: &Path, right: &Path) -> io::Result<bool> {
+    if normalize(left)? == normalize(right)? {
+        return Ok(true);
+    }
+    let left_identity = file_identity(left)?;
+    let right_identity = file_identity(right)?;
+    if left_identity.is_some() || right_identity.is_some() {
+        return Ok(left_identity.is_some() && left_identity == right_identity);
+    }
+    let parent: fn(&Path) -> &Path = |path| {
+        path.parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or(Path::new("."))
+    };
+    let left_parent = parent(left);
+    let right_parent = parent(right);
+    let directory_identity = file_identity(left_parent)?;
+    if directory_identity.is_none() || directory_identity != file_identity(right_parent)? {
+        return Ok(false);
+    }
+    let (Some(left_name), Some(right_name)) = (left.file_name(), right.file_name()) else {
+        return Ok(false);
+    };
+    // Probe missing names using the filesystem's case/Unicode rules without creating either destination.
+    let probe = tempfile::tempdir_in(right_parent)?;
+    fs::write(probe.path().join(right_name), [])?;
+    Ok(file_identity(&probe.path().join(left_name))?.is_some())
+}
+
 fn normalize(path: &Path) -> io::Result<PathBuf> {
+    normalize_with_links(path, 40)
+}
+
+fn normalize_with_links(path: &Path, remaining_links: u8) -> io::Result<PathBuf> {
     let absolute = std::path::absolute(path)?;
     let mut normalized = PathBuf::new();
     for component in absolute.components() {
@@ -66,7 +108,23 @@ fn normalize(path: &Path) -> io::Result<PathBuf> {
                 normalized.push(component);
                 match normalized.canonicalize() {
                     Ok(path) => normalized = path,
-                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                        match fs::symlink_metadata(&normalized) {
+                            Ok(metadata) if metadata.file_type().is_symlink() => {
+                                let remaining_links =
+                                    remaining_links.checked_sub(1).ok_or_else(|| {
+                                        io::Error::other("too many symbolic links in report path")
+                                    })?;
+                                let target = fs::read_link(&normalized)?;
+                                let target =
+                                    normalized.parent().unwrap_or(Path::new(".")).join(target);
+                                normalized = normalize_with_links(&target, remaining_links)?;
+                            }
+                            Ok(_) => {}
+                            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                            Err(error) => return Err(error),
+                        }
+                    }
                     Err(error) => return Err(error),
                 }
             }
@@ -113,6 +171,50 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_report_symlink_is_rejected_before_output_creation() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let project = root.join("project.json");
+        let output = root.join("out.mp4");
+        let report = root.join("report.json");
+        fs::write(&project, b"{}").unwrap();
+        std::os::unix::fs::symlink(&output, &report).unwrap();
+        assert!(validate_render_report_path(&report, &project, Some(&output)).is_err());
+        assert!(!output.exists());
+        assert!(
+            fs::symlink_metadata(&report)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+    }
+
+    #[test]
+    fn missing_names_follow_filesystem_case_unicode_and_trailing_dot_rules() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        for (output_name, report_name) in [
+            ("out.mp4", "OUT.MP4"),
+            ("é.mp4", "e\u{301}.mp4"),
+            ("out.mp4", "out.mp4."),
+        ] {
+            let output = root.join(output_name);
+            let report = root.join(report_name);
+            fs::write(&output, []).unwrap();
+            let aliases = report.exists();
+            fs::remove_file(&output).unwrap();
+            assert_eq!(
+                validate_render_report_path(&report, &root.join("missing.json"), Some(&output))
+                    .is_err(),
+                aliases,
+                "{output_name} / {report_name}"
+            );
+            assert_eq!(fs::read_dir(root).unwrap().count(), 0, "probe cleanup");
+        }
     }
 
     #[cfg(unix)]

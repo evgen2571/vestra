@@ -43,6 +43,9 @@ Report paths must be separate from the project, referenced media and selected re
 output, including normalized paths, symlinks and hard links. A collision fails
 with `VESTRA-REPORT-PATH` before rendering or writing a failure report. Reports
 are published from a temporary file; a failed write preserves a previous report.
+If a project cannot be read or parsed, an existing report path is preserved
+because protected media paths cannot be discovered; a new failure-report path
+can still be used.
 
 ### Progress streams
 

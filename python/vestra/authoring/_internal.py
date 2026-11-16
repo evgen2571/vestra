@@ -7,7 +7,7 @@ from sys import maxsize
 from .errors import AuthoringError
 
 
-def _number(value: int | float, name: str) -> float:
+def _number(value: object, name: str) -> float:
     """Normalize a public finite real number without depending on authoring nodes."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise TypeError(f"{name} must be a real number")

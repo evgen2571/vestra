@@ -8,24 +8,15 @@ tracks, which remain authoritative for canonical projects and rendering.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import isfinite
 from typing import Generic, Literal, Self, TypeAlias, TypeVar
 
+from ..authoring._internal import _number as _number
 from ..authoring.signals import ScalarSignal
 from ..authoring.values import CubicBezier, Interpolation
 
 InterpolationValue: TypeAlias = Interpolation | CubicBezier
 SignalOperation: TypeAlias = Literal["replace", "add", "multiply"]
 T = TypeVar("T")
-
-
-def _number(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    number = float(value)
-    if not isfinite(number):
-        raise ValueError(f"{name} must be finite")
-    return number
 
 
 @dataclass(frozen=True, slots=True)

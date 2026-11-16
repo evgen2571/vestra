@@ -10,7 +10,7 @@ Use shapes for procedural panels, outlines and geometric masks. Python exports
 
 ## API signatures
 
-```text title="Geometry signatures (style and presentation keywords omitted)"
+```text title="Geometry signature summaries (style and presentation keywords omitted)"
 Rectangle(*, width=100, height=100, corner_radius=0.0)
 Ellipse(*, width=100, height=100)
 Circle(*, radius=50)

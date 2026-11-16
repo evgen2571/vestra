@@ -4,9 +4,18 @@
 crop, then choose its source offset, playback rate and timeline span when placing
 it. See [sources and layers](../../guides/python/sources-and-layers.md) for placement examples.
 
+With an existing `project` and `assets/shot.mp4` containing at least five seconds
+of video, place source seconds 2–5 at project second 1:
+
+```python
+from vestra import Video
+
+layer = project.root.add(Video("assets/shot.mp4"), start=1, duration=3, source_start=2)
+```
+
 ## Source construction
 
-```text title="Source signature (presentation keywords omitted)"
+```text title="Source signature summary (presentation keywords omitted)"
 Video(path: str | PathLike[str], *, sizing: Sizing | Literal["original", "fit", "cover"] | None = None,
       crop: Crop | CropProperty | None = None)
 ```
@@ -23,7 +32,7 @@ Source trim and playback rate belong to placement, not the constructor.
 
 ## Placement and time domains
 
-```text title="Placement timing signature (presentation keywords omitted)"
+```text title="Placement timing signature summary (presentation keywords omitted)"
 composition.add(video, *, start=0, duration=None, source_start=0.0,
                 playback_rate=1.0, z=0, visible=True, opacity=1.0,
                 id=None, name=None, blend_mode=BlendMode.NORMAL)

@@ -4,9 +4,18 @@
 to the composition, and crop to select a region before layer presentation.
 See [sources and layers](../../guides/python/sources-and-layers.md) for placement examples.
 
+With an existing `project` and image file `assets/photo.png`, fill the canvas
+while preserving the image's aspect ratio:
+
+```python
+from vestra import Image
+
+layer = project.root.add(Image("assets/photo.png", sizing="cover"), duration=2)
+```
+
 ## API signature
 
-```text title="Source signature (presentation keywords omitted)"
+```text title="Source signature summary (presentation keywords omitted)"
 Image(path: str | PathLike[str], *, sizing: Sizing | Literal["original", "fit", "cover"] | None = None,
       crop: Crop | CropProperty | None = None)
 ```

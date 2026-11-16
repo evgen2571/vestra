@@ -29,6 +29,22 @@ Semantic validation checks project data without reading assets. SDK preflight
 resolves paths and probes media, so environment failures can be reported before
 frame execution. Preparation then creates reusable runtime state.
 
+## Follow an operation
+
+| Stage | Owner and handoff | Failure to look for |
+| --- | --- | --- |
+| Author and snapshot | Python lowers mutable objects; Rust/CLI load canonical data. | Invalid authoring values, JSON parsing or unsupported fields. |
+| Validate and compile | Core checks semantics and builds the plan using SDK-supplied media facts. | IDs, scope, timing, resource limits or unresolved duration. |
+| Preflight and prepare | SDK coordinates media probes, shared assets and backend preparation. | Missing/corrupt media, unusable output, unavailable adapter or device resources. |
+| Evaluate and render | Core evaluates frame time; CPU/WGPU consume the evaluated plan. | Frame-time values, pass/resource constraints, decode or renderer failure. |
+| Encode and publish | Media writes/finalizes; SDK coordinates cancellation and completion. | Encoder write, finalization or publication failure. |
+
+These stages have different success boundaries: pure validation does not prove
+media readiness, a WGPU selection does not prove hardware execution, and the
+last frame does not prove publication. The [render pipeline](render-pipeline.md)
+shows the operation order and retained state; the table identifies owners rather
+than a strict sequence of calls.
+
 Use [crate ownership](crates.md) to choose where a change belongs,
 [project to plan](project-to-plan.md) for compilation and timing contracts, or
 [render pipeline](render-pipeline.md) to follow a prepared project through execution.

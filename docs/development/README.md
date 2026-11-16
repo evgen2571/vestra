@@ -10,6 +10,9 @@ the route that matches your change.
 <span id="architecture"></span>
 <span id="release-procedures"></span>
 
+Use [Build from source](source-builds.md) for Python/CLI native prerequisites,
+Nix setup and editable builds. Site-only work needs none of these.
+
 ## Choose a task
 
 | I want to… | Start here | Check the result |

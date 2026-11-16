@@ -13,7 +13,7 @@ hide:
 <h1>Video composition<br> in Python</h1>
 <p class="home-lead">Vestra is a Python library for composing and rendering video, backed by Rust. Combine footage, text, shapes, effects, and audio in a script.</p>
 <div class="home-actions">
-<a class="home-button home-button--primary" href="getting-started/first-render/">Render a shape</a>
+<a class="home-button home-button--primary" href="getting-started/installation/">Install Vestra</a>
 <a class="home-button" href="gallery/">Browse examples</a>
 </div>
 <p class="home-requirements">Python 3.11–3.14 · CPU or WGPU rendering · MP4 output</p>
@@ -48,7 +48,15 @@ Three position keyframes move this rounded rectangle across the canvas and back.
 --8<-- "examples/tutorials/first_animation.py"
 ```
 
-[Install Vestra](getting-started/installation.md), then follow the [first render tutorial](getting-started/first-render.md) for a complete, explained project.
+Save the example as `first_animation.py` after
+[installing Vestra](getting-started/installation.md), then run:
+
+```bash
+uv run python first_animation.py
+```
+
+This creates `quickstart.mp4` in the current directory and replaces that file
+on a rerun. Follow the [first render tutorial](getting-started/first-render.md) for a complete, explained project.
 
 </div>
 <figure>
@@ -59,6 +67,15 @@ Three position keyframes move this rounded rectangle across the canvas and back.
 <figcaption>The output of the code alongside it. Positions use fractions of the canvas: (0.5, 0.5) is the center.</figcaption>
 </figure>
 </div>
+
+## Documentation version
+
+This site follows the **`develop` branch**, which can include changes after the
+latest [published release](https://github.com/evgen2571/vestra/releases).
+Tutorial downloads come from that branch too. Compare your installed version
+with the release notes when an API differs; for a development checkout, use
+[Build from source](development/source-builds.md). Gallery pages identify the
+exact source revision used for their recorded previews.
 
 ## Learn Vestra
 
@@ -72,7 +89,7 @@ The introductory tutorials start with the rectangle's static layout, then add th
 </li>
 <li>
 <span class="learning-path__step" aria-hidden="true">2</span>
-<h3><a href="getting-started/first-render/">Render a shape</a></h3>
+<h3><a href="getting-started/installation/">Install Vestra</a></h3>
 <p>Define a canvas, place a rounded rectangle, and render a three-second MP4.</p>
 </li>
 <li>

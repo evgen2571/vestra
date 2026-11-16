@@ -1,5 +1,8 @@
 //! WGPU-only unused-video preparation, source reads and upload accounting.
-use super::gpu::wgpu_backend_or_skip;
+use super::{
+    gpu::wgpu_backend_or_skip,
+    video_pool_tests::{CursorFactory, CursorTrace},
+};
 use image::RgbaImage;
 use std::sync::{
     Arc,
@@ -189,74 +192,6 @@ fn gpu_video_preparation_ignores_unused_assets_when_an_adapter_is_available() {
         .expect("hidden mask owner needs no video read");
     assert_eq!(frame_requests.load(Ordering::Relaxed), 6);
     assert_eq!(output.get_pixel(0, 0).0, [0, 0, 0, 0]);
-}
-
-#[derive(Default)]
-struct CursorTrace {
-    requests: Vec<Vec<f64>>,
-    budgets: Vec<u64>,
-    live: usize,
-}
-
-struct CursorFactory(Arc<std::sync::Mutex<CursorTrace>>);
-struct CursorSession {
-    trace: Arc<std::sync::Mutex<CursorTrace>>,
-    id: usize,
-    metrics: vestra_render_common::VideoDecoderMetrics,
-    previous: f64,
-}
-
-impl Drop for CursorSession {
-    fn drop(&mut self) {
-        self.trace.lock().unwrap().live -= 1;
-    }
-}
-
-impl crate::VideoDecoderFactory for CursorFactory {
-    fn open(
-        &self,
-        _asset: &vestra_core::plan::VideoAsset,
-        budget: u64,
-    ) -> Result<Box<dyn crate::VideoDecoderSession>, String> {
-        let mut trace = self.0.lock().unwrap();
-        let id = trace.requests.len();
-        trace.requests.push(Vec::new());
-        trace.budgets.push(budget);
-        trace.live += 1;
-        Ok(Box::new(CursorSession {
-            trace: Arc::clone(&self.0),
-            id,
-            metrics: vestra_render_common::VideoDecoderMetrics {
-                cache_bytes_retained: budget.min(4),
-                cache_bytes_peak: budget.min(4),
-                current_frame_bytes_retained: 4,
-                working_buffer_bytes_retained: 8,
-                ..Default::default()
-            },
-            previous: 0.0,
-        }))
-    }
-}
-
-impl crate::VideoDecoderSession for CursorSession {
-    fn frame_at(&mut self, seconds: f64) -> Result<crate::VideoFrame, String> {
-        self.trace.lock().unwrap().requests[self.id].push(seconds);
-        self.metrics.frame_requests += 1;
-        self.metrics.seeks += u64::from(seconds < self.previous);
-        self.previous = seconds;
-        Ok(crate::VideoFrame {
-            pts: (seconds * 1000.0).round() as i64,
-            pixels: Arc::new(RgbaImage::from_pixel(
-                1,
-                1,
-                image::Rgba([(seconds * 40.0).round() as u8, 0, 0, 255]),
-            )),
-        })
-    }
-
-    fn metrics(&self) -> vestra_render_common::VideoDecoderMetrics {
-        self.metrics
-    }
 }
 
 #[test]

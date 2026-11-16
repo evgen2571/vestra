@@ -45,6 +45,36 @@ For media seek checks, see the [preview-server playback limitation](documentatio
 
 Keep API inventories in reference pages. Link to them when a learner needs more detail. **Learn** contains the introductory sequence, **Guides** organizes tasks by topic, **Concepts** explains the model, and **Reference** gives exact contracts. Put pages in the appropriate navigation section in `zensical.toml`; retain a useful sidebar context on individual gallery pages. When extending a page, reconsider its order and purpose; split or rewrite it if the new material would bury the main task.
 
+### Make the common path visible
+
+Lead with the outcome and the starting conditions. Show the usual solution
+before alternatives, implementation background or exceptional cases. Keep
+compiler setup in contributor documentation and executable overrides in
+advanced configuration; a wheel user should be able to install and render
+without learning how the native engine is built.
+
+Choose the representation that helps a reader act or understand:
+
+| Information | Useful presentation |
+| --- | --- |
+| Actions that depend on earlier actions | Numbered steps with the command beside each action |
+| Prerequisites, choices or constraints | A short list grouped by the relevant platform or task |
+| Defaults, units, ranges or comparable alternatives | A lookup or comparison table |
+| Ownership, processing order, coordinates or clocks | A labeled diagram and a text explanation |
+| A visual or temporal difference | A labeled before/after still or short motion example |
+| Why one choice causes another result | Connected prose |
+
+Rework dense sections around their information, rather than converting each
+sentence to a bullet. Use headings that identify a task or question in the table
+of contents. Do not enforce paragraph lengths, bullet counts, illustration
+counts or a uniform API template. Keep necessary steps visible; collapsible
+sections are for optional depth. Reserve callouts for consequential mistakes,
+expensive work and destructive behavior, and put warnings before the action.
+
+Troubleshooting starts with the symptom, then gives a **check → fix → confirm**
+sequence. Separate installed-package failures from source-checkout failures,
+and say which command, version, diagnostic and output a bug report needs.
+
 ### Ownership of recurring topics
 
 | Topic | Maintained home | Other pages |
@@ -91,7 +121,13 @@ comments should explain timing, ownership or a choice the code cannot show.
 API signatures in reference pages are inventories, labelled as such rather than
 presented as runnable Python.
 
-Show imports, setup, rendering, the run command, and the output filename. State when a rerun overwrites an output. Keep optional GPU setup out of a beginner's first render.
+Show required assets before code that uses them, then imports, setup, rendering,
+the adjacent run command, and the exact output location. State replacement
+behavior before a command that overwrites an output. Identify each snippet as
+a standalone script, a continuation or a replacement for an earlier block.
+Keep object names and diagram labels consistent. End a tutorial with one
+recommended next step and only a few relevant follow-up tasks. Keep optional
+GPU setup out of a beginner's first render.
 
 Store complete tutorial programs in `examples/tutorials/` and shared inputs in
 `assets/`; `docs/assets/` contains only site delivery media and styling. Include
@@ -168,5 +204,9 @@ For Motion Tile examples, check the
 <span id="publish-only-after-review"></span>
 
 For theme overrides, URL behavior and hosting, use [Site maintenance](documentation-site.md).
+The site identifies itself as development documentation. Keep tutorial downloads
+on the same branch and preserve the explicit source revision for recorded gallery
+previews. When moving a section, keep its incoming anchor as a useful link to
+the new authoritative home; verify older generated URLs as well as current links.
 Its [publication procedure](documentation-site.md#publish-only-after-review) is a
 maintainer task after review; previewing or building the site does not deploy it.

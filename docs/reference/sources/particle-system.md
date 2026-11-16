@@ -6,7 +6,7 @@ system emits nothing: `rate=0.0` and `bursts=()`.
 
 ## API signature
 
-```text title="Source signature (presentation keywords omitted)"
+```text title="Source signature summary (presentation keywords omitted)"
 ParticleSystem(definition=None, *, emitter=PointEmitter(), rate=0.0, bursts=(), seed=0,
                lifetime=1.0, lifetime_range=None, size=1.0, size_range=None,
                colour="#ffffff", opacity=1.0, initial_velocity=Point(0, 0),

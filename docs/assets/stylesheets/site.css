@@ -71,7 +71,7 @@
 .md-typeset h3 { margin-top: 1.5em; }
 .md-typeset p, .md-typeset li { text-wrap: pretty; }
 .md-typeset pre { line-height: 1.65; }
-.md-typeset pre > code { font-size: .77em; border-radius: .45rem; }
+.md-typeset pre > code { font-size: .84em; border-radius: .45rem; }
 .md-typeset code { font-size: .82em; }
 .md-typeset figure { margin: 1.5em 0; max-width: 100%; }
 .md-typeset figure video, .md-typeset figure img {
@@ -92,6 +92,8 @@
   text-align: left;
 }
 .md-typeset table:not([class]) { background: var(--vestra-surface); }
+.md-typeset table:not([class]) code { white-space: nowrap; }
+.md-typeset .wide-table table { min-width: 36rem; }
 .md-typeset .admonition, .md-typeset details { font-size: .85em; }
 :is(a, button, label, input, video):focus-visible {
   outline: 3px solid var(--vestra-focus);
@@ -176,7 +178,7 @@
 .home-code h3 { margin-top: 0; }
 .home-code > div { min-width: 0; }
 .home-code p { max-width: 48ch; }
-.md-typeset .home-code pre > code { font-size: .72em; }
+.md-typeset .home-code pre > code { font-size: .84em; }
 .md-typeset ol.learning-path {
   list-style: none;
   display: grid;
@@ -203,7 +205,7 @@
 .gallery-card img, .gallery-card video { width: 100%; height: auto; border-radius: .5rem; }
 .gallery-card p { font-size: .94em; }
 @media (min-width: 76.25em) {
-  .md-content:not(:has(.vestra-home)) .md-content__inner { max-width: 48rem; margin-left: auto; margin-right: auto; }
+  .md-content:not(:has(.vestra-home)) .md-content__inner { max-width: 40rem; margin-left: auto; margin-right: auto; }
 }
 @media (max-width: 60em) {
   .home-hero { gap: 1.5rem; }

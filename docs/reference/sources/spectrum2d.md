@@ -7,7 +7,7 @@ is prepared master frequency analysis, separate from scalar signal bindings.
 
 ## API signature
 
-```text title="Source signature (presentation keywords omitted)"
+```text title="Source signature summary (presentation keywords omitted)"
 Spectrum2D(*, preset=None, band_count=None, min_hz=None, max_hz=None,
            sensitivity=None, attack_seconds=None, release_seconds=None,
            x=None, y=None, width=None, height=None, bar_gap_ratio=None,

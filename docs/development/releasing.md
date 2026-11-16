@@ -70,6 +70,12 @@ packaging-related PR checks. It builds:
   plus `SHA256SUMS`. Inventory validation requires every target and verifies
   each source ZIP's embedded binary hash and Vestra revision.
 
+The manylinux builder uses the exact host Rust version included in the artifact
+cache identity. Every build removes FFmpeg's cached build directories and
+fingerprints from both Cargo layouts, including full cache hits, so corresponding
+source comes from the current build. Other dependencies remain cached; FFmpeg
+is rebuilt for each artifact run. Source archiving fails on ambiguous trees.
+
 Wheels use CPython's stable ABI: one wheel per platform supports CPython
 3.11–3.14. PyPy and free-threaded CPython are not supported.
 `benchmarks/python-abi.py` measures Python/native conversion overhead

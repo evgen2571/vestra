@@ -27,7 +27,7 @@ from .properties import (
 )
 
 if TYPE_CHECKING:
-    from .editor import Composition, Layer
+    from ._composition import Composition, Layer
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +177,7 @@ class LoweringContext:
         self._used_native_ids.add(native_id)
 
         # This is a graph node check, not a source-specific lowering branch.
-        from .editor import CompositionLayer
+        from ._composition import CompositionLayer
 
         if isinstance(layer, CompositionLayer):
             children = self.lower_composition(layer.child, scope=(*scope, layer.id))
@@ -472,7 +472,7 @@ def _lower_image(
 def _lower_group(
     context: LoweringContext, layer: Layer, native_id: str, placement: Placement
 ) -> VisualClip:
-    from .editor import Layer
+    from ._composition import Layer
 
     source = cast(Group, layer.source)
     if id(source) in context._active_groups:

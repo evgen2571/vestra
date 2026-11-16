@@ -12,7 +12,7 @@ use crate::{
         Canvas, CompilationStats, PlanCompileInput, RenderPlan, ScalarSignalInterner,
         TemporalDependency,
     },
-    project::parse_colour,
+    project::{ShapeSource, TextSource, parse_colour},
 };
 
 mod assets;
@@ -30,6 +30,19 @@ use super::particles;
 mod presets;
 pub(crate) mod signals;
 pub(crate) mod transitions;
+
+struct CompilationContext<'a, 'project> {
+    validated: &'a PlanCompileInput<'project>,
+    image_indices: &'a BTreeMap<String, usize>,
+    video_indices: &'a BTreeMap<String, usize>,
+    font_indices: &'a BTreeMap<String, usize>,
+    shapes: &'a mut Vec<ShapeSource>,
+    texts: &'a mut Vec<TextSource>,
+    compilation: &'a mut CompilationStats,
+    scalar_signal_interner: &'a mut ScalarSignalInterner,
+    next_compiled_identity: &'a mut usize,
+    next_video_slot_index: &'a mut usize,
+}
 
 #[derive(Clone, Copy)]
 pub(super) struct ActiveLayerWindow {
@@ -108,19 +121,22 @@ pub fn compile(
             .count(),
         ..CompilationStats::default()
     };
+    let mut context = CompilationContext {
+        validated: &validated,
+        image_indices: &image_table.indices,
+        video_indices: &image_table.video_indices,
+        font_indices: &image_table.font_indices,
+        shapes: &mut shapes,
+        texts: &mut texts,
+        compilation: &mut compilation,
+        scalar_signal_interner: &mut scalar_signal_interner,
+        next_compiled_identity: &mut next_compiled_identity,
+        next_video_slot_index: &mut next_video_slot_index,
+    };
     for clip in &project.visual.clips {
         layers.push(clips::compile_with_preset(
             clip,
-            &validated,
-            &image_table.indices,
-            &image_table.video_indices,
-            &image_table.font_indices,
-            &mut shapes,
-            &mut texts,
-            &mut compilation,
-            &mut scalar_signal_interner,
-            &mut next_compiled_identity,
-            &mut next_video_slot_index,
+            &mut context,
             (0, project_duration_nanos),
         )?);
     }

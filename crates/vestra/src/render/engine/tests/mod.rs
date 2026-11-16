@@ -407,6 +407,80 @@ fn cpu_composition_counters_are_scoped_to_each_operation() {
 }
 
 #[test]
+fn video_counters_are_scoped_to_each_operation_and_cannot_regress() {
+    let plan = example_plan();
+    type Counter = fn(&mut PreparationStats) -> &mut u64;
+    let counters: [(&str, Counter); 9] = [
+        ("video_decoder_open_count", |stats| {
+            &mut stats.video_decoder_open_count
+        }),
+        ("video_frame_requests", |stats| {
+            &mut stats.video_frame_requests
+        }),
+        ("video_actual_decodes", |stats| {
+            &mut stats.video_actual_decodes
+        }),
+        ("video_seek_count", |stats| &mut stats.video_seek_count),
+        ("video_cache_hits", |stats| &mut stats.video_cache_hits),
+        ("video_cache_misses", |stats| &mut stats.video_cache_misses),
+        ("video_decode_time_us", |stats| {
+            &mut stats.video_decode_time_us
+        }),
+        ("video_upload_count", |stats| &mut stats.video_upload_count),
+        ("video_upload_bytes", |stats| &mut stats.video_upload_bytes),
+    ];
+    for (name, counter) in counters {
+        let mut before = PreparationStats::default();
+        *counter(&mut before) = 7;
+        let mut after = before.clone();
+        *counter(&mut after) = 12;
+        let mut performance = after.clone();
+        super::metrics::operation_backend_metrics(&mut performance, &before, &after, &plan)
+            .expect("video counter delta");
+        assert_eq!(*counter(&mut performance), 5, "{name}");
+        super::metrics::operation_backend_metrics(&mut performance, &after, &after, &plan)
+            .expect("idle operation has no video work");
+        assert_eq!(*counter(&mut performance), 0, "{name}");
+        *counter(&mut after) = 6;
+        let error =
+            super::metrics::operation_backend_metrics(&mut performance, &before, &after, &plan)
+                .expect_err(name);
+        assert_eq!(error.diagnostic.code, "VESTRA-BACKEND-METRICS", "{name}");
+        assert_eq!(error.context.stage, RenderFailureStage::FrameComposition);
+    }
+}
+
+#[test]
+fn video_resource_gauges_and_lifetime_peaks_keep_the_latest_snapshot() {
+    let plan = example_plan();
+    let before = PreparationStats {
+        video_decoder_session_count: 3,
+        video_cache_bytes_retained: 100,
+        video_cache_bytes_peak: 200,
+        video_current_frame_bytes_retained: 80,
+        video_decoder_buffer_bytes_retained: 60,
+        ..PreparationStats::default()
+    };
+    let after = PreparationStats {
+        video_decoder_session_count: 1,
+        video_cache_bytes_retained: 40,
+        video_cache_bytes_peak: 220,
+        video_current_frame_bytes_retained: 20,
+        video_decoder_buffer_bytes_retained: 10,
+        ..PreparationStats::default()
+    };
+    let mut performance = PreparationStats::default();
+    performance.absorb_backend_snapshot(&after);
+    super::metrics::operation_backend_metrics(&mut performance, &before, &after, &plan)
+        .expect("gauges may decrease and lifetime peaks are not operation deltas");
+    assert_eq!(performance.video_decoder_session_count, 1);
+    assert_eq!(performance.video_cache_bytes_retained, 40);
+    assert_eq!(performance.video_cache_bytes_peak, 220);
+    assert_eq!(performance.video_current_frame_bytes_retained, 20);
+    assert_eq!(performance.video_decoder_buffer_bytes_retained, 10);
+}
+
+#[test]
 fn timing_converts_after_submillisecond_samples_accumulate() {
     let accumulated = Duration::from_micros(800) * 100;
     assert_eq!(milliseconds(accumulated), 80);

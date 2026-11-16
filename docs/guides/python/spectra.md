@@ -25,8 +25,11 @@ from a clip to either kind of visual.
 
 ## Place a linear spectrum
 
-This starts a new project with your own `assets/music.wav`, containing at
-least four seconds of audio:
+Start a new `spectra.py` with your own `assets/music.wav`, containing at
+least four seconds of audio. The later Python block continues this project:
+
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
 
 ```python
 from vestra import Project, Spectrum2D
@@ -104,6 +107,15 @@ project.root.add(radial_source)
 project.render("spectra.mp4", backend="cpu", overwrite=True)
 ```
 
+Run the two blocks together:
+
+```bash
+uv run python spectra.py
+```
+
+This writes the silent `spectra.mp4` in the current directory and replaces it
+on a rerun.
+
 The radial rectangle is approximately square in output pixels, despite its
 unequal normalized width and height. `inner_radius_ratio=0.44` leaves an empty
 centre; the default outward direction extends bars from that inner radius.
@@ -132,8 +144,8 @@ limits, gradients and presets.
 ## Complete example
 
 [Download audio_response.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/audio_response.py) and run
-`python audio_response.py`. It creates a four-second bass-and-melody WAV and
-replaces `audio-spectra.mp4`, plus the two
+`uv run python audio_response.py`. It replaces `audio-pulses.wav`, a four-second
+bass-and-melody recording, and `audio-spectra.mp4` in the current directory, plus the two
 [scalar response studies](signals-and-audio-reactivity.md). The clips stay in
 the project for analysis, while `output_audio = False` makes the videos silent.
 Change that flag to publish sound with the same visuals.

@@ -7,7 +7,11 @@ before adding other processing.
 
 ## Choose cells for the output size
 
-This example requires your own `assets/photo.png`:
+Start a new `ascii.py` with your own `assets/photo.png`; the next Python block
+continues this project:
+
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
 
 ```python
 from vestra import Image, Project
@@ -62,10 +66,17 @@ letters.amount.keyframe(1, 1)
 project.render("ascii.mp4", backend="cpu", overwrite=True)
 ```
 
-Run the combined blocks with `python ascii.py`. It writes two seconds to
-`ascii.mp4`, replacing it on a rerun. To compare with the catalog photograph, save
-[landscape.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg) beside [effects_catalog.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py) and run
-`python effects_catalog.py --effect ascii --still`.
+Run the combined blocks:
+
+```bash
+uv run python ascii.py
+```
+
+This writes the two-second `ascii.mp4` in the current directory, replacing it
+on a rerun. To compare with the catalog photograph, save
+[landscape-study.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg) beside [effects_catalog.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py) and run
+`uv run python effects_catalog.py --effect ascii --still`. This replaces
+`effect-ascii.webp` in the current directory.
 
 ## Use a font or geometric marks
 

@@ -48,7 +48,7 @@ settings. Only attachment order changes.
 The source, radius, palette and dither scale stay fixed. Only attachment order
 changes. [Complete example](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py): keep
 [landscape.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg) beside it and run
-`python effects_catalog.py --effect order --still` to replace `effect-order.webp`.
+`uv run python effects_catalog.py --effect order --still` to replace `effect-order.webp`.
 The [catalog](../guides/python/effect-catalog.md) compares individual effects.
 
 ## Ownership and clocks

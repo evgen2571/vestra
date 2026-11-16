@@ -7,7 +7,11 @@ description: Set output dimensions and timing, add ordered layers and move relat
 A project defines the video size, frame rate and duration. Its root composition
 holds the visual layers that appear in the video. Use this guide for setup;
 [the authoring model](../../concepts/authoring-model.md) explains sources,
-placements and snapshot copies.
+placements and snapshot copies. Start a new `compositions.py` below; it needs
+no input files.
+
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
 
 ```python
 from vestra import Group, Project
@@ -37,7 +41,8 @@ important layers makes diagnostic messages and later edits easier to follow.
 
 ## Keep related layers in a group
 
-Build a standalone `Group`, add its children, then place the completed source.
+Continue the same project. Build a standalone `Group`, add its children, then
+place the completed source.
 Moving, scaling or rotating the returned placement also transforms its children:
 
 ```python
@@ -88,6 +93,22 @@ An omitted non-video duration inherits the whole containing duration, even when
 starting at `1` in a five-second project, use `duration=4` to end at `5`.
 [Timeline and time](../../concepts/timeline-and-time.md#duration-is-not-an-end-timestamp)
 explains automatic duration and frame boundaries.
+
+## Export the composition
+
+Finish `compositions.py` after the group placement:
+
+```python
+project.render("compositions.mp4", backend="cpu", overwrite=True)
+```
+
+```bash
+uv run python compositions.py
+```
+
+This writes `compositions.mp4` in the current directory and replaces it on a
+rerun. The output lasts five seconds; the grouped card appears from second 1
+to second 4.
 
 Continue with [sources and layers](sources-and-layers.md) to add media or text,
 or [rendering and preparation](rendering-and-preparation.md) to export the

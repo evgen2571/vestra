@@ -72,6 +72,24 @@ how media uses the containing canvas. Text derives its bounds from layout.
 A `Color` source fills the containing canvas. These sources still use the layer
 transform to present that content.
 
+## Fit media to a canvas
+
+Sizing changes the media geometry before the layer transform. Compare the same
+160 × 80 pixel image centered in a 120 × 120 canvas:
+
+![A schematic source with left and right markers and a center circle is placed three ways: original keeps its 160 by 80 size and clips the sides, fit shows the whole source at 120 by 60, and cover fills the canvas with a 240 by 120 source whose sides are cropped.](../assets/diagrams/media-sizing.svg)
+
+| Mode | Adapted image | What to notice |
+| --- | --- | --- |
+| `original` | 160 × 80 px | Keeps the source size; the canvas clips its sides and leaves space above and below. |
+| `fit` | 120 × 60 px | Shows the whole image with space above and below. |
+| `cover` | 240 × 120 px | Fills the canvas and clips more of the sides. |
+
+The circle stays round in every panel: these modes preserve aspect ratio.
+Use explicit [stretch sizing](../reference/sources/image.md#parameters-and-sizing)
+when distortion is intentional. Crop first chooses a source region; sizing
+adapts that region, then the layer's transform places it.
+
 ## Each group has a parent and a local canvas
 
 A child's normalized position uses its group's local canvas. The group's own

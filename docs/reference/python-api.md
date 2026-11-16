@@ -64,12 +64,48 @@ without scaling child geometry or changing timing/FPS. See
 
 ### Source presentation
 
-All visual source constructors accept the same transform keywords; ParticleSystem
-keeps `rotation` for particle orientation and accepts `rotation_degrees` for
-presentation. Sources expose `transform` defaults; placements copy them.
-An individual placement override replaces only that property's animation and
-bindings. `transform=` replaces all defaults and is exclusive with individual
-keywords. See [precedence and validation](../guides/python/sources-and-layers.md).
+Visual source constructors accept `position`, `anchor`, `scale` and `rotation`
+(alias `rotation_degrees`) as presentation defaults. These initialize the
+placement's existing transform without an extra rendering pass. ParticleSystem
+keeps `rotation` for particle orientation; use `rotation_degrees` for presentation.
+
+| Property | Default | Units and limits |
+| --- | --- | --- |
+| `position` | `(0.5, 0.5)` | Normalized parent-canvas coordinates. |
+| `anchor` | `(0.5, 0.5)` | Coordinates within `[0, 1]`. |
+| `scale` | `(1, 1)` | Positive number or pair. |
+| `rotation`, `rotation_degrees` | `0` | Finite degrees; supplying both spellings is an error. |
+
+Sources expose `source.transform` for defaults, including keyframes and component
+audio bindings. Each placement copies all transform state. A supplied `transform=`
+on a source constructor or `add()` replaces the whole default transform and
+cannot be mixed with individual transform arguments.
+
+Individual `add()` overrides replace the selected property's value, keyframes
+and bindings, including X/Y component bindings. Unspecified properties retain
+their complete state. Later edits through `layer.transform` use normal property
+behavior: assigning a numeric `.value` preserves existing keyframes and bindings.
+Later source edits affect only future placements.
+
+Scale bindings apply in this order:
+
+1. Uniform `transform.scale` bindings.
+2. `transform.scale.x` / `.y` bindings.
+3. `transform.scale_x` / `scale_y` bindings.
+
+`Color` / `SolidColor` fills the canonical canvas and has no direct canonical
+transform or transition endpoint. Python supplies a presentation wrapper when
+its layer is transformed or used in a transition. See
+[add content and edit layers](../guides/python/sources-and-layers.md)
+for placement examples.
+
+### Property assignment
+
+Where a setter accepts another property, assignment copies its base value and
+keyframes. Both must satisfy the destination's limits; a rejected copy leaves
+the destination's value, keyframes and bindings unchanged. Copies between
+bindable properties include their signal bindings, including point-component
+bindings. Subsequent edits to either property remain independent.
 
 ### Masks and track mattes
 

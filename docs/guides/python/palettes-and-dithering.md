@@ -8,7 +8,12 @@ procedural study; this guide explains which controls to change.
 
 ## Choose how the source finds a color
 
-For a tonal look, supply opaque colors from dark to light:
+This example needs your own `assets/photo.png`. Start a new `palette.py`; the
+remaining Python blocks continue the same project. For a tonal look, supply
+opaque colors from dark to light:
+
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
 
 ```python
 from vestra import Image, Project
@@ -28,11 +33,12 @@ look = photo.effects.add(
 )
 ```
 
-This example needs your own `assets/photo.png`. It continues through the
-remaining Python blocks. Keep the returned `look` handle when adjusting it.
+Keep the returned `look` handle when adjusting it.
 For the photographic comparison download [the catalog source](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py)
-and [landscape.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg), then run
-`python effects_catalog.py --effect ordered-dither --still`.
+and [landscape-study.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg)
+into the same directory, then run
+`uv run python effects_catalog.py --effect ordered-dither --still`. This replaces
+`effect-ordered-dither.webp` in the current directory.
 
 `PaletteMap(mode="gradient")` interpolates between tonal colors;
 `mode="nearest"` produces tonal bands. Ordered Dither selects discrete palette
@@ -114,9 +120,15 @@ look.amount.keyframe(1, 1)
 project.render("palette.mp4", backend="cpu", overwrite=True)
 ```
 
-Run the combined blocks with `python palette.py`. It replaces `palette.mp4` on a
-rerun. Compare the first and last seconds to see intensity grow independently of
-the threshold pattern. For moving footage and perceptual palette comparisons,
+Run the combined blocks:
+
+```bash
+uv run python palette.py
+```
+
+This writes `palette.mp4` in the current directory and replaces it on a rerun.
+Compare the first and last seconds to see intensity grow independently of the
+threshold pattern. For moving footage and perceptual palette comparisons,
 see the [existing reproducible stylization studies](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/stylized-effects/README.md).
 
 Find exact ranges and static/bindable distinctions in [parameters](../../reference/effect-parameters.md#ordereddither-ordered_dither),

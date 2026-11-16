@@ -6,6 +6,8 @@ use vestra_core::timeline::{frame_count, seconds_to_nanos};
 use crate::project::{Project, ValidatedProject, ValidationOptions};
 
 pub(super) mod assets;
+#[cfg(test)]
+pub(crate) use assets::on_audio_probe_completed;
 pub(super) mod audio;
 pub(super) mod duration;
 

@@ -3,6 +3,8 @@
 pub(crate) mod human;
 pub(crate) mod progress;
 mod report;
+mod report_paths;
+pub(crate) use report_paths::validate_render_report_path;
 mod result;
 mod terminal;
 

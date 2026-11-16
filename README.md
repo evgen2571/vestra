@@ -13,12 +13,18 @@ Python library, with a canonical JSON format and a separate native `ve` CLI.
 
 ## Quick start
 
-Requires Python 3.11–3.14. FFmpeg is installed automatically for Python
-(see [installation](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)).
+Requires CPython 3.11–3.14. In a Python project:
 
 ```bash
-pip install vestra   # or: uv add vestra
+uv add vestra
 ```
+
+Alternatively, use `python -m pip install vestra` in an activated virtual
+environment. Follow [installation](https://github.com/evgen2571/vestra/blob/develop/docs/getting-started/installation.md)
+for the import check and supported platforms.
+
+Save this as `example.py`; it needs no input files. Rerunning it replaces
+`output.mp4`:
 
 ```python
 from vestra import Project
@@ -31,8 +37,16 @@ bar = project.root.add(Rectangle(width=240, height=8, fill="#a9c4aa"))
 bar.transform.scale.keyframe(0, (0.05, 1))
 bar.transform.scale.keyframe(2, (1, 1))
 
-project.render("output.mp4", overwrite=True)
+project.render("output.mp4", backend="cpu", overwrite=True)
 ```
+
+```bash
+uv run python example.py
+```
+
+Open `output.mp4` in the current directory: a two-second, 640 × 360 video of a
+growing bar. In a pip environment, use `python example.py` instead.
+Continue with [your first animation](https://github.com/evgen2571/vestra/blob/develop/docs/getting-started/first-animation.md).
 
 ## What you can build
 
@@ -70,7 +84,7 @@ one evaluated plan.
   [feature matrix](https://github.com/evgen2571/vestra/blob/main/docs/reference/feature-support.md).
 - Download the separate `ve` CLI from [GitHub Releases](https://github.com/evgen2571/vestra/releases),
   or build it with `cargo build -p vestra-cli`. It needs no Python; see
-  [CLI installation](https://github.com/evgen2571/vestra/blob/develop/docs/getting-started/installation.md#install-the-native-cli).
+  [CLI installation](https://github.com/evgen2571/vestra/blob/develop/docs/getting-started/cli-installation.md).
 - Python text uses a bundled default, an installed font family, or an explicit font file.
 
 Vestra is a rendering engine, not a live editor: it renders a finished project
@@ -127,21 +141,10 @@ cargo run -q -p vestra-cli -- version
 
 ### Without Nix
 
-Install these dependencies before running `uv sync`:
-
-- Rust toolchain, including rustfmt and Clippy.
-- Python 3.11–3.14.
-- uv for the Python environment and package build.
-- Just for the repository's build and test commands.
-- A C compiler and `make` to build bundled FFmpeg.
-- libclang for native bindings, and `pkg-config` for library discovery.
-- Git to fetch the source code.
-- **NASM** for FFmpeg's x86 assembly.
-- FFmpeg on `PATH` for native CLI tests and developer media tools; Python
-  uses its installed `imageio-ffmpeg` dependency.
-
-See [native setup instructions](docs/getting-started/installation.md#without-nix)
-for the prerequisites and build commands, including an Ubuntu/Debian example.
+Use [Build from source](docs/development/source-builds.md#without-nix) for the
+native compiler, binding and runtime prerequisites, including Ubuntu/Debian
+commands. Keep native CLI/developer tools' FFmpeg requirement separate from
+Python's installed executable.
 
 ### Checking your changes
 

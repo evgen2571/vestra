@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, TypeAlias, cast
 
+from .authoring._internal import _number as _finite_number
 from .authoring.audio import AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe
 from .authoring.audio_effects import audio_effect_definition
 from .authoring.signals import MasterAudioSignals
@@ -20,11 +21,7 @@ if TYPE_CHECKING:
 
 
 def _number(value: int | float, name: str, *, nonnegative: bool = True) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    result = float(value)
-    if result != result or result in (float("inf"), float("-inf")):
-        raise ValueError(f"{name} must be finite")
+    result = _finite_number(value, name)
     if nonnegative and result < 0:
         raise ValueError(f"{name} must be non-negative")
     return result

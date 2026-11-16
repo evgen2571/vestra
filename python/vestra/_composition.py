@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from . import _native, editor as _editor
+from .authoring._internal import _number
 from .authoring.values import BlendMode
 from .effects import EffectStack
 from .masks import MaskCollection, MatteMode
@@ -13,11 +14,7 @@ from .sources import Source, Video
 from .transitions import TransitionCollection
 
 def _real(value: object, name: str, *, positive: bool = False) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    number = float(value)
-    if number != number or number in (float("inf"), float("-inf")):
-        raise ValueError(f"{name} must be finite")
+    number = _number(value, name)
     if positive and number <= 0:
         raise ValueError(f"{name} must be positive")
     if not positive and number < 0:

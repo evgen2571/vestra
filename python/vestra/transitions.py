@@ -7,6 +7,7 @@ from copy import deepcopy
 import math
 from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
 
+from .authoring._internal import _number
 from .authoring.animation import interpolation_to_canonical
 from .authoring.values import CubicBezier, Interpolation, Point
 from .effects import DirectionalBlur, Effect, GaussianBlur, ZoomBlur
@@ -16,15 +17,6 @@ if TYPE_CHECKING:
 
 InterpolationValue = Interpolation | CubicBezier
 AnimationValue = TypeVar("AnimationValue", covariant=True)
-
-
-def _number(value: int | float, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    result = float(value)
-    if not math.isfinite(result):
-        raise ValueError(f"{name} must be finite")
-    return result
 
 
 def _nonnegative(value: int | float, name: str) -> float:

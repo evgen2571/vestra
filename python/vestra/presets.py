@@ -5,21 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+from .authoring._internal import _number as _real
 if TYPE_CHECKING:
     from ._composition import Layer
 
 PresetKind = Literal[
     "slow_drift", "zoom_punch", "impact", "heavy_impact", "focus_reveal"
 ]
-
-
-def _real(value: int | float, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    result = float(value)
-    if result != result or result in (float("inf"), float("-inf")):
-        raise ValueError(f"{name} must be finite")
-    return result
 
 
 @dataclass(frozen=True, slots=True)

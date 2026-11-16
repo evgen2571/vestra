@@ -52,25 +52,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Identify the build toolchain
+        id: build-toolchain
+        shell: bash
+        run: echo "version=$(rustc --version | cut -d ' ' -f 2)" >> "$GITHUB_OUTPUT"
       - uses: Swatinem/rust-cache@v2
         id: build-cache
         with:
+          # Rotate the restore namespace: old caches mix Cargo build layouts.
+          prefix-key: artifacts-v2
           key: artifacts-${{ matrix.platform.target }}
           workspaces: |
             . -> target/cli
             . -> target/wheel
       - name: Clear outdated bundled FFmpeg builds
-        if: steps.build-cache.outputs.cache-hit != 'true'
         shell: bash
         env:
           TARGET: ${{ matrix.platform.target }}
         run: |
-          # Partial cache restores can contain obsolete Cargo feature hashes.
+          # Full hits can also restore old Cargo layouts. Rebuild only FFmpeg;
+          # Cargo clean cannot remove layouts belonging to another Cargo version.
           for directory in target/cli target/wheel; do
-            sources=("$directory/$TARGET/release/build"/ffmpeg-sys-next-*/out/ffmpeg-*/ffbuild/config.mak)
-            if [[ -f "${sources[0]}" ]]; then
-              cargo clean --release --locked -p ffmpeg-sys-next --target "$TARGET" --target-dir "$directory"
-            fi
+            for profile in "$directory/release" "$directory/$TARGET/release"; do
+              rm -rf "$profile"/{build,.fingerprint}/ffmpeg-sys-next{,-*}
+            done
           done
       - name: Install macOS build tools
         if: runner.os == 'macOS'
@@ -97,6 +102,8 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           maturin-version: v1.14.1
+          # Match rust-cache's host compiler instead of floating inside manylinux.
+          rust-toolchain: ${{ steps.build-toolchain.outputs.version }}
           target: ${{ matrix.platform.target }}
           manylinux: '2_28'
           # Both Linux binaries use the same portable toolchain, with distinct

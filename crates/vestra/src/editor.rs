@@ -1355,21 +1355,6 @@ mod tests {
 
     #[test]
     fn cancellation_during_audio_preflight_emits_cancelled_instead_of_failed() {
-        struct CancelAfterAudioProbe(CancellationToken);
-
-        impl io::Write for CancelAfterAudioProbe {
-            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-                if String::from_utf8_lossy(bytes).contains("audio media probe completed") {
-                    self.0.cancel();
-                }
-                Ok(bytes.len())
-            }
-
-            fn flush(&mut self) -> io::Result<()> {
-                Ok(())
-            }
-        }
-
         let directory = tempfile::tempdir().expect("temporary directory");
         let project = Project::from_value(
             serde_json::json!({
@@ -1389,12 +1374,12 @@ mod tests {
         )
         .expect("project");
         let cancellation = CancellationToken::new();
-        let writer_cancellation = cancellation.clone();
-        let subscriber = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .with_writer(move || CancelAfterAudioProbe(writer_cancellation.clone()))
-            .finish();
+        let probe_cancellation = cancellation.clone();
+        let _probe_guard = crate::project::validation::on_audio_probe_completed(move || {
+            probe_cancellation.cancel();
+        });
         let mut events = Vec::new();
+        let subscriber = tracing::subscriber::NoSubscriber::default();
         let error = tracing::subscriber::with_default(subscriber, || {
             Editor::new()
                 .render_with_observer(

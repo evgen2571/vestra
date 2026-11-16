@@ -39,6 +39,11 @@ has precedence over those flags and supports target-specific filters such as
 | `--report PATH` | Unset. Writes a structured report on success or failure. |
 | `--render-backend auto\|cpu\|wgpu` | `auto`. |
 
+Report paths must be separate from the project, referenced media and selected render
+output, including normalized paths, symlinks and hard links. A collision fails
+with `VESTRA-REPORT-PATH` before rendering or writing a failure report. Reports
+are published from a temporary file; a failed write preserves a previous report.
+
 ### Progress streams
 
 With JSON progress and human final results, progress is sent to stdout and the

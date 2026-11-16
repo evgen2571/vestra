@@ -25,6 +25,7 @@ mod runtime_error;
 pub(crate) mod support;
 mod texture_pool;
 mod topology;
+mod video_pool;
 
 #[cfg(test)]
 #[path = "tests/fixtures.rs"]
@@ -143,3 +144,7 @@ mod resource_gpu_tests;
 #[cfg(all(test, feature = "adapter-tests"))]
 #[path = "tests/stylization.rs"]
 mod stylization_tests;
+
+#[cfg(test)]
+#[path = "tests/video_pool.rs"]
+mod video_pool_tests;

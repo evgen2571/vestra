@@ -12,11 +12,10 @@ use std::{
 
 #[cfg(all(test, feature = "adapter-tests"))]
 use image::RgbaImage;
-use vestra_core::plan::{EvaluatedFrame, EvaluatedSource, RenderPlan, VideoAsset};
-use vestra_render_common::{VideoDecoderFactory, VideoDecoderMetrics};
+use vestra_core::plan::{EvaluatedFrame, EvaluatedSource, RenderPlan};
 
 use crate::{
-    Diagnostic, VideoDecoderSession,
+    Diagnostic,
     render::{
         AdapterMetadata, ByteLruCache, CompletedFrame, DecodedAssets, PollMode, RenderBackend,
         RenderBackendKind,
@@ -39,6 +38,7 @@ use super::{
     resources::{FrameResources, SourceResources},
     texture_pool::{StaticLayerTexture, create_static_layer_texture, static_layer_texture_bytes},
     topology::PlanTopology,
+    video_pool::VideoPool,
 };
 
 /// WGPU owns persistent source and working textures. Each submitted frame owns
@@ -66,9 +66,7 @@ pub struct WgpuBackend {
     static_cache_population_renders: u64,
     pending_static_layers: PendingStaticLayers,
     temporary_texture_reuses: u64,
-    video_decoders: BTreeMap<usize, VideoAssetDecoders>,
-    retired_video_metrics: VideoDecoderMetrics,
-    video_decoder_open_count: u64,
+    video_pool: VideoPool,
     video_pts: BTreeMap<usize, i64>,
     video_upload_count: u64,
     video_upload_bytes: u64,
@@ -76,17 +74,6 @@ pub struct WgpuBackend {
     // them. Rust drops fields in declaration order; resources must outlive
     // their parent WGPU context.
     context: GpuContext,
-}
-
-struct VideoAssetDecoders {
-    asset: VideoAsset,
-    factory: Arc<dyn VideoDecoderFactory>,
-    sessions: Vec<VideoSession>,
-}
-
-struct VideoSession {
-    source_index: Option<usize>,
-    decoder: Box<dyn VideoDecoderSession>,
 }
 
 struct FrameSlotResources {
@@ -230,60 +217,13 @@ impl WgpuBackend {
             "WGPU resources initialized"
         );
         let upload_started = Instant::now();
-        let mut video_decoders = BTreeMap::new();
-        let mut video_decoder_open_count = 0;
-        let mut initial_video_frames = BTreeMap::new();
-        if plan.video_slot_count() > 0 && decoded.video_factory().is_none() {
-            return Err(Diagnostic::error(
-                "WGPU-VIDEO-FACTORY",
-                crate::Category::Media,
-                "compiled video layers require a video decoder factory",
-                "",
-            ));
-        }
         let video_slot_assets = plan.video_slot_assets();
-        let used_video_assets = used_video_asset_indices(&video_slot_assets);
-        if let Some(factory) = decoded.video_factory() {
-            let per_decoder_budget = plan
-                .limits
-                .maximum_cache_bytes
-                .checked_div(used_video_assets.len().max(1) as u64)
-                .unwrap_or(0);
-            for asset_index in used_video_assets {
-                let asset = plan.videos.get(asset_index).ok_or_else(|| {
-                    Diagnostic::error(
-                        "WGPU-VIDEO-ASSET",
-                        crate::Category::Media,
-                        "compiled video slot references a missing video asset",
-                        "",
-                    )
-                })?;
-                video_decoder_open_count += 1;
-                let mut decoder = factory
-                    .open_with_span(asset, per_decoder_budget, tracing::Span::current())
-                    .map_err(|error| {
-                        Diagnostic::error("WGPU-VIDEO-OPEN", crate::Category::Media, error, "")
-                    })?;
-                decoder.enable_prefetch();
-                let frame = decoder
-                    .frame_at_with_span(0.0, tracing::Span::current())
-                    .map_err(|error| {
-                        Diagnostic::error("WGPU-VIDEO-DECODE", crate::Category::Media, error, "")
-                    })?;
-                initial_video_frames.insert(asset_index, (frame.pts, frame.pixels));
-                video_decoders.insert(
-                    asset_index,
-                    VideoAssetDecoders {
-                        asset: asset.clone(),
-                        factory: Arc::clone(&factory),
-                        sessions: vec![VideoSession {
-                            source_index: None,
-                            decoder,
-                        }],
-                    },
-                );
-            }
-        }
+        let (video_pool, initial_video_frames) = VideoPool::new(
+            &plan.videos,
+            &video_slot_assets,
+            plan.limits.maximum_cache_bytes,
+            decoded.video_factory(),
+        )?;
         let dynamic_frames = video_slot_assets
             .iter()
             .map(|asset| {
@@ -291,7 +231,7 @@ impl WgpuBackend {
                     &initial_video_frames
                         .get(asset)
                         .expect("compiled video slot asset was prepared")
-                        .1,
+                        .pixels,
                 )
             })
             .collect::<Vec<_>>();
@@ -424,9 +364,7 @@ impl WgpuBackend {
             static_cache_population_renders: 0,
             pending_static_layers: PendingStaticLayers::default(),
             temporary_texture_reuses: 0,
-            video_decoders,
-            video_decoder_open_count,
-            retired_video_metrics: VideoDecoderMetrics::default(),
+            video_pool,
             video_pts: video_slot_assets
                 .iter()
                 .enumerate()
@@ -436,7 +374,7 @@ impl WgpuBackend {
                         initial_video_frames
                             .get(asset)
                             .expect("compiled video slot asset was prepared")
-                            .0,
+                            .pts,
                     )
                 })
                 .collect(),
@@ -507,81 +445,7 @@ impl WgpuBackend {
                 requested.insert(*source_index, (*asset_index, *source_time));
             }
         }
-        // Preserve live slot bindings before reusing an idle primary cursor.
-        for pool in self.video_decoders.values_mut() {
-            let mut index = 0;
-            pool.sessions.retain_mut(|session| {
-                let active = session
-                    .source_index
-                    .is_some_and(|slot| requested.contains_key(&slot));
-                let keep = active || index == 0;
-                index += 1;
-                if !keep {
-                    let metrics = session.decoder.metrics();
-                    self.retired_video_metrics.frame_requests += metrics.frame_requests;
-                    self.retired_video_metrics.actual_decodes += metrics.actual_decodes;
-                    self.retired_video_metrics.seeks += metrics.seeks;
-                    self.retired_video_metrics.cache_hits += metrics.cache_hits;
-                    self.retired_video_metrics.cache_misses += metrics.cache_misses;
-                    self.retired_video_metrics.decode_time_us += metrics.decode_time_us;
-                    self.retired_video_metrics.cache_bytes_peak += metrics.cache_bytes_peak;
-                } else if !active {
-                    session.source_index = None;
-                }
-                keep
-            });
-        }
-        // Share only immutable results within this submission, never cursor ownership.
-        let mut frames = BTreeMap::new();
-        for (source_index, (asset_index, source_time)) in requested {
-            let key = (asset_index, source_time.to_bits());
-            let frame = if let Some(frame) = frames.get(&key) {
-                frame
-            } else {
-                let pool = self.video_decoders.get_mut(&asset_index).ok_or_else(|| {
-                    Diagnostic::error(
-                        "WGPU-VIDEO-DECODER",
-                        crate::Category::Media,
-                        "video decoder session is missing",
-                        "",
-                    )
-                })?;
-                let available = pool
-                    .sessions
-                    .iter()
-                    .position(|session| session.source_index == Some(source_index))
-                    .or_else(|| {
-                        pool.sessions
-                            .iter()
-                            .position(|session| session.source_index.is_none())
-                    });
-                let index = if let Some(index) = available {
-                    index
-                } else {
-                    let mut decoder = pool
-                        .factory
-                        .open_with_span(&pool.asset, 0, tracing::Span::current())
-                        .map_err(|error| {
-                            Diagnostic::error("WGPU-VIDEO-OPEN", crate::Category::Media, error, "")
-                        })?;
-                    decoder.enable_prefetch();
-                    pool.sessions.push(VideoSession {
-                        source_index: None,
-                        decoder,
-                    });
-                    self.video_decoder_open_count += 1;
-                    pool.sessions.len() - 1
-                };
-                let session = &mut pool.sessions[index];
-                session.source_index = Some(source_index);
-                let frame = session
-                    .decoder
-                    .frame_at_with_span(source_time, tracing::Span::current())
-                    .map_err(|error| {
-                        Diagnostic::error("WGPU-VIDEO-DECODE", crate::Category::Media, error, "")
-                    })?;
-                frames.entry(key).or_insert(frame)
-            };
+        for (source_index, frame) in self.video_pool.frames(requested)? {
             if self.video_pts.get(&source_index) != Some(&frame.pts) {
                 self.sources
                     .upload_video(&self.context.queue, source_index, &frame.pixels)?;
@@ -1000,35 +864,19 @@ impl RenderBackend for WgpuBackend {
         let readback = self.readback.metrics();
         self.stats.readback_tight_rgba_allocations = readback.tight_rgba_allocations;
         self.stats.readback_repack_bytes = readback.repack_bytes;
-        self.stats.video_decoder_session_count = self
-            .video_decoders
-            .values()
-            .map(|pool| pool.sessions.len())
-            .sum();
-        self.stats.video_decoder_open_count = self.video_decoder_open_count;
-        self.stats.video_frame_requests = self.retired_video_metrics.frame_requests;
-        self.stats.video_actual_decodes = self.retired_video_metrics.actual_decodes;
-        self.stats.video_seek_count = self.retired_video_metrics.seeks;
-        self.stats.video_cache_hits = self.retired_video_metrics.cache_hits;
-        self.stats.video_cache_misses = self.retired_video_metrics.cache_misses;
-        self.stats.video_decode_time_us = self.retired_video_metrics.decode_time_us;
-        self.stats.video_cache_bytes_retained = 0;
-        self.stats.video_cache_bytes_peak = self.retired_video_metrics.cache_bytes_peak;
-        self.stats.video_current_frame_bytes_retained = 0;
-        self.stats.video_decoder_buffer_bytes_retained = 0;
-        for session in self.video_decoders.values().flat_map(|pool| &pool.sessions) {
-            let metrics = session.decoder.metrics();
-            self.stats.video_frame_requests += metrics.frame_requests;
-            self.stats.video_actual_decodes += metrics.actual_decodes;
-            self.stats.video_seek_count += metrics.seeks;
-            self.stats.video_cache_hits += metrics.cache_hits;
-            self.stats.video_cache_misses += metrics.cache_misses;
-            self.stats.video_decode_time_us += metrics.decode_time_us;
-            self.stats.video_cache_bytes_retained += metrics.cache_bytes_retained;
-            self.stats.video_cache_bytes_peak += metrics.cache_bytes_peak;
-            self.stats.video_current_frame_bytes_retained += metrics.current_frame_bytes_retained;
-            self.stats.video_decoder_buffer_bytes_retained += metrics.working_buffer_bytes_retained;
-        }
+        self.stats.video_decoder_session_count = self.video_pool.session_count();
+        self.stats.video_decoder_open_count = self.video_pool.open_count();
+        let metrics = self.video_pool.metrics();
+        self.stats.video_frame_requests = metrics.frame_requests;
+        self.stats.video_actual_decodes = metrics.actual_decodes;
+        self.stats.video_seek_count = metrics.seeks;
+        self.stats.video_cache_hits = metrics.cache_hits;
+        self.stats.video_cache_misses = metrics.cache_misses;
+        self.stats.video_decode_time_us = metrics.decode_time_us;
+        self.stats.video_cache_bytes_retained = metrics.cache_bytes_retained;
+        self.stats.video_cache_bytes_peak = metrics.cache_bytes_peak;
+        self.stats.video_current_frame_bytes_retained = metrics.current_frame_bytes_retained;
+        self.stats.video_decoder_buffer_bytes_retained = metrics.working_buffer_bytes_retained;
         self.stats.video_upload_count = self.video_upload_count;
         self.stats.video_upload_bytes = self.video_upload_bytes;
         self.stats.clone()
@@ -1178,10 +1026,6 @@ fn contains_group(layer: &vestra_core::plan::EvaluatedLayer) -> bool {
     )
 }
 
-fn used_video_asset_indices(slot_assets: &[usize]) -> BTreeSet<usize> {
-    slot_assets.iter().copied().collect()
-}
-
 #[cfg(test)]
 mod configuration_tests {
     use super::*;
@@ -1219,11 +1063,6 @@ mod configuration_tests {
         assert_eq!(error.category, crate::Category::Backend);
         assert!(error.message.contains("7372800"));
         assert!(error.message.contains("5000000"));
-    }
-
-    #[test]
-    fn video_decoder_selection_deduplicates_only_compiled_slot_assets() {
-        assert_eq!(used_video_asset_indices(&[2, 2, 0]), BTreeSet::from([0, 2]));
     }
 
     #[test]

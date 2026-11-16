@@ -12,7 +12,7 @@ from .authoring.values import CubicBezier, Interpolation, Point
 from .effects import DirectionalBlur, Effect, GaussianBlur, ZoomBlur
 
 if TYPE_CHECKING:
-    from .editor import Composition, Layer
+    from ._composition import Composition, Layer
 
 InterpolationValue = Interpolation | CubicBezier
 AnimationValue = TypeVar("AnimationValue", covariant=True)
@@ -743,7 +743,7 @@ class TransitionCollection:
         return tuple(self._items)
 
     def _valid_endpoint(self, layer: Layer) -> bool:
-        from .editor import CompositionLayer
+        from ._composition import CompositionLayer
         from .lowering import source_capabilities
 
         if isinstance(layer, CompositionLayer):
@@ -764,7 +764,7 @@ class TransitionCollection:
         duration: int | float,
         id: str | None = None,
     ) -> TransitionPlacement:
-        from .editor import Layer
+        from ._composition import Layer
 
         if not isinstance(outgoing, Layer) or not isinstance(incoming, Layer):
             raise TypeError("transition endpoints must be Layer objects")

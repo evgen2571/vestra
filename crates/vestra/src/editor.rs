@@ -1,18 +1,25 @@
+mod preflight;
+mod preparation;
+pub(crate) mod reporting;
+use preparation::InternalPreparationTarget;
+pub(crate) use reporting::{log_render_failure, log_render_timing_summary};
+
 use std::{
     fmt,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::AtomicBool,
     time::{Duration, Instant},
 };
 
+#[cfg(test)]
+use crate::application::ApplicationRenderError;
 #[cfg(test)]
 use std::cell::RefCell;
 
 use crate::{
     CancellationToken, Diagnostic, InspectionReport, PreflightReport, PrepareOptions,
     PreparedProject, Project, RenderEvent, RenderFailureContext, RenderResult, ValidationReport,
-    application::{self, ApplicationRenderError, PreparationTimings, RenderRequest},
-    project::{LoadError, ValidatedProject, ValidationOptions},
+    application::{self, RenderRequest},
     render::{LifecycleEmitter, RenderBackendPreference},
 };
 use vestra_core::OperationId;
@@ -119,33 +126,6 @@ impl Default for PreflightOptions {
     }
 }
 
-struct InternalPreflightOutcome {
-    report: PreflightReport,
-    resolved: Option<ValidatedProject>,
-}
-
-struct PreparationContext {
-    warnings: Vec<Diagnostic>,
-    timings: PreparationTimings,
-    operation_started: Instant,
-    validation_elapsed: std::time::Duration,
-    preflight_elapsed: std::time::Duration,
-}
-
-/// The one internal preparation coordinator serves both public reusable
-/// preparation and the one-shot render path. Only preflight
-/// target selection differs; validation through backend construction is shared.
-#[derive(Clone, Copy)]
-enum InternalPreparationTarget<'a> {
-    Public(PrepareOptions),
-    OneShot(&'a SdkRenderRequest),
-}
-
-struct CoordinatedPreparation {
-    prepared: application::PreparedRender,
-    started: Instant,
-}
-
 /// An SDK operation failed after parsing or during rendering.
 #[derive(Debug)]
 pub enum EditorError {
@@ -238,98 +218,6 @@ impl fmt::Display for EditorError {
 }
 impl std::error::Error for EditorError {}
 
-pub(crate) fn log_render_failure(
-    operation_id: OperationId,
-    output_path: &Path,
-    operation_started: Instant,
-    error: &EditorError,
-) {
-    let diagnostic = error.diagnostics().first();
-    tracing::error!(
-        target: "vestra.render",
-        operation_id = %operation_id,
-        output = %output_path.display(),
-        stage = error
-            .render_failure_context()
-            .map_or(error.kind().as_str(), |context| context.stage.as_str()),
-        error_code = diagnostic.map_or("unknown", |item| item.code.as_str()),
-        error = diagnostic.map_or("render operation failed", |item| item.message.as_str()),
-        elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
-        "render failed"
-    );
-}
-
-pub(crate) fn log_render_timing_summary(
-    operation_id: OperationId,
-    actual_backend: &str,
-    audio_analysis_ms: u128,
-    timings: &crate::RenderTimings,
-) {
-    let common = (
-        crate::render::trace_millisecond_value(timings.project_parse_ms),
-        crate::render::trace_millisecond_value(timings.semantic_validation_ms),
-        crate::render::trace_millisecond_value(timings.preflight_ms),
-        crate::render::trace_millisecond_value(timings.plan_compile_ms),
-        crate::render::trace_millisecond_value(timings.asset_decode_ms),
-        crate::render::trace_millisecond_value(timings.track_evaluation_ms),
-        crate::render::trace_millisecond_value(timings.frame_render_ms),
-        crate::render::trace_millisecond_value(timings.encoder_write_ms),
-        crate::render::trace_millisecond_value(timings.encoder_finalize_ms),
-        crate::render::trace_millisecond_value(timings.output_publish_ms),
-        crate::render::trace_millisecond_value(timings.operation_total_ms),
-    );
-    if actual_backend == "wgpu" {
-        tracing::debug!(
-            target: "vestra.performance",
-            operation_id = %operation_id,
-            actual_backend,
-            project_parse_ms = common.0,
-            semantic_validation_ms = common.1,
-            preflight_ms = common.2,
-            plan_compile_ms = common.3,
-            asset_decode_ms = common.4,
-            audio_analysis_ms = crate::render::trace_millisecond_value(audio_analysis_ms),
-            gpu_initialization_ms = crate::render::trace_millisecond_value(timings.gpu_initialization_ms.unwrap_or_default()),
-            gpu_adapter_request_ms = crate::render::trace_millisecond_value(timings.gpu_adapter_request_ms.unwrap_or_default()),
-            gpu_device_request_ms = crate::render::trace_millisecond_value(timings.gpu_device_request_ms.unwrap_or_default()),
-            gpu_pipeline_creation_ms = crate::render::trace_millisecond_value(timings.gpu_pipeline_creation_ms.unwrap_or_default()),
-            texture_upload_ms = crate::render::trace_millisecond_value(timings.texture_upload_ms.unwrap_or_default()),
-            gpu_frame_command_encode_ms = crate::render::trace_millisecond_value(timings.gpu_frame_command_encode_ms.unwrap_or_default()),
-            gpu_submission_ms = crate::render::trace_millisecond_value(timings.gpu_submission_ms.unwrap_or_default()),
-            gpu_readback_wait_ms = crate::render::trace_millisecond_value(timings.gpu_readback_wait_ms.unwrap_or_default()),
-            row_repack_ms = crate::render::trace_millisecond_value(timings.row_repack_ms.unwrap_or_default()),
-            track_evaluation_ms = common.5,
-            frame_render_ms = common.6,
-            encoder_write_ms = common.7,
-            encoder_finalize_ms = common.8,
-            output_publish_ms = common.9,
-            operation_total_ms = common.10,
-            elapsed_ms = common.10,
-            "render timing summary"
-        );
-    } else {
-        tracing::debug!(
-            target: "vestra.performance",
-            operation_id = %operation_id,
-            actual_backend,
-            project_parse_ms = common.0,
-            semantic_validation_ms = common.1,
-            preflight_ms = common.2,
-            plan_compile_ms = common.3,
-            asset_decode_ms = common.4,
-            audio_analysis_ms = crate::render::trace_millisecond_value(audio_analysis_ms),
-            track_evaluation_ms = common.5,
-            frame_render_ms = common.6,
-            encoder_write_ms = common.7,
-            encoder_finalize_ms = common.8,
-            output_publish_ms = common.9,
-            operation_total_ms = common.10,
-            elapsed_ms = common.10,
-            "render timing summary"
-        );
-    }
-}
-
 impl Editor {
     #[must_use]
     pub fn new() -> Self {
@@ -395,97 +283,6 @@ impl Editor {
             .report
     }
 
-    fn run_preflight(
-        &self,
-        project: &Project,
-        validation: &ValidationReport,
-        options: &PreflightOptions,
-        cancelled: &AtomicBool,
-    ) -> InternalPreflightOutcome {
-        let outcome = crate::project::validation::preflight(
-            project,
-            validation,
-            &ValidationOptions {
-                limits: self.limits,
-            },
-            cancelled,
-        );
-        if cancelled.load(Ordering::Relaxed) {
-            return InternalPreflightOutcome {
-                report: PreflightReport {
-                    diagnostics: outcome.diagnostics,
-                },
-                resolved: None,
-            };
-        }
-        let mut diagnostics = outcome.diagnostics;
-        let target = &options.target;
-        let render_target = match target {
-            PreflightTarget::Render {
-                backend,
-                output,
-                overwrite,
-            } => Some((*backend, output.clone(), *overwrite)),
-            PreflightTarget::Validate => Some((RenderBackendPreference::Auto, None, false)),
-            PreflightTarget::Preparation { backend } => {
-                let probe = vestra_render::probe_backend(match backend {
-                    RenderBackendPreference::Auto => vestra_render::RenderBackendPreference::Auto,
-                    RenderBackendPreference::Cpu => vestra_render::RenderBackendPreference::Cpu,
-                    RenderBackendPreference::Wgpu => vestra_render::RenderBackendPreference::Wgpu,
-                });
-                diagnostics.extend(probe.diagnostics);
-                None
-            }
-            PreflightTarget::Inspect => None,
-        };
-        if let Some((backend, override_output, overwrite)) = render_target {
-            let output = override_output.unwrap_or_else(|| {
-                let configured = PathBuf::from(&project.canonical().output.path);
-                if configured.is_absolute() {
-                    configured
-                } else {
-                    project.base_directory().join(configured)
-                }
-            });
-            if let Err(error) = vestra_media::check_output(&output, overwrite) {
-                diagnostics.push(Diagnostic::error(
-                    "VESTRA-OUTPUT-PATH",
-                    crate::Category::Output,
-                    error.to_string(),
-                    "/output/path",
-                ));
-            }
-            if let Err(error) = vestra_media::check_output_encoder_available(
-                &output,
-                self.ffmpeg_executable.as_deref(),
-            ) {
-                let message = self.ffmpeg_executable.as_ref().map_or_else(
-                    || format!("FFmpeg is unavailable: {error}"),
-                    |path| format!("FFmpeg is unavailable ({}): {error}", path.display()),
-                );
-                diagnostics.push(Diagnostic::error(
-                    "VESTRA-ENCODER-UNAVAILABLE",
-                    crate::Category::Backend,
-                    message,
-                    "",
-                ));
-            }
-            let probe = vestra_render::probe_backend(match backend {
-                RenderBackendPreference::Auto => vestra_render::RenderBackendPreference::Auto,
-                RenderBackendPreference::Cpu => vestra_render::RenderBackendPreference::Cpu,
-                RenderBackendPreference::Wgpu => vestra_render::RenderBackendPreference::Wgpu,
-            });
-            diagnostics.extend(probe.diagnostics);
-        }
-        let has_errors = diagnostics
-            .iter()
-            .any(|item| item.severity == crate::Severity::Fatal);
-        InternalPreflightOutcome {
-            report: PreflightReport { diagnostics },
-            resolved: if has_errors { None } else { outcome.resolved },
-        }
-    }
-
     #[expect(
         clippy::result_large_err,
         reason = "inspection diagnostics retain operation timings for CLI report output"
@@ -533,162 +330,6 @@ impl Editor {
             Self::project_display_path(project).to_path_buf(),
             coordinated.started.elapsed().as_millis(),
         ))
-    }
-
-    #[expect(
-        clippy::result_large_err,
-        reason = "preparation failures retain diagnostics and timing context"
-    )]
-    fn prepare_internal(
-        &self,
-        project: &Project,
-        target: InternalPreparationTarget<'_>,
-        cancelled: &AtomicBool,
-    ) -> Result<CoordinatedPreparation, EditorError> {
-        let _prepare_span = tracing::debug_span!(
-            target: "vestra.render",
-            "prepare",
-            stage = "prepare"
-        )
-        .entered();
-        let started = Instant::now();
-        let (frame_rate, quality, preview, resolution, silent) = match target {
-            InternalPreparationTarget::Public(options) => (
-                options.frame_rate(),
-                options.quality(),
-                false,
-                options.resolution(),
-                false,
-            ),
-            InternalPreparationTarget::OneShot(request) => (
-                request.frame_rate,
-                request.quality,
-                request.preview,
-                request.resolution,
-                vestra_media::is_animated_output(&Self::render_output_path(project, request)),
-            ),
-        };
-        let effective_project = project.with_render_overrides(frame_rate, quality, preview, silent);
-        let project = effective_project.as_ref();
-        let validation_started = Instant::now();
-        let validation = self.validate(project);
-        let validation_elapsed = validation_started.elapsed();
-        tracing::debug!(
-            target: "vestra.project",
-            stage = "validate",
-            elapsed_ms = crate::render::trace_milliseconds(validation_elapsed),
-            "project validation completed"
-        );
-        let preflight_started = Instant::now();
-        let (options, backend, preview) = match target {
-            InternalPreparationTarget::Public(options) => (
-                PreflightOptions::for_preparation(options.backend()),
-                options.backend(),
-                false,
-            ),
-            InternalPreparationTarget::OneShot(request) => (
-                PreflightOptions::for_render(
-                    request.backend,
-                    request.output.clone(),
-                    request.overwrite,
-                ),
-                request.backend,
-                request.preview,
-            ),
-        };
-        let outcome = self.run_preflight(project, &validation, &options, cancelled);
-        let preflight_elapsed = preflight_started.elapsed();
-        tracing::debug!(
-            target: "vestra.project",
-            stage = "preflight",
-            requested_backend = backend.as_str(),
-            elapsed_ms = crate::render::trace_milliseconds(preflight_elapsed),
-            diagnostics = outcome.report.diagnostics.len(),
-            "render preflight completed"
-        );
-        let warnings = Self::operation_warnings(&outcome.report.diagnostics);
-        #[cfg(test)]
-        let warnings = {
-            let mut warnings = warnings;
-            if let Some(warning) = test_preflight_warning() {
-                warnings.push(warning);
-            }
-            Self::operation_warnings(&warnings)
-        };
-        let validated = outcome
-            .resolved
-            .filter(|_| !cancelled.load(Ordering::Relaxed))
-            .ok_or_else(|| {
-                Self::diagnostic_error(
-                    outcome.report.diagnostics,
-                    Self::operation_timings(
-                        project,
-                        started,
-                        validation_elapsed,
-                        preflight_elapsed,
-                    ),
-                )
-            })?;
-        let prepared = self.prepare_validated(
-            project,
-            validated,
-            backend,
-            preview,
-            resolution,
-            PreparationContext {
-                warnings: warnings.clone(),
-                timings: PreparationTimings {
-                    validation_ms: validation_elapsed.as_millis(),
-                    preflight_ms: preflight_elapsed.as_millis(),
-                    ..PreparationTimings::default()
-                },
-                operation_started: started,
-                validation_elapsed,
-                preflight_elapsed,
-            },
-        )?;
-        Ok(CoordinatedPreparation { prepared, started })
-    }
-
-    #[expect(
-        clippy::result_large_err,
-        reason = "the shared coordinator preserves preparation diagnostics"
-    )]
-    fn prepare_validated(
-        &self,
-        project: &Project,
-        validated: ValidatedProject,
-        backend: RenderBackendPreference,
-        preview: bool,
-        resolution: Option<(u32, u32)>,
-        context: PreparationContext,
-    ) -> Result<application::PreparedRender, EditorError> {
-        let request = RenderRequest {
-            frame_range: None,
-            resolution,
-            output_override: None,
-            overwrite: false,
-            preview,
-            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            backend_preference: backend,
-        };
-        application::prepare_project(
-            validated,
-            &request,
-            context.warnings.clone(),
-            context.timings,
-            self.ffmpeg_executable.clone(),
-        )
-        .map_err(|error| {
-            Self::render_error(
-                error,
-                project,
-                context.operation_started,
-                context.validation_elapsed,
-                context.preflight_elapsed,
-                context.warnings,
-            )
-        })
     }
 
     #[expect(
@@ -810,45 +451,27 @@ impl Editor {
             "render started"
         );
         if lifecycle.started(total_frames, &output_path) == crate::RenderObserverControl::Cancel {
-            lifecycle.cancelled();
-            tracing::info!(
-                target: "vestra.render",
-                operation_id = %operation_id,
-                stage = "preparing",
-                elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
-                "render cancelled"
-            );
-            return Err(Self::cancelled_editor_error(
+            return Err(reporting::cancel_preparation(
+                &mut lifecycle,
+                operation_id,
                 operation_started,
                 total_frames.unwrap_or_default(),
                 output_path,
             ));
         }
         if lifecycle.stage(crate::RenderStage::Preparing) == crate::RenderObserverControl::Cancel {
-            lifecycle.cancelled();
-            tracing::info!(
-                target: "vestra.render",
-                operation_id = %operation_id,
-                stage = "preparing",
-                elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
-                "render cancelled"
-            );
-            return Err(Self::cancelled_editor_error(
+            return Err(reporting::cancel_preparation(
+                &mut lifecycle,
+                operation_id,
                 operation_started,
                 total_frames.unwrap_or_default(),
                 output_path,
             ));
         }
         if cancellation.is_cancelled() {
-            lifecycle.cancelled();
-            tracing::info!(
-                target: "vestra.render",
-                operation_id = %operation_id,
-                stage = "preparing",
-                elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
-                "render cancelled"
-            );
-            return Err(Self::cancelled_editor_error(
+            return Err(reporting::cancel_preparation(
+                &mut lifecycle,
+                operation_id,
                 operation_started,
                 total_frames.unwrap_or_default(),
                 output_path,
@@ -955,26 +578,13 @@ impl Editor {
                     &mut editor_error,
                     operation_preparation.renderer,
                 );
-                if editor_error.is_cancelled() {
-                    lifecycle.cancelled();
-                    tracing::info!(
-                        target: "vestra.render",
-                        operation_id = %operation_id,
-                        stage = %editor_error
-                            .render_failure_context()
-                            .map_or("render", |context| context.stage.as_str()),
-                        elapsed_ms = crate::render::trace_milliseconds(operation_started.elapsed()),
-                        "render cancelled"
-                    );
-                } else {
-                    lifecycle.failed();
-                    log_render_failure(
-                        operation_id,
-                        &output_path,
-                        operation_started,
-                        &editor_error,
-                    );
-                }
+                reporting::finish_render_error(
+                    &mut lifecycle,
+                    operation_id,
+                    &output_path,
+                    operation_started,
+                    &editor_error,
+                );
                 return Err(editor_error);
             }
         };
@@ -1059,170 +669,6 @@ impl Editor {
         )
         .ok()?;
         Some(range.end - range.start)
-    }
-    fn cancelled_editor_error(
-        operation_started: Instant,
-        total_frames: u64,
-        output_path: PathBuf,
-    ) -> EditorError {
-        let operation_total_ms = operation_started.elapsed().as_millis();
-        EditorError::Render {
-            diagnostic: Box::new(Diagnostic::error(
-                "VESTRA-CANCELLED",
-                crate::Category::Cancellation,
-                "render cancelled",
-                "",
-            )),
-            warnings: Vec::new(),
-            context: Box::new(RenderFailureContext {
-                stage: crate::RenderFailureStage::Cancellation,
-                last_completed_frame_index: None,
-                completed_frames: 0,
-                attempted_frame: None,
-                total_frames,
-                timeline_position: None,
-                progress: (total_frames > 0).then_some(0.0),
-                output_path: Some(output_path),
-                temporary_output_path: None,
-            }),
-            temporary_removed: false,
-            timings: crate::RenderTimings {
-                operation_total_ms,
-                ..crate::RenderTimings::default()
-            },
-        }
-    }
-    fn project_error(error: LoadError) -> EditorError {
-        match error {
-            LoadError::Diagnostics(diagnostics) => {
-                Self::diagnostic_error(diagnostics, crate::RenderTimings::default())
-            }
-        }
-    }
-    fn render_error(
-        error: ApplicationRenderError,
-        project: &Project,
-        operation_started: Instant,
-        validation_elapsed: std::time::Duration,
-        preflight_elapsed: std::time::Duration,
-        warnings: Vec<Diagnostic>,
-    ) -> EditorError {
-        match error {
-            ApplicationRenderError::Plan {
-                diagnostic,
-                plan_compile_elapsed_ms,
-                ..
-            } => EditorError::Plan {
-                diagnostic: Box::new(diagnostic),
-                warnings,
-                timings: crate::RenderTimings {
-                    plan_compile_ms: plan_compile_elapsed_ms,
-                    ..Self::operation_timings(
-                        project,
-                        operation_started,
-                        validation_elapsed,
-                        preflight_elapsed,
-                    )
-                },
-            },
-            ApplicationRenderError::Render {
-                error,
-                plan_compile_elapsed_ms,
-            } => {
-                let error = *error;
-                let mut all_warnings = warnings;
-                all_warnings.extend(error.warnings);
-                let mut timings = error.timings;
-                timings.project_parse_ms = project.parse_elapsed().as_millis();
-                timings.semantic_validation_ms = validation_elapsed.as_millis();
-                timings.preflight_ms = preflight_elapsed.as_millis();
-                timings.plan_compile_ms = plan_compile_elapsed_ms;
-                timings.operation_total_ms = operation_started.elapsed().as_millis();
-                EditorError::Render {
-                    diagnostic: Box::new(error.diagnostic),
-                    warnings: Self::operation_warnings(&all_warnings),
-                    context: Box::new(error.context),
-                    temporary_removed: error.temporary_removed,
-                    timings,
-                }
-            }
-        }
-    }
-    fn diagnostic_error(
-        diagnostics: Vec<Diagnostic>,
-        timings: crate::RenderTimings,
-    ) -> EditorError {
-        let errors = diagnostics
-            .iter()
-            .filter(|item| item.severity == crate::Severity::Fatal)
-            .cloned()
-            .collect();
-        let warnings = diagnostics
-            .into_iter()
-            .filter(|item| item.severity == crate::Severity::Warning)
-            .collect();
-        EditorError::Project {
-            errors,
-            warnings,
-            timings,
-        }
-    }
-    fn operation_timings(
-        project: &Project,
-        operation_started: Instant,
-        validation_elapsed: std::time::Duration,
-        preflight_elapsed: std::time::Duration,
-    ) -> crate::RenderTimings {
-        let operation_total_ms = operation_started.elapsed().as_millis();
-        crate::RenderTimings {
-            project_parse_ms: project.parse_elapsed().as_millis(),
-            operation_total_ms,
-            semantic_validation_ms: validation_elapsed.as_millis(),
-            preflight_ms: preflight_elapsed.as_millis(),
-            ..crate::RenderTimings::default()
-        }
-    }
-    pub(crate) fn apply_renderer_preparation_timings(
-        timings: &mut crate::RenderTimings,
-        preparation: crate::render::PreparationTimings,
-    ) {
-        timings.asset_decode_ms = preparation.decode.as_millis();
-        if preparation.gpu_initialization != std::time::Duration::ZERO {
-            timings.gpu_initialization_ms = Some(preparation.gpu_initialization.as_millis());
-            timings.gpu_adapter_request_ms = Some(preparation.gpu_adapter_request.as_millis());
-            timings.gpu_device_request_ms = Some(preparation.gpu_device_request.as_millis());
-            timings.gpu_pipeline_creation_ms = Some(preparation.gpu_pipeline_creation.as_millis());
-            timings.texture_upload_ms = Some(preparation.texture_upload.as_millis());
-        }
-    }
-    fn apply_error_preparation_timings(
-        error: &mut EditorError,
-        preparation: crate::render::PreparationTimings,
-    ) {
-        if let EditorError::Render { timings, .. } = error {
-            Self::apply_renderer_preparation_timings(timings, preparation);
-        }
-    }
-    pub(crate) fn operation_warnings(diagnostics: &[Diagnostic]) -> Vec<Diagnostic> {
-        let mut warnings = Vec::new();
-        for diagnostic in diagnostics
-            .iter()
-            .filter(|item| item.severity == crate::Severity::Warning)
-        {
-            let duplicate = warnings.iter().any(|existing: &Diagnostic| {
-                existing.code == diagnostic.code
-                    && existing.category == diagnostic.category
-                    && existing.severity == diagnostic.severity
-                    && existing.message == diagnostic.message
-                    && existing.pointer == diagnostic.pointer
-                    && existing.related_id == diagnostic.related_id
-                    && existing.hint == diagnostic.hint
-            });
-            if !duplicate {
-                warnings.push(diagnostic.clone());
-            }
-        }
-        warnings
     }
 }
 

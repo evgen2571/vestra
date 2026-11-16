@@ -6,8 +6,8 @@
 
 use vestra_core::{Category, Diagnostic, animation, domain, project};
 use vestra_render_common::{
-    AdapterMetadata, VideoDecoderSession, ascii, backend, gaussian, geometry, halftone, kernel,
-    particle_raster, trace_milliseconds,
+    AdapterMetadata, ascii, backend, gaussian, geometry, halftone, kernel, particle_raster,
+    trace_milliseconds,
 };
 mod wgpu;
 pub use wgpu::{FrameDifference, PixelMismatch, WgpuBackend, compare_rgba};
@@ -49,4 +49,4 @@ mod test_support;
 use vestra_render_common::{AdapterPerformanceClass, DecodedAssets, PollMode};
 
 #[cfg(all(test, feature = "adapter-tests"))]
-use vestra_render_common::{VideoDecoderFactory, VideoFrame};
+use vestra_render_common::{VideoDecoderFactory, VideoDecoderSession, VideoFrame};

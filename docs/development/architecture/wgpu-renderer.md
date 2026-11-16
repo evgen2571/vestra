@@ -53,6 +53,7 @@ The internal frame path has these owners, all inside
 
 | Module | Owns |
 | --- | --- |
+| `video_pool.rs` | Decoder factories/sessions, independent placement cursors, per-asset cache budgets, immutable request sharing, retirement and cumulative decoder metrics |
 | `backend.rs` | Prepared resources and per-submission slots, video uploads, cache reservations, polling, cancellation and lifecycle coordination |
 | `frame_plan/mod.rs`, `frame_plan/operations.rs` | Frame-plan interface, authoritative operation and texture-role definitions, canvas alternation |
 | `frame_plan/builder.rs` | Ordered frame construction, recursive layers/groups, static-cache operations and compositing |

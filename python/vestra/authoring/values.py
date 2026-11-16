@@ -2,21 +2,12 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from math import isfinite
 import re
 from typing import Final, Literal
 
 
+from ._internal import _number as _finite_number
 _COLOUR: Final[re.Pattern[str]] = re.compile(r"^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$")
-
-
-def _finite_number(value: int | float, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    number = float(value)
-    if not isfinite(number):
-        raise ValueError(f"{name} must be finite")
-    return number
 
 
 class _CanonicalStrEnum(Enum):

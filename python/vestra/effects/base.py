@@ -7,6 +7,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Iterable, Mapping, Self, TypeVar, cast
 
+from ..authoring._internal import _number as _number
 # BEGIN GENERATED EFFECT IMPORTS
 from ..authoring.effects import (
     AsciiColorMode,
@@ -81,15 +82,6 @@ def _parameter(effect_type: str, name: str) -> Mapping[str, object]:
         if item["name"] == name:
             return item
     raise TypeError(f"unknown parameter {name!r} for effect {effect_type!r}")
-
-
-def _number(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    result = float(value)
-    if result != result or result in (float("inf"), float("-inf")):
-        raise ValueError(f"{name} must be finite")
-    return result
 
 
 def _integer(

@@ -18,6 +18,51 @@ pub(super) fn operation_backend_metrics(
     // the current render instead of leaking prior work.
     let counters = [
         (
+            "video decoder open",
+            before.video_decoder_open_count,
+            after.video_decoder_open_count,
+        ),
+        (
+            "video frame request",
+            before.video_frame_requests,
+            after.video_frame_requests,
+        ),
+        (
+            "video actual decode",
+            before.video_actual_decodes,
+            after.video_actual_decodes,
+        ),
+        (
+            "video seek",
+            before.video_seek_count,
+            after.video_seek_count,
+        ),
+        (
+            "video cache hit",
+            before.video_cache_hits,
+            after.video_cache_hits,
+        ),
+        (
+            "video cache miss",
+            before.video_cache_misses,
+            after.video_cache_misses,
+        ),
+        (
+            "video decode time",
+            before.video_decode_time_us,
+            after.video_decode_time_us,
+        ),
+        (
+            "video upload",
+            before.video_upload_count,
+            after.video_upload_count,
+        ),
+        (
+            "video upload bytes",
+            before.video_upload_bytes,
+            after.video_upload_bytes,
+        ),
+        (
             "command submission",
             before.command_submission_count,
             after.command_submission_count,
@@ -152,6 +197,22 @@ pub(super) fn operation_backend_metrics(
     }
     let delta =
         |before: u64, after: u64| after.checked_sub(before).expect("counters checked above");
+    // Retained resources and lifetime peaks remain the latest backend snapshot.
+    performance.video_decoder_open_count = delta(
+        before.video_decoder_open_count,
+        after.video_decoder_open_count,
+    );
+    performance.video_frame_requests =
+        delta(before.video_frame_requests, after.video_frame_requests);
+    performance.video_actual_decodes =
+        delta(before.video_actual_decodes, after.video_actual_decodes);
+    performance.video_seek_count = delta(before.video_seek_count, after.video_seek_count);
+    performance.video_cache_hits = delta(before.video_cache_hits, after.video_cache_hits);
+    performance.video_cache_misses = delta(before.video_cache_misses, after.video_cache_misses);
+    performance.video_decode_time_us =
+        delta(before.video_decode_time_us, after.video_decode_time_us);
+    performance.video_upload_count = delta(before.video_upload_count, after.video_upload_count);
+    performance.video_upload_bytes = delta(before.video_upload_bytes, after.video_upload_bytes);
     performance.command_submission_count = delta(
         before.command_submission_count,
         after.command_submission_count,

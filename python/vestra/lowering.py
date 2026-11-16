@@ -16,14 +16,12 @@ from .audio import AudioEffectStack, AudioTimeline
 from .effects import EffectStack
 from .flashes import FlashCollection
 from .transitions import TransitionCollection
-from .properties import (
-    BindablePointProperty,
-    BindableScalarProperty,
-    CropProperty,
-    PointProperty,
-    ScalarBindingTarget,
-    ScalarProperty,
-    Transform,
+from .properties.lowering import (
+    apply_property as _lower_scalar_property,
+    apply_property as _lower_point_property,
+    apply_property as _lower_crop_property,
+    apply_component_bindings as _lower_component_bindings,
+    apply_transform as _lower_transform,
 )
 
 if TYPE_CHECKING:
@@ -611,57 +609,6 @@ def _lower_spectrum(
     return cast(VisualClip, clip)
 
 
-def _lower_scalar_property(source: ScalarProperty, target: Any) -> None:
-    target.base_value = source.value
-    target.clear_keyframes()
-    for frame in source.keyframes:
-        target.keyframe(
-            time=frame.time, value=frame.value, interpolation=frame.interpolation
-        )
-    if isinstance(source, BindableScalarProperty):
-        for binding in source.bindings:
-            target.modulate(binding.signal, mode=binding.operation)
-
-
-def _lower_point_property(source: PointProperty, target: Any) -> None:
-    target.base_value = source.value
-    target.clear_keyframes()
-    for frame in source.keyframes:
-        target.keyframe(
-            time=frame.time, value=frame.value, interpolation=frame.interpolation
-        )
-    if isinstance(source, BindablePointProperty):
-        for binding in source.bindings:
-            target.react_to(binding.signal, mode=binding.operation)
-
-
-def _lower_component_bindings(source: ScalarBindingTarget, target: Any) -> None:
-    for binding in source.bindings:
-        target.modulate(binding.signal, mode=binding.operation)
-
-
-def _lower_crop_property(source: CropProperty, target: Any) -> None:
-    target.base_value = source.value
-    target.clear_keyframes()
-    for frame in source.keyframes:
-        target.keyframe(
-            time=frame.time, value=frame.value, interpolation=frame.interpolation
-        )
-
-
-def _lower_transform(source: Transform, target: Any) -> None:
-    _lower_point_property(source.position, target.transform.position)
-    _lower_point_property(source.anchor, target.transform.anchor)
-    _lower_point_property(source.scale, target.transform.scale)
-    _lower_scalar_property(source.rotation_degrees, target.transform.rotation_degrees)
-    _lower_component_bindings(source.position_x, target.transform.position_x)
-    _lower_component_bindings(source.position_y, target.transform.position_y)
-    _lower_component_bindings(source.scale.x, target.transform.scale_x)
-    _lower_component_bindings(source.scale.y, target.transform.scale_y)
-    _lower_component_bindings(source.scale_x, target.transform.scale_x)
-    _lower_component_bindings(source.scale_y, target.transform.scale_y)
-
-
 def _lower_presentation(
     layer: Layer, clip: VisualClip, *, include_transform: bool
 ) -> None:
@@ -680,7 +627,7 @@ def _lower_presentation(
         if layer.source.crop.active:
             _lower_crop_property(layer.source.crop, clip.crop)
     if include_transform:
-        _lower_transform(layer.transform, clip)
+        _lower_transform(layer.transform, clip.transform)
 
 
 register_source(

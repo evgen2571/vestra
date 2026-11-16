@@ -132,6 +132,12 @@ device-resident memory**. Cache hits and copies do not cover every allocation.
 Fewer allocations may retain more memory; more cache hits do not prove a speedup.
 A zero baseline gives an absolute delta with no percentage.
 
+Render reports scope cumulative backend counters to the current operation,
+including video requests, decodes, seeks, cache events, decode time, decoder opens
+and uploads. Reusing a prepared project does not include work from earlier
+operations. Retained-resource gauges describe the latest backend snapshot;
+`video_cache_bytes_peak` retains the sum of session lifetime high-water marks.
+
 Use [CPU accounting](architecture/cpu-renderer.md#memory-accounting) to interpret
 retained capacity, per-owner peaks and worker estimates. The
 [profiling procedure](performance-probes.md#allocation-and-sustained-render-profiling)

@@ -1603,6 +1603,74 @@ fn prepared_cpu_project_owns_state_and_renders_random_access_frames() {
 }
 
 #[test]
+fn prepared_cpu_video_counters_exclude_previous_operations() {
+    let directory = tempdir().expect("temporary directory");
+    let status = std::process::Command::new("ffmpeg")
+        .args([
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=16x16:r=4:d=1",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+        ])
+        .arg(directory.path().join("clip.mp4"))
+        .status()
+        .expect("generate video fixture");
+    assert!(status.success());
+    let project = vestra::Project::from_value(
+        serde_json::json!({
+            "schema_version": 1,
+            "output": {"path": "unused.mp4", "width": 16, "height": 16,
+                "frame_rate": 2, "background": "#000000", "quality": "preview",
+                "audio": false, "duration_mode": "explicit", "duration": 1},
+            "assets": [{"id": "video", "type": "video", "source": "clip.mp4"}],
+            "visual": {"clips": [{"id": "clip", "source": {"type": "video", "asset": "video"},
+                "start": 0, "duration": 1, "layer": 0, "opacity": {"base_value": 1}}]}
+        }),
+        directory.path(),
+    )
+    .expect("project");
+    let mut prepared = Editor::new()
+        .prepare(&project, PrepareOptions::new(BackendPreference::Cpu))
+        .expect("prepare video project");
+    let mut results = Vec::new();
+    for name in ["first.mp4", "second.mp4"] {
+        results.push(
+            prepared
+                .render_video(
+                    PreparedVideoRenderRequest::new(directory.path().join(name)),
+                    |_| {},
+                    &CancellationToken::new(),
+                )
+                .expect("render prepared video"),
+        );
+    }
+    for result in &results {
+        assert_eq!(result.total_frames, 2);
+        assert_eq!(result.render_backend, "cpu");
+        assert_eq!(result.performance.video_frame_requests, 2);
+        assert_eq!(
+            result.performance.video_cache_hits + result.performance.video_cache_misses,
+            2
+        );
+    }
+    let first = &results[0].performance;
+    let second = &results[1].performance;
+    assert!(first.video_actual_decodes > 0);
+    assert!(second.video_actual_decodes <= first.video_actual_decodes);
+    assert!(first.video_decoder_open_count > 0);
+    assert_eq!(
+        second.video_decoder_open_count,
+        first.video_decoder_open_count
+    );
+}
+
+#[test]
 fn prepared_cpu_video_operation_uses_an_operation_request() {
     let directory = tempdir().expect("temporary directory");
     let project_path = fixture("tests/fixtures/wgpu-small-rgba.json");

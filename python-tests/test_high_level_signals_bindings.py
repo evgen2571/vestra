@@ -246,3 +246,49 @@ def test_cpu_render_evaluates_high_level_audio_signal_binding() -> None:
     loud = project.render_frame(0.75, backend="cpu").to_bytes()[:4]
     assert quiet != loud
     assert quiet[0] < 255 and loud[0] < 255
+
+
+def test_layer_group_and_mask_lower_identical_animation_and_ordered_bindings() -> None:
+    from vestra import Group, Rectangle
+
+    project = vestra.Project(size=(8, 8), fps=2, duration=1)
+    layer = project.root.add(Rectangle(width=4, height=4, fill="#ffffff"))
+    group = Group()
+    child = group.add(Rectangle(width=4, height=4, fill="#ffffff"), duration=1)
+    mask = layer.masks.add(Rectangle(width=4, height=4, fill="#ffffff"))
+    first, second = project.audio.signal.rms(), project.audio.signal.peak()
+    for transform in (layer.transform, child.transform, mask.transform):
+        transform.position.value = (0.4, 0.6)
+        transform.position.keyframe(0.5, (0.7, 0.2))
+        transform.anchor.keyframe(0.5, (0.2, 0.8))
+        transform.scale.value = (1.2, 0.8)
+        transform.scale.keyframe(0.5, (0.8, 1.2))
+        transform.scale.bind(first, operation="replace")
+        transform.scale.x.bind(second, operation="multiply")
+        transform.scale_x.bind(first, operation="add")
+        transform.scale.y.bind(second, operation="add")
+        transform.scale_y.bind(first, operation="multiply")
+        transform.position_x.bind(first, operation="replace")
+        transform.position_y.bind(second, operation="add")
+        transform.rotation.keyframe(0.5, 30)
+        transform.rotation.bind(first, operation="multiply").bind(second, operation="add")
+    for prop in (layer.opacity, child.opacity, mask.strength):
+        prop.value = 0.25
+        prop.keyframe(0.5, 0.75)
+        prop.bind(first, operation="replace").bind(second, operation="multiply").bind(first, operation="add")
+    ordinary = project.snapshot().to_dict()["visual"]["clips"][0]
+    grouped = group.to_canonical()["clips"][0]
+    masked = mask.to_canonical()
+    assert ordinary["transform"] == grouped["transform"] == masked["transform"]
+    assert ordinary["opacity"] == grouped["opacity"] == masked["strength"]
+    assert [binding["operation"] for binding in ordinary["transform"]["component_modifiers"]["scale_x"]] == ["replace", "multiply", "add"]
+    assert [binding["operation"] for binding in ordinary["transform"]["component_modifiers"]["scale_y"]] == ["replace", "add", "multiply"]
+
+
+def test_group_effect_output_matches_effect_canonical_animation_and_bindings() -> None:
+    group = vestra.Group()
+    child = group.add(vestra.Rectangle(width=2, height=2, fill="#ffffff"), duration=1)
+    effect = child.effects.add(vestra.Brightness(0.1, id="animated"))
+    effect.amount.keyframe(0.5, 0.2)
+    effect.amount.bind(vestra.MasterAudioSignals().rms(), operation="multiply")
+    assert group.to_canonical()["clips"][0]["effects"][0] == effect.to_canonical()

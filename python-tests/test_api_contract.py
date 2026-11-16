@@ -172,3 +172,17 @@ def test_from_dict_accepts_general_mappings() -> None:
     project = vestra.ProjectSnapshot.from_dict(source)
     del source
     assert project.to_dict()["metadata"] == {"nested": True}
+
+
+def test_composition_imports_and_resolved_annotations_remain_public() -> None:
+    from typing import get_type_hints
+    from vestra.editor import Composition, CompositionLayer, Layer, Project, Source
+
+    assert Source is vestra.Source
+
+    for value in (Composition, CompositionLayer, Layer):
+        assert getattr(vestra, value.__name__) is value
+        assert value.__module__ == "vestra.editor"
+    assert get_type_hints(Composition.__init__)["project"] is Project
+    assert get_type_hints(Composition.project.fget)["return"] is Project
+    assert get_type_hints(Layer.__init__)["composition"] is Composition

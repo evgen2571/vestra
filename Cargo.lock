@@ -2698,6 +2698,7 @@ dependencies = [
  "tracing",
  "vestra",
  "vestra-observability",
+ "winapi-util",
 ]
 
 [[package]]

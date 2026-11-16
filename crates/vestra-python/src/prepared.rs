@@ -1,6 +1,6 @@
 use std::{
     path::PathBuf,
-    sync::{Condvar, Mutex, OnceLock, TryLockError},
+    sync::{Mutex, TryLockError},
     time::Duration,
 };
 
@@ -628,7 +628,8 @@ impl PyPreparedProject {
         // was invalidated by the failed operation.
         let mut prepared = self.take()?;
         py.detach(|| {
-            if let Err(error) = wait_for_prepared_test_barrier() {
+            #[cfg(feature = "test-support")]
+            if let Err(error) = crate::test_support::prepared::wait_for_prepared_test_barrier() {
                 self.restore(prepared)?;
                 return Err(error);
             }
@@ -651,7 +652,8 @@ impl PyPreparedProject {
         // while Python is detached; callbacks reattach only around Python
         // invocation, then the slot is restored before returning.
         py.detach(|| {
-            if let Err(error) = wait_for_prepared_test_barrier() {
+            #[cfg(feature = "test-support")]
+            if let Err(error) = crate::test_support::prepared::wait_for_prepared_test_barrier() {
                 self.restore(prepared)?;
                 return Err(error);
             }
@@ -858,70 +860,6 @@ pub(crate) fn duration_from_seconds(value: &Bound<'_, PyAny>) -> PyResult<Durati
     duration_from_ns(nanos.trunc() as u128)
 }
 
-#[derive(Default)]
-struct PreparedTestBarrier {
-    armed: bool,
-    entered: bool,
-    released: bool,
-}
-fn prepared_test_barrier() -> &'static (Mutex<PreparedTestBarrier>, Condvar) {
-    static BARRIER: OnceLock<(Mutex<PreparedTestBarrier>, Condvar)> = OnceLock::new();
-    BARRIER.get_or_init(|| (Mutex::new(PreparedTestBarrier::default()), Condvar::new()))
-}
-fn wait_for_prepared_test_barrier() -> Result<(), SlotError> {
-    let (lock, wake) = prepared_test_barrier();
-    let mut state = lock.lock().map_err(|_| SlotError::Poisoned)?;
-    if !state.armed {
-        return Ok(());
-    }
-    state.armed = false;
-    state.entered = true;
-    wake.notify_all();
-    while !state.released {
-        state = wake.wait(state).map_err(|_| SlotError::Poisoned)?;
-    }
-    state.entered = false;
-    state.released = false;
-    Ok(())
-}
-
-pub(crate) fn wait_for_test_barrier() -> bool {
-    wait_for_prepared_test_barrier().is_ok()
-}
-#[pyfunction]
-fn _test_arm_prepared_operation() -> PyResult<()> {
-    let (lock, _) = prepared_test_barrier();
-    let mut state = lock
-        .lock()
-        .map_err(|_| PyRuntimeError::new_err("prepared test synchronization was poisoned"))?;
-    state.armed = true;
-    state.entered = false;
-    state.released = false;
-    Ok(())
-}
-#[pyfunction]
-fn _test_wait_until_prepared_operation_entered(py: Python<'_>) -> PyResult<()> {
-    py.detach(|| {
-        let (lock, wake) = prepared_test_barrier();
-        let state = lock.lock().map_err(|_| SlotError::Poisoned)?;
-        let _state = wake
-            .wait_while(state, |state| !state.entered)
-            .map_err(|_| SlotError::Poisoned)?;
-        Ok::<(), SlotError>(())
-    })
-    .map_err(|_| PyRuntimeError::new_err("prepared test synchronization was poisoned"))
-}
-#[pyfunction]
-fn _test_release_prepared_operation() -> PyResult<()> {
-    let (lock, wake) = prepared_test_barrier();
-    let mut state = lock
-        .lock()
-        .map_err(|_| PyRuntimeError::new_err("prepared test synchronization was poisoned"))?;
-    state.released = true;
-    wake.notify_all();
-    Ok(())
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyPrepareOptions>()?;
     module.add_class::<PyPreparedProject>()?;
@@ -935,11 +873,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyAdapterInfo>()?;
     module.add_class::<PyAdapterDeviceType>()?;
     module.add_class::<PyGraphicsBackend>()?;
-    module.add_function(wrap_pyfunction!(_test_arm_prepared_operation, module)?)?;
-    module.add_function(wrap_pyfunction!(
-        _test_wait_until_prepared_operation_entered,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(_test_release_prepared_operation, module)?)?;
     Ok(())
 }

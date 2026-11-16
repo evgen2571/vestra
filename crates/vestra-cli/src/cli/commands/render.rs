@@ -74,7 +74,7 @@ pub(super) fn run(
             Ok(loaded) => editor.render_with_progress(
                 &loaded,
                 RenderRequest {
-                    output,
+                    output: output.clone(),
                     overwrite,
                     preview,
                     backend: backend_preference,
@@ -87,6 +87,28 @@ pub(super) fn run(
             Err(error) => Err(error),
         }
     };
+    // Rendering may have created the destination since the initial alias check.
+    if let Some(path) = report.as_deref()
+        && let Err(error) =
+            crate::output::validate_render_report_path(path, &project, output.as_deref())
+    {
+        let warnings = match &outcome {
+            Ok(result) => result.warnings.clone(),
+            Err(error) => error.warnings().to_vec(),
+        };
+        return print_failure_for_progress(
+            progress,
+            "render",
+            format,
+            vec![Diagnostic::error(
+                "VESTRA-REPORT-PATH",
+                Category::Output,
+                error,
+                "",
+            )],
+            warnings,
+        );
+    }
     match outcome {
         Ok(data) => {
             let warnings = data.warnings.clone();

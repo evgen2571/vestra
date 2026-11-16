@@ -220,3 +220,48 @@ fn separate_reports_work_for_success_and_failure() {
         assert_eq!(data["status"], if invalid { "failure" } else { "success" });
     }
 }
+
+#[test]
+fn report_discovery_failure_preserves_existing_media_and_allows_a_new_failure_report() {
+    let workspace = TempDir::new().unwrap();
+    let root = workspace.path();
+    let project = root.join("malformed.json");
+    let media = root.join("source.png");
+    let output = root.join("out.mp4");
+    std::fs::write(
+        &project,
+        br#"{"assets":[{"id":"image","type":"image","source":"source.png"}],"#,
+    )
+    .unwrap();
+    std::fs::write(&media, b"original media").unwrap();
+    let result = command()
+        .arg("render")
+        .arg(&project)
+        .arg("--output")
+        .arg(&output)
+        .arg("--report")
+        .arg(&media)
+        .args(["--format", "json", "--progress", "none"])
+        .output()
+        .unwrap();
+    let response: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert!(!result.status.success());
+    assert_eq!(response["errors"][0]["code"], "VESTRA-REPORT-PATH");
+    assert_eq!(std::fs::read(&media).unwrap(), b"original media");
+    assert!(!output.exists());
+    let report = root.join("new-report.json");
+    let result = command()
+        .arg("render")
+        .arg(&project)
+        .arg("--output")
+        .arg(&output)
+        .arg("--report")
+        .arg(&report)
+        .args(["--format", "json", "--progress", "none"])
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    let report: Value = serde_json::from_slice(&std::fs::read(report).unwrap()).unwrap();
+    assert_eq!(report["status"], "failure");
+    assert_eq!(report["failure_stage"], "project_load_or_validation");
+}

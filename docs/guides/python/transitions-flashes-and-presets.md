@@ -2,7 +2,9 @@
 description: Compare rendered transition families and place them correctly in a composition's overlap interval.
 ---
 
-# Transitions, flashes, and presets
+<span id="transitions-flashes-and-presets"></span>
+
+# Connect two shots
 
 A transition presents two overlapping layers as one change of scene. Its
 placement belongs to the composition that owns both layers; its reusable
@@ -10,7 +12,11 @@ definition describes how their opacity, transforms or effects change.
 
 ## Start with an overlap
 
-This is a complete three-second project using two procedural shape layers:
+Save this standalone project as `crossfade.py`. It produces a three-second
+change between two procedural shape layers and needs no input files:
+
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
 
 ```python
 from vestra import Crossfade, Project, Rectangle
@@ -46,8 +52,12 @@ project.root.transitions.add(
 project.render("crossfade.mp4", backend="cpu", overwrite=True)
 ```
 
-This replaces `crossfade.mp4`. Both endpoint layers exist throughout the
-transition. The transition API does not extend their durations or move the
+```bash
+uv run python crossfade.py
+```
+
+This writes `crossfade.mp4` in the current directory and replaces it on a rerun.
+Both endpoint layers exist throughout the transition. The transition API does not extend their durations or move the
 incoming layer to create an overlap.
 
 ![The root composition owns outgoing A from zero to two seconds and incoming B from one to three seconds. Their one-second overlap contains the whole transition, with local times 1, 1.5 and 2 mapping to progress zero, one half and one.](../../assets/diagrams/transitions-timeline.svg)
@@ -173,49 +183,13 @@ structure is separate from media preflight.
 
 [transition_comparisons.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/transition_comparisons.py)
 builds both scenes and runs the four definitions. Run
-`python transition_comparisons.py` to replace `transition-{crossfade,push,zoom,blur}.mp4`
+`uv run python transition_comparisons.py` to replace `transition-{crossfade,push,zoom,blur}.mp4`
 in the current directory. The graphics are original and use the bundled font.
 
 ## Flashes and image presets
 
-A flash is a separate project-wide color overlay. It does not need endpoints
-or an overlap. This continues the first shape project:
-
-```python
-from vestra import Flash
-
-project.flashes.add(
-    Flash(
-        start=1.5,
-        duration=0.12,
-        colour="#ffffff",
-        opacity=0.7,
-        fade_out=0.08,
-        layer=10,
-    )
-)
-```
-
-The explicit `layer=10` places this overlay above the example layers. Use
-flashes sparingly: their coverage is frame-wide, and draw order still applies.
-Their placement uses project seconds. A preset instead belongs to one image layer
-and describes a reusable motion treatment such as a slow drift. The current
-high-level API accepts one preset per Image layer. For a separate photo project
-using your own `assets/one.png`:
-
-```python
-from vestra import Image
-
-project = Project(
-    size=(640, 360),
-    fps=30,
-    duration=6,
-)
-
-photo = project.root.add(Image("assets/one.png"))
-
-photo.presets.apply_slow_drift(start=0.5, duration=4, intensity=0.6)
-```
-
-See [presets and flashes](../../reference/presets-and-flashes.md) for their
-constraints; neither changes transition ownership.
+A flash is a separate project-wide color overlay; a preset adds a motion
+treatment to one image layer. Neither needs transition endpoints or changes
+transition ownership. Use [add flashes and photo motion](flashes-and-presets.md)
+for those tasks, or [presets and flashes](../../reference/presets-and-flashes.md)
+for their exact constraints.

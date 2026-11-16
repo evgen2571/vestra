@@ -23,8 +23,12 @@ why playback and analysis are separate. For a first soundtrack, see
 
 ## Choose a measurement
 
-This starts a new project with your own `assets/music.wav`, containing at
-least three seconds of audio:
+Start a new `audio_response_small.py` with your own `assets/music.wav`,
+containing at least three seconds of audio. The later Python blocks continue
+this project:
+
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
 
 ```python
 from vestra import Circle, Project
@@ -99,7 +103,12 @@ project.output_audio = False
 project.render("audio-response.mp4", backend="cpu", overwrite=True)
 ```
 
-This replaces `audio-response.mp4` with a silent video. Setting
+```bash
+uv run python audio_response_small.py
+```
+
+This writes the silent `audio-response.mp4` in the current directory and
+replaces it on a rerun. Setting
 `output_audio = False` retains the clips and prepared analysis; changing it to
 `True` publishes the same visuals with sound. See the
 [signals reference](../../reference/signals.md) for binding operations, frequency
@@ -113,7 +122,7 @@ constraints and other transforms.
 [Download audio_response.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/audio_response.py) and run:
 
 ```bash
-python audio_response.py
+uv run python audio_response.py
 ```
 
 The program creates `audio-pulses.wav` with Python's standard-library `wave`

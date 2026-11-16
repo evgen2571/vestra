@@ -2,7 +2,9 @@
 description: Place independent copies of shapes, media and text, then edit the returned layers.
 ---
 
-# Sources and layers
+<span id="sources-and-layers"></span>
+
+# Add content and edit layers
 
 Add a source to a composition, then configure the returned layer. A source
 supplies content; the layer supplies timing, placement and processing. If these
@@ -10,7 +12,11 @@ roles are new, start with [the authoring model](../../concepts/authoring-model.m
 
 ## Reuse content in independent placements
 
-This complete setup needs no media files:
+Start a new `sources.py` with this setup; it needs no media files. The later
+blocks continue this project unless stated otherwise:
+
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
 
 ```python
 from vestra import Project, Rectangle
@@ -89,64 +95,23 @@ content and polygon points remain required. See [shape defaults](../../reference
 Text can use the bundled default, an installed font family, or an explicit file:
 
 ```python
-from vestra import Text, list_system_fonts
+from vestra import Text
 
 title = Text("Hello", font_size=48)
 project.root.add(title)
 ```
 
-The bundled font needs no host font setup. Use an explicit font file when the
-project requires another face and distribute it under its license.
+The bundled font needs no host font setup. For another face, supply a licensed
+font file as `assets/MyFont.ttf` before adding this block:
 
-??? note "Installed families, file paths and font discovery"
+```python
+file_title = Text("Hello", font="assets/MyFont.ttf", font_size=48)
+project.root.add(file_title, position=(0.5, 0.7))
+```
 
-    To choose an installed family, check which names are available first:
-
-    ```python
-    print(list_system_fonts())
-
-    system_title = Text("Hello", font="DejaVu Sans", font_size=48)
-    ```
-
-    Use that family only if it appears in the list. For a font file you distribute
-    with the project, provide its path instead:
-
-    ```python
-    file_title = Text("Hello", font="assets/MyFont.ttf", font_size=48)
-    ```
-
-    The bundled DejaVu-derived regular font works without host fonts and provides
-    Latin, Greek, Cyrillic and other Unicode glyphs. It produces consistent font
-    selection across machines. Explicit files are portable when the same file is
-    available. Installed families depend on the machine where the snapshot is
-    created; the snapshot then references the resolved file.
-
-    Family matching is exact and case-insensitive, including names with spaces.
-    Vestra prefers a regular face and breaks ties by file path and collection index.
-    An unavailable family raises `ValueError` during snapshot creation; it never
-    silently substitutes another family. Use `list_system_fonts()` to see choices.
-
-    `PathLike` values always mean files. Strings containing `/`, `\\`, or a filename
-    suffix (such as `Manrope.ttf`) mean files too, as do existing files relative to
-    `base_directory`. Other strings mean family names. For an extensionless file
-    that does not yet exist, use `Path("myfont")` or `"./myfont"`. For a family name
-    containing a dot or slash, discover its file and provide that explicit path.
-    Relative file paths retain their project base-directory semantics. Missing,
-    inaccessible or invalid files fail preflight/preparation.
-
-    Discovery is cached for the process: restart Python after installing fonts or
-    changing font configuration. Linux uses fontconfig configuration (including
-    `FONTCONFIG_FILE` and configured NixOS directories) with standard-directory
-    fallback. Windows and macOS scan standard system/user font directories;
-    application-private fonts, macOS resource-fork/dfont files, Windows registry-only
-    custom locations and uninstalled cloud fonts may not appear. Fontconfig aliases
-    and substitution rules do not replace exact family matching. No external font
-    utilities are needed. Empty discovery returns `[]`. Collections use the chosen
-    face through a standalone file in the user cache (`vestra/fonts` under the platform cache directory;
-    `XDG_CACHE_HOME` on Linux). Keep that file available for saved snapshots, or
-    restart Python and recreate the snapshot after clearing caches. The default
-    is bundled in the package and does not need a writable cache. There is no automatic per-character
-    font fallback. See the [Text reference](../../reference/sources/text.md).
+Leave `font` unset for consistent selection without host font setup. Installed
+families, path selection, discovery and cache behavior are covered by the
+[Text reference](../../reference/sources/text.md#select-a-font).
 
 ## Set source transform defaults
 
@@ -164,31 +129,29 @@ right_panel.transform.rotation.keyframe(0, 15)
 right_panel.transform.rotation.keyframe(2, 180)
 ```
 
-These values initialize the placement's existing transform; they add no extra
-rendering pass. Position is normalized to the parent canvas, anchor is within
-`[0, 1]`, scale is a positive number or pair, and rotation is finite degrees.
-Defaults remain position/anchor `(0.5, 0.5)`, scale `(1, 1)`, rotation `0`.
-ParticleSystem's existing `rotation` controls particle orientation; use
-`rotation_degrees` for its presentation default.
+These values initialize each layer's transform. Here both rectangles inherit
+15° rotation, while only the right one overrides position. Keyframes then edit
+that returned layer without changing the source or the left rectangle.
 
-You can configure `source.transform` before placement, including keyframes and
-component audio bindings, or pass `transform=my_transform` to a constructor or
-`add()`. Every placement copies all transform state. A supplied `transform`
-replaces the entire default transform and cannot be mixed with individual
-transform arguments. Supplying both rotation spellings is also an error.
+Use `source.transform` to prepare more defaults before placement. For exact
+limits, `transform=` replacement and animation/binding precedence, see
+[source presentation](../../reference/python-api.md#source-presentation).
 
-Individual `add()` overrides replace the selected property's value, keyframes,
-and bindings, including its X/Y component bindings. Unspecified properties
-retain their complete state. Later edits through `layer.transform` use the
-normal property behavior; assigning a numeric `.value` preserves its existing
-keyframes and bindings. Later source edits affect only future placements.
+## Export the result
 
-Scale bindings apply in order: uniform `transform.scale` bindings, then
-`transform.scale.x`/`.y`, then `transform.scale_x`/`scale_y` bindings.
+After the edits you want to try, finish `sources.py` with:
 
-`Color`/`SolidColor` fills the canonical canvas and has no direct canonical
-transform or transition endpoint. Python supplies a presentation wrapper when
-its layer is transformed or used in a transition.
+```python
+project.render("sources-and-layers.mp4", backend="cpu", overwrite=True)
+```
+
+```bash
+uv run python sources.py
+```
+
+This writes `sources-and-layers.mp4` in the current directory and replaces it
+on a rerun. The shape and default-font examples need no inputs; include the
+media and custom-font blocks only after supplying their listed files.
 
 For animation timing and interpolation, continue with
 [animation and keyframes](../../getting-started/animation.md). For reusable multi-part

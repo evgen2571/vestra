@@ -52,6 +52,13 @@ For interpolation and values before/after keyframes, use the authoritative
 
 ## Nested time
 
+For a video inside a group, read all four clocks down one column:
+
+<figure class="diagram" markdown="span">
+![A group begins at project second 2; its child begins one second later and samples source second 10 at half speed. At project second 4, group time is 2, child-local time is 1 and source time is 10.5. The child end at project second 6 is excluded.](../assets/diagrams/nested-time-domains.svg)
+<figcaption>This separate nested example uses a group start of 2 s, child start of 1 s, source offset of 10 s and playback rate of 0.5. Child keyframes follow the clip-local row; media decoding follows the source row.</figcaption>
+</figure>
+
 A group's children have a clock that starts at zero when the group appears.
 Subtract each placement's start to enter its local clock; keyframes then use
 that placement's own elapsed time. The [worked group example](../guides/python/nested-compositions.md#child-time-starts-with-the-group)
@@ -91,6 +98,11 @@ Layers are active over `[start, start + duration)`: the start is included, the e
 is excluded. At 30 fps, a one-second output has frames at `0`, `1/30`, …, `29/30`.
 There is no frame at the excluded end `1.0`. A final keyframe at that end therefore
 need not be sampled exactly. Put it earlier to show a held final state.
+
+![A one-second span at 30 fps includes filled sample points at 0, 1/30, 2/30 and, after omitted intermediate samples, 29/30 seconds. An open circle at 1 second marks the excluded end.](../assets/diagrams/frame-samples.svg)
+
+Filled points are rendered frames. The gap marked “…” omits intermediate
+samples; the open endpoint is a boundary rather than an extra frame.
 
 `fps` can be an integer or rational pair such as `(30000, 1001)`. Times in Python
 properties are seconds, not frame indices. Use prepared frame-number APIs when

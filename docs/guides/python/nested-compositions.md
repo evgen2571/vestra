@@ -13,12 +13,14 @@ that placement affects all its children together.
 <figcaption>One completed source, two independent placements. The right card's rotation and opacity leave the left card unchanged.</figcaption>
 </figure>
 
+This standalone card example needs no input files:
+
 ```python
 --8<-- "examples/tutorials/group_placements.py"
 ```
 
-The [complete card example](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/group_placements.py) needs no assets.
-Run `python group_placements.py` to write `group-placements.mp4`; rerunning replaces
+[Download the complete card example](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/group_placements.py).
+Run `uv run python group_placements.py` to write `group-placements.mp4`; rerunning replaces
 it. Its graphics are original and use the bundled font.
 
 ## Compose locally, then transform the result
@@ -162,9 +164,12 @@ For fractional sizes, resource limits and exact transform rules, see
 
 ## Nest a sized group
 
-Continue with the imports from the complete card example above:
+This separate sized-group example reuses only `project` from the preceding
+coordinate example. Import its own source classes before building the card:
 
 ```python
+from vestra import Circle, Group, Rectangle
+
 card = Group(size=(600, 300))
 
 card.add(

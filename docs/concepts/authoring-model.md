@@ -59,6 +59,18 @@ independent authoring state while still referring to the same media asset.
 Use the returned layer for placement edits. For the exact override behavior and
 practical source examples, see [sources and layers](../guides/python/sources-and-layers.md).
 
+```text
+source ── add(source) ──→ layer A's copy
+       └─ add(source) ──→ layer B's copy
+
+effect ── layer A.effects.add(effect) ──→ attached effect handle
+```
+
+The original source and effect remain templates for future attachments. Edit
+the returned layer or attached effect handle to change what is already shown.
+An audio binding instead records how a property samples a prepared signal;
+see [audio and signals](audio-and-signals.md) for that evaluation path.
+
 ## Nested compositions
 
 A reusable `Group` source is copied on placement, including its current children.

@@ -652,15 +652,9 @@ impl PreparedProject {
             == crate::RenderObserverControl::Cancel
             || cancellation.is_cancelled()
         {
-            lifecycle.cancelled();
-            tracing::info!(
-                target: "vestra.render",
-                operation_id = %operation_id,
-                stage = "preparing",
-                elapsed_ms = trace_milliseconds(operation_started.elapsed()),
-                "render cancelled"
-            );
-            return Err(prepared_cancelled_error(
+            return Err(crate::editor::reporting::cancel_preparation(
+                &mut lifecycle,
+                operation_id,
                 operation_started,
                 total_frames,
                 output_path,
@@ -669,15 +663,9 @@ impl PreparedProject {
         if lifecycle.stage(crate::RenderStage::Preparing) == crate::RenderObserverControl::Cancel
             || cancellation.is_cancelled()
         {
-            lifecycle.cancelled();
-            tracing::info!(
-                target: "vestra.render",
-                operation_id = %operation_id,
-                stage = "preparing",
-                elapsed_ms = trace_milliseconds(operation_started.elapsed()),
-                "render cancelled"
-            );
-            return Err(prepared_cancelled_error(
+            return Err(crate::editor::reporting::cancel_preparation(
+                &mut lifecycle,
+                operation_id,
                 operation_started,
                 total_frames,
                 output_path,
@@ -701,26 +689,13 @@ impl PreparedProject {
             Ok(summary) => summary,
             Err(error) => {
                 let error = prepared_operation_error(frame_error(error), operation_started);
-                if error.is_cancelled() {
-                    lifecycle.cancelled();
-                    tracing::info!(
-                        target: "vestra.render",
-                        operation_id = %operation_id,
-                        stage = %error
-                            .render_failure_context()
-                            .map_or("render", |context| context.stage.as_str()),
-                        elapsed_ms = trace_milliseconds(operation_started.elapsed()),
-                        "render cancelled"
-                    );
-                } else {
-                    lifecycle.failed();
-                    crate::editor::log_render_failure(
-                        operation_id,
-                        &output_path,
-                        operation_started,
-                        &error,
-                    );
-                }
+                crate::editor::reporting::finish_render_error(
+                    &mut lifecycle,
+                    operation_id,
+                    &output_path,
+                    operation_started,
+                    &error,
+                );
                 return Err(error);
             }
         };
@@ -760,39 +735,6 @@ impl PreparedProject {
             &result.timings,
         );
         Ok(result)
-    }
-}
-
-fn prepared_cancelled_error(
-    operation_started: Instant,
-    total_frames: u64,
-    output_path: PathBuf,
-) -> EditorError {
-    let operation_total_ms = operation_started.elapsed().as_millis();
-    EditorError::Render {
-        diagnostic: Box::new(Diagnostic::error(
-            "VESTRA-CANCELLED",
-            crate::Category::Cancellation,
-            "render cancelled",
-            "",
-        )),
-        warnings: Vec::new(),
-        context: Box::new(crate::RenderFailureContext {
-            stage: crate::RenderFailureStage::Cancellation,
-            last_completed_frame_index: None,
-            completed_frames: 0,
-            attempted_frame: None,
-            total_frames,
-            timeline_position: None,
-            progress: Some(0.0),
-            output_path: Some(output_path),
-            temporary_output_path: None,
-        }),
-        temporary_removed: false,
-        timings: crate::RenderTimings {
-            operation_total_ms,
-            ..crate::RenderTimings::default()
-        },
     }
 }
 

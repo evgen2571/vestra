@@ -51,23 +51,31 @@ pub(crate) fn validate(
                             );
                         }
                     }
-                    AssetType::Audio => match audio_probes
-                        .entry(resolved.clone())
-                        .or_insert_with(|| probe_audio_duration_cancellable(&resolved, cancelled))
-                    {
-                        Ok(duration) => {
-                            audio_durations.insert(asset.id.clone(), *duration);
+                    AssetType::Audio => {
+                        match audio_probes.entry(resolved.clone()).or_insert_with(|| {
+                            let result = probe_audio_duration_cancellable(&resolved, cancelled);
+                            #[cfg(test)]
+                            AUDIO_PROBE_CALLBACK.with(|callback| {
+                                if let Some(callback) = callback.borrow().as_ref() {
+                                    callback();
+                                }
+                            });
+                            result
+                        }) {
+                            Ok(duration) => {
+                                audio_durations.insert(asset.id.clone(), *duration);
+                            }
+                            Err(error) => errors.push(
+                                Diagnostic::error(
+                                    "VESTRA-ASSET-AUDIO",
+                                    Category::Media,
+                                    format!("invalid audio asset '{}': {error}", asset.id),
+                                    format!("{pointer}/source"),
+                                )
+                                .with_related_id(&asset.id),
+                            ),
                         }
-                        Err(error) => errors.push(
-                            Diagnostic::error(
-                                "VESTRA-ASSET-AUDIO",
-                                Category::Media,
-                                format!("invalid audio asset '{}': {error}", asset.id),
-                                format!("{pointer}/source"),
-                            )
-                            .with_related_id(&asset.id),
-                        ),
-                    },
+                    }
                     AssetType::Video => match probe_video(&resolved) {
                         Ok(info) => match info.duration_seconds {
                             Some(duration) if duration.is_finite() && duration > 0.0 => {
@@ -132,46 +140,49 @@ pub(crate) fn validate(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{
-        io,
-        sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        },
+thread_local! {
+    // Preflight runs on its caller's thread; concurrent tests must not share hooks.
+    static AUDIO_PROBE_CALLBACK: std::cell::RefCell<Option<Box<dyn Fn()>>> = const {
+        std::cell::RefCell::new(None)
     };
+}
+
+#[cfg(test)]
+pub(crate) struct TestAudioProbeGuard(Option<Box<dyn Fn()>>);
+
+#[cfg(test)]
+impl Drop for TestAudioProbeGuard {
+    fn drop(&mut self) {
+        AUDIO_PROBE_CALLBACK.with(|callback| *callback.borrow_mut() = self.0.take());
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn on_audio_probe_completed(callback: impl Fn() + 'static) -> TestAudioProbeGuard {
+    let previous =
+        AUDIO_PROBE_CALLBACK.with(|current| current.borrow_mut().replace(Box::new(callback)));
+    TestAudioProbeGuard(previous)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, rc::Rc};
 
     use super::*;
 
     #[test]
     fn shared_audio_paths_are_probed_once_per_preflight() {
-        struct CountAudioProbes(Arc<AtomicUsize>);
-
-        impl io::Write for CountAudioProbes {
-            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-                if String::from_utf8_lossy(bytes).contains("audio media probe completed") {
-                    self.0.fetch_add(1, Ordering::Relaxed);
-                }
-                Ok(bytes.len())
-            }
-
-            fn flush(&mut self) -> io::Result<()> {
-                Ok(())
-            }
-        }
-
         let assets = serde_json::from_value::<Vec<Asset>>(serde_json::json!([
             {"id": "first", "type": "audio", "source": "tone.wav"},
             {"id": "second", "type": "audio", "source": "tone.wav"}
         ]))
         .expect("assets");
-        let probes = Arc::new(AtomicUsize::new(0));
-        let writer_probes = Arc::clone(&probes);
-        let subscriber = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .with_writer(move || CountAudioProbes(Arc::clone(&writer_probes)))
-            .finish();
+        let probes = Rc::new(Cell::new(0));
+        let callback_probes = Rc::clone(&probes);
+        let _probe_guard =
+            on_audio_probe_completed(move || callback_probes.set(callback_probes.get() + 1));
         let mut errors = Vec::new();
+        let subscriber = tracing::subscriber::NoSubscriber::default();
         let validated = tracing::subscriber::with_default(subscriber, || {
             validate(
                 &assets,
@@ -191,7 +202,7 @@ mod tests {
             validated.audio_durations["first"],
             validated.audio_durations["second"]
         );
-        assert_eq!(probes.load(Ordering::Relaxed), 1);
+        assert_eq!(probes.get(), 1);
     }
 
     #[test]

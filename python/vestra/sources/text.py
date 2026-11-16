@@ -6,6 +6,7 @@ import os
 from math import isfinite
 from typing import Literal
 
+from ..authoring._internal import _number as _finite
 from ..authoring.values import Color, color_to_canonical
 from ..properties.transform import Transform, TransformPoint, TransformScale
 from .base import Source
@@ -19,15 +20,6 @@ def _positive(value: int | float, name: str) -> float:
     result = float(value)
     if not isfinite(result) or result <= 0:
         raise ValueError(f"{name} must be finite and positive")
-    return result
-
-
-def _finite(value: int | float, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{name} must be a real number")
-    result = float(value)
-    if not isfinite(result):
-        raise ValueError(f"{name} must be finite")
     return result
 
 

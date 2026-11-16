@@ -8,8 +8,10 @@ import ast
 import json
 from pathlib import Path
 import re
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +19,10 @@ SPEC = importlib.util.spec_from_file_location(
     "generate_effects", ROOT / "scripts/generate-effects.py"
 )
 generator = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(generator)
+with patch.object(sys, "path", [str(ROOT / "scripts"), *sys.path]):
+    SPEC.loader.exec_module(generator)
+python_render = generator.python_render
+reference_render = generator.reference_render
 
 
 def metadata():
@@ -77,7 +82,7 @@ class EffectGenerationTests(unittest.TestCase):
     def test_reference_escapes_pipe_in_python_default(self):
         data = metadata()
         data["effects"][0]["parameters"][0]["default"] = "a|b"
-        text = generator.render_reference(data["effects"])
+        text = reference_render.render_reference(data["effects"])
         row = next(
             line for line in text.splitlines() if line.startswith("| `edge_characters`")
         )
@@ -105,7 +110,7 @@ class EffectGenerationTests(unittest.TestCase):
         )
         effect["python"]["defaults"] = {"amount": 1}
         effect["units"] = [["amount", "factor"]]
-        text = generator.render_reference(data["effects"])
+        text = reference_render.render_reference(data["effects"])
         self.assertIn("## Example (`example`)", text)
         self.assertIn("| `amount` | `1` | [0, 1]; factor | keyframes + signals |", text)
         self.assertIn('??? info "Canonical JSON and planner metadata"', text)
@@ -115,18 +120,18 @@ class EffectGenerationTests(unittest.TestCase):
 
     def test_generated_constructor_mapping_is_readable(self):
         data = many_parameters()
-        text = generator.render_class(data["effects"][0], data["effects"])
+        text = python_render.render_class(data["effects"][0], data["effects"])
         self.assertLessEqual(max(map(len, text.splitlines())), 120)
         compile(text, "generated.py", "exec")
 
     def test_generated_helper_mapping_is_readable(self):
-        text = generator.render_helper(many_parameters()["effects"][0])
+        text = python_render.render_helper(many_parameters()["effects"][0])
         self.assertLessEqual(max(map(len, text.splitlines())), 120)
 
     def test_stub_constructor_remains_readable(self):
         data = many_parameters()
-        source = generator.render_class(data["effects"][0], data["effects"])
-        text = generator.render_stub(source)
+        source = python_render.render_class(data["effects"][0], data["effects"])
+        text = python_render.render_stub(source)
         self.assertLessEqual(max(map(len, text.splitlines())), 120)
         compile(text, "generated.pyi", "exec")
 
@@ -160,28 +165,28 @@ class EffectGenerationTests(unittest.TestCase):
             integer_maximum=256,
         )
         generator.validate(data)
-        before = generator.render_class(effect, [effect])
-        stub_before = generator.render_stub(before)
-        reference_before = generator.render_reference([effect])
+        before = python_render.render_class(effect, [effect])
+        stub_before = python_render.render_stub(before)
+        reference_before = reference_render.render_reference([effect])
         self.assertIn("levels: int = 4", before)
         self.assertIn("levels: int = 4", stub_before)
         self.assertIn("`4`", reference_before)
         parameter["default"] = 8
-        after = generator.render_class(effect, [effect])
+        after = python_render.render_class(effect, [effect])
         self.assertIn("levels: int = 8", after)
-        self.assertIn("levels: int = 8", generator.render_stub(after))
-        self.assertIn("levels: int = 8", generator.render_helper(effect))
-        self.assertIn("optional; `8`", generator.render_reference([effect]))
+        self.assertIn("levels: int = 8", python_render.render_stub(after))
+        self.assertIn("levels: int = 8", python_render.render_helper(effect))
+        self.assertIn("optional; `8`", reference_render.render_reference([effect]))
         parameter.update(kind="number", minimum=2, maximum=256)
         self.assertIn(
-            "levels: int | float = 8", generator.render_class(effect, [effect])
+            "levels: int | float = 8", python_render.render_class(effect, [effect])
         )
 
     def test_explicit_static_getter_fallback_is_preserved(self):
         data = metadata()
         effect = data["effects"][0]
         effect["python"]["get_values"] = True
-        source = generator.render_class(effect, [effect])
+        source = python_render.render_class(effect, [effect])
         self.assertIn("self._values.get('edge_characters')", source)
 
     def test_invalid_python_enum_override_fails_before_generation(self):
@@ -221,7 +226,7 @@ class EffectGenerationTests(unittest.TestCase):
         )
         effect["parameters"].insert(0, interval)
         effect = generator.with_python(data, {})["effects"][0]
-        source = generator.render_class(effect, [effect])
+        source = python_render.render_class(effect, [effect])
         tree = ast.parse(source)
         constructor = next(
             node
@@ -358,34 +363,34 @@ class EffectGenerationTests(unittest.TestCase):
             module = root / "python/vestra/effects/example.py"
             module.parent.mkdir(parents=True)
             module.write_text(
-                generator.IMPORT_BEGIN
+                python_render.IMPORT_BEGIN
                 + "\n"
-                + generator.IMPORT_END
+                + python_render.IMPORT_END
                 + "\n"
-                + generator.BEGIN
+                + python_render.BEGIN
                 + "\n"
-                + generator.END
+                + python_render.END
                 + "\n"
             )
             authoring = root / "python/vestra/authoring/effects.py"
             authoring.parent.mkdir(parents=True)
             authoring.write_text(
-                generator.ENUM_BEGIN
+                python_render.ENUM_BEGIN
                 + "\n"
-                + generator.ENUM_END
+                + python_render.ENUM_END
                 + "\n"
-                + generator.ADVANCED_BEGIN
+                + python_render.ADVANCED_BEGIN
                 + "\n"
-                + generator.ADVANCED_END
+                + python_render.ADVANCED_END
                 + "\n"
                 + "class Collection:\n"
-                + generator.HELPER_BEGIN
+                + python_render.HELPER_BEGIN
                 + "\n"
-                + generator.HELPER_END
+                + python_render.HELPER_END
                 + "\nclass ClipCollection:\n"
-                + generator.CLIP_BEGIN
+                + python_render.CLIP_BEGIN
                 + "\n"
-                + generator.CLIP_END
+                + python_render.CLIP_END
                 + "\n"
             )
             for path in [
@@ -394,19 +399,19 @@ class EffectGenerationTests(unittest.TestCase):
                 "python/vestra/authoring/__init__.py",
             ]:
                 (root / path).write_text(
-                    generator.IMPORT_BEGIN
+                    python_render.IMPORT_BEGIN
                     + "\n"
-                    + generator.IMPORT_END
+                    + python_render.IMPORT_END
                     + "\n__all__ = []\n"
                 )
             (root / "python/vestra/effects/base.py").write_text(
-                generator.IMPORT_BEGIN
+                python_render.IMPORT_BEGIN
                 + "\n"
-                + generator.IMPORT_END
+                + python_render.IMPORT_END
                 + "\n"
-                + generator.ENUM_TYPES_BEGIN
+                + python_render.ENUM_TYPES_BEGIN
                 + "\n"
-                + generator.ENUM_TYPES_END
+                + python_render.ENUM_TYPES_END
                 + "\n"
             )
             expected = generator.outputs(metadata(), root)
@@ -420,9 +425,9 @@ class EffectGenerationTests(unittest.TestCase):
                         marker = next(
                             marker
                             for marker in [
-                                generator.BEGIN,
-                                generator.HELPER_BEGIN,
-                                generator.IMPORT_BEGIN,
+                                python_render.BEGIN,
+                                python_render.HELPER_BEGIN,
+                                python_render.IMPORT_BEGIN,
                             ]
                             if marker in content
                         )
@@ -443,10 +448,10 @@ class EffectGenerationTests(unittest.TestCase):
 
     def test_generated_sections_preserve_handwritten_adapters(self):
         text = "adapter_before\nBEGIN\nold\nEND\nadapter_after\n"
-        actual = generator.replace_section(text, "BEGIN", "END", "new\n")
+        actual = python_render.replace_section(text, "BEGIN", "END", "new\n")
         self.assertEqual(actual, "adapter_before\nBEGIN\nnew\nEND\nadapter_after\n")
         with self.assertRaisesRegex(ValueError, "expected one generated section"):
-            generator.replace_section("no markers", "BEGIN", "END", "new")
+            python_render.replace_section("no markers", "BEGIN", "END", "new")
 
     def test_invalid_metadata_has_actionable_diagnostics(self):
         mutations = [

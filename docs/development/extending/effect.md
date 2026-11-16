@@ -241,6 +241,10 @@ high-level classes/stubs, advanced typed handles, enums, collection helpers,
 imports/exports, enum associations, visual schema branches and the parameter
 reference. Package users run no generator.
 
+`scripts/generate-effects.py` validates metadata and synchronizes output files.
+`scripts/effects/python_render.py` owns Python classes, helpers, facades and stubs;
+`scripts/effects/reference_render.py` owns the parameter reference.
+
 Normal new effects default to `vestra.effects.stylize` with no Python metadata
 entry. Optional `scripts/effects/python_metadata.py` overrides own module
 placement, constructor ergonomics, naming and historical compatibility. Keep

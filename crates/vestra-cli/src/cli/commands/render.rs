@@ -31,6 +31,23 @@ pub(super) fn run(
     backend_preference: RenderBackendPreference,
 ) -> ExitCode {
     let began = Instant::now();
+    if let Some(path) = report.as_deref()
+        && let Err(error) =
+            crate::output::validate_render_report_path(path, &project, output.as_deref())
+    {
+        return print_failure_for_progress(
+            progress,
+            "render",
+            format,
+            vec![Diagnostic::error(
+                "VESTRA-REPORT-PATH",
+                Category::Output,
+                error,
+                "",
+            )],
+            Vec::new(),
+        );
+    }
     let cancellation = CancellationToken::new();
     let cancellation_flag = cancellation.clone();
     if let Err(error) = ctrlc::set_handler(move || cancellation_flag.cancel()) {

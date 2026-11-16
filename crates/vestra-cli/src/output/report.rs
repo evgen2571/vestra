@@ -1,4 +1,8 @@
-use std::{fs, path::Path};
+use std::{
+    fs::File,
+    io::{self, Write},
+    path::Path,
+};
 
 use serde::Serialize;
 
@@ -7,7 +11,20 @@ use vestra::{Diagnostic, RenderFailureContext, RenderTimings};
 pub fn write_report<T: Serialize>(path: &Path, report: &T) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(report)
         .map_err(|error| format!("cannot serialize report: {error}"))?;
-    fs::write(path, bytes).map_err(|error| format!("cannot write report: {error}"))
+    publish_report(path, |file| file.write_all(&bytes))
+        .map_err(|error| format!("cannot write report: {error}"))
+}
+
+fn publish_report(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    write(temporary.as_file_mut())?;
+    temporary.as_file().sync_all()?;
+    temporary.persist(path).map_err(|error| error.error)?;
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -192,6 +209,22 @@ pub fn write_render_failure_report(
 mod tests {
     use super::*;
     use vestra::Category;
+
+    #[test]
+    fn failed_partial_report_write_preserves_previous_report_and_removes_temporary() {
+        let directory = tempfile::tempdir().unwrap();
+        let report = directory.path().join("report.json");
+        std::fs::write(&report, b"previous report").unwrap();
+        assert!(
+            publish_report(&report, |file| {
+                file.write_all(b"partial JSON")?;
+                Err(io::Error::other("injected write failure"))
+            })
+            .is_err()
+        );
+        assert_eq!(std::fs::read(&report).unwrap(), b"previous report");
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
 
     #[test]
     fn plan_failure_report_preserves_diagnostics_warnings_and_timings() {

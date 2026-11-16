@@ -44,7 +44,16 @@ resources. Keep device, queue and submission identities distinct when managing
 completion; see the upstream [identity correction](https://github.com/gfx-rs/wgpu/commit/8c7c5c4974717414d49ffbd19e91a337f2db7861)
 and [lifecycle verification](../gpu-validation.md#stress-resource-lifetimes).
 
-The backend has bounded in-flight work. `VESTRA_WGPU_IN_FLIGHT` controls the implementation pipeline depth only when valid; it is not a semantic setting. Texture pools, source caches, staging buffers, pending static layers and readback slots are retained across a prepared operation. Release them only when their GPU completion token makes them safe to reuse. This is why a `PreparedProject` owns one backend instance and is not freely concurrent.
+The backend has bounded in-flight work. Resource reuse follows completion:
+
+1. Retain texture pools, source caches, staging buffers, pending static layers
+   and readback slots across the prepared operation.
+2. Associate submitted work with its GPU completion token.
+3. Release or reuse those resources only when completion makes it safe.
+
+`VESTRA_WGPU_IN_FLIGHT` controls implementation pipeline depth only when valid;
+it is not a semantic setting. A `PreparedProject` owns one backend instance and
+is not freely concurrent because these resources and submissions share state.
 
 ## Frame planning and module ownership
 

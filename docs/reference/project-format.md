@@ -7,6 +7,11 @@ checks assets, media, tools, output paths, and requested backends. Objects
 reject unknown fields. Parsing with `Project.from_json` or `from_value` does
 not read files or probe media.
 
+Use this page when writing or inspecting canonical JSON. Python constructor
+defaults and conveniences are documented in the [Python API](python-api.md);
+they do not make required JSON fields optional. For a complete runnable file,
+start with [Author JSON projects](../guides/json-authoring.md).
+
 <span id="project-and-output"></span>
 
 ## Project object

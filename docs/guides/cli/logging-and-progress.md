@@ -1,4 +1,60 @@
-# Logging and progress
+<span id="logging-and-progress"></span>
+
+# CLI automation and logging
+
+Use JSON results when another program consumes the command, a report when you
+need a saved outcome, and JSON progress when you need to monitor a running
+render. For ordinary terminal rendering, use [Render with the CLI](rendering.md).
+
+## Capture a result and report
+
+Start with an existing `project.json` and accessible media. Check it before the
+render so a failure stops the script before encoding:
+
+```bash
+ve validate project.json --format json
+```
+
+After validation succeeds, run the command below. It protects an existing
+`final.mp4`, but replaces `render-report.json` after a successful report write,
+including a report of a render failure:
+
+```bash
+ve render project.json --output final.mp4 --format json --progress none --report render-report.json
+```
+
+Check the exit code before reading the result as a success. This creates
+`final.mp4` in the current directory and refuses to replace an existing video.
+The report path is replaced on a successful report write, including a report
+of a render failure. Choose a path separate from the project, media and output;
+see [report path protection](../../reference/cli.md#report-paths).
+
+## Monitor a render
+
+This alternative writes one event per line and a final JSON result envelope to
+`render-events.jsonl`; shell redirection replaces that log file:
+
+```bash
+ve render project.json --output monitored.mp4 --progress json --format json > render-events.jsonl
+```
+
+`monitored.mp4` must not already exist. The stdout file is a JSONL stream rather
+than one JSON document. Distinguish lifecycle events from the final command
+result; a failure before rendering starts may produce diagnostics without a
+render lifecycle. Progress reaching the final frame does not establish success:
+wait for publication and the final command outcome.
+
+| Channel | Contains | Use it for |
+| --- | --- | --- |
+| Final result (`--format json`) | Success or failure envelope, diagnostics and warnings. | Decide whether the command succeeded. |
+| Progress (`--progress json`) | Typed `RenderEvent` lifecycle on stdout. | Update an application or process monitor. |
+| Report (`--report PATH`) | Saved structured success or failure outcome. | Retain timings, backend data and failure context. |
+| Tracing (stderr by default) | Operational messages filtered by verbosity or `RUST_LOG`. | Investigate a failure or performance issue. |
+
+The [CLI reference](../../reference/cli.md#progress-streams) records which
+combinations share stdout and which send the final result to stderr.
+
+## Set log detail
 
 `ve` writes tracing logs to stderr. The default verbosity is WARN. Each `-v`
 raises the default level:

@@ -70,6 +70,24 @@ def test_public_pages_have_navigation_context() -> None:
     assert len(navigated) == len(set(navigated)), "Each page needs one sidebar context"
 
 
+def test_home_learning_path_reaches_the_first_render() -> None:
+    generated = ROOT / "site/index.html"
+    if not generated.is_file():
+        pytest.skip("requires just docs-build; included in just site-check")
+    learning_path = re.search(
+        r'<ol class="learning-path">(.*?)</ol>',
+        generated.read_text(encoding="utf-8"),
+        re.DOTALL,
+    )
+    assert learning_path is not None
+    destinations = re.findall(r'<h3[^>]*><a href="([^"]+)"', learning_path[1])
+    assert destinations == [
+        "getting-started/installation/",
+        "getting-started/first-render/",
+        "getting-started/first-animation/",
+    ]
+
+
 def test_reference_catalog_links_every_reference_topic() -> None:
     reference = ROOT / "docs/reference"
     topics = {

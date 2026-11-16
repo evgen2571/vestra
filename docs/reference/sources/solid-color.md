@@ -5,7 +5,7 @@ panels. `SolidColor` is an alias for the same high-level class.
 
 ## API signature
 
-```text title="Source signature (presentation keywords omitted)"
+```text title="Source signature summary (presentation keywords omitted)"
 Color(value="#000000")
 SolidColor(value="#000000")
 ```

@@ -70,10 +70,14 @@ analysis, and use the normal temporary-output, abort and publication lifecycle.
 
 ## Completion, failure and reporting
 
-Writing frames, finalizing the temporary encoder output and publishing the
-destination are separate failure boundaries. A successful frame loop does not
-establish that the file is ready. `RenderResult` and the terminal `completed`
-event follow successful publication.
+| Boundary | Success establishes | Failure evidence |
+| --- | --- | --- |
+| Frame write | The sink accepted the next ordered RGBA frame. | Failed frame/stage and encoder error; the destination is not yet published. |
+| Encoder finalization | The temporary container finished encoding. | Finalization error and temporary path, where retained. |
+| Publication | Output is available at its destination under the overwrite policy. | Publication stage and destination/temporary paths. |
+
+A successful frame loop does not establish that the file is ready.
+`RenderResult` and the terminal `completed` event follow successful publication.
 
 `RenderFailureContext` identifies the failed stage and may retain temporary and
 destination paths. Reports record requested and selected backend, fallback,

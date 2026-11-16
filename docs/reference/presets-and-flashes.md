@@ -1,7 +1,8 @@
 # Presets and flashes
 
 Presets expand a layer's motion intent; flashes add root-owned color overlays.
-See the [guide](../guides/python/transitions-flashes-and-presets.md) for examples.
+See [Add flashes and motion presets](../guides/python/flashes-and-presets.md)
+for examples. For overlapping shots, use [transitions](transitions.md).
 
 ## Layer presets
 

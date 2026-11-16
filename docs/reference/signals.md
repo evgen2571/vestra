@@ -4,6 +4,18 @@ Signals are immutable scalar values derived from prepared master-audio analysis.
 Use `project.audio.signal` in high-level Python. Each constructor or transform
 returns a new `ScalarSignal`; it does not mutate the input.
 
+For an existing project with audio and a visual `layer`, bind a bounded master
+RMS response to opacity:
+
+```python
+response = project.audio.signal.rms().gain(2).clamp(0, 1)
+layer.opacity.bind(response, operation="replace")
+```
+
+Preparation analyzes master audio; the binding then reads that response at the
+frame's project time. See [audio reactivity](../guides/python/signals-and-audio-reactivity.md)
+for a complete task.
+
 ## Audio features
 
 | Python form | Canonical feature | Contract |
@@ -49,3 +61,11 @@ JSON. They are not standalone runtime SDK objects. See the [audio reference](aud
 and [audio-reactivity guide](../guides/python/signals-and-audio-reactivity.md).
 For a multi-band visual source with its own smoothing, see
 [the spectrum guide](../guides/python/spectra.md).
+
+## Errors
+
+Invalid transform ranges or non-finite controls fail authoring/validation.
+Preparation fails if a binding cannot obtain usable master-audio analysis.
+Clamp to the target property's accepted range explicitly when the signal can
+exceed it; the target still validates evaluated values. See
+[diagnostics](diagnostics.md) for structured failure information.

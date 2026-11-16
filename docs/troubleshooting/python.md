@@ -1,120 +1,153 @@
 # Python problems
 
-Start with the section matching the error you see. If you installed Vestra from
-PyPI, the first checks apply to your installed package. Source-checkout checks
-are collected at the end.
+Start with the error you see. The first sections apply to an installed package;
+[source-checkout checks](#problems-in-a-source-checkout) are separate. Run each
+check with the same Python environment that runs your script.
 
 ## `import vestra` fails
 
-Check that Vestra is installed in the environment running your script.
-For a uv project:
+**Check.** Read the full traceback and compare your interpreter/platform with
+[wheel support](../getting-started/installation.md#supported-python-versions-and-platforms).
+`ModuleNotFoundError: vestra` usually means the active environment does not
+contain the package. An error mentioning `_native` means the compiled engine
+cannot be found or loaded.
+
+**Fix.** Install in the environment that runs your script. For a uv project:
 
 ```bash
 uv add vestra
-uv run python -c "import vestra; print(vestra.__version__)"
 ```
 
-For a pip environment, use the same Python interpreter for installation and
-execution:
+For a pip environment, use `python -m pip install vestra`. If no published wheel
+matches the interpreter/platform, use a supported interpreter or follow the
+[advanced source-build route](../development/source-builds.md). Rebuilding a
+checkout is a separate case below.
+
+**Confirm.** Check import and version with that interpreter:
 
 ```bash
-python -m pip install vestra
-python -c "import vestra; print(vestra.__version__)"
+uv run python -c "import vestra; print(vestra.__version__); print(vestra.__file__)"
 ```
 
-An error mentioning `_native` means that Python cannot load Vestra's compiled
-engine. Check that your Python version and platform are supported by the
-[installation guide](../getting-started/installation.md). If you are working
-from a checkout, see the source-build section below.
+In a pip environment, use `python` instead of `uv run python`. If a supported
+wheel still fails to load, keep the traceback, OS/architecture, Python version
+and package version for a report.
 
 ## My editor reports an error, but the script runs
 
-Make sure your editor's type checker uses the same Python environment as your
-script. Check which package the script imports:
+**Check.** Compare the editor's selected interpreter with the script's package:
 
 ```bash
 uv run python -c "import vestra; print(vestra.__file__)"
-# In a pip environment, use python instead of uv run python.
 ```
 
-Compare the highlighted name or argument with the
-[Python API reference](../reference/python-api.md). If the installed version,
-editor environment and documented API agree but the warning persists, report
-it with a small example and the type checker's message.
+Use `python` in a pip environment. Compare the highlighted name/argument and
+installed version with the [Python API reference](../reference/python-api.md).
+
+**Fix.** Select the same environment in the editor. For a source checkout,
+rebuild the native extension before comparing runtime behavior with stubs.
+
+**Confirm.** Rerun the script and the type checker. If they still disagree,
+report the smallest example, installed version and exact type-checker message.
 
 ## Validation passes, but rendering fails
 
-`project.validate()` checks project settings and layer relationships. It does
-not check whether media files exist, codecs are available, the output path is
-writable or a graphics adapter can be used. Those checks happen during
-`project.prepare()` or `project.render()`.
+**Check.** `project.validate()` checks project settings and layer relationships.
+It does not check media existence, codecs, writable outputs or graphics adapters.
+Those checks happen during `prepare()` or `render()`. Read the error for the
+failing file/resource and check relative paths against `project.base_directory`,
+which may differ from your shell's current directory.
 
-Read the render error for the failing file or resource. For FFmpeg failures,
-check the selected executable path in the diagnostic and any
-`IMAGEIO_FFMPEG_EXE` override. Python uses the executable installed through
-`imageio-ffmpeg`; a system FFmpeg on PATH is not required. Relative media paths
-are resolved from the project's `base_directory`, which may differ from your
-shell's current directory.
-See [FFmpeg troubleshooting](ffmpeg.md) and
-[rendering troubleshooting](rendering.md) for the next checks.
+**Fix.** Correct the named path, output or backend problem. For FFmpeg failures,
+check the executable path in the diagnostic and any `IMAGEIO_FFMPEG_EXE`
+override. Python selects its installed executable automatically; it does not
+require system FFmpeg on `PATH`. See [FFmpeg checks](ffmpeg.md) and
+[rendering checks](rendering.md).
 
-The CLI's `ve validate` also checks resources needed by a project file, so it
-performs more environment checks than Python's `project.validate()`.
+**Confirm.** Rerun the operation that failed. Semantic validation passing again
+does not verify resource readiness. The CLI's `ve validate` includes preflight,
+so it performs more environment checks than Python `project.validate()`.
 
 ## Progress callbacks raise an exception
 
-`render(..., on_progress=callback)` sends `RenderEvent` v1 values for `started`,
-`stage_changed`, `progress` and the terminal outcome. A callback replaces the
-built-in terminal progress display. The `completed` event means the output
-file has been finalized and published.
+**Check.** Read the callback's traceback first. `on_progress=callback` receives
+`RenderEvent` v1 values for `started`, `stage_changed`, `progress` and the terminal
+outcome, and replaces built-in terminal progress. Inspect
+`error.render_cleanup_error` if an additional cleanup error was attached.
 
-If a callback raises before rendering completes, Vestra stops rendering and
-re-raises the original Python exception. Check the callback's traceback first.
-An additional cleanup error may be attached as `render_cleanup_error`.
-An exception from a callback handling `completed` does not invalidate the
-already-published output.
+**Fix.** Correct the callback. If it raises before completion, Vestra stops
+rendering and re-raises the original Python exception. A callback exception
+handling `completed` does not invalidate the already-published output.
+
+**Confirm.** Rerun with the corrected callback. Wait for the normal render
+result; a terminal `completed` event means finalization and publication have
+already succeeded. Keep the traceback if the exception persists.
 
 ## Cancelling a render raises `CancelledError`
 
-This is the expected outcome of cancellation. Create a `CancellationToken`,
-pass it to `render` and call `cancel()` from another control path to stop the
-render. Handle `vestra.CancelledError` when your application needs to distinguish
-cancellation from success. It is a `RenderError`, and is separate from exceptions
-raised by a progress callback.
+**Check.** This is the expected cancellation outcome. Check which control path
+called `cancel()` on the `CancellationToken` passed to `render()`.
+
+**Fix.** Handle `vestra.CancelledError` when your application needs to distinguish
+cancellation from success. It is a `RenderError`, separate from an exception
+raised by a progress callback. If cancellation was unintended, correct the token
+or application control path.
+
+**Confirm.** An intentional cancellation should raise that exception rather
+than return a success result. Run again without cancelling to verify normal
+completion.
 
 ## Logs are missing or conflict with progress output
 
-Call `vestra.configure_logging(...)` to enable Vestra logs. Importing Vestra or
-rendering a project does not configure logging automatically. Configure it once;
-repeated global initialization raises a runtime error.
+**Check.** Importing Vestra or rendering does not configure logging automatically.
+`vestra.configure_logging(...)` initializes it once; repeating global
+initialization raises a runtime error. Inspect the level/filter and destination:
 
-Choose the destination consistently:
+| Destination | File argument | Progress behavior |
+| --- | --- | --- |
+| `output="stderr"` | Rejected. | JSON logging disables terminal progress on stderr. |
+| `output="file"` | Required. | Terminal progress remains available. |
+| `output="stderr_and_file"` | Required. | JSON logging disables terminal progress on stderr. |
 
-- `output="stderr"` does not accept a `file` argument.
-- `output="file"` and `output="stderr_and_file"` require a `file` argument.
+**Fix.** Configure logging once with a matching destination/file combination.
+Choose readable text or JSON Lines and a level/filter that includes the records
+you need. An advanced `RUST_LOG` override can change filtering; see
+[logging options](../reference/python-api.md#logging).
 
-Logging supports readable text or JSON Lines, levels, `filter=` and the advanced
-`RUST_LOG` override. JSON logs sent to stderr disable terminal progress so the
-JSON stream stays readable by tools. JSON logs sent to a file leave terminal
-progress available. See the [Python API reference](../reference/python-api.md)
-for logging options.
+**Confirm.** Run the failing operation again and check the selected destination.
+Keep JSON logs and render events as separate streams; enabling one does not
+enable the other.
 
 ## Problems in a source checkout
 
-Rebuild the editable native package after changing Rust code or switching
-interpreters. From the checkout's development environment:
+**Check.** An `_native` load failure can mean the extension was built for another
+interpreter or cannot load native dependencies. Switching interpreters or
+changing Rust code requires rebuilding the editable native package.
+
+**Fix.** From the checkout's configured development environment:
 
 ```bash
 just python-sync
+```
+
+For prerequisites, use [source builds](../development/source-builds.md); for
+native media build failures, see [FFmpeg troubleshooting](ffmpeg.md#build-cannot-find-ffmpeg).
+Binding changes must keep the compiled extension, package exports and
+`python/vestra/_native.pyi` consistent.
+
+**Confirm.** Check that the imported package is the intended checkout:
+
+```bash
 uv run python -c "import vestra; print(vestra.__file__)"
 ```
 
-An `_native` import failure can mean the extension was built for a different
-interpreter or cannot load its native dependencies. For FFmpeg build errors,
-see [FFmpeg troubleshooting](ffmpeg.md). Follow
-[Contributing](https://github.com/evgen2571/vestra/blob/develop/CONTRIBUTING.md) and [Testing](../development/testing.md)
-for environment setup and checks.
+Then rerun the failing script or focused check from [Testing](../development/testing.md).
 
-When changing the Python bindings, keep the compiled extension and its type
-stubs in `python/vestra/_native.pyi` consistent. Rebuild before comparing runtime
-behavior with type-checker results.
+## Report a problem that remains
+
+Include the smallest script, complete traceback/type-checker message, exact run
+command, Vestra and Python versions, OS/architecture, imported package path and
+whether you used a wheel or a source checkout. For a checkout, include the commit
+and build command. For render failures, add the
+[render evidence](rendering.md#report-an-unresolved-render-failure), including
+selected backend and any FFmpeg override. Remove private data before sharing.

@@ -141,7 +141,7 @@ the appropriate graphics API/environment from above:
 ```bash
 VESTRA_WGPU_BACKEND=vulkan VESTRA_REQUIRE_WGPU=1 \
   cargo test -p vestra --test public_sdk --all-features \
-  public_wgpu_concurrent_lifecycle_stress -- --ignored --exact --nocapture
+  wgpu::public_wgpu_concurrent_lifecycle_stress -- --ignored --exact --nocapture
 ```
 
 It requests 12 workers with 30 prepare/render/drop rounds each (GL uses one

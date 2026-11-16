@@ -7,9 +7,9 @@ external assets, so it is easy to copy and inspect.
 ## Prerequisites
 
 The Python package does not install the `ve` CLI. Download a
-[native CLI archive](installation.md#install-the-native-cli), or build it from
+[native CLI archive](cli-installation.md), or build it from
 a repository checkout using the
-[build-from-source instructions](installation.md#build-from-source--development).
+[build-from-source instructions](../development/source-builds.md#build-the-cli).
 You also need `ffmpeg` on `PATH` for encoding and audio processing.
 
 Run the commands below in a working directory with `ve` on your `PATH`.

@@ -81,6 +81,8 @@ import `first_render.py`.
 --8<-- "examples/tutorials/first_animation.py"
 ```
 
+The script replaces `quickstart.mp4` on a rerun because it uses
+`overwrite=True`. Change the output filename to keep an earlier render.
 Run it in your project environment:
 
 ```bash
@@ -90,8 +92,7 @@ uv run python first_animation.py
 Open **`quickstart.mp4` in the current directory**. The render is 640 × 360 at
 30 fps, lasts three seconds and has no audio. The output name comes from the
 script's final `project.render(...)` call, independently of the Python
-filename. Running it again replaces `quickstart.mp4` because the example uses
-`overwrite=True`.
+filename.
 
 ## Change the timing
 

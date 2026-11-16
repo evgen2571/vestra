@@ -100,7 +100,7 @@ copies from the bundled renders, follow [preview reproduction](../development/do
 it uses this checkout and does not fetch a separate documentation branch.
 
 If you don't use Nix, follow the
-[source-build installation instructions](../getting-started/installation.md#build-from-source--development)
+[source-build installation instructions](../development/source-builds.md)
 for your platform. Building from the checkout needs Rust and native build tools;
 developer media tools also need `ffmpeg` on `PATH`. Current Python installs its
 FFmpeg executable automatically. The captured revision

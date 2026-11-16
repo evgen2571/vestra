@@ -204,14 +204,14 @@ keeping the project duration at three seconds.
 
 For the low-level forms, see
 [the animation reference](../reference/animation.md)
-and [the project format](../reference/project-format.md). For a practical next
-step, explore [effects](../guides/python/effects.md) or find a project in the
-[examples gallery](../gallery/index.md).
+and [the project format](../reference/project-format.md). The next section helps you choose a practical task.
 
 
 ## What to build next
 
-Choose a task that builds on the position and opacity tracks used here:
+[Add text, shapes and media](../guides/python/sources-and-layers.md){ .md-button .md-button--primary }
+
+Start by adding another layer to your animation. Other useful follow-ups:
 
 | Task | Start here | See it in a complete project |
 | --- | --- | --- |

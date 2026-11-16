@@ -47,7 +47,7 @@ Choose the environment for your change:
   just python-sync
   ```
 
-  Without Nix, follow [native installation](docs/getting-started/installation.md#build-from-source--development).
+  Without Nix, follow [source-build setup](docs/development/source-builds.md#without-nix).
   Native CLI tests and developer media tools need `ffmpeg` on `PATH`; Python
   installs its executable through `imageio-ffmpeg`. Some optional
   media verification workflows use `ffprobe` as an independent reference.

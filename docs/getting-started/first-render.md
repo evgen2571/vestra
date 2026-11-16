@@ -29,6 +29,10 @@ You can also [download the Python file](https://raw.githubusercontent.com/evgen2
 
 ## 2. Render the video
 
+The script uses `overwrite=True`: rerunning it replaces an existing
+`first-render.mp4` when rendering succeeds. Change the filename to keep an
+older render, or omit `overwrite=True` in your own tools to protect it.
+
 From the directory containing your script:
 
 ```bash
@@ -39,12 +43,6 @@ Open **`first-render.mp4` in the current directory** with an MP4-capable video
 player. It should show the rectangle above for three seconds at 30 frames per
 second, with no audio.
 
-!!! note "Running the example again"
-
-    `overwrite=True` replaces an existing `first-render.mp4` when rendering
-    succeeds. Use a different output filename to keep an earlier version.
-    Omit that option in your own tools if you want an existing file to be
-    protected by default.
 
 If the render fails, check [installation](installation.md#3-check-the-environment)
 and [rendering troubleshooting](../troubleshooting/rendering.md).

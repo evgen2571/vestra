@@ -10,7 +10,9 @@ one clock, so you can pause them at the same point.
 
 These selected settings cover all 23 canonical effects, PseudoAscii and a second
 dither pattern. Use [Add an effect](effects.md) to attach a treatment, or the
-[complete example](#complete-example) to run these comparisons.
+[complete example](#complete-example) to run these comparisons. The Python
+blocks below show constructor settings; they are separate alternatives, not a
+script to run in sequence. Imports, source setup and output are in that program.
 
 ## Color and tone
 
@@ -515,11 +517,11 @@ see the [anchor coverage example](../../reference/effects.md#motion-tile-anchor-
 ## Complete example
 
 Save [effects_catalog.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/effects_catalog.py) and
-[landscape-study.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg) in the same directory:
+[landscape-study.jpg](https://raw.githubusercontent.com/evgen2571/vestra/develop/assets/images/landscape-study.jpg) in the same directory. These commands replace their named output files:
 
 ```bash
-python effects_catalog.py --effect gaussian-blur --still
-python effects_catalog.py --effect motion-blur
+uv run python effects_catalog.py --effect gaussian-blur --still
+uv run python effects_catalog.py --effect motion-blur
 ```
 
 These write `effect-gaussian-blur.webp` and a three-second `effect-motion-blur.mp4`;

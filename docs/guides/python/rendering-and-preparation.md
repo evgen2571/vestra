@@ -5,8 +5,26 @@ description: Render videos and previews, export stills or arrays, and reuse prep
 # Render and prepare from Python
 
 Start with a `project` from the [first render tutorial](../../getting-started/first-render.md).
-The examples below use that project to export videos, images and arrays.
-Use `prepare()` when you need several outputs from the same project.
+Copy its imports and project-building code into `export.py`, then append the
+export you need below. Each block uses the same `project`; blocks that use `frame` or
+`prepared` continue the preceding setup. Outputs go in the current directory
+unless a destination directory is shown. Every `overwrite=True` allows an
+existing output to be replaced.
+
+## Choose an output
+
+| You need | Use | Destination |
+| --- | --- | --- |
+| A finished video with sound | [Encode one video](#encode-one-video) | `.mp4` |
+| A smaller draft | [Render a preview](#render-a-preview-or-change-output-settings) | `.mp4` |
+| A section of the timeline | [Export a range](#export-part-of-the-timeline) | `.mp4`, `.gif` or `.webp` |
+| A looping animation | [Export GIF or animated WebP](#export-gif-or-animated-webp) | `.gif` or `.webp`, without sound |
+| A poster or selected frames | [Save images](#save-a-still-image-or-sequence) | PNG, JPEG or static WebP |
+| Pixels for another Python library | [Use NumPy](#use-frames-with-numpy) | An RGBA array in memory |
+| Repeated requests in an application | [Reuse prepared state](#application-integration) | Frames or encoded files |
+
+The first five routes save files directly. Arrays and prepared runtimes are
+useful when another part of your application consumes the result.
 
 ## Encode one video
 
@@ -21,7 +39,14 @@ print(f"Saved {result.output_path} using {result.selected_backend}")
 
 This replaces `output.mp4` if it exists. Omit `overwrite=True` to protect an
 existing file. A successful result means the file has finished encoding and is
-available at `result.output_path`.
+available at `result.output_path`. Run the combined setup and export:
+
+```bash
+uv run python export.py
+```
+
+The output is `output.mp4` in the current directory; rerunning replaces it.
+Use the same command after choosing another export block below.
 
 Use `backend="auto"` to prefer WGPU when an adapter is available and fall back
 to CPU otherwise. Check the result's backend and adapter information to see
@@ -35,8 +60,8 @@ For a quick draft:
 project.render_preview("preview.mp4", overwrite=True)
 ```
 
-The preview keeps all effects, caps the longest side at 640 pixels and the
-frame rate at 15 FPS, and uses fast H.264 encoding. It never increases a smaller
+`preview.mp4` is replaced on a rerun. The preview keeps all effects, caps the
+longest side at 640 pixels and the frame rate at 15 FPS, and uses fast H.264 encoding. It never increases a smaller
 project's dimensions or a lower frame rate. `project.render(..., preview=True)`
 uses the same preset.
 
@@ -54,8 +79,8 @@ project.render(
 )
 ```
 
-These settings leave the authored project unchanged. Positions and sizes keep
-their authored proportions; a different aspect ratio fits the composition in
+This writes `small.mp4`, replacing an existing file. These settings leave the
+authored project unchanged. Positions and sizes keep their authored proportions; a different aspect ratio fits the composition in
 the center without stretching it. Explicit settings override the corresponding
 preview defaults. Quality controls apply to MP4.
 
@@ -69,8 +94,8 @@ for accepted values, encoder presets and effect limits.
 result = project.render("clip.mp4", start=0.5, end=1.0, overwrite=True)
 ```
 
-`start` and `end` are seconds on the original project timeline. Omit `end` to
-render through the project duration. The selection includes frames at or after
+This writes `clip.mp4`, replacing an existing file. `start` and `end` are seconds
+on the original project timeline. Omit `end` to render through the project duration. The selection includes frames at or after
 `start` and before `end`; it must contain at least one frame.
 
 Effects and transitions keep their original project time. The exported clip
@@ -88,6 +113,7 @@ project.render("animation.gif", fps=15, start=0, end=0.5, overwrite=True)
 project.render("animation.webp", fps=24, start=0, end=0.5, overwrite=True)
 ```
 
+These write `animation.gif` and `animation.webp`, replacing existing files.
 The extension selects the format. Both animations loop indefinitely and contain
 no audio stream. Audio-driven visuals still work, and audio assets still need
 preflight when they determine the project duration or supply visual analysis.
@@ -106,6 +132,7 @@ frame.save("poster.webp", overwrite=True)
 project.render_frame(frame_number=0, output="first.jpg", overwrite=True)
 ```
 
+These write `poster.png`, `poster.webp` and `first.jpg`, replacing existing files.
 Choose PNG, JPEG or static WebP by extension. PNG and WebP preserve alpha;
 JPEG composites transparent pixels over black. Still export uses built-in
 encoders and does not require the FFmpeg executable. `frame.save("poster.webp")`
@@ -148,11 +175,23 @@ project.render_frames(
 
 ## Use frames with NumPy
 
-Install the optional extra with `pip install 'vestra[numpy]'`:
+Add the optional extra before running this block:
+
+```bash
+uv add 'vestra[numpy]'
+```
+
+For a pip-managed environment, use `pip install 'vestra[numpy]'` instead.
+Continue with your `project` to get pixels directly:
 
 ```python
 pixels = project.get_frame(0.5, backend="cpu")
 print(pixels.shape, pixels.dtype)  # (height, width, 4), uint8
+```
+
+If you already have a `frame` from the still-image example, convert it instead:
+
+```python
 pixels = frame.to_numpy()
 ```
 
@@ -163,11 +202,18 @@ See [frame data](../../reference/render-outputs.md#frames-and-arrays) for layout
 and ownership details.
 
 The [complete frame export example](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/frame_exports.py)
-creates a project, stills, selected frames, a sequence and an array. Run it with
-`python frame_exports.py` after installing `vestra[numpy]`. It replaces its
+needs no input files. It creates a project, stills, selected frames, a sequence
+and an array. Run it with
+`uv run python frame_exports.py` after installing `vestra[numpy]`. It replaces its
 outputs inside `frame-exports/` on each run.
 
-## Validate before rendering
+## Application integration
+
+The export methods above are enough for scripts that write a finished result.
+For a preview service, editor or batch job, validate authoring data separately,
+then reuse one prepared snapshot while it stays unchanged.
+
+### Validate before rendering
 
 ```python
 report = project.validate()
@@ -181,7 +227,7 @@ also check media and the environment; validation alone does not establish that
 a render can succeed. CLI `ve validate` includes environment preflight. The
 [rendering lifecycle](../../concepts/rendering-lifecycle.md) explains these stages.
 
-## Prepare once for several frames
+### Prepare once for several frames
 
 ```python
 prepared = project.prepare(backend="cpu")
@@ -196,7 +242,7 @@ prepares again. Neither route encodes video or checks output publication.
 You can pass `resolution`, `fps` and `quality` to `prepare()`. The prepared
 runtime keeps those settings for its lifetime; prepare again to change them.
 
-## Render videos from prepared state
+### Render videos from prepared state
 
 The same prepared runtime can produce several videos without rebuilding resources:
 
@@ -207,11 +253,11 @@ request = PreparedVideoRenderRequest("prepared-output.mp4", overwrite=True)
 result = prepared.render_video(request)
 ```
 
-Each request supplies a destination and overwrite policy. Add `start` and `end`
-to select a timeline interval, or use a `.gif` or `.webp` destination for an
+This replaces `prepared-output.mp4`. Each request supplies a destination and
+overwrite policy. Add `start` and `end` to select a timeline interval, or use a `.gif` or `.webp` destination for an
 animation. The prepared runtime already owns its snapshot and renderer.
 
-## Progress and cancellation
+### Progress and cancellation
 
 `project.render()` shows progress automatically when appropriate for the terminal.
 Set `show_progress=False` to disable it, or use `on_progress=callback` instead.
@@ -230,7 +276,7 @@ re-raises the original Python exception. A native cleanup error is attached as
 invalidate an already-published render. See [runtime events and errors](../../reference/python-api.md#progress-and-cancellation)
 for the exact integration contract.
 
-## Use the immutable runtime explicitly
+### Use the immutable runtime explicitly
 
 Use this route when a canonical snapshot is already part of your workflow:
 

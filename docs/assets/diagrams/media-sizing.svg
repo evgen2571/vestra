@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="390" viewBox="0 0 480 390" role="img" aria-labelledby="title desc">
+  <title id="title">Original, fit and cover sizing</title>
+  <desc id="desc">A 160 by 80 source is centered in three 120 by 120 canvases. Original keeps its size; fit scales to 120 by 60; cover scales to 240 by 120. Canvas boundaries clip excess content. Fit retains both edge markers; cover clips them. The central circle stays round.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#fff; --ink:#242b33; --line:#697988; --source:#b9ccdb; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#1f242a; --ink:#eef2f6; --line:#95a7b6; --source:#3e607e; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .frame { fill:none; stroke:var(--line); stroke-width:2; stroke-dasharray:5 4; }
+  </style>
+  <defs>
+    <g id="source">
+      <rect width="160" height="80" fill="var(--source)"/>
+      <circle cx="80" cy="40" r="15" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      <text x="8" y="48">L</text>
+      <text x="139" y="48">R</text>
+    </g>
+  </defs>
+  <rect width="480" height="390" rx="10" fill="var(--bg)"/>
+  <text x="20" y="35">One source: 160 × 80 px</text>
+  <use href="#source" x="160" y="60"/>
+  <g text-anchor="middle">
+    <text x="80" y="190">original</text>
+    <text x="240" y="190">fit</text>
+    <text x="400" y="190">cover</text>
+  </g>
+  <svg x="20" y="210" width="120" height="120" viewBox="0 0 120 120" overflow="hidden">
+    <rect width="120" height="120" fill="var(--panel)"/>
+    <use href="#source" transform="translate(-20 20)"/>
+  </svg>
+  <svg x="180" y="210" width="120" height="120" viewBox="0 0 120 120" overflow="hidden">
+    <rect width="120" height="120" fill="var(--panel)"/>
+    <use href="#source" transform="translate(0 30) scale(.75)"/>
+  </svg>
+  <svg x="340" y="210" width="120" height="120" viewBox="0 0 120 120" overflow="hidden">
+    <rect width="120" height="120" fill="var(--panel)"/>
+    <use href="#source" transform="translate(-60 0) scale(1.5)"/>
+  </svg>
+  <rect x="20" y="210" width="120" height="120" class="frame"/>
+  <rect x="180" y="210" width="120" height="120" class="frame"/>
+  <rect x="340" y="210" width="120" height="120" class="frame"/>
+  <text x="20" y="370">Dashed outline: 120 × 120 canvas</text>
+</svg>

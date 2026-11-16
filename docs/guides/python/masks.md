@@ -21,6 +21,11 @@ also [download its three-second MP4](../../assets/renders/concepts-masks.mp4).
 
 ## Start with a circular crop
 
+Start `portrait_reveal.py` below. The next three steps continue this project.
+
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
+
 ```python
 from vestra import Circle, Image, Project
 
@@ -77,8 +82,12 @@ so the result is an expanding ring. Leave out this step when you want a solid po
 project.render("portrait-reveal.mp4", backend="cpu", overwrite=True)
 ```
 
-This writes a five-second, silent MP4 to the current directory. Rerunning it
-replaces that file. To try the alternatives below, replace the masks before
+```bash
+uv run python portrait_reveal.py
+```
+
+This writes the five-second, silent `portrait-reveal.mp4` to the current
+directory. Rerunning it replaces that file. To try the alternatives below, replace the masks before
 rendering again.
 
 ## Use an image as a mask
@@ -94,7 +103,8 @@ gradient = Image("gradient.png")
 portrait.masks.add(gradient, mode=MaskCoverageMode.LUMA, feather=12)
 ```
 
-To use an image's transparency instead, replace that mask with an alpha mask:
+To use transparency instead, supply a separate `alpha.png` in the same directory
+and replace that mask with an alpha mask:
 
 ```python
 portrait.masks.clear()
@@ -223,6 +233,6 @@ children and direct image/video sizing restrictions, see
 ## Complete example
 
 [concepts_masks.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/concepts_masks.py) builds the four
-coverage cases without external images. Run `python concepts_masks.py` to write
+coverage cases without external images. Run `uv run python concepts_masks.py` to write
 `concepts-masks.mp4`; rerunning replaces the file. The same artwork reaches each
 placement, so the comparison isolates coverage before adding animation.

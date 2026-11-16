@@ -4,6 +4,9 @@ Start with a [layer](sources-and-layers.md) in a project. An effect changes its
 appearance; it does not alter its timeline placement. This example blurs a
 procedural title, so no input files are needed.
 
+The render calls below use `overwrite=True`; rerunning a script replaces its
+named output files.
+
 ```python
 from vestra import Color, Project, Text
 from vestra.effects import GaussianBlur
@@ -48,7 +51,7 @@ project.post_effects.add(Brightness(amount=0.05))
 project.render("focus.mp4", backend="cpu", overwrite=True)
 ```
 
-Run the two blocks in one Python file with `python focus.py`. It writes a
+Run the two blocks in one Python file with `uv run python focus.py`. It writes a
 2-second `focus.mp4` in the current directory and replaces it on a rerun.
 Global effect tracks use project time. A reusable `Group` snapshots its children;
 attach processing to the returned placed layer when editing that instance.
@@ -131,7 +134,7 @@ layer.effects.add(DirectionalBlur(radius=4, angle_degrees=25))
 project.render("tiled-card.mp4", backend="cpu", overwrite=True)
 ```
 
-Run this complete program with `python tiled_card.py`; it replaces
+Run this complete program with `uv run python tiled_card.py`; it replaces
 `tiled-card.mp4` on a rerun. Notice mirrored repeats around the original card,
 then blur in the rotated output. Motion Tile samples a virtual source region;
 the 640×360 canvas stays the same size. The explicit origin anchor places the
@@ -164,7 +167,14 @@ for effect in analog_monitor(period=2):
 project.render("monitor.mp4", backend="cpu", overwrite=True)
 ```
 
-This writes `monitor.mp4`. Recipe attachments are independent copies, so keep
+Save the block as `monitor.py` and run:
+
+```bash
+uv run python monitor.py
+```
+
+This writes `monitor.mp4` in the current directory and replaces it on a rerun.
+Recipe attachments are independent copies, so keep
 returned handles if changing them afterwards. `halftone_print()` and
 `sorted_neon(direction=...)` provide other composed starting points. They do not
 change which layer types a cinematic preset accepts. Periodic CRT motion repeats

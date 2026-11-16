@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="690" viewBox="0 0 480 690" role="img" aria-labelledby="title desc">
+  <title id="title">Audio placement, source trim and processing scopes</title>
+  <desc id="desc">At normal speed, source seconds 4, 9 and 14 align with project seconds 2, 7 and 12 and clip-local seconds 0, 5 and 10. The start is included and the end is excluded. Clip processing feeds track processing, then master processing. The master mix supplies both published audio and visual analysis.</desc>
+  <style>
+    :root { --bg:#f0f2f4; --panel:#e1e6eb; --ink:#242b33; --muted:#4e5d6a; --line:#697988; --shape:#7194b3; --edge:#3e607e; --stripe:#466c8c; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#292e35; --panel:#353e48; --ink:#eef2f6; --muted:#bdc9d3; --line:#95a7b6; --shape:#83a5c2; --edge:#bdd0e0; --stripe:#4b6e8d; } }
+    text { fill:var(--ink); font:22px system-ui,sans-serif; }
+    .small { font-size:21px; }
+    .muted { fill:var(--muted); }
+    .panel { fill:var(--panel); stroke:var(--line); stroke-width:1.5; }
+    .shape { fill:var(--shape); stroke:var(--edge); stroke-width:2; }
+    .line { fill:none; stroke:var(--line); stroke-width:2; }
+    .guide { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:4 5; }
+    .arrow { fill:none; stroke:var(--line); stroke-width:2; marker-end:url(#arrow); }
+    .point { fill:var(--ink); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="480" height="690" rx="10" fill="var(--bg)"/>
+  <text x="20" y="36">Trim selects; start places</text>
+  <text x="20" y="68" class="small muted">Normal playback speed</text>
+  <rect x="275" y="90" width="40" height="200" class="panel"/>
+  <path d="M165 92v198M295 92v198M425 92v198" class="guide"/>
+  <text x="20" y="118" class="small">Source</text>
+  <text x="165" y="118" class="small" text-anchor="middle">4</text>
+  <text x="295" y="118" class="small" text-anchor="middle">9</text>
+  <text x="425" y="118" class="small" text-anchor="middle">14</text>
+  <path d="M165 136h260" class="line"/>
+  <text x="20" y="190" class="small">Project</text>
+  <text x="165" y="190" class="small" text-anchor="middle">2</text>
+  <text x="295" y="190" class="small" text-anchor="middle">7</text>
+  <text x="425" y="190" class="small" text-anchor="middle">12</text>
+  <path d="M165 208h260" class="line"/>
+  <text x="20" y="262" class="small">Clip local</text>
+  <text x="165" y="262" class="small" text-anchor="middle">0</text>
+  <text x="295" y="262" class="small" text-anchor="middle">5</text>
+  <text x="425" y="262" class="small" text-anchor="middle">10</text>
+  <path d="M165 280h260" class="line"/>
+  <circle cx="165" cy="136" r="4" class="point"/>
+  <circle cx="165" cy="208" r="4" class="point"/>
+  <circle cx="165" cy="280" r="4" class="point"/>
+  <circle cx="425" cy="136" r="5" fill="var(--bg)" stroke="var(--ink)" stroke-width="2"/>
+  <circle cx="425" cy="208" r="5" fill="var(--bg)" stroke="var(--ink)" stroke-width="2"/>
+  <circle cx="425" cy="280" r="5" fill="var(--bg)" stroke="var(--ink)" stroke-width="2"/>
+  <text x="20" y="322" class="small muted">● Start included</text>
+  <text x="245" y="322" class="small muted">○ End excluded</text>
+  <path d="M20 344h440" class="line"/>
+  <text x="20" y="380">Choose the processing scope</text>
+  <rect x="25" y="400" width="200" height="48" rx="5" class="shape"/>
+  <rect x="255" y="400" width="200" height="48" rx="5" class="shape"/>
+  <text x="125" y="431" class="small" text-anchor="middle">Clip A effects</text>
+  <text x="355" y="431" class="small" text-anchor="middle">Clip B effects</text>
+  <path d="M125 450v17h230v-17" class="line"/>
+  <path d="M240 467v17" class="arrow"/>
+  <rect x="100" y="490" width="280" height="48" rx="5" class="panel"/>
+  <text x="240" y="521" class="small" text-anchor="middle">Track mix → track effects</text>
+  <path d="M240 540v20" class="arrow"/>
+  <rect x="60" y="566" width="360" height="48" rx="5" class="panel"/>
+  <text x="240" y="597" class="small" text-anchor="middle">All tracks → master effects</text>
+  <path d="M240 616v18H120v14" class="arrow"/>
+  <path d="M240 634h120v14" class="arrow"/>
+  <text x="120" y="677" class="small" text-anchor="middle">Output audio</text>
+  <text x="360" y="677" class="small" text-anchor="middle">Visual analysis</text>
+</svg>

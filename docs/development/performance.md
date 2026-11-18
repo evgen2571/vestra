@@ -3,6 +3,7 @@
 Compare a local baseline and candidate on the same machine, then use a focused
 probe to explain a stage or resource cost. Smoke timings prove execution only.
 For an existing regression, [choose a focused investigation](#choose-a-focused-investigation).
+The [benchmark report](../benchmarks/vestra-vs-moviepy.md) contains the published Windows and Linux measurements.
 
 ## Measure and compare
 

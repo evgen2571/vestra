@@ -14,24 +14,32 @@ import matplotlib.pyplot as plt  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
-    source = (ROOT / "docs/benchmarks/vestra-vs-moviepy.md").read_text(encoding="utf-8")
-    rows = [
+def table_rows(source):
+    return [
         [cell.strip() for cell in line.strip("|").split("|")]
         for line in source.splitlines()
         if line.startswith("| ")
     ]
+
+
+def main():
+    source = (ROOT / "docs/benchmarks/vestra-vs-moviepy.md").read_text(encoding="utf-8")
+    windows = source.split("\n## Windows capture\n", 1)[1].split("\n### ", 1)[0]
+    timelines = ("Basic export", "Three-shot edit", "Layered composition")
+    matched = {
+        row[0]: [float(value.removesuffix(" s")) for value in row[1:]]
+        for row in table_rows(windows)
+        if row[0] in timelines
+    }
+    moviepy, cpu, gpu = zip(*(matched[timeline] for timeline in timelines), strict=True)
     plt.rcParams.update(
         {"svg.fonttype": "none", "svg.hashsalt": "vestra", "font.size": 11}
     )
-    context = next(
-        line.removeprefix("<!-- Chart context: ").removesuffix(" -->")
+    contexts = dict(
+        line.removeprefix("<!-- Chart context ").removesuffix(" -->").split(": ", 1)
         for line in source.splitlines()
-        if line.startswith("<!-- Chart context: ")
+        if line.startswith("<!-- Chart context ")
     )
-    matched = [
-        r for r in rows if r[0] in {"basic", "editing", "layered"} and len(r) == 12
-    ]
     effect_names = (
         "stylization_baseline",
         "palette_video",
@@ -42,16 +50,18 @@ def main():
         "sort_vertical_video",
         "crt_video",
     )
-    by_name = {r[1]: r for r in rows if len(r) == 8 and r[1] in effect_names}
+    by_name = {
+        r[1]: r for r in table_rows(source) if len(r) == 8 and r[1] in effect_names
+    }
     effects = [by_name[name] for name in effect_names]
     for filename, labels, series in (
         (
             "moviepy-times",
             ["Basic export", "Three-shot edit", "Layered"],
             [
-                ("MoviePy CPU", [float(r[1]) for r in matched], "#bdc9d3", ""),
-                ("Vestra CPU", [float(r[2]) for r in matched], "#7194b3", "//"),
-                ("Vestra GPU", [float(r[4]) for r in matched], "#4e5d6a", ".."),
+                ("MoviePy CPU", moviepy, "#bdc9d3", ""),
+                ("Vestra CPU", cpu, "#7194b3", "//"),
+                ("Vestra GPU", gpu, "#4e5d6a", ".."),
             ],
         ),
         (
@@ -99,7 +109,7 @@ def main():
         ax.invert_yaxis()
         ax.set_xlim(0, maximum * 1.24)
         ax.set_xlabel("Render time (seconds) · lower is better")
-        ax.set_title(context, fontsize=10, pad=48)
+        ax.set_title(contexts[filename], fontsize=10, pad=48)
         ax.legend(
             loc="lower center",
             bbox_to_anchor=(0.5, 1.02),

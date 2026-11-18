@@ -1,18 +1,52 @@
 # Vestra and MoviePy benchmarks
 
-Measured on 10 and 15 November 2026 using a Ryzen 5 3600 and GTX 1650 SUPER with Vulkan. All short outputs use 1920 × 1080 at 60 fps.
-
-<!-- Chart context: 10 Nov 2026 · 1920 × 1080 · 60 fps -->
+Editing benchmarks on Windows 11 and Linux. Both captures use 1920 × 1080 at 60 fps, silent H.264/yuv420p, and libx264 CRF 23 / veryfast. Basic and layered last 10 seconds (600 frames). Editing lasts 12 seconds (720 frames). Each engine has one warmup and three measured samples. Wall time includes worker startup, project construction, decoding, rendering, encoding and publication.
 
 [Benchmark overview](index.md) · [Workload previews](workloads.md) · [Run benchmarks](collecting.md)
 
-## Matched editing workloads
+## Windows capture
 
-All three timelines use 1920 × 1080 at 60 fps, silent H.264/yuv420p, libx264 CRF 23 / veryfast. Basic and layered last 10 seconds (600 frames); editing lasts 12 seconds (720 frames). Each engine has one warmup and three measured samples. Times include the complete worker process: startup, project construction, decoding, rendering, encoding and publication. Lower is better.
+Measured on **18 November 2026** with a Core i5-14600KF, RTX 4060 Ti (Vulkan) and 32 GiB RAM. Median wall times are shown below. Lower is better.
+
+<!-- Chart context moviepy-times: Windows 11 · RTX 4060 Ti · 1920 × 1080 · 60 fps -->
 
 <figure class="comparison" markdown="span">
-![Measured MoviePy CPU, Vestra CPU and Vestra hardware GPU render times in seconds at 1920×1080, 60 fps.](../assets/benchmarks/moviepy-times.svg)
+![Windows MoviePy CPU, Vestra CPU and Vestra GPU render times in seconds at 1920×1080, 60 fps.](../assets/benchmarks/moviepy-times.svg)
 </figure>
+
+| Timeline | MoviePy CPU | Vestra CPU | Vestra hardware GPU |
+| --- | ---: | ---: | ---: |
+| Basic export | 10.684 s | 6.900 s | 6.032 s |
+| Three-shot edit | 110.567 s | 16.686 s | 7.357 s |
+| Layered composition | 46.392 s | 17.754 s | 8.741 s |
+
+### Windows sample ranges
+
+| Timeline | MoviePy CPU range | Vestra CPU range | Hardware GPU range |
+| --- | ---: | ---: | ---: |
+| Basic export | 10.680–10.734 s | 6.896–6.916 s | 5.975–6.033 s |
+| Three-shot edit | 109.957–113.451 s | 16.664–16.725 s | 7.356–7.396 s |
+| Layered composition | 45.970–46.566 s | 17.745–17.787 s | 8.704–9.070 s |
+
+All three comparisons passed stream validation, full decode and sampled visual checks. The native Windows suites rendered their first workload, then stopped during Git metadata collection.
+
+### One-hour renders on Windows
+
+Each engine rendered and validated 108,000 frames at 640 × 360 / 30 fps. The table shows one measured run per engine. The separate decoder-cache checks passed exact-pixel validation.
+
+| Engine | Worker wall time | Peak process-tree RSS |
+| --- | ---: | ---: |
+| MoviePy CPU | 841.766 s | 353.469 MiB |
+| Vestra CPU | 295.806 s | 523.762 MiB |
+| Vestra hardware GPU | 160.413 s | 648.914 MiB |
+
+The Windows capture used revision `9f5a43da7053174a89bd0a8aafa2db2043b19115`, rustc 1.100.0, Python 3.13.18, FFmpeg 9.0.2 and MoviePy 2.2.1. GPU utilization and VRAM were unmeasured.
+
+<span id="matched-editing-workloads"></span>
+
+## Linux capture
+
+The editing benchmarks were measured on **10 November 2026** with a Ryzen 5 3600, GTX 1650 SUPER (Vulkan) and 16 GiB RAM. Both captures used the same workload definitions and original footage. The prepared video files, FFmpeg versions and Vestra revisions differed, so the timings describe each setup as measured.
 
 | Timeline | MoviePy CPU | Vestra CPU | Vestra hardware GPU |
 | --- | ---: | ---: | ---: |
@@ -45,7 +79,11 @@ Effective FPS is recalculated from the validated output frame count and each mea
 
 All published streams passed structural checks and full decode. Independent source-reference and cross-engine checks passed 135 sampled frame/region comparisons, including the frames surrounding fades, placement starts and placement ends. Reduced RGB error is bounded by the maintained verifier tolerance; encoded outputs need not be pixel-identical.
 
-## Native rendering and effect controls
+<span id="native-rendering-and-effect-controls"></span>
+
+## Native rendering and effect controls on Linux
+
+<!-- Chart context effect-times: 10 Nov 2026 · 1920 × 1080 · 60 fps -->
 
 Every output uses 1920 × 1080 at 60 fps and the high quality tier (libx264 CRF 18 / medium). `single_video`, `mixed_dynamic`, `video_heavy` and `production_edit` use one measured sample with no warmup, captured on 15 November 2026. The remaining canonical workloads use one warmup and five samples; the complete effects/control suite uses one warmup and three, captured on 10 November 2026. The wall interval includes loading, preparation, rendering, encoding and publication. This scope differs from the process-based MoviePy table above.
 
@@ -130,7 +168,9 @@ The effect chart shows three-second outputs (180 frames). Other scenario duratio
 
 The concurrent-video scene renders 180 frames in 19.334 s on WGPU versus 41.206 s on CPU. WGPU used 3 decoder sessions, 1 seek and 576 decoded frames; CPU used 24 worker-local decoder sessions, 16 seeks and 4,275 decoded frames. WGPU keeps independent cursors for placements reading different source times and shares immutable frames for identical requests. Extra cursors use no RGBA cache and retire when inactive. These end-to-end times include decoding and encoding; they do not isolate GPU shader cost.
 
-## Environment and interpretation
+<span id="environment-and-interpretation"></span>
+
+## Linux environment and interpretation
 
 - Host: AMD Ryzen 5 3600, 12 logical CPUs, 16 GiB RAM, Linux x86_64.
 - Hardware GPU: NVIDIA GeForce GTX 1650 SUPER, driver 595.71.05, Vulkan, classified by Vestra as `discrete_gpu`. Software adapters and CPU fallback are excluded.
@@ -150,7 +190,9 @@ The 10 November source fingerprint is `3449b023fea2223f1c3a7493eee1106bfa13fac36
 
 </details>
 
-## Reproduce the capture
+<span id="reproduce-the-capture"></span>
+
+## Reproduce the Linux capture
 
 Use the same source and input fingerprint, native environment, graphics API and settings. Run serially:
 

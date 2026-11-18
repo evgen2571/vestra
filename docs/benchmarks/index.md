@@ -10,23 +10,25 @@ The scenes, resolution and frame rate matter as much as the hardware. These meas
 [See the workloads](workloads.md){ .md-button }
 [Run benchmarks](collecting.md){ .md-button }
 
-## Measured on this machine
+<span id="measured-on-this-machine"></span>
 
-The matched editing comparisons were captured on **10 November 2026**, using a Ryzen 5 3600 and GTX 1650 SUPER with Vulkan. Native video results were captured on **15 November 2026** on the same hardware. The report records revisions, sample counts, provenance and validation.
+## 1080p60 editing benchmarks
+
+Measured on **18 November 2026** on Windows 11 with a Core i5-14600KF and an RTX 4060 Ti using Vulkan.
 
 <figure class="comparison" markdown="span">
-![Measured render times for basic export, editing and layered composition, with MoviePy CPU, Vestra CPU and hardware GPU shown separately. Lower is better.](../assets/benchmarks/moviepy-times.svg)
+![Windows render times for basic export, editing and layered composition on MoviePy CPU, Vestra CPU and Vestra GPU. Lower is better.](../assets/benchmarks/moviepy-times.svg)
 </figure>
 
 | Timeline | MoviePy CPU | Vestra CPU | Vestra hardware GPU |
 | --- | ---: | ---: | ---: |
-| Basic export | 14.018 s | 14.156 s | 8.649 s |
-| Three-shot edit | 122.797 s | 29.672 s | 11.680 s |
-| Layered composition | 68.349 s | 32.616 s | 13.038 s |
+| Basic export | 10.684 s | 6.900 s | 6.032 s |
+| Three-shot edit | 110.567 s | 16.686 s | 7.357 s |
+| Layered composition | 46.392 s | 17.754 s | 8.741 s |
 
 Values are median end-to-end render times; **lower is better**. Basic and layered produce 10-second videos; editing produces 12 seconds. All use silent H.264/libx264 CRF 23 / veryfast. GPU refers to WGPU rendering; decoding and encoding use the CPU.
 
-[Read the measured ranges, complete native results and limitations](vestra-vs-moviepy.md).
+We also measured these workloads on Linux with a Ryzen 5 3600 and GTX 1650 SUPER. See the [Windows capture](vestra-vs-moviepy.md#windows-capture) for sample ranges and one-hour renders, and the [Linux capture](vestra-vs-moviepy.md#linux-capture) for the editing and native benchmark results.
 
 ## What each suite answers
 

@@ -5,11 +5,11 @@ project — layers, sources, keyframes, effects, audio — and Vestra renders it
 through a native Rust engine, on the CPU or GPU (WGPU). It ships as a
 Python library, with a canonical JSON format and a separate native `ve` CLI.
 
-![Animated showcase: animation, media, compositing and audio-reactive graphics](examples/showcase/readme-demo/preview.gif)
+![A tile animation edited in Neovim, followed by compositing, audio-reactive motion and video editing](examples/showcase/readme-hero/preview.gif)
 
-[Full demo](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/readme-demo/render.mp4)
-· [Python source](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/readme-demo/main.py)
-· [Asset credits](https://github.com/evgen2571/vestra/blob/fa0e95a1c896d01798f54e27d7e9bed3623734c7/examples/showcase/readme-demo/README.md#credits)
+[Full video](examples/showcase/readme-hero/render.mp4)
+· [Animation source](examples/showcase/readme-hero/main.py)
+· [Asset credits](examples/showcase/readme-hero/README.md#credits)
 
 ## Quick start
 

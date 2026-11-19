@@ -162,7 +162,7 @@ showcase-smoke:
 showcase:
     uv run python scripts/render-showcases.py
 
-# Replace committed videos/posters and the README GIF with fresh full renders.
+# Replace the generated showcase videos, posters and GIFs with fresh renders.
 showcase-refresh:
     uv run python scripts/render-showcases.py --preview --update-results
 

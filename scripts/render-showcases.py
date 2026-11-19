@@ -113,7 +113,7 @@ def main() -> None:
     parser.add_argument(
         "--preview",
         action="store_true",
-        help="regenerate the README GIF from the full hero render",
+        help="regenerate the motion design showcase GIF from its full render",
     )
     parser.add_argument(
         "--update-results",

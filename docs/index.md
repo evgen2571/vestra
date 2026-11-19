@@ -19,11 +19,10 @@ hide:
 <p class="home-requirements">Python 3.11–3.14 · CPU or WGPU rendering · MP4 output</p>
 </div>
 <figure class="home-hero__preview">
-<video controls playsinline preload="metadata" width="640" height="360" poster="assets/gallery/motion-design.webp" aria-label="Vestra overview: animated cards, masked valley footage with dithering, and a radial audio spectrum" aria-describedby="reel-caption">
-<source src="assets/gallery/motion-design.mp4" type="video/mp4">
-<a href="assets/gallery/motion-design.mp4">Download the feature reel</a>.
+<video autoplay muted loop controls playsinline preload="metadata" width="640" height="360" poster="assets/hero/poster.webp" aria-label="Vestra demo" aria-describedby="reel-caption">
+<source src="assets/hero/reel.mp4" type="video/mp4">
 </video>
-<figcaption id="reel-caption">A ten-second render of animated cards, masked valley footage, palette effects, and a radial audio spectrum. <a href="gallery/motion-design/">Source &amp; credits</a></figcaption>
+<figcaption id="reel-caption">A tile animation in Python, followed by compositing, audio-reactive motion, and video editing examples. <a href="assets/hero/reel.mp4" download>Download MP4</a> · <a href="https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-hero/README.md">Source &amp; credits</a></figcaption>
 </figure>
 </div>
 

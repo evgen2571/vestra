@@ -90,6 +90,8 @@ I can now use Vestra for the project I originally wanted to build.
 - [Blend modes](docs/benchmarks/workloads.md#blend_modes) and [transitions](docs/guides/python/transitions-flashes-and-presets.md)
 - [Visual effects](docs/guides/python/effects.md)
 - [Audio-reactive animation](docs/guides/python/signals-and-audio-reactivity.md)
+- [Export MP4, GIF, animated WebP, and still images](docs/reference/render-outputs.md#formats)
+- [Convert rendered frames to NumPy arrays](docs/guides/python/rendering-and-preparation.md#use-frames-with-numpy)
 - [Render videos from JSON with the CLI](docs/getting-started/cli-quickstart.md)
 
 ## Comparison with MoviePy

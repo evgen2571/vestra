@@ -64,7 +64,7 @@ For these techniques, see
 The valley clip is shared with the [benchmark workloads](../benchmarks/workloads.md#shared-footage).
 The footage is resized, reframed, masked and dithered.
 
-The original synth loop is CC0; Manrope is SIL OFL 1.1. Its [example credits](https://github.com/evgen2571/vestra/blob/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/readme-demo/README.md#credits) link to
+The original synth loop is CC0; Manrope is SIL OFL 1.1. Its [example credits](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-demo/README.md#credits) link to
 the original synth dedication, footage preparation and accompanying font license.
 
 ## Preview details
@@ -72,7 +72,7 @@ the original synth dedication, footage preparation and accompanying font license
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 1.7 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/readme-demo/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/tree/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/readme-demo).
 The source render's SHA-256 is `fe91bfbfc12501f3f8b7dc68a97e227bc2fbc9801f23a82004567795cd6021bf`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

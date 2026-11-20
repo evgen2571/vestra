@@ -55,15 +55,15 @@ Continue with [Masks](../guides/python/masks.md),
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/),
 [from Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Landscape_in_Salzburger_Land.jpg).
 The image was resized, cropped, zoomed, masked and colour-adjusted.
-The Manrope font is SIL OFL 1.1. The [example README](https://github.com/evgen2571/vestra/blob/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/compositing/README.md#photo-source)
-records the photo checksum, resizing command and accompanying font notice.
+The Manrope font is SIL OFL 1.1. The [example README](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/compositing/README.md#photo-source)
+links to the photo checksum, resizing command and accompanying font notice.
 
 ## Preview details
 
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 2 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/compositing/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/tree/e6191c1e567d8e66e73f1fe299ccc15fe64711df/examples/showcase/compositing).
 The source render's SHA-256 is `382c4376de3ebfd5dc68cbe40239b00402da8a05d6db1ee478dc3642e5c2903b`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

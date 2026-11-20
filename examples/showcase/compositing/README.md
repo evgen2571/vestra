@@ -1,29 +1,25 @@
 # Photo cutouts with masks and groups
 
-[Watch / download the rendered video](render.mp4)
+[Full video](render.mp4) · [Python source](main.py)
 
-![Animated preview of the Vestra render](preview.gif)
+![A landscape through three moving geometric cutouts](preview.gif)
 
-An eight-second example of one photograph composited through three geometric
-masks: a circle, a rounded rectangle and a rectangle. Each nested group moves
-as a unit while its image zooms independently; different saturation settings
-make the treatments easy to compare. The output is silent.
+One photo appears through three masks. Each group moves as a unit while its
+photo zooms independently.
 
-From the checkout after `uv sync --locked --extra dev`:
+## Render
+
+Run this from a [development checkout](../../../CONTRIBUTING.md#2-set-up-a-checkout).
 
 ```bash
 uv run python examples/showcase/compositing/main.py
 ```
 
-Output: `examples/output/compositing.mp4`, 1280×720, 30 fps, 8 seconds, CPU.
-Pass `--smoke` for the full timeline at 320×180 and 6 fps, or `--output PATH`.
-The OFL font and CC0 photograph are bundled; no downloads are needed.
-See the sources below and the [shared Manrope notice](../README.md#shared-font).
+Writes `examples/output/compositing.mp4` (8 seconds, silent). Add `--smoke` for a
+quick preview or `--output PATH` to choose the destination.
 
 ## Photo source
 
-See the [shared landscape record](../../../assets/images/README.md) for the
-source, license, original checksum and reproduction command. This scene crops,
-zooms, masks and adjusts saturation; the [lookbook](../lookbook/README.md) also
-applies effects. Graphics and example code are MIT licensed.
-The [Manrope license](../../../assets/fonts/Manrope-OFL.txt) stays beside the font.
+The scene crops, zooms, masks and adjusts saturation on Dimitry Anikin's
+“Landscape in Salzburger Land” (CC0). The bundled photo record gives the
+original source, checksum and prep command. [Photo credits](../../../assets/images/README.md) · [Manrope font credits](../README.md#shared-font)

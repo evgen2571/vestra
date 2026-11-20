@@ -111,22 +111,17 @@ def main() -> None:
     )
     parser.add_argument("--output-dir", type=Path, default=ROOT / "examples/output")
     parser.add_argument(
-        "--preview",
-        action="store_true",
-        help="regenerate the motion design showcase GIF from its full render",
-    )
-    parser.add_argument(
         "--update-results",
         action="store_true",
-        help="replace committed MP4s/posters with full renders",
+        help="replace committed MP4s, posters and GIFs with full renders",
     )
     args = parser.parse_args()
     if args.offline and not args.smoke:
         parser.error(
             "--offline requires --smoke; full showcases use the documented real assets"
         )
-    if (args.preview or args.update_results) and args.smoke:
-        parser.error("--preview and --update-results require a full render")
+    if args.update_results and args.smoke:
+        parser.error("--update-results requires a full render")
     size, fps = ((320, 180), 6) if args.smoke else ((1280, 720), 30)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="vestra-showcase-") as temporary:
@@ -160,33 +155,36 @@ def main() -> None:
             )
             if args.update_results:
                 shutil.copyfile(output, SHOWCASE / name / "render.mp4")
-                if name != "readme-demo":
-                    width, colours, bayer = (
-                        (400, 96, 5) if name == "real-media-edit" else (480, 128, 3)
-                    )
+                width, colours, bayer = (
+                    (400, 96, 5) if name == "real-media-edit" else (480, 128, 3)
+                )
+                input_label = ""
+                if name == "readme-demo":
+                    width = 800
+                    input_label = "[0:v]"
+                filters = (
+                    f"{input_label}fps=20,scale={width}:-1:flags=lanczos,split[a][b];"
+                    f"[a]palettegen=max_colors={colours}:stats_mode=diff[p];"
+                    f"[b][p]paletteuse=dither=bayer:bayer_scale={bayer}"
+                )
+                if name == "real-media-edit":
                     filters = (
-                        f"fps=20,scale={width}:-1:flags=lanczos,split[a][b];"
-                        f"[a]palettegen=max_colors={colours}:stats_mode=diff[p];"
-                        f"[b][p]paletteuse=dither=bayer:bayer_scale={bayer}"
+                        "trim=start=3.5:end=7.5,setpts=PTS-STARTPTS,"
+                        "fade=t=in:d=0.15,fade=t=out:st=3.85:d=0.15," + filters
                     )
-                    if name == "real-media-edit":
-                        filters = (
-                            "trim=start=3.5:end=7.5,setpts=PTS-STARTPTS,"
-                            "fade=t=in:d=0.15,fade=t=out:st=3.85:d=0.15," + filters
-                        )
-                    run(
-                        "ffmpeg",
-                        "-v",
-                        "error",
-                        "-i",
-                        str(output),
-                        "-filter_complex",
-                        filters,
-                        "-loop",
-                        "0",
-                        "-y",
-                        str(SHOWCASE / name / "preview.gif"),
-                    )
+                run(
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-i",
+                    str(output),
+                    "-filter_complex",
+                    filters,
+                    "-loop",
+                    "0",
+                    "-y",
+                    str(SHOWCASE / name / "preview.gif"),
+                )
                 run(
                     "ffmpeg",
                     "-v",
@@ -206,20 +204,6 @@ def main() -> None:
                     "-y",
                     str(SHOWCASE / name / "poster.jpg"),
                 )
-    if args.preview:
-        run(
-            "ffmpeg",
-            "-v",
-            "error",
-            "-i",
-            str(args.output_dir / "readme-demo.mp4"),
-            "-filter_complex",
-            "[0:v]fps=20,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3",
-            "-loop",
-            "0",
-            "-y",
-            str(SHOWCASE / "readme-demo/preview.gif"),
-        )
 
 
 if __name__ == "__main__":

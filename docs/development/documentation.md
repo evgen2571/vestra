@@ -155,7 +155,14 @@ Check behavior against the current implementation and its callers/tests. A Pytho
 
 For motion, show the actual rendered result. For timing or coordinate relationships, use a legible diagram when it explains the relationship more clearly than prose. Explain what to notice next to the visual. Avoid repeating the same explanation in the caption and body.
 
-Videos use a small poster, native controls, `playsinline`, and `preload="metadata"` so the controls can show duration before playback. Playback starts when requested; the gallery index uses still previews rather than loading every video. Provide a nearby text description and a download link. Spoken content needs captions. Give informative images meaningful alt text and diagrams a text explanation; do not encode meaning in color alone. Check diagrams at mobile width in both themes. A static picture should remain useful when someone cannot play a video.
+Videos use a small poster, native controls, `playsinline`, and `preload="metadata"`
+so the controls can show duration before playback. The homepage demo autoplays
+muted and loops. Other videos start on request, and the gallery index uses still
+previews. Provide a nearby text description and a download link. Spoken content
+needs captions. Give informative images meaningful alt text and diagrams a text
+explanation. Use text as well as color to convey meaning. Check diagrams at
+mobile width in both themes. A static picture should remain useful when someone
+cannot play a video.
 
 ## Asset credits
 

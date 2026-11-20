@@ -1,6 +1,6 @@
 # README hero
 
-[Full video](render.mp4) · [Animation source](main.py)
+[Full video](../../../docs/assets/hero/reel.mp4) · [Animation source](main.py)
 
 The 31.8-second reel opens with a Neovim recording of a tile animation and its
 Vestra render. The preview zooms into three showcase excerpts, then returns to
@@ -8,13 +8,22 @@ the blank editor.
 
 Run [main.py](main.py) from a scratch directory with Vestra installed to render
 the two-second tile animation to `out.mp4`. The video pairs that render with the
-editor capture and the excerpts below. To regenerate the looping GIF from the
-finished MP4, run this command in this directory.
+editor capture and the excerpts below. To regenerate the looping README preview
+and the documentation poster from the original MP4, run these commands in this
+directory. The poster uses the frame at 15 seconds, when the code and result
+are visible together. The WebP keeps the source's 30 FPS and converts the
+BT.709 frames to RGB before encoding.
 
 ```bash
-ffmpeg -i render.mp4 \
-  -filter_complex 'fps=10,scale=720:405:flags=lanczos,split[frames][colors];[colors]palettegen=stats_mode=diff:max_colors=160[palette];[frames][palette]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle' \
-  -loop 0 preview.gif
+reel=../../../docs/assets/hero/reel.mp4
+
+ffmpeg -i "$reel" \
+  -an -vf 'scale=1152:648:flags=lanczos,format=bgra' \
+  -c:v libwebp_anim -quality 82 -compression_level 5 -loop 0 preview.webp
+
+ffmpeg -ss 15.0 -i "$reel" \
+  -vf 'scale=960:540:flags=lanczos' -frames:v 1 -c:v libwebp -quality 88 \
+  ../../../docs/assets/hero/poster.webp
 ```
 
 ## Credits

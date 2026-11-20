@@ -88,6 +88,19 @@ def test_home_learning_path_reaches_the_first_render() -> None:
     ]
 
 
+def test_home_hero_autoplays_muted_with_controls() -> None:
+    generated = ROOT / "site/index.html"
+    if not generated.is_file():
+        pytest.skip("requires just docs-build; included in just site-check")
+    hero = re.search(
+        r'<figure class="home-hero__preview">\s*<video\b([^>]*)>',
+        generated.read_text(encoding="utf-8"),
+    )
+    assert hero is not None
+    for attribute in ("autoplay", "muted", "loop", "controls", "playsinline"):
+        assert re.search(rf"\s{attribute}(?=\s|=|$)", hero[1]), attribute
+
+
 def test_reference_catalog_links_every_reference_topic() -> None:
     reference = ROOT / "docs/reference"
     topics = {

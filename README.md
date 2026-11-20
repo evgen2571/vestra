@@ -1,6 +1,6 @@
 <h1 align="center">Vestra</h1>
 
-<p align="center">Vestra is a Python library for building and rendering video compositions with layers, keyframes, and effects.</p>
+<p align="center">A Rust engine for layer-based video composition and rendering, with a Python API.</p>
 
 <p align="center">
   <a href="https://pypi.org/project/vestra/"><img src="https://img.shields.io/pypi/v/vestra.svg" alt="Vestra version on PyPI"></a>
@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <img src="examples/showcase/readme-hero/preview.gif" width="100%" alt="A tile animation edited in Neovim, followed by compositing, audio-reactive motion, and video editing examples">
+  <img src="examples/showcase/readme-hero/preview.webp" width="100%" alt="A tile animation edited in Neovim, followed by compositing, audio-reactive motion, and video editing examples">
 </p>
 
 <p align="center">
-  <a href="examples/showcase/readme-hero/render.mp4">Full video</a> ·
+  <a href="docs/assets/hero/reel.mp4">Full video</a> ·
   <a href="examples/showcase/readme-hero/main.py">Demo source</a> ·
   <a href="https://github.com/evgen2571/vestra/blob/develop/docs/index.md">Documentation</a>
 </p>
@@ -81,6 +81,16 @@ After Effects and Premiere Pro, so I based much of Vestra's design on what I was
 familiar with.
 
 I can now use Vestra for the project I originally wanted to build.
+
+## Features
+
+- [Groups and nested compositions](docs/guides/python/nested-compositions.md)
+- [Keyframes and easing](docs/guides/python/animation.md)
+- [Masks and track mattes](docs/guides/python/masks.md)
+- [Blend modes](docs/benchmarks/workloads.md#blend_modes) and [transitions](docs/guides/python/transitions-flashes-and-presets.md)
+- [Visual effects](docs/guides/python/effects.md)
+- [Audio-reactive animation](docs/guides/python/signals-and-audio-reactivity.md)
+- [Render videos from JSON with the CLI](docs/getting-started/cli-quickstart.md)
 
 ## Comparison with MoviePy
 

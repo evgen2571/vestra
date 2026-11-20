@@ -66,14 +66,14 @@ Start with [Audio and signals](../concepts/audio-and-signals.md), then see
 The original synth loop is dedicated to
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) by Vestra contributors.
 The graphics are original project work; the Manrope font is SIL OFL 1.1.
-See the [synth dedication and font notice](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/audio-visualizer/README.md#credits).
+See the [synth dedication and font notice](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/audio-visualizer/README.md#credits).
 
 ## Preview details
 
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 3 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/audio-visualizer/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/tree/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/audio-visualizer).
 The source render's SHA-256 is `2abfd5976d5c948cc77aaec688fd73f6bd9044940ecc8b5718a313f9d97f4db5`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

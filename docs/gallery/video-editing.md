@@ -53,9 +53,9 @@ to adapt the sequence to your own footage.
 
 ## Credits
 
-The Manrope font is SIL OFL 1.1; the [shared font notice](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/README.md#shared-font)
+The Manrope font is SIL OFL 1.1; the [shared font notice](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/README.md#shared-font)
 includes its copyright and complete license.
-[Earlier Location Kenya copies](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
+[Earlier Location Kenya copies](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/real-media-edit/README.md#earlier-footage-copies)
 retain their CC BY 3.0 attribution requirements.
 
 ## Preview details
@@ -63,7 +63,7 @@ retain their CC BY 3.0 attribution requirements.
 This is a downscaled copy of the complete CPU render: 640 × 360, 30 fps,
 H.264/yuv420p with MP4 fast start. The WebP poster is the frame at 6 seconds.
 The original render and cleaned source are together at the
-[reviewed example revision](https://github.com/evgen2571/vestra/blob/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/real-media-edit/README.md).
+[reviewed example revision](https://github.com/evgen2571/vestra/tree/f4679ecdc4d7a45b6b56e5d106f873d3374492dd/examples/showcase/real-media-edit).
 The source render's SHA-256 is `091e10cf2d19a84ddf0c9c0fabe12d83764606322272d94860ce44c1889d61b9`.
 
 [Reproduce the delivery copies](../development/documentation.md#reproduce-gallery-previews).

@@ -1,41 +1,35 @@
 # Video editing
 
-[Watch / download the rendered video](render.mp4)
+[Full video](render.mp4) · [Python source](main.py)
 
-![Animated preview of the Vestra render](preview.gif)
+![Forest and valley footage with animated framing and dissolves](preview.gif)
 
-A fourteen-second video editing example: forest, valley and water-drop footage,
-slow reframing, two dissolves, muted saturation/vignette and a grouped title.
-The output is silent.
+Three shots use slow reframing, soft color grading, two dissolves and a grouped
+title.
 
-From the checkout after `uv sync --locked --extra dev`:
+## Render
+
+Run this from a [development checkout](../../../CONTRIBUTING.md#2-set-up-a-checkout).
 
 ```bash
 uv run python examples/showcase/real-media-edit/main.py
 ```
 
-Output: `examples/output/real-media-edit.mp4`, 1280×720, 30 fps, 14 seconds, CPU.
-Pass `--smoke` for the complete timeline at 320×180 and 6 fps, or `--output PATH`.
-The three shots use the [shared bundled footage](../../../assets/footage/README.md),
-also used by the benchmarks. Rendering needs no asset download.
+Writes `examples/output/real-media-edit.mp4` (14 seconds, silent). Add
+`--smoke` for a quick preview or `--output PATH` to choose the destination.
 
 ## Shared inputs
 
-The shots use the first five seconds of `forest.mp4`, `valley.mp4` and `tear.mp4`.
-The [README demo](../readme-demo/README.md) uses the valley clip through a rotating
-mask and dither effect. The edit reframes, grades and dissolves the same files.
-
-Labels use Manrope; its [copyright and complete OFL license](../README.md#shared-font)
-remain with the font. Videos display rendered text rather than distributing the
-font file.
+The edit reframes, grades and dissolves the first five seconds of the bundled
+forest, valley and water-drop clips. Labels use Manrope.
+[Footage credits](../../../assets/footage/README.md) · [Manrope font credits](../README.md#shared-font)
 
 ### Earlier footage copies
 
-Earlier releases, branches, clones or shared previews may still contain “City
-timelapse video” by Location Kenya, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/),
-[from Wikimedia Commons](https://commons.wikimedia.org/wiki/File:City_timelapse_video.webm).
-Those copies keep their license. When sharing them, retain: “City timelapse video —
-Location Kenya, CC BY 3.0; trimmed, resized, reframed, colour-adjusted and edited
-with the original audio removed.” Include the source and license links above;
-no author endorsement is implied. Replacing this checkout's footage does not
-relicense older copies.
+Older previews using “City timelapse video” must retain the following credit when shared.
+
+> “City timelapse video” by Location Kenya, CC BY 3.0. Trimmed, resized,
+> reframed, colour-adjusted and edited with the original audio removed.
+
+Include the source and license links with the credit. No author endorsement is
+implied. [Wikimedia Commons source](https://commons.wikimedia.org/wiki/File:City_timelapse_video.webm) · [CC BY 3.0 license](https://creativecommons.org/licenses/by/3.0/)

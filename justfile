@@ -7,7 +7,16 @@ default:
 
 # Run the canonical contributor checks.
 check:
-    ./scripts/check.sh
+    @echo "Checking Rust formatting, build, lints, tests, and schema freshness"
+    cargo fmt --all -- --check
+    rustfmt --edition 2024 --check crates/vestra-core/src/effects/*.rs
+    just gen-effects-check
+    cargo check --workspace --all-features
+    just lint-rust
+    just test
+    just schema-check
+    just docs-check
+    @echo "Local contributor checks passed"
 
 # Format Rust and the maintained Python format surface.
 fmt:
@@ -164,7 +173,7 @@ showcase:
 
 # Replace the generated showcase videos, posters and GIFs with fresh renders.
 showcase-refresh:
-    uv run python scripts/render-showcases.py --preview --update-results
+    uv run python scripts/render-showcases.py --update-results
 
 # Preview documentation with live reload; no Rust engine or Vestra install needed.
 docs-serve *args:

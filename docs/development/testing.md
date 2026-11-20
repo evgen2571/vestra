@@ -55,7 +55,7 @@ just python-sync
 just check
 ```
 
-`just check` runs [scripts/check.sh](https://github.com/evgen2571/vestra/blob/develop/scripts/check.sh):
+The [`just check` recipe](https://github.com/evgen2571/vestra/blob/develop/justfile) covers the following checks.
 
 - Rust formatting, including the included effect semantic sources.
 - Effect-generation freshness and exporter/generator tests.

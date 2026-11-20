@@ -2,17 +2,20 @@
 
 [Full video](../../../docs/assets/hero/reel.mp4) · [Animation source](main.py)
 
-The 31.8-second reel opens with a Neovim recording of a tile animation and its
-Vestra render. The preview zooms into three showcase excerpts, then returns to
-the blank editor.
+The 31.8-second reel shows a tile animation being coded in Neovim, plays its
+render, then zooms into three showcase excerpts before returning to the editor.
 
-Run [main.py](main.py) from a scratch directory with Vestra installed to render
-the two-second tile animation to `out.mp4`. The video pairs that render with the
-editor capture and the excerpts below. To regenerate the looping README preview
-and the documentation poster from the original MP4, run these commands in this
-directory. The poster uses the frame at 15 seconds, when the code and result
-are visible together. The WebP keeps the source's 30 FPS and converts the
-BT.709 frames to RGB before encoding.
+## Render the tile
+
+With Vestra installed, run [main.py](main.py) from a scratch directory. It
+writes the two-second animation to `out.mp4`.
+
+## Regenerate the README preview
+
+Run these commands in this directory with FFmpeg and approve the overwrite
+prompts to replace the README WebP
+and homepage poster using the original MP4. The WebP keeps the source's 30 fps
+and converts BT.709 to RGB. The poster shows the code and render at 15 seconds.
 
 ```bash
 reel=../../../docs/assets/hero/reel.mp4
@@ -28,14 +31,10 @@ ffmpeg -ss 15.0 -i "$reel" \
 
 ## Credits
 
-The reel uses excerpts from the repository's showcase renders. Each showcase
-links its original assets and licenses.
+| Excerpt | Source range | Playback |
+| --- | --- | --- |
+| [Compositing](../compositing/README.md#photo-source) | 0.20–5.80 s | 2× |
+| [Spectrum](../audio-visualizer/README.md#credits) | 4.50–10.30 s | 1.5×, muted |
+| [Video edit](../real-media-edit/README.md#shared-inputs) | 1.30–8.97 s | Original speed |
 
-- Compositing uses 0.20–5.80 seconds at 2×, including the landscape photograph
-  and Manrope labels. [Compositing asset credits](../compositing/README.md#photo-source)
-- Spectrum uses 4.50–10.30 seconds at 1.5×, with the bundled synth driving the
-  animation. The reel is silent. [Spectrum asset credits](../audio-visualizer/README.md#credits)
-- Video Edit uses 1.30–8.97 seconds at its original speed, including the
-  forest-to-valley dissolve. [Video Edit asset credits](../real-media-edit/README.md#shared-inputs)
-
-The Neovim capture uses JetBrains Mono Nerd Font. [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts/tree/master/patched-fonts/JetBrainsMono)
+The Neovim capture uses JetBrains Mono Nerd Font. [Font source](https://github.com/ryanoasis/nerd-fonts/tree/master/patched-fonts/JetBrainsMono)

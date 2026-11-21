@@ -71,11 +71,9 @@ Its destination also uses ease in/out interpolation.
 
 ## The complete script
 
-Save this as `first_animation.py`. It is a complete copy of the quickstart
-example from the repository's README showcase. You do not need to run or
-import `first_render.py`.
-
-[Download first_animation.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/first_animation.py)
+Save this as `first_animation.py` in your Python project, or
+[download the script](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/first_animation.py).
+It creates its own project from scratch.
 
 ```python title="first_animation.py"
 --8<-- "examples/tutorials/first_animation.py"
@@ -90,9 +88,7 @@ uv run python first_animation.py
 ```
 
 Open **`quickstart.mp4` in the current directory**. The render is 640 × 360 at
-30 fps, lasts three seconds and has no audio. The output name comes from the
-script's final `project.render(...)` call, independently of the Python
-filename.
+30 fps, lasts three seconds and has no audio.
 
 ## Change the timing
 

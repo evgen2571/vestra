@@ -8,6 +8,9 @@ to the [source-build path](../development/source-builds.md).
 
 ## `ffmpeg` is missing at runtime
 
+The Python setup below applies to Vestra 0.1.5 and later. If you installed an
+older version, install FFmpeg and put both `ffmpeg` and `ffprobe` on `PATH`.
+
 **Check.** Read the selected executable path in the diagnostic. Python uses the
 executable installed through `imageio-ffmpeg`; the separate native CLI and Rust
 SDK use `ffmpeg` on `PATH`. Check whether `IMAGEIO_FFMPEG_EXE` overrides Python's
@@ -30,9 +33,8 @@ in the same shell. If selecting your own executable, follow the
 including the required encoders and filters. Prepare again after changing it;
 prepared projects keep the executable selected during preparation.
 
-Media probing uses bundled FFmpeg libraries and does not require `ffprobe`.
-Install `ffprobe` only for optional developer checks that verify encoded output
-independently.
+Since 0.1.5, Vestra probes media through its bundled FFmpeg libraries.
+Some developer checks still use `ffprobe` to verify encoded output independently.
 
 ### NixOS
 

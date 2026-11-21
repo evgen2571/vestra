@@ -6,18 +6,22 @@ description: Install the Python package, check the import, and continue to your 
 
 <span id="install-into-a-python-project-with-uv"></span>
 
-In your Python project, run:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and use
+Python 3.11–3.14. In an existing Python project, run:
 
 ```bash
 uv add vestra
 ```
 
-For a new project, run `uv init my-video` and `cd my-video` first.
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed.
+Starting from an empty directory? Create a project first:
 
-<span id="install-into-a-python-project-with-uv"></span>
+```bash
+uv init my-video
+cd my-video
+uv add vestra
+```
+
 <span id="3-check-the-environment"></span>
-
 <span id="check-the-environment"></span>
 
 ## Check the installation
@@ -26,9 +30,12 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed.
 uv run python -c "import vestra; print(vestra.__version__)"
 ```
 
-This prints the installed version. Continue with
-[your first render](first-render.md) to make a three-second MP4 on CPU; no GPU
-or separate native tools are needed on the supported platforms below.
+Vestra 0.1.5 and later install the FFmpeg executable as a Python dependency.
+For 0.1.4 or earlier, install FFmpeg separately and make sure both
+`ffmpeg` and `ffprobe` are on your `PATH`.
+
+Once the import works and FFmpeg is available,
+[render your first video](first-render.md). The tutorial runs on the CPU.
 
 <span id="install-with-pip"></span>
 

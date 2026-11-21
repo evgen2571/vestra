@@ -15,13 +15,13 @@
 <p align="center">
   <a href="docs/assets/hero/reel.mp4">Full video</a> ·
   <a href="examples/showcase/readme-hero/main.py">Demo source</a> ·
-  <a href="https://github.com/evgen2571/vestra/blob/develop/docs/index.md">Documentation</a>
+  <a href="https://evgen2571.github.io/vestra/">Documentation</a>
 </p>
 
 ## Quick start
 
 In a Python project with CPython 3.11–3.14, install Vestra with uv.
-See the [installation guide](https://github.com/evgen2571/vestra/blob/main/docs/getting-started/installation.md)
+See the [installation guide](https://evgen2571.github.io/vestra/getting-started/installation/)
 for pip and supported platforms.
 
 ```bash
@@ -79,15 +79,15 @@ And now I can actually use it for the project that started all of this.
 
 ## Features
 
-- [Groups and nested compositions](docs/guides/python/nested-compositions.md)
-- [Keyframes and easing](docs/guides/python/animation.md)
-- [Masks and track mattes](docs/guides/python/masks.md)
-- [Blend modes](docs/benchmarks/workloads.md#blend_modes) and [transitions](docs/guides/python/transitions-flashes-and-presets.md)
-- [Visual effects](docs/guides/python/effects.md)
-- [Audio-reactive animation](docs/guides/python/signals-and-audio-reactivity.md)
-- [Export MP4, GIF, animated WebP, and still images](docs/reference/render-outputs.md#formats)
-- [Convert rendered frames to NumPy arrays](docs/guides/python/rendering-and-preparation.md#use-frames-with-numpy)
-- [Render videos from JSON with the CLI](docs/getting-started/cli-quickstart.md)
+- [Groups and nested compositions](https://evgen2571.github.io/vestra/guides/python/nested-compositions/)
+- [Keyframes and easing](https://evgen2571.github.io/vestra/guides/python/animation/)
+- [Masks and track mattes](https://evgen2571.github.io/vestra/guides/python/masks/)
+- [Blend modes](https://evgen2571.github.io/vestra/benchmarks/workloads/#blend_modes) and [transitions](https://evgen2571.github.io/vestra/guides/python/transitions-flashes-and-presets/)
+- [Visual effects](https://evgen2571.github.io/vestra/guides/python/effects/)
+- [Audio-reactive animation](https://evgen2571.github.io/vestra/guides/python/signals-and-audio-reactivity/)
+- [Export MP4, GIF, animated WebP, and still images](https://evgen2571.github.io/vestra/reference/render-outputs/#formats)
+- [Convert rendered frames to NumPy arrays](https://evgen2571.github.io/vestra/guides/python/rendering-and-preparation/#use-frames-with-numpy)
+- [Render videos from JSON with the CLI](https://evgen2571.github.io/vestra/getting-started/cli-quickstart/)
 
 ## Comparison with MoviePy
 
@@ -96,7 +96,7 @@ And now I can actually use it for the project that started all of this.
 | Vestra | Build a layered composition with keyframes and masks, or reuse an animated layout with different footage and text. |
 | MoviePy | Trim and join clips in a Python script, or process each frame with a custom Python function. |
 
-See the [render benchmarks](docs/benchmarks/vestra-vs-moviepy.md) for measured
+See the [render benchmarks](https://evgen2571.github.io/vestra/benchmarks/vestra-vs-moviepy/) for measured
 render times, workloads, and hardware.
 
 ## AI use disclaimer
@@ -112,8 +112,8 @@ example. That helps me understand the problem and improve the code.
 ## Contributing
 
 See the [contribution guide](CONTRIBUTING.md) for reporting issues and submitting
-changes. The development docs cover [building from source](docs/development/source-builds.md)
-and [running checks](docs/development/testing.md).
+changes. The development docs cover [building from source](https://evgen2571.github.io/vestra/development/source-builds/)
+and [running checks](https://evgen2571.github.io/vestra/development/testing/).
 
 ## License
 

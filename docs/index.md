@@ -1,6 +1,6 @@
 ---
 title: Vestra documentation
-description: Compose and render video in Python with Vestra. Start with a runnable example or explore render formats, guides, and APIs.
+description: Documentation for Vestra, a Python library for composing and rendering video.
 hide:
   - navigation
   - toc
@@ -11,8 +11,8 @@ hide:
 <div class="home-hero" markdown="0">
 <div class="home-hero__copy">
 <span id="video-composition-in-python"></span>
-<h1>Compose and render video in Python</h1>
-<p class="home-lead">Layer footage, text, and shapes, then add effects and sound. Animate a title, edit a sequence, or generate videos from data.</p>
+<h1>Vestra documentation</h1>
+<p class="home-lead">Vestra is a Python library for composing and rendering video. A project can combine footage, images, text, shapes, and audio.</p>
 <div class="home-actions">
 <a class="home-button home-button--primary" href="getting-started/installation/">Get started</a>
 <a class="home-button" href="gallery/">Browse examples</a>
@@ -22,9 +22,9 @@ hide:
 <figure class="home-hero__preview">
 <video controls playsinline preload="metadata" width="640" height="360" poster="assets/hero/poster.webp" aria-label="Vestra demo reel" aria-describedby="reel-caption">
 <source src="assets/hero/reel.mp4" type="video/mp4">
-<a href="assets/hero/reel.mp4">Download the demo reel</a>.
+<a href="assets/hero/reel.mp4">Download video</a>.
 </video>
-<figcaption id="reel-caption">Watch a Python script become a tile animation, then see what Vestra can do with compositing, audio, and video editing. <a href="assets/hero/reel.mp4" download>Download the reel</a> or <a href="https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-hero/README.md">view the source and credits</a>.</figcaption>
+<figcaption id="reel-caption">A tile animation shown alongside its Python code, followed by clips from the example projects. <a href="assets/hero/reel.mp4" download>Download video</a> · <a href="https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-hero/README.md">Source and credits</a></figcaption>
 </figure>
 </div>
 

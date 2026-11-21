@@ -57,6 +57,19 @@
 }
 .md-grid { max-width: 76rem; }
 .md-header { box-shadow: none; }
+.site-brand { padding: .35rem 0; font-size: .95rem; font-weight: 700; }
+.site-version {
+  flex: none;
+  margin-inline: .7rem auto;
+  padding: .3rem .45rem;
+  border: 1px solid var(--vestra-line);
+  border-radius: .3rem;
+  color: var(--vestra-muted);
+  font-size: .68rem;
+  line-height: 1.2;
+}
+.site-brand:hover, .site-version:hover, .site-footer a:hover { text-decoration: underline; }
+.site-footer { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; padding: .8rem 0; font-size: .75rem; }
 .md-tabs { color: var(--md-default-fg-color); border-bottom: 1px solid var(--vestra-line); }
 .md-tabs__link { color: var(--md-default-fg-color); }
 .md-typeset { font-size: .84rem; line-height: 1.7; }
@@ -126,22 +139,23 @@
 }
 .md-nav .md-nav__link[href]:is(:hover, :focus-visible) { transform: translateX(3px); }
 .md-tabs__link:is(:hover, :focus-visible), .md-header__button:is(:hover, :focus-visible) { transform: translateY(-2px); }
-.vestra-home { padding: .5rem 0 2rem; }
+.vestra-home { max-width: 69rem; margin-inline: auto; padding-bottom: 2rem; }
 .home-hero {
   display: grid;
-  grid-template-columns: .9fr 1.1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   align-items: center;
-  gap: 3rem;
-  padding: 2rem 0 2.5rem;
+  gap: clamp(2rem, 5vw, 4rem);
+  padding: 1.25rem 0 2rem;
 }
 .md-typeset .home-hero h1 {
-  font-size: clamp(2.6rem, 4.5vw, 3.65rem);
+  font-size: clamp(2.55rem, 4vw, 3.45rem);
   font-weight: 730;
   line-height: 1.05;
-  letter-spacing: -.055em;
+  letter-spacing: -.045em;
   margin: 0 0 1rem;
+  text-wrap: balance;
 }
-.home-lead { font-size: 1.08em; max-width: 34ch; }
+.home-lead { font-size: 1.08em; max-width: 43ch; }
 .home-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1.4rem; }
 .md-typeset .home-button {
   display: inline-flex;
@@ -160,11 +174,9 @@
 .md-typeset .home-button--primary { color: var(--vestra-button-fg); background: var(--vestra-button-bg); border-color: var(--vestra-button-bg); }
 .md-typeset .home-button:is(:hover, :focus-visible) { text-decoration: none; border-color: var(--vestra-focus); transform: translateY(-3px); }
 .md-typeset .home-button--primary:is(:hover, :focus-visible) { color: var(--vestra-button-fg); background: var(--vestra-button-hover); }
-.home-requirements { color: var(--vestra-muted); font-size: .72em; margin-top: 1rem; }
+.home-formats { color: var(--vestra-muted); font-size: .86em; margin: 1rem 0 0; }
 .md-typeset .home-hero__preview { margin: 0; }
-.home-hero__preview video { box-shadow: 0 1rem 2.5rem #0002; }
-.home-intro { max-width: 56ch; margin: 1rem auto 3rem; }
-.home-intro h2 { font-size: 1.7em; }
+.home-hero__preview video { box-shadow: 0 .5rem 1.5rem #0002; }
 .home-code {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -175,7 +187,7 @@
   border: 1px solid var(--vestra-line);
   border-radius: .7rem;
 }
-.home-code h3 { margin-top: 0; }
+.md-typeset .home-code h2 { margin-top: 0; }
 .home-code > div { min-width: 0; }
 .home-code p { max-width: 48ch; }
 .md-typeset .home-code pre > code { font-size: .84em; }
@@ -216,7 +228,7 @@
   .md-typeset { font-size: .82rem; }
   .md-typeset h1 { font-size: 2em; }
   .home-hero { grid-template-columns: 1fr; padding-top: .75rem; gap: 1.25rem; }
-  .md-typeset .home-hero h1 { font-size: clamp(2rem, 14vw, 2.65rem); }
+  .md-typeset .home-hero h1 { font-size: clamp(2rem, 9vw, 2.65rem); }
   .home-lead { max-width: 42ch; }
   .home-actions { flex-direction: row; }
   .home-code { grid-template-columns: 1fr; padding: 1rem; }
@@ -232,11 +244,9 @@
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
 
-/* The header and mobile drawer use the site name as their identity. */
-.md-header__button.md-logo,
-.md-nav__button.md-logo {
-  display: none;
-}
+/* The header brand links home. The drawer lists the documentation sections. */
+.md-nav__button.md-logo,
+.md-nav--primary > .md-nav__list > .md-nav__item:not(.md-nav__item--nested) { display: none; }
 
 @media (max-width: 76.234375em) {
   /* Zensical 0.1.0 leaves closed drawer links in the keyboard tab order. */

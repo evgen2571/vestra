@@ -8,6 +8,9 @@ Vestra exports MP4, GIF, animated WebP, individual frames and image sequences.
 All use the same evaluated composition and selected CPU or WGPU backend.
 For Python examples, see [rendering and preparation](../guides/python/rendering-and-preparation.md).
 
+GIF, animated WebP, and saving still images or sequences through Vestra's
+export helpers require version 0.1.5 or later.
+
 ## Formats
 
 | Output | Selection | Encoding and alpha |

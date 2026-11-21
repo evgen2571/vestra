@@ -1,6 +1,6 @@
 [project]
 site_name = "Vestra"
-site_description = "Compose video with Python. Learn Vestra through real renders, readable examples and practical animation projects."
+site_description = "Compose and render video in Python with Vestra. Get started with a runnable example or look up guides, render formats, and APIs."
 site_url = "https://evgen2571.github.io/vestra/"
 repo_url = "https://github.com/evgen2571/vestra"
 repo_name = "evgen2571/vestra"
@@ -14,13 +14,20 @@ requirements.txt
 """
 nav = [
   { "Home" = "index.md" },
-  { "Learn" = [
-    { "Installation" = "getting-started/installation.md" },
-    { "First render" = "getting-started/first-render.md" },
-    { "First animation" = "getting-started/first-animation.md" },
-    { "Animation & keyframes" = "getting-started/animation.md" },
+  { "Get started" = [
+    { "Python" = [
+      { "Installation" = "getting-started/installation.md" },
+      { "First render" = "getting-started/first-render.md" },
+      { "First animation" = "getting-started/first-animation.md" },
+      { "Animation and keyframes" = "getting-started/animation.md" },
+    ] },
+    { "Command line" = [
+      { "Install the CLI" = "getting-started/cli-installation.md" },
+      { "CLI quickstart" = "getting-started/cli-quickstart.md" },
+    ] },
   ] },
   { "Guides" = [
+    { "Overview" = "guides/index.md" },
     { "Python" = [
       { "Set up a composition" = "guides/python/projects-and-compositions.md" },
       { "Add text, shapes and media" = "guides/python/sources-and-layers.md" },
@@ -42,20 +49,24 @@ nav = [
     ] },
     { "JSON and command line" = [
       { "JSON authoring" = "guides/json-authoring.md" },
-      { "Install the CLI" = "getting-started/cli-installation.md" },
-      { "CLI quickstart" = "getting-started/cli-quickstart.md" },
       { "Rendering with the CLI" = "guides/cli/rendering.md" },
       { "Logging and progress" = "guides/cli/logging-and-progress.md" },
     ] },
-  ] },
-  { "Concepts" = [
-    { "Authoring model" = "concepts/authoring-model.md" },
-    { "Coordinates and anchors" = "concepts/coordinates-and-anchors.md" },
-    { "Timeline and time" = "concepts/timeline-and-time.md" },
-    { "Masks and mattes" = "concepts/masks-and-mattes.md" },
-    { "Effects, transitions and animation" = "concepts/effects-transitions-and-animation.md" },
-    { "Audio and signals" = "concepts/audio-and-signals.md" },
-    { "Rendering lifecycle" = "concepts/rendering-lifecycle.md" },
+    { "Concepts" = [
+      { "Authoring model" = "concepts/authoring-model.md" },
+      { "Coordinates and anchors" = "concepts/coordinates-and-anchors.md" },
+      { "Timeline and time" = "concepts/timeline-and-time.md" },
+      { "Masks and mattes" = "concepts/masks-and-mattes.md" },
+      { "Effects, transitions and animation" = "concepts/effects-transitions-and-animation.md" },
+      { "Audio and signals" = "concepts/audio-and-signals.md" },
+      { "Rendering lifecycle" = "concepts/rendering-lifecycle.md" },
+    ] },
+    { "Troubleshooting" = [
+      { "Python" = "troubleshooting/python.md" },
+      { "Rendering" = "troubleshooting/rendering.md" },
+      { "FFmpeg" = "troubleshooting/ffmpeg.md" },
+      { "WGPU" = "troubleshooting/wgpu.md" },
+    ] },
   ] },
   { "Examples" = [
     { "Gallery" = "gallery/index.md" },
@@ -102,57 +113,53 @@ nav = [
     ] },
     { "Full index" = "reference/catalog.md" },
   ] },
-  { "Troubleshooting" = [
-    { "Python" = "troubleshooting/python.md" },
-    { "Rendering" = "troubleshooting/rendering.md" },
-    { "FFmpeg" = "troubleshooting/ffmpeg.md" },
-    { "WGPU" = "troubleshooting/wgpu.md" },
-  ] },
-  { "Benchmarks" = [
-    { "Overview" = "benchmarks/index.md" },
-    { "Workload gallery" = "benchmarks/workloads.md" },
-    { "Run benchmarks" = "benchmarks/collecting.md" },
-    { "Measured results" = "benchmarks/vestra-vs-moviepy.md" },
-  ] },
-  { "Contributing" = [
-    { "Contributing to Vestra" = "development/README.md" },
-    { "Write documentation" = [
-      { "Documentation authoring" = "development/documentation.md" },
-      { "Reproduce media" = "development/documentation-media.md" },
-      { "Maintain the site" = "development/documentation-site.md" },
+  { "Project" = [
+    { "Benchmarks" = [
+      { "Overview" = "benchmarks/index.md" },
+      { "Workload gallery" = "benchmarks/workloads.md" },
+      { "Run benchmarks" = "benchmarks/collecting.md" },
+      { "Measured results" = "benchmarks/vestra-vs-moviepy.md" },
     ] },
-    { "Build from source" = "development/source-builds.md" },
-    { "Test and measure" = [
-      { "Testing" = "development/testing.md" },
-      { "GPU validation" = "development/gpu-validation.md" },
-      { "Performance" = "development/performance.md" },
+    { "Contributing" = [
+      { "Contributing to Vestra" = "development/README.md" },
+      { "Write documentation" = [
+        { "Documentation authoring" = "development/documentation.md" },
+        { "Reproduce media" = "development/documentation-media.md" },
+        { "Maintain the site" = "development/documentation-site.md" },
+      ] },
+      { "Build from source" = "development/source-builds.md" },
+      { "Test and measure" = [
+        { "Testing" = "development/testing.md" },
+        { "GPU validation" = "development/gpu-validation.md" },
+        { "Performance" = "development/performance.md" },
+      ] },
+      { "Extend Vestra" = [
+        { "Add a source" = "development/extending/source.md" },
+        { "Add an effect" = "development/extending/effect.md" },
+        { "Add a transition" = "development/extending/transition.md" },
+        { "Add a backend" = "development/extending/backend.md" },
+      ] },
+      { "Architecture" = [
+        { "Overview" = "development/architecture/overview.md" },
+        { "Crate ownership" = "development/architecture/crates.md" },
+        { "Project to plan" = "development/architecture/project-to-plan.md" },
+        { "Render pipeline" = "development/architecture/render-pipeline.md" },
+        { "Effect pipeline" = "development/architecture/effect-pipeline.md" },
+        { "CPU renderer" = "development/architecture/cpu-renderer.md" },
+        { "WGPU renderer" = "development/architecture/wgpu-renderer.md" },
+        { "Media I/O" = "development/architecture/media-io.md" },
+        { "Python bindings" = "development/architecture/python-bindings.md" },
+      ] },
+      { "Specialist references" = [
+        { "Effect tests" = "development/effect-testing.md" },
+        { "Effect algorithms" = "development/effect-algorithms.md" },
+        { "Media pipeline and concurrency" = "development/media-pipeline.md" },
+        { "Performance probes" = "development/performance-probes.md" },
+        { "Dithered palette look" = "development/stylization/dithered-palette-look.md" },
+        { "Temporal diagnostics" = "development/stylization/temporal-diagnostics.md" },
+      ] },
+      { "Releasing" = "development/releasing.md" },
     ] },
-    { "Extend Vestra" = [
-      { "Add a source" = "development/extending/source.md" },
-      { "Add an effect" = "development/extending/effect.md" },
-      { "Add a transition" = "development/extending/transition.md" },
-      { "Add a backend" = "development/extending/backend.md" },
-    ] },
-    { "Architecture" = [
-      { "Overview" = "development/architecture/overview.md" },
-      { "Crate ownership" = "development/architecture/crates.md" },
-      { "Project to plan" = "development/architecture/project-to-plan.md" },
-      { "Render pipeline" = "development/architecture/render-pipeline.md" },
-      { "Effect pipeline" = "development/architecture/effect-pipeline.md" },
-      { "CPU renderer" = "development/architecture/cpu-renderer.md" },
-      { "WGPU renderer" = "development/architecture/wgpu-renderer.md" },
-      { "Media I/O" = "development/architecture/media-io.md" },
-      { "Python bindings" = "development/architecture/python-bindings.md" },
-    ] },
-    { "Specialist references" = [
-      { "Effect tests" = "development/effect-testing.md" },
-      { "Effect algorithms" = "development/effect-algorithms.md" },
-      { "Media pipeline and concurrency" = "development/media-pipeline.md" },
-      { "Performance probes" = "development/performance-probes.md" },
-      { "Dithered palette look" = "development/stylization/dithered-palette-look.md" },
-      { "Temporal diagnostics" = "development/stylization/temporal-diagnostics.md" },
-    ] },
-    { "Releasing" = "development/releasing.md" },
   ] },
 ]
 

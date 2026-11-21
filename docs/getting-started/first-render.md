@@ -20,18 +20,14 @@ The script uses the CPU backend, so it does not require a GPU.
 
 ## 1. Save the script
 
-In your Python project, create `first_render.py` with this complete example.
-You can also [download the Python file](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/first_render.py).
+Save this example as `first_render.py` in your Python project, or
+[download the script](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/first_render.py).
 
 ```python title="first_render.py"
 --8<-- "examples/tutorials/first_render.py"
 ```
 
 ## 2. Render the video
-
-The script uses `overwrite=True`: rerunning it replaces an existing
-`first-render.mp4` when rendering succeeds. Change the filename to keep an
-older render, or omit `overwrite=True` in your own tools to protect it.
 
 From the directory containing your script:
 
@@ -43,6 +39,8 @@ Open **`first-render.mp4` in the current directory** with an MP4-capable video
 player. It should show the rectangle above for three seconds at 30 frames per
 second, with no audio.
 
+Rerunning the script replaces `first-render.mp4` because it uses
+`overwrite=True`. Change the output filename to keep the earlier render.
 
 If the render fails, check [installation](installation.md#3-check-the-environment)
 and [rendering troubleshooting](../troubleshooting/rendering.md).
@@ -55,7 +53,7 @@ and [rendering troubleshooting](../troubleshooting/rendering.md).
 | `Color("#101c24")` | Describes a solid-colour source that fills the canvas. |
 | `Rectangle(...)` | Describes a 180 × 140 pixel shape with rounded corners and a mint fill. |
 | `project.root.add(...)` | Places a copy of a source in the root **composition** and returns its **layer**. |
-| `project.render(...)` | Prepares the project and writes an encoded MP4. |
+| `project.render("first-render.mp4", ...)` | Renders the project and saves it as an MP4. |
 
 Both layers inherit the project's three-second duration. The background stays
 fixed, and `card` is the rectangle layer you can reposition or animate. For
@@ -87,5 +85,7 @@ these two positions during one video.
 [Continue to your first animation](first-animation.md){ .md-button .md-button--primary }
 
 For more about placement, see [sources and layers](../guides/python/sources-and-layers.md).
+To save an animation, a still image, or a sequence of frames, see
+[exporting from Python](../guides/python/rendering-and-preparation.md).
 
 <span id="preview-reproduction"></span>

@@ -60,8 +60,8 @@ which may differ from your shell's current directory.
 
 **Fix.** Correct the named path, output or backend problem. For FFmpeg failures,
 check the executable path in the diagnostic and any `IMAGEIO_FFMPEG_EXE`
-override. Python selects its installed executable automatically; it does not
-require system FFmpeg on `PATH`. See [FFmpeg checks](ffmpeg.md) and
+override. In Vestra 0.1.5 and later, Python selects its installed executable
+automatically. See [FFmpeg checks](ffmpeg.md) and
 [rendering checks](rendering.md).
 
 **Confirm.** Rerun the operation that failed. Semantic validation passing again

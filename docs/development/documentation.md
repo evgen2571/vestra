@@ -43,7 +43,11 @@ For media seek checks, see the [preview-server playback limitation](documentatio
 | Concept | “Why does it behave like this?” | Use a concrete case, a visual if helpful, and the rule that explains it. |
 | Reference | “What exactly is accepted or returned?” | Give signatures, units, defaults, constraints, errors, and support limits. |
 
-Keep API inventories in reference pages. Link to them when a learner needs more detail. **Learn** contains the introductory sequence, **Guides** organizes tasks by topic, **Concepts** explains the model, and **Reference** gives exact contracts. Put pages in the appropriate navigation section in `zensical.toml`; retain a useful sidebar context on individual gallery pages. When extending a page, reconsider its order and purpose; split or rewrite it if the new material would bury the main task.
+Keep API inventories in **Reference** and link to them when a reader needs a
+precise contract. Put introductory tutorials in **Get started**, task pages in
+**Guides**, and complete rendered projects in **Examples**. Concepts and
+troubleshooting pages have their own groups under **Guides**. Organize pages
+in `zensical.toml` and keep each page in one sidebar group.
 
 ### Make the common path visible
 
@@ -156,10 +160,10 @@ Check behavior against the current implementation and its callers/tests. A Pytho
 For motion, show the actual rendered result. For timing or coordinate relationships, use a legible diagram when it explains the relationship more clearly than prose. Explain what to notice next to the visual. Avoid repeating the same explanation in the caption and body.
 
 Videos use a small poster, native controls, `playsinline`, and `preload="metadata"`
-so the controls can show duration before playback. The homepage demo autoplays
-muted and loops. Other videos start on request, and the gallery index uses still
-previews. Provide a nearby text description and a download link. Spoken content
-needs captions. Give informative images meaningful alt text and diagrams a text
+so the controls can show duration before playback. Videos start on request.
+The homepage video opens on a frame from the finished render, and the gallery
+index uses still previews. Provide a nearby text description and a download link.
+Spoken content needs captions. Give informative images meaningful alt text and diagrams a text
 explanation. Use text as well as color to convey meaning. Check diagrams at
 mobile width in both themes. A static picture should remain useful when someone
 cannot play a video.

@@ -5,6 +5,7 @@ import hashlib
 import re
 import subprocess
 import tomllib
+from urllib.parse import urljoin
 
 import pytest
 
@@ -34,32 +35,20 @@ def pages(items: list[dict]) -> list[str]:
 def test_public_pages_have_navigation_context() -> None:
     config = tomllib.loads((ROOT / "zensical.toml").read_text())
     sections = {
-        label: value
-        for item in config["project"]["nav"]
-        for label, value in item.items()
+        label: value for item in config["project"]["nav"] for label, value in item.items()
     }
-    assert all(
-        isinstance(sections[label], list)
-        for label in (
-            "Learn",
-            "Guides",
-            "Concepts",
-            "Examples",
-            "Reference",
-            "Troubleshooting",
-            "Contributing",
-        )
-    )
-    assert pages(sections["Learn"]) == [
+    assert pages(sections["Get started"]) == [
         "getting-started/installation.md",
         "getting-started/first-render.md",
         "getting-started/first-animation.md",
         "getting-started/animation.md",
+        "getting-started/cli-installation.md",
+        "getting-started/cli-quickstart.md",
     ]
-    assert pages(sections["Contributing"])[:2] == [
-        "development/README.md",
-        "development/documentation.md",
-    ]
+    assert {"Concepts", "Troubleshooting"} <= {
+        label for item in sections["Guides"] for label in item
+    }
+    assert [next(iter(item)) for item in sections["Project"]] == ["Benchmarks", "Contributing"]
     navigated = pages(config["project"]["nav"])
     public = {
         str(path.relative_to(ROOT / "docs"))
@@ -88,17 +77,41 @@ def test_home_learning_path_reaches_the_first_render() -> None:
     ]
 
 
-def test_home_hero_autoplays_muted_with_controls() -> None:
+def test_home_hero_shows_the_vestra_reel_with_playback_on_request() -> None:
     generated = ROOT / "site/index.html"
     if not generated.is_file():
         pytest.skip("requires just docs-build; included in just site-check")
     hero = re.search(
-        r'<figure class="home-hero__preview">\s*<video\b([^>]*)>',
+        r'<figure class="home-hero__preview">\s*<video\b([^>]*)>(.*?)</video>',
         generated.read_text(encoding="utf-8"),
+        re.DOTALL,
     )
     assert hero is not None
-    for attribute in ("autoplay", "muted", "loop", "controls", "playsinline"):
+    for attribute in ("controls", "playsinline"):
         assert re.search(rf"\s{attribute}(?=\s|=|$)", hero[1]), attribute
+    assert "autoplay" not in hero[1]
+    assert 'poster="assets/hero/poster.webp"' in hero[1]
+    assert 'src="assets/hero/reel.mp4"' in hero[2]
+
+
+@pytest.mark.parametrize("path", ["", "getting-started/first-render/", "development/"])
+def test_site_has_four_primary_tabs_and_secondary_project_links(path: str) -> None:
+    generated = ROOT / "site" / path / "index.html"
+    if not generated.is_file():
+        pytest.skip("requires just docs-build; included in just site-check")
+    html = generated.read_text(encoding="utf-8")
+    tabs = re.findall(r'class="md-tabs__link">\s*([^<]+)</a>', html)
+    assert [tab.strip() for tab in tabs] == ["Get started", "Guides", "Examples", "Reference"]
+    root = "https://example.com/vestra/"
+    brand = re.search(r'class="site-brand" href="([^"]*)">Vestra</a>', html)[1]
+    version = re.search(r'class="site-version" href="([^"]*)">Dev docs</a>', html)[1]
+    assert urljoin(root + path, brand) == root
+    assert urljoin(root + path, version) == root + "#documentation-version"
+    assert "Development documentation ·" not in html
+    footer = re.search(r"<footer\b.*?</footer>", html, re.DOTALL)[0]
+    for label, target in [("Benchmarks", "benchmarks/"), ("Contributing", "development/")]:
+        href = re.search(rf'href="([^"]*)">{label}</a>', footer)[1]
+        assert urljoin(root + path, href) == root + target
 
 
 def test_reference_catalog_links_every_reference_topic() -> None:

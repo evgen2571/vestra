@@ -77,19 +77,21 @@ def test_home_learning_path_reaches_the_first_render() -> None:
     ]
 
 
-def test_home_hero_shows_a_finished_render_with_playback_on_request() -> None:
+def test_home_hero_shows_the_vestra_reel_with_playback_on_request() -> None:
     generated = ROOT / "site/index.html"
     if not generated.is_file():
         pytest.skip("requires just docs-build; included in just site-check")
     hero = re.search(
-        r'<figure class="home-hero__preview">\s*<video\b([^>]*)>',
+        r'<figure class="home-hero__preview">\s*<video\b([^>]*)>(.*?)</video>',
         generated.read_text(encoding="utf-8"),
+        re.DOTALL,
     )
     assert hero is not None
     for attribute in ("controls", "playsinline"):
         assert re.search(rf"\s{attribute}(?=\s|=|$)", hero[1]), attribute
     assert "autoplay" not in hero[1]
-    assert 'poster="assets/gallery/audio-reactive.webp"' in hero[1]
+    assert 'poster="assets/hero/poster.webp"' in hero[1]
+    assert 'src="assets/hero/reel.mp4"' in hero[2]
 
 
 @pytest.mark.parametrize("path", ["", "getting-started/first-render/", "development/"])

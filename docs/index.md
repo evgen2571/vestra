@@ -20,11 +20,11 @@ hide:
 <p class="home-formats">Export MP4, GIF, animated WebP, still images, or image sequences. <a href="reference/render-outputs/">See render formats</a>.</p>
 </div>
 <figure class="home-hero__preview">
-<video controls playsinline preload="metadata" width="640" height="360" poster="assets/gallery/audio-reactive.webp" aria-label="Audio-reactive graphics rendered with Vestra" aria-describedby="hero-caption">
-<source src="assets/gallery/audio-reactive.mp4" type="video/mp4">
-<a href="assets/gallery/audio-reactive.mp4">Download the video</a>.
+<video controls playsinline preload="metadata" width="640" height="360" poster="assets/hero/poster.webp" aria-label="Vestra demo reel" aria-describedby="reel-caption">
+<source src="assets/hero/reel.mp4" type="video/mp4">
+<a href="assets/hero/reel.mp4">Download the demo reel</a>.
 </video>
-<figcaption id="hero-caption">The soundtrack drives the spectrum bars and pulsing ring. <a href="gallery/audio-reactive/">See the example and its source</a>.</figcaption>
+<figcaption id="reel-caption">Watch a Python script become a tile animation, then see what Vestra can do with compositing, audio, and video editing. <a href="assets/hero/reel.mp4" download>Download the reel</a> or <a href="https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-hero/README.md">view the source and credits</a>.</figcaption>
 </figure>
 </div>
 

@@ -91,6 +91,3 @@ For setup without Nix, follow the [source-build instructions](../development/sou
 for your platform. See **Credits** on each example page for sources and licenses,
 or [preview reproduction](../development/documentation.md#reproduce-gallery-previews)
 to rebuild the site's previews.
-
-You can also [download the showcase reel](../assets/hero/reel.mp4) or
-[read its source and credits](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-hero/README.md).

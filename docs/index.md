@@ -1,6 +1,6 @@
 ---
 title: Vestra documentation
-description: Documentation for Vestra, a Python library for composing and rendering video.
+description: Documentation for Vestra, a Rust engine for layer-based video composition and rendering, with a Python API.
 hide:
   - navigation
   - toc
@@ -12,7 +12,7 @@ hide:
 <div class="home-hero__copy">
 <span id="video-composition-in-python"></span>
 <h1>Vestra documentation</h1>
-<p class="home-lead">Vestra is a Python library for composing and rendering video. A project can combine footage, images, text, shapes, and audio.</p>
+<p class="home-lead">A Rust engine for layer-based video composition and rendering, with a Python API.</p>
 <div class="home-actions">
 <a class="home-button home-button--primary" href="getting-started/installation/">Get started</a>
 <a class="home-button" href="gallery/">Browse examples</a>

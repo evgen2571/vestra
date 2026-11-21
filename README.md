@@ -67,20 +67,15 @@ This writes a two-second animation to `out.mp4` in the current directory.
 
 ## Why
 
-While planning another project, I needed a way to create videos programmatically.
-I first looked at MoviePy, but I would have had to implement quite a lot myself,
-particularly for more complex compositions.
+Vestra actually started because of another project I was working on. I needed to generate videos programmatically, so I tried MoviePy first. It worked, but I wasn't particularly happy with the performance, and doing more complex compositions would've required quite a bit of extra code.
 
-I also tried MLT and OpenShot, but found them difficult to work with. Remotion
-looked interesting, but I didn't really want to work with Node.js. After almost
-two months of looking for alternatives alongside other work, I decided to write
-my own video engine.
+I tried MLT and OpenShot as well, but found both pretty difficult to work with. Remotion looked interesting, but I didn't want to use Node.js.
 
-At that point, my only experience with video editing was a few months of using
-After Effects and Premiere Pro, so I based much of Vestra's design on what I was
-familiar with.
+I kept looking for other options on and off for almost two months while working on other things. Eventually, I decided to just write my own video engine.
 
-I can now use Vestra for the project I originally wanted to build.
+I don't have much experience with video editing, apart from a few months with After Effects and Premiere Pro. That's mostly where the ideas behind Vestra came from.
+
+And now I can actually use it for the project that started all of this.
 
 ## Features
 

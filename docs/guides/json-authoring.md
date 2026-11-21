@@ -76,7 +76,7 @@ allow comments or trailing commas.
 | `background` | Canvas colour where no visual clip covers it. |
 | `quality` | `"preview"`, `"balanced"` or `"high"`. |
 | `audio` | Whether to include audio in the rendered file. |
-| `path` | Requested MP4 output path; `--output` can override it. |
+| `path` | MP4 destination stored in the project. Use `--output` at render time to choose another destination, including GIF or animated WebP. |
 
 Use an explicit duration while learning. For duration inferred from the project,
 set `duration_mode` to `"automatic"` and omit `duration`. Colours use `#RRGGBB`

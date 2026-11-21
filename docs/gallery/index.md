@@ -4,12 +4,9 @@ description: "Complete Vestra Python projects with previews: animated layers, ma
 
 # Examples
 
-Browse complete Python projects by their output. Each page includes a preview
-rendered with Vestra, the source code, and instructions for rendering it from
-a checkout.
-
-For a smaller introduction, start with the
-[first render tutorial](../getting-started/first-render.md).
+Pick a project to watch its render, read the Python source, or make it yourself.
+For a smaller example you can run in a new project, try
+[your first render](../getting-started/first-render.md).
 
 <div class="gallery-grid" markdown>
 
@@ -72,11 +69,8 @@ share the same zoom animation.
 
 ## Run the examples
 
-These projects load shared media and fonts from `assets/`. The
-sources and inputs are included in the documentation checkout. If you already
-have that checkout, enter `nix develop` and run `just python-sync` from its root.
-
-To obtain the exact example versions used for these previews independently:
+Clone Vestra and check out the revision used to make these previews. The
+checkout includes the source, footage, and fonts.
 
 ```bash
 git clone https://github.com/evgen2571/vestra.git
@@ -90,29 +84,13 @@ nix develop
 just python-sync
 ```
 
-Source links, bundled inputs and full-resolution renders all use revision
-`e6191c1e567d8e66e73f1fe299ccc15fe64711df`. The video-editing and masked-footage previews have been regenerated
-with the shared benchmark inputs. Public commit links become
-available when the reviewed commits are pushed.
+Then run the command on the project page. Add `--smoke` to render the full
+timeline at a smaller size and lower frame rate.
 
-Each example describes its inputs and preview. To make website delivery
-copies from the bundled renders, follow [preview reproduction](../development/documentation.md#reproduce-gallery-previews);
-it uses this checkout and does not fetch a separate documentation branch.
+For setup without Nix, follow the [source-build instructions](../development/source-builds.md)
+for your platform. See **Credits** on each example page for sources and licenses,
+or [preview reproduction](../development/documentation.md#reproduce-gallery-previews)
+to rebuild the site's previews.
 
-If you don't use Nix, follow the
-[source-build installation instructions](../development/source-builds.md)
-for your platform. Building from the checkout needs Rust and native build tools;
-developer media tools also need `ffmpeg` on `PATH`. Current Python installs its
-FFmpeg executable automatically. The captured revision
-above also uses `ffprobe` for audio probing. Current Vestra probes media through
-bundled libraries and does not require that executable.
-
-Each project page gives its render command. Add `--smoke` for a 320 × 180,
-6 fps version of the full timeline. Full renders use the CPU at 1280 × 720
-and 30 fps with Vestra's high quality tier; the website previews are downscaled
-copies.
-
-The required media and fonts are committed with the examples, so rendering
-needs no asset download after setup. Source, license and modification details
-are beside each example under **Credits**, with reproduction details in its
-linked README.
+You can also [download the showcase reel](../assets/hero/reel.mp4) or
+[read its source and credits](https://github.com/evgen2571/vestra/blob/develop/examples/showcase/readme-hero/README.md).

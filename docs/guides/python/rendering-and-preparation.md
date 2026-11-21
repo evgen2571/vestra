@@ -1,15 +1,15 @@
 ---
-description: Render videos and previews, export stills or arrays, and reuse prepared projects from Python.
+description: Export video, looping animations, stills, image sequences, or arrays from Python.
 ---
 
-# Render and prepare from Python
+# Export from Python
 
-Start with a `project` from the [first render tutorial](../../getting-started/first-render.md).
-Copy its imports and project-building code into `export.py`, then append the
-export you need below. Each block uses the same `project`; blocks that use `frame` or
-`prepared` continue the preceding setup. Outputs go in the current directory
-unless a destination directory is shown. Every `overwrite=True` allows an
-existing output to be replaced.
+<span id="render-and-prepare-from-python"></span>
+
+Choose an output below. If you need a project to try it on, copy the
+[first render script](../../getting-started/first-render.md) into `export.py`
+and replace its final render call with the example you want to run.
+`overwrite=True` lets an example replace an existing file.
 
 ## Choose an output
 
@@ -23,8 +23,9 @@ existing output to be replaced.
 | Pixels for another Python library | [Use NumPy](#use-frames-with-numpy) | An RGBA array in memory |
 | Repeated requests in an application | [Reuse prepared state](#application-integration) | Frames or encoded files |
 
-The first five routes save files directly. Arrays and prepared runtimes are
-useful when another part of your application consumes the result.
+The basic MP4 example below works on Vestra 0.1.4. The preview helper, render
+overrides, and export helpers in the rest of this guide use Vestra 0.1.5 APIs.
+See [Render outputs](../../reference/render-outputs.md) for format details.
 
 ## Encode one video
 

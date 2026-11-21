@@ -4,9 +4,9 @@ description: Know what validation, preflight, preparation, frame rendering and s
 
 # The rendering lifecycle
 
-`project.render(...)` takes an authored project to a published video. A successful
-validation report or a fully rendered last frame is an earlier milestone; the
-output is complete only after encoding, finalization and publication succeed.
+`project.render(...)` creates a video or looping animation, depending on the
+[output format](../reference/render-outputs.md). The output is ready to use once
+Vestra finishes encoding it and saves it to the requested path.
 
 <figure class="diagram" markdown="span">
 ![A snapshot passes through semantic validation, environment preflight, preparation, frame and audio rendering with encoding, then finalization and publication before completion.](../assets/diagrams/lifecycle-render.svg)

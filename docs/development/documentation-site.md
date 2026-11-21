@@ -16,6 +16,8 @@ The site builds from committed assets without the native engine. Use the
 | --- | --- |
 | `zensical.toml` | Navigation, search, syntax highlighting and theme settings |
 | `docs/assets/stylesheets/site.css` | Layout, colors, focus styles and reduced-motion support |
+| `overrides/main.html` | Header, primary tabs, and page metadata |
+| `overrides/partials/copyright.html` | Secondary project links in the footer |
 | `overrides/partials/source.html` | Repository link without GitHub statistics requests |
 
 Prefer Zensical's native components, semantic HTML and Markdown. Keep the neutral
@@ -24,11 +26,12 @@ fonts avoid remote font requests and work offline after site assets load.
 
 ### Identity and keyboard navigation
 
-The identity is text only. Preserve these overrides when upgrading Zensical,
-and recheck browser requests and keyboard navigation:
+The Vestra name links to the homepage, and **Dev docs** links to the version
+note. Desktop tabs show the reader-facing sections. **Project** holds
+Benchmarks and Contributing in the mobile drawer and gives those pages a
+sidebar. Recheck browser requests and keyboard navigation when upgrading Zensical:
 
-- `overrides/partials/logo.html` suppresses the theme logo; CSS removes its
-  empty header/drawer links.
+- `overrides/partials/logo.html` suppresses the theme logo in the drawer.
 - `overrides/main.html` replaces the theme's `site_meta` block, retaining
   description, canonical and previous/next metadata with an empty `data:,`
   browser icon. Deleting logo/favicon configuration restores theme defaults.

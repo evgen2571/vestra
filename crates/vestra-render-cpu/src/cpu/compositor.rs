@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 use image::{GenericImage, Rgba, RgbaImage};
 
 use crate::{
+    Diagnostic,
     cpu::blend::blend_surface,
     cpu::{assets::PreparedAssets, effects, raster::draw_layer},
     render::ByteLruCache,
@@ -55,7 +56,7 @@ pub(super) fn compose(
     static_layers: &mut ByteLruCache<usize, Arc<CachedCpuLayerSurface>>,
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
-) -> ComposeStats {
+) -> Result<ComposeStats, Diagnostic> {
     let first_is_opaque_cached = frame.layers.first().and_then(|layer| {
         static_layers
             .peek(&layer.compiled_layer_index)
@@ -89,7 +90,7 @@ pub(super) fn compose(
         matte_cache: HashMap::new(),
         stats: ComposeStats::default(),
     };
-    context.compose_layers(&frame.layers, frame.width, frame.height, canvas, 0);
+    context.compose_layers(&frame.layers, frame.width, frame.height, canvas, 0)?;
     effects::apply_to(
         context.surfaces,
         canvas,
@@ -98,7 +99,7 @@ pub(super) fn compose(
         context.profiling_enabled,
         context.assets.glyph_atlases(),
     );
-    context.stats
+    Ok(context.stats)
 }
 
 struct ComposeContext<'a> {
@@ -120,14 +121,14 @@ impl ComposeContext<'_> {
         height: u32,
         canvas: &mut RgbaImage,
         depth: usize,
-    ) {
+    ) -> Result<(), Diagnostic> {
         self.surfaces.resize(width, height);
         for layer in layers {
             if !layer.visible {
                 continue;
             }
             if let EvaluatedSource::Group { composition } = &layer.source {
-                self.render_group(layer, composition, layers, canvas, depth);
+                self.render_group(layer, composition, layers, canvas, depth)?;
                 continue;
             }
 
@@ -155,7 +156,7 @@ impl ComposeContext<'_> {
                         layer.colour_transform,
                         self.timings,
                         self.profiling_enabled,
-                    );
+                    )?;
                     if let Some(started) = started {
                         self.timings.source_rasterization += started.elapsed();
                     }
@@ -169,7 +170,7 @@ impl ComposeContext<'_> {
                         ColourTransform::default(),
                         self.timings,
                         self.profiling_enabled,
-                    );
+                    )?;
                     if let Some(started) = started {
                         self.timings.source_rasterization += started.elapsed();
                     }
@@ -181,8 +182,8 @@ impl ComposeContext<'_> {
                         self.assets.glyph_atlases(),
                     );
                 }
-                self.apply_masks(layer, depth);
-                self.apply_track_matte(layer, layers, depth);
+                self.apply_masks(layer, depth)?;
+                self.apply_track_matte(layer, layers, depth)?;
                 let bytes = u64::from(width) * u64::from(height) * 4;
                 let cached =
                     self.static_layers
@@ -227,7 +228,7 @@ impl ComposeContext<'_> {
                     layer.colour_transform,
                     self.timings,
                     self.profiling_enabled,
-                );
+                )?;
                 if let Some(bytes) = copied_bytes {
                     self.stats.opaque_row_copy_fast_path_hits += 1;
                     self.stats.opaque_row_copy_fast_path_bytes += bytes;
@@ -247,7 +248,7 @@ impl ComposeContext<'_> {
                 ColourTransform::default(),
                 self.timings,
                 self.profiling_enabled,
-            );
+            )?;
             if let Some(started) = started {
                 self.timings.source_rasterization += started.elapsed();
             }
@@ -258,8 +259,8 @@ impl ComposeContext<'_> {
                 self.profiling_enabled,
                 self.assets.glyph_atlases(),
             );
-            self.apply_masks(layer, depth);
-            self.apply_track_matte(layer, layers, depth);
+            self.apply_masks(layer, depth)?;
+            self.apply_track_matte(layer, layers, depth)?;
             let started = self.profiling_enabled.then(Instant::now);
             blend_surface(
                 canvas,
@@ -274,6 +275,7 @@ impl ComposeContext<'_> {
             }
             self.stats.generic_blend_surface_calls += 1;
         }
+        Ok(())
     }
 
     fn render_group(
@@ -283,7 +285,7 @@ impl ComposeContext<'_> {
         scope_layers: &[EvaluatedLayer],
         parent: &mut RgbaImage,
         depth: usize,
-    ) {
+    ) -> Result<(), Diagnostic> {
         if layer.content_dependency == TemporalDependency::Static {
             if let Some(cached) = self.static_layers.get(&layer.compiled_layer_index).cloned() {
                 composite_cached_surface(
@@ -294,7 +296,7 @@ impl ComposeContext<'_> {
                     self.profiling_enabled
                         .then_some(&mut self.timings.composition_cases),
                 );
-                return;
+                return Ok(());
             }
             self.stats.static_layer_renders += 1;
         }
@@ -311,7 +313,7 @@ impl ComposeContext<'_> {
             composition.height,
             &mut group_surface,
             depth + 1,
-        );
+        )?;
 
         // A Group becomes image-like only after all children have been composed.
         // The effect pool is separate so the live composition surface remains
@@ -351,8 +353,8 @@ impl ComposeContext<'_> {
                 self.assets.glyph_atlases(),
             );
         }
-        self.apply_masks(layer, depth);
-        self.apply_track_matte(layer, scope_layers, depth);
+        self.apply_masks(layer, depth)?;
+        self.apply_track_matte(layer, scope_layers, depth)?;
         if layer.content_dependency == TemporalDependency::Static {
             let bytes = u64::from(width) * u64::from(height) * 4;
             let cached = self
@@ -402,6 +404,7 @@ impl ComposeContext<'_> {
             self.stats.generic_blend_surface_calls += 1;
         }
         self.compositions.release(depth, group_surface);
+        Ok(())
     }
 }
 
@@ -458,8 +461,10 @@ impl ComposeContext<'_> {
         layer: &EvaluatedLayer,
         layers: &[EvaluatedLayer],
         depth: usize,
-    ) {
-        let Some(matte) = &layer.matte else { return };
+    ) -> Result<(), Diagnostic> {
+        let Some(matte) = &layer.matte else {
+            return Ok(());
+        };
         let width = self.surfaces.current().width();
         let height = self.surfaces.current().height();
         self.surfaces.resize_mask_local(width, height);
@@ -475,7 +480,7 @@ impl ComposeContext<'_> {
                 *pixel = Rgba([0, 0, 0, 0]);
             }
             self.surfaces.apply_external_matte(mode, matte.invert);
-            return;
+            return Ok(());
         };
         let mut saved_consumer = self.compositions.acquire(depth + 1, width, height);
         saved_consumer
@@ -487,7 +492,7 @@ impl ComposeContext<'_> {
                 .copy_from(cached, 0, 0)
                 .expect("matching cached matte surface dimensions");
         } else {
-            self.render_isolated_layer(source, layers, depth + 1);
+            self.render_isolated_layer(source, layers, depth + 1)?;
             self.matte_cache.insert(
                 source.compiled_layer_index,
                 self.surfaces.mask_local_surface().clone(),
@@ -499,6 +504,7 @@ impl ComposeContext<'_> {
             .expect("matching matte restore surface dimensions");
         self.compositions.release(depth + 1, saved_consumer);
         self.surfaces.apply_external_matte(mode, matte.invert);
+        Ok(())
     }
 
     fn render_isolated_layer(
@@ -506,7 +512,7 @@ impl ComposeContext<'_> {
         layer: &EvaluatedLayer,
         scope_layers: &[EvaluatedLayer],
         depth: usize,
-    ) {
+    ) -> Result<(), Diagnostic> {
         self.surfaces.clear();
         if let EvaluatedSource::Group { composition } = &layer.source {
             let width = self.surfaces.current().width();
@@ -520,7 +526,7 @@ impl ComposeContext<'_> {
                 composition.height,
                 &mut group_surface,
                 depth + 2,
-            );
+            )?;
             // Child effects leave pixels in scratch; transform only the completed group.
             self.surfaces.resize(width, height);
             self.surfaces.clear();
@@ -561,7 +567,7 @@ impl ComposeContext<'_> {
                 },
                 self.timings,
                 self.profiling_enabled,
-            );
+            )?;
         }
         if !uses_direct_colour_path(layer) {
             effects::apply_chain(
@@ -572,8 +578,8 @@ impl ComposeContext<'_> {
                 self.assets.glyph_atlases(),
             );
         }
-        self.apply_masks(layer, depth);
-        self.apply_track_matte(layer, scope_layers, depth);
+        self.apply_masks(layer, depth)?;
+        self.apply_track_matte(layer, scope_layers, depth)?;
         if layer.opacity != 1.0 {
             for pixel in self.surfaces.current().pixels_mut() {
                 pixel[3] = (f64::from(pixel[3]) * layer.opacity)
@@ -582,11 +588,12 @@ impl ComposeContext<'_> {
             }
         }
         self.surfaces.copy_current_to_mask_local();
+        Ok(())
     }
 
-    fn apply_masks(&mut self, layer: &EvaluatedLayer, depth: usize) {
+    fn apply_masks(&mut self, layer: &EvaluatedLayer, depth: usize) -> Result<(), Diagnostic> {
         if layer.masks.is_empty() {
-            return;
+            return Ok(());
         }
         let started = self.profiling_enabled.then(Instant::now);
         self.surfaces.reset_mask_coverage();
@@ -629,7 +636,7 @@ impl ComposeContext<'_> {
                         ColourTransform::default(),
                         self.timings,
                         self.profiling_enabled,
-                    );
+                    )?;
                 }
                 EvaluatedMaskInput::Image { asset_index, mode } => {
                     let prepared = self.assets.raster_source(asset_index);
@@ -676,7 +683,7 @@ impl ComposeContext<'_> {
                         );
                         let mut group_surface =
                             RgbaImage::new(composition.width, composition.height);
-                        self.compose_layers(
+                        let result = self.compose_layers(
                             &composition.layers,
                             composition.width,
                             composition.height,
@@ -685,6 +692,7 @@ impl ComposeContext<'_> {
                         );
                         let nested_surfaces = std::mem::replace(self.surfaces, owner_surfaces);
                         self.surfaces.record_nested_usage(&nested_surfaces);
+                        result?;
                         crate::cpu::raster::draw_surface(
                             self.surfaces.mask_local_surface(),
                             &group_surface,
@@ -700,7 +708,7 @@ impl ComposeContext<'_> {
                             ColourTransform::default(),
                             self.timings,
                             self.profiling_enabled,
-                        );
+                        )?;
                     }
                     for pixel in self.surfaces.mask_local_surface().pixels_mut() {
                         pixel[3] = (crate::project::mask_coverage(pixel.0, mode) * 255.0)
@@ -719,6 +727,7 @@ impl ComposeContext<'_> {
         if let Some(started) = started {
             self.timings.transform_sampling += started.elapsed();
         }
+        Ok(())
     }
 }
 

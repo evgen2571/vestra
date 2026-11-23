@@ -1,6 +1,6 @@
 //! State owned by one CPU render worker.
 
-use crate::cpu::metrics::CpuHotPathTimings;
+use crate::{Category, Diagnostic, cpu::metrics::CpuHotPathTimings};
 use std::{
     panic::AssertUnwindSafe,
     sync::{Arc, mpsc::SyncSender},
@@ -52,8 +52,7 @@ pub(super) enum WorkerCompletion {
     Failed {
         worker_id: usize,
         frame_number: u64,
-        message: String,
-        code: &'static str,
+        diagnostic: Diagnostic,
     },
 }
 
@@ -109,17 +108,20 @@ pub(super) fn run_worker(
                         frame,
                         render_duration,
                     },
-                    Ok(Err(message)) => WorkerCompletion::Failed {
+                    Ok(Err(diagnostic)) => WorkerCompletion::Failed {
                         worker_id,
                         frame_number,
-                        message,
-                        code: "CPU-VIDEO-DECODE",
+                        diagnostic,
                     },
                     Err(_) => WorkerCompletion::Failed {
                         worker_id,
                         frame_number,
-                        message: "CPU worker panicked while rendering".to_owned(),
-                        code: "CPU-WORKER-PANIC",
+                        diagnostic: Diagnostic::error(
+                            "CPU-WORKER-PANIC",
+                            Category::Backend,
+                            "CPU worker panicked while rendering",
+                            "",
+                        ),
                     },
                 };
                 if completion_tx.send(completion).is_err() {
@@ -191,7 +193,7 @@ impl CpuWorkerState {
         &mut self,
         frame_number: u64,
         frame: &EvaluatedFrame,
-    ) -> Result<CompletedFrame, String> {
+    ) -> Result<CompletedFrame, Diagnostic> {
         let mut destination = RgbaImage::new(frame.width, frame.height);
         self.full_frame_allocations += 1;
         let insertions_before = self.static_layers.stats().insertions;
@@ -205,6 +207,8 @@ impl CpuWorkerState {
             &mut self.hot_path_timings,
             self.profiling_enabled,
         );
+        self.assets.finish_frame();
+        let compose = compose?;
         self.static_layer_renders += compose.static_layer_renders;
         self.opaque_copy_fast_path_hits +=
             compose.opaque_copy_fast_path_hits + compose.opaque_row_copy_fast_path_hits;
@@ -213,10 +217,14 @@ impl CpuWorkerState {
         self.generic_blend_surface_calls += compose.generic_blend_surface_calls;
         self.static_cache_population_renders +=
             self.static_layers.stats().insertions - insertions_before;
-        self.assets.finish_frame();
 
         if let Some(error) = self.assets.take_video_error() {
-            return Err(error);
+            return Err(Diagnostic::error(
+                "CPU-VIDEO-DECODE",
+                Category::Backend,
+                error,
+                "",
+            ));
         }
         Ok(CompletedFrame {
             frame_number,

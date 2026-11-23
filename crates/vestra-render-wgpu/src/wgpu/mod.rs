@@ -11,6 +11,7 @@ mod context;
 mod diagnostics;
 mod executor;
 mod frame_plan;
+mod layer_upload;
 mod parameters;
 mod parity;
 mod particles;

@@ -482,6 +482,7 @@ fn spectrum2d_one_two_and_four_workers_are_byte_identical() {
             let mut frame = evaluate(&plan, &[ScheduledItem(0)], frame_number)
                 .expect("renderer fixture evaluates");
             frame.layers[0].source = EvaluatedSource::Spectrum2D {
+                wave: None,
                 bands: vec![
                     (frame_number as f32 * 0.17).sin().abs(),
                     0.2 + frame_number as f32 * 0.03,

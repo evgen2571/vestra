@@ -125,6 +125,7 @@ pub enum EvaluatedSource {
     },
     Spectrum2D {
         bands: Vec<f32>,
+        wave: Option<EvaluatedSpectrum2DWave>,
         x: f64,
         y: f64,
         width: f64,
@@ -149,6 +150,14 @@ pub enum EvaluatedSource {
     Group {
         composition: EvaluatedComposition,
     },
+}
+
+#[derive(Clone, Debug)]
+pub struct EvaluatedSpectrum2DWave {
+    pub style: crate::project::Spectrum2DStyle,
+    pub settings: std::sync::Arc<crate::project::Spectrum2DWave>,
+    pub channels: Option<[Vec<f32>; 2]>,
+    pub pixel_scale: f64,
 }
 
 impl EvaluatedSource {
@@ -502,6 +511,7 @@ fn evaluate_source(
         },
         CompiledVisualSource::Spectrum2D {
             band_signals,
+            wave,
             x,
             y,
             width,
@@ -511,24 +521,45 @@ fn evaluate_source(
             layout,
             gradient,
             colour,
-        } => EvaluatedSource::Spectrum2D {
-            bands: band_signals
-                .iter()
-                .map(|signal| context.sample_scalar(*signal, root_project_time))
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter()
-                .map(|amplitude| amplitude.clamp(0.0, 1.0) as f32)
-                .collect(),
-            x: *x,
-            y: *y,
-            width: *width,
-            height: *height,
-            bar_gap_ratio: *bar_gap_ratio,
-            min_bar_height_ratio: *min_bar_height_ratio,
-            layout: layout.clone(),
-            gradient: *gradient,
-            colour: *colour,
-        },
+        } => {
+            let sample_bands = |signals: &[crate::plan::ScalarSignalId]| {
+                signals
+                    .iter()
+                    .map(|signal| {
+                        context
+                            .sample_scalar(*signal, root_project_time)
+                            .map(|amplitude| amplitude.clamp(0.0, 1.0) as f32)
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            };
+            let wave = if let Some(wave) = wave {
+                Some(EvaluatedSpectrum2DWave {
+                    style: wave.style,
+                    settings: wave.settings.clone(),
+                    channels: if let Some([left, right]) = &wave.channels {
+                        Some([sample_bands(left)?, sample_bands(right)?])
+                    } else {
+                        None
+                    },
+                    pixel_scale: 1.0,
+                })
+            } else {
+                None
+            };
+            EvaluatedSource::Spectrum2D {
+                bands: sample_bands(band_signals)?,
+                wave,
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
+                bar_gap_ratio: *bar_gap_ratio,
+                min_bar_height_ratio: *min_bar_height_ratio,
+                layout: layout.clone(),
+                gradient: *gradient,
+                colour: *colour,
+            }
+        }
         CompiledVisualSource::ParticleSystem(system) => EvaluatedSource::ParticleSystem {
             system: system.clone(),
             time_nanos: relative,

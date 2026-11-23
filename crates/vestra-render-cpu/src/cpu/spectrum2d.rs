@@ -65,6 +65,7 @@ pub(super) fn rasterize(
                 crate::project::Spectrum2DBandMapping::Reverse => count - 1 - visual,
                 _ => visual,
             },
+            _ => unreachable!("path layouts use the shared Spectrum2D rasterizer"),
         }
     };
     let colour_at = |t: f64| {
@@ -231,6 +232,7 @@ pub(super) fn rasterize(
                 }
             }
         }
+        _ => unreachable!("path layouts use the shared Spectrum2D rasterizer"),
     }
 }
 

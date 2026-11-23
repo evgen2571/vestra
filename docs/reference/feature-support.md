@@ -37,7 +37,7 @@ a source or effect's backend support listed below.
 | Solid color | `Color`/`SolidColor` → `solid_color` | adapter-mediated | supported | supported |
 | Shape (including Line stroke masks) | Shape constructors → `shape` | direct | supported | supported |
 | Text | `Text` → `text`; bundled, installed or file fonts | direct | supported, requires font preparation | supported, requires font preparation |
-| Spectrum2D | `Spectrum2D` → `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | not fully verified |
+| Spectrum2D | `Spectrum2D` → `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | legacy bars use a shader. Paths and waves use a shared source raster |
 | Particle system | `ParticleSystem` → `particle_system` | adapter-mediated | supported | not fully verified |
 | Nested composition | `Group` or `CompositionLayer` → `group` | direct | supported | supported |
 | Local group canvas | `Group(size=(width, height))` → optional group `size` | clipped local canvas; unsized inherits parent | supported | supported |

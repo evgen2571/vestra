@@ -29,6 +29,8 @@ pub mod particle_raster;
 #[doc(hidden)]
 mod shape_raster;
 #[doc(hidden)]
+pub mod spectrum2d;
+#[doc(hidden)]
 mod text;
 pub mod video;
 

@@ -21,6 +21,7 @@ pub fn spectrum_frame(bands: Vec<f32>, bar_gap_ratio: f64) -> EvaluatedFrame {
             ),
             source: EvaluatedSource::Spectrum2D {
                 bands,
+                wave: None,
                 x: 0.0,
                 y: 0.0,
                 width: 1.0,

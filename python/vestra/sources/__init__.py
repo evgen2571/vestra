@@ -28,6 +28,11 @@ from .spectrum import (
     Spectrum2DLinearLayout,
     Spectrum2DPreset,
     Spectrum2DRadialLayout,
+    Spectrum2DEllipseLayout,
+    Spectrum2DPathLayout,
+    Spectrum2DStereo,
+    Spectrum2DStyle,
+    Spectrum2DWave,
 )
 
 __all__ = [
@@ -67,6 +72,11 @@ __all__ = [
     "Spectrum2DLayout",
     "Spectrum2DLinearLayout",
     "Spectrum2DRadialLayout",
+    "Spectrum2DEllipseLayout",
+    "Spectrum2DPathLayout",
+    "Spectrum2DStereo",
+    "Spectrum2DStyle",
+    "Spectrum2DWave",
 ]
 
 # Keep the established public module identity for classes that used to live in

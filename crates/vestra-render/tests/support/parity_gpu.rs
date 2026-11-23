@@ -1113,28 +1113,59 @@ fn gpu_spectrum2d_frames_keep_distinct_in_flight_band_data() {
     plan.canvas.logical_height = plan.canvas.height;
     plan.compilation.effect_pass_count = 0;
     let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
-    let frames = [
-        spectrum_frame(vec![1.0, 0.0, 0.0], 0.0),
-        spectrum_frame(vec![0.0, 1.0, 0.0], 0.0),
-        spectrum_frame(vec![0.0, 0.0, 1.0], 0.0),
-    ];
-    let Some(mut gpu) = super::gpu::wgpu_backend_or_skip_depth(&plan, Arc::clone(&decoded), 3)
-    else {
-        return;
-    };
-    for (frame_number, frame) in frames.iter().enumerate() {
-        gpu.submit_frame(frame_number as u64, frame)
-            .expect("GPU Spectrum2D frame submits");
-    }
-    let completed = gpu.flush().expect("GPU Spectrum2D frames flush");
-    assert_eq!(completed.len(), frames.len());
-    for result in completed {
-        let expected = &frames[result.frame_number as usize];
+    for path_raster in [false, true] {
+        let mut frames = [
+            spectrum_frame(vec![1.0, 0.0, 0.0], 0.0),
+            spectrum_frame(vec![0.0, 1.0, 0.0], 0.0),
+            spectrum_frame(vec![0.0, 0.0, 1.0], 0.0),
+        ];
+        if path_raster {
+            for frame in &mut frames {
+                let vestra_core::plan::EvaluatedSource::Spectrum2D { layout, wave, .. } =
+                    &mut frame.layers[0].source
+                else {
+                    unreachable!("spectrum fixture creates a Spectrum2D source")
+                };
+                *layout =
+                    crate::project::Spectrum2DLayout::Path(crate::project::Spectrum2DPathLayout {
+                        points: vec![Point { x: 0.0, y: 0.95 }, Point { x: 1.0, y: 0.75 }],
+                        closed: false,
+                        direction: Default::default(),
+                        band_mapping: Default::default(),
+                    });
+                *wave = Some(vestra_core::plan::EvaluatedSpectrum2DWave {
+                    style: crate::project::Spectrum2DStyle::Both,
+                    settings: Default::default(),
+                    channels: None,
+                    pixel_scale: 1.0,
+                });
+            }
+        }
+        let Some(mut gpu) = super::gpu::wgpu_backend_or_skip_depth(&plan, Arc::clone(&decoded), 3)
+        else {
+            return;
+        };
+        for (frame_number, frame) in frames.iter().enumerate() {
+            gpu.submit_frame(frame_number as u64, frame)
+                .expect("GPU Spectrum2D frame submits");
+        }
+        let completed = gpu.flush().expect("GPU Spectrum2D frames flush");
+        assert_eq!(completed.len(), frames.len());
+        assert_ne!(completed[0].rgba, completed[1].rgba);
+        assert_ne!(completed[1].rgba, completed[2].rgba);
         let mut cpu = CpuBackend::new(&plan, Arc::clone(&decoded));
-        let mut cpu_output = RgbaImage::new(10, 4);
-        cpu.render_frame(expected, &mut cpu_output)
-            .expect("CPU Spectrum2D frame renders");
-        assert_eq!(result.rgba, cpu_output.as_raw().as_slice());
+        for result in completed {
+            let expected = &frames[result.frame_number as usize];
+            let mut cpu_output = RgbaImage::new(10, 4);
+            cpu.render_frame(expected, &mut cpu_output)
+                .expect("CPU Spectrum2D frame renders");
+            let tolerance = if path_raster { 2 } else { 0 };
+            let difference = compare_rgba(cpu_output.as_raw(), &result.rgba, tolerance);
+            assert!(
+                difference.maximum_absolute_channel_error <= tolerance,
+                "{difference:?}"
+            );
+        }
     }
 }
 

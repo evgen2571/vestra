@@ -7,13 +7,19 @@ from typing import cast
 from ..authoring._internal import _Owner
 from ..authoring.clips import Spectrum2DClip
 from ..authoring.spectrum2d import (
+    Spectrum2DEllipseLayout,
     Spectrum2DGradient,
     Spectrum2DLayout,
     Spectrum2DLinearLayout,
+    Spectrum2DPathLayout,
     Spectrum2DPreset,
     Spectrum2DRadialLayout,
+    Spectrum2DStereo,
+    Spectrum2DStyle,
+    Spectrum2DWave,
     _UNSET,
     _Unset,
+    _canonical_spectrum2d_options,
     _resolve_spectrum2d_source,
 )
 from ..authoring.values import Color as AuthoringColor, color_to_canonical
@@ -36,6 +42,10 @@ _SPECTRUM_FIELDS = (
     "min_bar_height_ratio",
     "layout",
     "gradient",
+    "style",
+    "wave",
+    "soft_knee",
+    "response_power",
 )
 
 
@@ -65,6 +75,10 @@ class Spectrum2D(Source):
         min_bar_height_ratio: int | float | None = None,
         layout: Spectrum2DLayout | None = None,
         gradient: Spectrum2DGradient | None | _Unset = _UNSET,
+        style: Spectrum2DStyle | None = None,
+        wave: Spectrum2DWave | None | _Unset = _UNSET,
+        soft_knee: int | float | None | _Unset = _UNSET,
+        response_power: int | float | None = None,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,
@@ -96,6 +110,10 @@ class Spectrum2D(Source):
             "min_bar_height_ratio": min_bar_height_ratio,
             "layout": layout,
             "gradient": gradient,
+            "style": style,
+            "wave": wave,
+            "soft_knee": soft_knee,
+            "response_power": response_power,
         }
         self._preset = preset
         overrides_values: dict[str, object] = {
@@ -112,9 +130,10 @@ class Spectrum2D(Source):
             name: value if name in self._overrides else _UNSET
             for name, value in values.items()
         }
-        if gradient is None:
-            self._overrides["gradient"] = None
-            overrides["gradient"] = None
+        for name in ("gradient", "wave", "soft_knee"):
+            if values[name] is None:
+                self._overrides[name] = None
+                overrides[name] = None
         resolved, _ = _resolve_spectrum2d_source(preset, overrides)
         self._values = dict(resolved)
         self._validate()
@@ -148,6 +167,10 @@ class Spectrum2D(Source):
             min_bar_height_ratio=cast(float, values["min_bar_height_ratio"]),
             layout=values["layout"],
             gradient=values.get("gradient"),
+            style=values["style"],
+            wave=values["wave"],
+            soft_knee=cast(float | None, values["soft_knee"]),
+            response_power=cast(float, values["response_power"]),
         )
 
     def value(self, name: str) -> object:
@@ -215,6 +238,22 @@ class Spectrum2D(Source):
     def gradient(self) -> Spectrum2DGradient | None:
         return cast(Spectrum2DGradient | None, self._values.get("gradient"))
 
+    @property
+    def style(self) -> Spectrum2DStyle:
+        return cast(Spectrum2DStyle, self._values["style"])
+
+    @property
+    def wave(self) -> Spectrum2DWave | None:
+        return cast(Spectrum2DWave | None, self._values["wave"])
+
+    @property
+    def soft_knee(self) -> float | None:
+        return cast(float | None, self._values["soft_knee"])
+
+    @property
+    def response_power(self) -> float:
+        return cast(float, self._values["response_power"])
+
     def lowering_kwargs(self) -> dict[str, object]:
         return dict(self._overrides)
 
@@ -228,12 +267,9 @@ class Spectrum2D(Source):
             "bar_gap_ratio": self.bar_gap_ratio, "colour": self.colour,
             "min_bar_height_ratio": self.min_bar_height_ratio,
         }
-        if not (isinstance(self.layout, Spectrum2DLinearLayout)
-                and self.layout.anchor == "bottom"
-                and self.layout.band_mapping == "forward"):
-            data["layout"] = self.layout.to_canonical()
-        if self.gradient is not None:
-            data["gradient"] = self.gradient.to_canonical()
+        data.update(_canonical_spectrum2d_options(
+            self.layout, self.gradient, self.style, self.wave, self.soft_knee, self.response_power,
+        ))
         return data
 
 
@@ -241,5 +277,6 @@ class Spectrum2D(Source):
 
 __all__ = [
     "Spectrum2D", "Spectrum2DPreset", "Spectrum2DGradient", "Spectrum2DLayout",
-    "Spectrum2DLinearLayout", "Spectrum2DRadialLayout",
+    "Spectrum2DLinearLayout", "Spectrum2DRadialLayout", "Spectrum2DEllipseLayout",
+    "Spectrum2DPathLayout", "Spectrum2DStereo", "Spectrum2DStyle", "Spectrum2DWave",
 ]

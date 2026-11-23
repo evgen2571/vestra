@@ -319,6 +319,7 @@ pub enum CompiledVisualSource {
     },
     Spectrum2D {
         band_signals: Vec<crate::plan::ScalarSignalId>,
+        wave: Option<CompiledSpectrum2DWave>,
         x: f64,
         y: f64,
         width: f64,
@@ -335,6 +336,13 @@ pub enum CompiledVisualSource {
     },
     ParticleSystem(Arc<crate::plan::CompiledParticleSystem>),
     Group(Arc<CompiledComposition>),
+}
+
+#[derive(Clone, Debug)]
+pub struct CompiledSpectrum2DWave {
+    pub style: crate::project::Spectrum2DStyle,
+    pub settings: Arc<crate::project::Spectrum2DWave>,
+    pub channels: Option<[Vec<crate::plan::ScalarSignalId>; 2]>,
 }
 
 #[derive(Clone, Debug)]

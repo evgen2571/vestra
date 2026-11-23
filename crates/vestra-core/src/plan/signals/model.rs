@@ -106,6 +106,8 @@ pub enum AudioScalarFeature {
     Rms,
     Peak,
     BandEnergy(AudioFrequencyBand),
+    LeftBandEnergy(AudioFrequencyBand),
+    RightBandEnergy(AudioFrequencyBand),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -158,6 +160,8 @@ pub enum SignalTransformContractError {
     InvalidRemapInputRange,
     InvalidClampRange,
     InvalidResponseCurveXControls,
+    InvalidSpectrumPower,
+    InvalidSpectrumKnee,
 }
 
 impl fmt::Display for SignalTransformContractError {
@@ -167,6 +171,8 @@ impl fmt::Display for SignalTransformContractError {
             Self::InvalidRemapInputRange => "remap requires input_min < input_max",
             Self::InvalidClampRange => "clamp requires min <= max",
             Self::InvalidResponseCurveXControls => "response curve requires 0 <= x1 <= x2 <= 1",
+            Self::InvalidSpectrumPower => "spectrum response power must be in (0, 1]",
+            Self::InvalidSpectrumKnee => "spectrum soft knee must be in [0, 1)",
         })
     }
 }
@@ -399,6 +405,53 @@ fn cubic_bezier_derivative(parameter: f64, control_one: f64, control_two: f64) -
         + 3.0 * parameter * parameter * (1.0 - control_two)
 }
 
+/// Shapes the dynamic range of non-negative Spectrum2D band power.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SpectrumResponseTransform {
+    power: CanonicalF64,
+    gain: GainTransform,
+    knee: Option<CanonicalF64>,
+}
+
+impl SpectrumResponseTransform {
+    pub(crate) fn new(
+        power: f64,
+        gain: f64,
+        knee: Option<f64>,
+    ) -> Result<Self, SignalTransformContractError> {
+        let power = CanonicalF64::new(power)?;
+        if power.value() <= 0.0 || power.value() > 1.0 {
+            return Err(SignalTransformContractError::InvalidSpectrumPower);
+        }
+        let knee = knee.map(CanonicalF64::new).transpose()?;
+        if knee.is_some_and(|value| !(0.0..1.0).contains(&value.value())) {
+            return Err(SignalTransformContractError::InvalidSpectrumKnee);
+        }
+        Ok(Self {
+            power,
+            gain: GainTransform::new(gain)?,
+            knee,
+        })
+    }
+
+    fn evaluate(self, input: f64) -> f64 {
+        let weighted = if self.power.value() == 1.0 {
+            input
+        } else {
+            input.powf(self.power.value())
+        };
+        let level = weighted * self.gain.gain();
+        if let Some(knee) = self.knee.map(CanonicalF64::value)
+            && level > knee
+        {
+            let headroom = 1.0 - knee;
+            knee + headroom * ((level - knee) / headroom).tanh()
+        } else {
+            level.clamp(0.0, 1.0)
+        }
+    }
+}
+
 /// Generic transforms applied in declaration order during signal preparation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CompiledSignalTransform {
@@ -407,6 +460,7 @@ pub enum CompiledSignalTransform {
     Clamp(ClampTransform),
     Envelope(EnvelopeTransform),
     ResponseCurve(CubicResponseCurve),
+    SpectrumResponse(SpectrumResponseTransform),
 }
 
 impl CompiledSignalTransform {
@@ -422,6 +476,7 @@ impl CompiledSignalTransform {
             Self::Clamp(transform) => input.clamp(transform.min(), transform.max()),
             Self::Envelope(_) => unreachable!("Envelope operates on a complete signal series"),
             Self::ResponseCurve(curve) => curve.evaluate(input),
+            Self::SpectrumResponse(response) => response.evaluate(input),
         }
     }
 }

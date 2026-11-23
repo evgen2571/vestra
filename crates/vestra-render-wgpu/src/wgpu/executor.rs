@@ -12,8 +12,8 @@ use crate::Diagnostic;
 use super::{
     bind_groups::{FrameBindGroups, composite_group},
     frame_plan::{GpuFramePlan, GpuOperation, TextureSlot},
+    layer_upload::LayerUpload,
     parameters::FrameParameterArena,
-    particles::ParticleUpload,
     pipeline::GpuPipelines,
     resources::FrameResources,
     texture_pool::StaticLayerTexture,
@@ -56,8 +56,8 @@ pub(super) fn encode_and_submit(
     readback: &wgpu::Buffer,
     static_layers: &BTreeMap<usize, Arc<StaticLayerTexture>>,
     particle_buffer: Option<&wgpu::Buffer>,
-    particle_upload_buffer: Option<&wgpu::Buffer>,
-    particle_uploads: &[Option<ParticleUpload>],
+    layer_upload_buffer: Option<&wgpu::Buffer>,
+    layer_uploads: &[Option<LayerUpload>],
 ) -> Result<FrameExecutionMetrics, Diagnostic> {
     queue.write_buffer(parameter_buffer, 0, parameters.bytes());
     let started = Instant::now();
@@ -70,7 +70,7 @@ pub(super) fn encode_and_submit(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("vestra texture frame"),
     });
-    let mut particle_upload_index = 0;
+    let mut layer_uploads = layer_uploads.iter();
     for (operation, &(width, height)) in plan.operations.iter().zip(&plan.extents) {
         match operation {
             GpuOperation::ClearCanvas {
@@ -113,6 +113,18 @@ pub(super) fn encode_and_submit(
                 ..
             } => {
                 debug_assert_eq!(*destination, super::frame_plan::TextureSlot::Layer);
+                if let Some(upload) = next_layer_upload(&mut layer_uploads)? {
+                    copy_layer_upload(
+                        &mut encoder,
+                        layer_upload_buffer,
+                        frame,
+                        upload,
+                        width,
+                        height,
+                    )?;
+                    metrics.texture_copies += 1;
+                    continue;
+                }
                 dispatch(
                     &mut encoder,
                     &pipelines.spectrum2d,
@@ -133,15 +145,7 @@ pub(super) fn encode_and_submit(
                 blend_mode,
                 ..
             } => {
-                let upload = particle_uploads.get(particle_upload_index).ok_or_else(|| {
-                    Diagnostic::error(
-                        "WGPU-PARTICLE-UPLOAD",
-                        crate::Category::Backend,
-                        "particle operation has no matching source upload entry",
-                        "",
-                    )
-                })?;
-                particle_upload_index += 1;
+                let upload = next_layer_upload(&mut layer_uploads)?;
                 debug_assert!(matches!(
                     (*blend_mode, *destination),
                     (
@@ -153,35 +157,14 @@ pub(super) fn encode_and_submit(
                     )
                 ));
                 if let Some(upload) = upload {
-                    let buffer = particle_upload_buffer.ok_or_else(|| {
-                        Diagnostic::error(
-                            "WGPU-PARTICLE-UPLOAD",
-                            crate::Category::Backend,
-                            "particle upload requested without an upload buffer",
-                            "",
-                        )
-                    })?;
-                    encoder.copy_buffer_to_texture(
-                        wgpu::ImageCopyBuffer {
-                            buffer,
-                            layout: wgpu::ImageDataLayout {
-                                offset: upload.offset,
-                                bytes_per_row: Some(upload.bytes_per_row),
-                                rows_per_image: Some(height),
-                            },
-                        },
-                        wgpu::ImageCopyTexture {
-                            texture: &frame.working.get(TextureSlot::Layer).texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        wgpu::Extent3d {
-                            width,
-                            height,
-                            depth_or_array_layers: 1,
-                        },
-                    );
+                    copy_layer_upload(
+                        &mut encoder,
+                        layer_upload_buffer,
+                        frame,
+                        upload,
+                        width,
+                        height,
+                    )?;
                     metrics.texture_copies += 1;
                     continue;
                 }
@@ -627,4 +610,57 @@ fn pixel_sort_dispatch_extent(
     } else {
         (width, height)
     }
+}
+
+fn next_layer_upload(
+    uploads: &mut std::slice::Iter<'_, Option<LayerUpload>>,
+) -> Result<Option<LayerUpload>, Diagnostic> {
+    uploads.next().copied().ok_or_else(|| {
+        Diagnostic::error(
+            "WGPU-LAYER-UPLOAD",
+            crate::Category::Backend,
+            "render operation has no matching source upload entry",
+            "",
+        )
+    })
+}
+
+fn copy_layer_upload(
+    encoder: &mut wgpu::CommandEncoder,
+    buffer: Option<&wgpu::Buffer>,
+    frame: &FrameResources,
+    upload: LayerUpload,
+    width: u32,
+    height: u32,
+) -> Result<(), Diagnostic> {
+    let buffer = buffer.ok_or_else(|| {
+        Diagnostic::error(
+            "WGPU-LAYER-UPLOAD",
+            crate::Category::Backend,
+            "source upload requested without an upload buffer",
+            "",
+        )
+    })?;
+    encoder.copy_buffer_to_texture(
+        wgpu::ImageCopyBuffer {
+            buffer,
+            layout: wgpu::ImageDataLayout {
+                offset: upload.offset,
+                bytes_per_row: Some(upload.bytes_per_row),
+                rows_per_image: Some(height),
+            },
+        },
+        wgpu::ImageCopyTexture {
+            texture: &frame.working.get(TextureSlot::Layer).texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    Ok(())
 }

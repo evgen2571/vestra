@@ -52,9 +52,11 @@ pub use signals::{
 };
 pub use spectrum2d::{
     SPECTRUM2D_DEFAULT_BAND_COUNT, SPECTRUM2D_MAX_BAND_COUNT, SPECTRUM2D_MIN_BAND_COUNT,
-    Spectrum2D, Spectrum2DBandMapping, Spectrum2DGradient, Spectrum2DGradientDirection,
-    Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Spectrum2DRadialDirection,
-    Spectrum2DRadialLayout,
+    Spectrum2D, Spectrum2DBandMapping, Spectrum2DEllipseLayout, Spectrum2DGradient,
+    Spectrum2DGradientDirection, Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout,
+    Spectrum2DPathBandMapping, Spectrum2DPathDirection, Spectrum2DPathLayout,
+    Spectrum2DRadialDirection, Spectrum2DRadialLayout, Spectrum2DStereo, Spectrum2DStyle,
+    Spectrum2DWave,
 };
 pub use transitions::{
     Flash, NormalizedKeyframe, NormalizedTrack, TransitionDefinition, TransitionPlacement,

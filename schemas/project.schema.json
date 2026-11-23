@@ -4573,13 +4573,35 @@
           "minimum": 0,
           "type": "number"
         },
+        "response_power": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "type": "number"
+        },
         "sensitivity": {
           "default": 8.0,
           "exclusiveMinimum": 0,
           "type": "number"
         },
+        "soft_knee": {
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "style": {
+          "default": "bars",
+          "enum": [
+            "bars",
+            "wave",
+            "both"
+          ]
+        },
         "type": {
           "const": "spectrum2d"
+        },
+        "wave": {
+          "$ref": "#/$defs/spectrum2d_wave"
         },
         "width": {
           "default": 0.8,
@@ -4700,8 +4722,197 @@
             "type"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "band_mapping": {
+              "default": "forward",
+              "enum": [
+                "forward",
+                "reverse"
+              ]
+            },
+            "direction": {
+              "default": "outward",
+              "enum": [
+                "outward",
+                "inward",
+                "both"
+              ]
+            },
+            "radius_x": {
+              "exclusiveMinimum": 0,
+              "maximum": 0.5,
+              "type": "number"
+            },
+            "radius_y": {
+              "exclusiveMinimum": 0,
+              "maximum": 0.5,
+              "type": "number"
+            },
+            "start_angle_degrees": {
+              "default": 0,
+              "type": "number"
+            },
+            "sweep_angle_degrees": {
+              "default": 360,
+              "exclusiveMinimum": 0,
+              "maximum": 360,
+              "type": "number"
+            },
+            "type": {
+              "const": "ellipse"
+            }
+          },
+          "required": [
+            "type",
+            "radius_x",
+            "radius_y"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "closed": {
+                "const": true
+              }
+            },
+            "required": [
+              "closed"
+            ]
+          },
+          "properties": {
+            "band_mapping": {
+              "default": "forward",
+              "enum": [
+                "forward",
+                "reverse"
+              ]
+            },
+            "closed": {
+              "default": false,
+              "type": "boolean"
+            },
+            "direction": {
+              "default": "left",
+              "enum": [
+                "left",
+                "right",
+                "both"
+              ]
+            },
+            "points": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "x": {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "y": {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "minItems": 2,
+              "type": "array"
+            },
+            "type": {
+              "const": "path"
+            }
+          },
+          "required": [
+            "type",
+            "points"
+          ],
+          "then": {
+            "properties": {
+              "points": {
+                "minItems": 3
+              }
+            }
+          },
+          "type": "object"
         }
       ]
+    },
+    "spectrum2d_stereo": {
+      "additionalProperties": false,
+      "properties": {
+        "left_colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "left_weight": {
+          "default": 0.65,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "right_colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "right_weight": {
+          "default": 1.0,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "spectrum2d_wave": {
+      "additionalProperties": false,
+      "properties": {
+        "bar_opacity": {
+          "default": 1.0,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "fill_opacity": {
+          "default": 0.18,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "glow_opacity": {
+          "default": 0.45,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "glow_radius": {
+          "default": 0.0,
+          "maximum": 32,
+          "minimum": 0,
+          "type": "number"
+        },
+        "stereo": {
+          "$ref": "#/$defs/spectrum2d_stereo"
+        },
+        "stroke_width": {
+          "default": 2.0,
+          "exclusiveMinimum": 0,
+          "maximum": 64,
+          "type": "number"
+        }
+      },
+      "type": "object"
     },
     "text": {
       "additionalProperties": false,

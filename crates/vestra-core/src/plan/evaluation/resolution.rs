@@ -192,6 +192,7 @@ fn scale_source(
             transform.scale.y *= scale;
         }
         EvaluatedSource::Spectrum2D {
+            wave,
             x,
             y,
             width,
@@ -204,6 +205,9 @@ fn scale_source(
             *width *= horizontal;
             *y *= vertical;
             *height *= vertical;
+            if let Some(wave) = wave {
+                wave.pixel_scale *= scale;
+            }
         }
         EvaluatedSource::SolidColor { .. } | EvaluatedSource::ParticleSystem { .. } => {}
     }

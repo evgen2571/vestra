@@ -94,7 +94,8 @@ fn render_frame_with_plan(
         &mut cache,
         &mut crate::cpu::metrics::CpuHotPathTimings::default(),
         false,
-    );
+    )
+    .expect("compose frame");
     canvas
 }
 
@@ -239,7 +240,8 @@ fn late_effect_mask_and_feather_activation_matches_fresh_frames_and_keeps_owned_
             &mut cache,
             &mut CpuHotPathTimings::default(),
             false,
-        );
+        )
+        .expect("compose frame");
         assert_eq!(canvas, expected, "phase {phase}, iteration {iteration}");
         if phase == 0 {
             assert!(
@@ -338,7 +340,8 @@ fn static_group_is_cached_at_the_complete_layer_stage() {
         &mut cache,
         &mut timings,
         false,
-    );
+    )
+    .expect("compose frame");
     let first_pixels = canvas.clone();
     let second = compose(
         &frame,
@@ -349,7 +352,8 @@ fn static_group_is_cached_at_the_complete_layer_stage() {
         &mut cache,
         &mut timings,
         false,
-    );
+    )
+    .expect("compose frame");
 
     assert_eq!(first.static_layer_renders, 2);
     assert_eq!(second.static_layer_renders, 0);
@@ -395,7 +399,8 @@ fn dynamic_group_never_reuses_a_static_surface() {
         &mut cache,
         &mut timings,
         false,
-    );
+    )
+    .expect("compose frame");
     let first_pixel = *canvas.get_pixel(8, 8);
     compose(
         &second_frame,
@@ -406,7 +411,8 @@ fn dynamic_group_never_reuses_a_static_surface() {
         &mut cache,
         &mut timings,
         false,
-    );
+    )
+    .expect("compose frame");
     assert_ne!(first_pixel, *canvas.get_pixel(8, 8));
     assert_eq!(cache.stats().requests, 0);
 }
@@ -554,7 +560,8 @@ fn group_opacity_is_applied_once_to_the_isolated_child_result() {
         &mut cache,
         &mut crate::cpu::metrics::CpuHotPathTimings::default(),
         false,
-    );
+    )
+    .expect("compose frame");
 
     let mut isolated = Rgba([0, 0, 0, 0]);
     isolated = blend_pixel(
@@ -953,6 +960,7 @@ fn particle_and_spectrum_sources_render_inside_groups_deterministically() {
         visible: true,
         content_dependency: TemporalDependency::Dynamic,
         source: EvaluatedSource::Spectrum2D {
+            wave: None,
             bands: vec![1.0, 0.75, 0.5],
             x: 0.25,
             y: 0.25,

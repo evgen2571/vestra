@@ -226,6 +226,7 @@ fn spectrum2d_cpu_benchmark() {
                     .expect("renderer fixture evaluates");
                 if let EvaluatedSource::Image { .. } = frame.layers[0].source {
                     frame.layers[0].source = EvaluatedSource::Spectrum2D {
+                        wave: None,
                         bands: (0..band_count)
                             .map(|band| {
                                 (((band + frame_number as usize) % band_count) as f32

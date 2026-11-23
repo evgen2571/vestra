@@ -15,6 +15,11 @@ from .particles import (
 from .particle_presets import ambient_stars, embers, radial_burst, snow, sparks
 from .spectrum2d import (
     Spectrum2DPreset, Spectrum2DGradient, Spectrum2DLinearLayout, Spectrum2DRadialLayout,
+    Spectrum2DEllipseLayout,
+    Spectrum2DPathLayout,
+    Spectrum2DStereo,
+    Spectrum2DStyle,
+    Spectrum2DWave,
 )
 from .presets import Preset, PresetCollection
 from .timeline import Timeline
@@ -185,4 +190,9 @@ __all__ = [
     "Flash",
     "FlashCollection",
     "TransitionCollection",
+    "Spectrum2DEllipseLayout",
+    "Spectrum2DPathLayout",
+    "Spectrum2DStereo",
+    "Spectrum2DStyle",
+    "Spectrum2DWave",
 ]

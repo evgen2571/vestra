@@ -9,7 +9,11 @@ from .assets import ImageAsset, VideoAsset
 from .effects import ClipEffectCollection
 from .tracks import CropTrack, ModulatableScalarTrack, Transform
 from .presets import PresetCollection
-from .spectrum2d import Spectrum2DGradient, Spectrum2DLinearLayout, Spectrum2DLayout, Spectrum2DRadialLayout
+from .spectrum2d import (
+    Spectrum2DEllipseLayout, Spectrum2DGradient, Spectrum2DLayout, Spectrum2DLinearLayout,
+    Spectrum2DPathLayout, Spectrum2DRadialLayout, Spectrum2DStyle, Spectrum2DWave,
+    _canonical_spectrum2d_options,
+)
 from .values import BlendMode, Color, Crop, Sizing, color_to_canonical
 from .particles import ParticleSystem
 
@@ -425,13 +429,14 @@ class ParticleSystemClip(_Clip):
 class Spectrum2DClip(_Clip):
     """An audio-reactive 2D spectrum source driven by authored Master audio.
 
-    It supports linear and radial layouts; the default is linear, bottom,
-    forward. Normal visual effects, opacity, and blend modes apply.
+    It defaults to linear bars anchored at the bottom of the spectrum region.
+    Normal visual effects, opacity, and blend modes apply.
     """
 
     __slots__ = (
         "_band_count", "_min_hz", "_max_hz", "_sensitivity", "_attack_seconds",
         "_release_seconds", "_x", "_y", "_width", "_height", "_bar_gap_ratio", "_colour", "_min_bar_height_ratio", "_layout", "_gradient",
+        "_style", "_wave", "_soft_knee", "_response_power",
     )
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -445,6 +450,7 @@ class Spectrum2DClip(_Clip):
         x: int | float, y: int | float, width: int | float, height: int | float,
         bar_gap_ratio: int | float, colour: Color | str,
         min_bar_height_ratio: int | float, layout: object, gradient: object,
+        style: object, wave: object, soft_knee: int | float | None, response_power: int | float,
     ) -> "Spectrum2DClip":
         instance = object.__new__(cls)
         instance._initialize(owner, identifier, start=start, duration=duration, layer=layer,
@@ -466,6 +472,10 @@ class Spectrum2DClip(_Clip):
         if gradient is not None and not isinstance(gradient, Spectrum2DGradient):
             raise TypeError("gradient must be Spectrum2DGradient or None")
         instance.gradient = gradient
+        instance.style = style
+        instance.wave = wave
+        instance.soft_knee = soft_knee
+        instance.response_power = response_power
         return instance
 
     @staticmethod
@@ -598,8 +608,10 @@ class Spectrum2DClip(_Clip):
     def layout(self, value: object) -> None:
         if value is None:
             value = Spectrum2DLinearLayout()
-        if not isinstance(value, (Spectrum2DLinearLayout, Spectrum2DRadialLayout)):
-            raise TypeError("layout must be Spectrum2DLinearLayout, Spectrum2DRadialLayout, or None")
+        if not isinstance(value, (
+            Spectrum2DLinearLayout, Spectrum2DRadialLayout, Spectrum2DEllipseLayout, Spectrum2DPathLayout,
+        )):
+            raise TypeError("layout must be a Spectrum2D layout or None")
         self._layout = value
 
     @property
@@ -612,6 +624,46 @@ class Spectrum2DClip(_Clip):
             raise TypeError("gradient must be Spectrum2DGradient or None")
         self._gradient = value
 
+    @property
+    def style(self) -> Spectrum2DStyle:
+        return self._style
+
+    @style.setter
+    def style(self, value: object) -> None:
+        if not isinstance(value, str):
+            raise TypeError("style must be 'bars', 'wave', or 'both'")
+        if value not in ("bars", "wave", "both"):
+            raise ValueError("style must be 'bars', 'wave', or 'both'")
+        self._style = cast(Spectrum2DStyle, value)
+
+    @property
+    def wave(self) -> Spectrum2DWave | None:
+        return self._wave
+
+    @wave.setter
+    def wave(self, value: object) -> None:
+        if value is not None and not isinstance(value, Spectrum2DWave):
+            raise TypeError("wave must be Spectrum2DWave or None")
+        self._wave = value
+
+    @property
+    def soft_knee(self) -> float | None:
+        return self._soft_knee
+
+    @soft_knee.setter
+    def soft_knee(self, value: int | float | None) -> None:
+        self._soft_knee = None if value is None else self._bounded(
+            value, "soft_knee", maximum_inclusive=False,
+        )
+
+    @property
+    def response_power(self) -> float:
+        return self._response_power
+
+    @response_power.setter
+    def response_power(self, value: int | float) -> None:
+        self._response_power = self._bounded(value, "response_power", minimum_inclusive=False)
+
     def to_canonical(self) -> dict[str, object]:
         data = self._canonical_common()
         source: dict[str, object] = {
@@ -622,15 +674,10 @@ class Spectrum2DClip(_Clip):
             "bar_gap_ratio": self.bar_gap_ratio, "colour": self.colour,
             "min_bar_height_ratio": self.min_bar_height_ratio,
         }
+        source.update(_canonical_spectrum2d_options(
+            self.layout, self.gradient, self.style, self.wave, self.soft_knee, self.response_power,
+        ))
         data["source"] = source
-        if not (
-            isinstance(self.layout, Spectrum2DLinearLayout)
-            and self.layout.anchor == "bottom"
-            and self.layout.band_mapping == "forward"
-        ):
-            source["layout"] = self.layout.to_canonical()
-        if self.gradient is not None:
-            source["gradient"] = self.gradient.to_canonical()
         return data
 
     def __repr__(self) -> str:

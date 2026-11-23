@@ -29,8 +29,8 @@ use super::{
     diagnostics::finish_error_scopes,
     executor::{FrameExecutionMetrics, encode_and_submit},
     frame_plan::{GpuFramePlan, GpuOperation},
+    layer_upload::LayerUpload,
     parameters::{self, FrameParameterArena, encode_parameters},
-    particles::ParticleUpload,
     pipeline::GpuPipelines,
     polling::{drain, nonblocking, wait_for_one},
     readback::ReadbackRing,
@@ -82,10 +82,10 @@ struct FrameSlotResources {
     parameter_buffer: wgpu::Buffer,
     particle_instances: Vec<super::particles::GpuParticleInstance>,
     particle_pixels: Vec<u8>,
-    particle_upload_bytes: Vec<u8>,
-    particle_uploads: Vec<Option<ParticleUpload>>,
+    layer_upload_bytes: Vec<u8>,
+    layer_uploads: Vec<Option<LayerUpload>>,
     particle_buffer: Option<wgpu::Buffer>,
-    particle_upload_buffer: Option<wgpu::Buffer>,
+    layer_upload_buffer: Option<wgpu::Buffer>,
     uses: u64,
 }
 
@@ -271,10 +271,10 @@ impl WgpuBackend {
                 parameter_buffer,
                 particle_instances: Vec::new(),
                 particle_pixels: Vec::new(),
-                particle_upload_bytes: Vec::new(),
-                particle_uploads: Vec::new(),
+                layer_upload_bytes: Vec::new(),
+                layer_uploads: Vec::new(),
                 particle_buffer: None,
-                particle_upload_buffer: None,
+                layer_upload_buffer: None,
                 bind_groups,
                 uses: 0,
             });
@@ -534,8 +534,9 @@ impl RenderBackend for WgpuBackend {
                 &self.sources,
                 &mut slot.particle_instances,
                 &mut slot.particle_pixels,
-                &mut slot.particle_upload_bytes,
-                &mut slot.particle_uploads,
+                &mut slot.layer_upload_bytes,
+                &mut slot.layer_uploads,
+                self.context.device.limits().max_buffer_size,
             )
         }) {
             let error = self.runtime_context(error, Some(token));
@@ -579,40 +580,33 @@ impl RenderBackend for WgpuBackend {
             );
         }
         slot.particle_buffer = particle_buffer;
-        let mut particle_upload_buffer = slot.particle_upload_buffer.take();
-        if !slot.particle_upload_bytes.is_empty() {
-            let required = u64::try_from(slot.particle_upload_bytes.len()).map_err(|_| {
-                Diagnostic::error(
-                    "WGPU-PARTICLE-UPLOAD",
-                    crate::Category::Backend,
-                    "particle upload size overflow",
-                    "",
-                )
-            })?;
-            if particle_upload_buffer
+        let mut layer_upload_buffer = slot.layer_upload_buffer.take();
+        if !slot.layer_upload_bytes.is_empty() {
+            let required = slot.layer_upload_bytes.len() as u64;
+            if layer_upload_buffer
                 .as_ref()
                 .is_none_or(|buffer| buffer.size() < required)
             {
-                particle_upload_buffer =
+                layer_upload_buffer =
                     Some(self.context.device.create_buffer(&wgpu::BufferDescriptor {
-                        label: Some("vestra additive particle uploads"),
-                        size: particle_buffer_capacity(
+                        label: Some("vestra rasterized source uploads"),
+                        size: buffer_capacity(
                             required,
                             self.context.device.limits().max_buffer_size,
-                        )?,
+                        ),
                         usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
                         mapped_at_creation: false,
                     }));
             }
             self.context.queue.write_buffer(
-                particle_upload_buffer
+                layer_upload_buffer
                     .as_ref()
-                    .expect("particle upload buffer created"),
+                    .expect("source upload buffer created"),
                 0,
-                &slot.particle_upload_bytes,
+                &slot.layer_upload_bytes,
             );
         }
-        slot.particle_upload_buffer = particle_upload_buffer;
+        slot.layer_upload_buffer = layer_upload_buffer;
         let execution = match encode_and_submit(
             &self.context.device,
             &self.context.queue,
@@ -625,8 +619,8 @@ impl RenderBackend for WgpuBackend {
             self.readback.buffer(&token)?,
             &textures,
             slot.particle_buffer.as_ref(),
-            slot.particle_upload_buffer.as_ref(),
-            &slot.particle_uploads,
+            slot.layer_upload_buffer.as_ref(),
+            &slot.layer_uploads,
         ) {
             Ok(execution) => execution,
             Err(error) => {
@@ -952,12 +946,16 @@ fn particle_buffer_capacity(required: u64, max_buffer_size: u64) -> Result<u64, 
             "",
         ));
     }
+    Ok(buffer_capacity(required, max_buffer_size))
+}
+
+fn buffer_capacity(required: u64, max_buffer_size: u64) -> u64 {
     // Keep geometric growth where possible without exceeding the device limit.
-    Ok(required
+    required
         .checked_next_power_of_two()
         .unwrap_or(max_buffer_size)
         .max(32)
-        .min(max_buffer_size))
+        .min(max_buffer_size)
 }
 
 fn pipeline_depth_from_environment() -> Result<usize, Diagnostic> {

@@ -25,8 +25,8 @@ impl std::error::Error for SignalPreparationError {}
 /// Applies the finalized ordered transform pipeline to one immutable raw series.
 ///
 /// This deliberately allocates one working output vector. Each transform then
-/// mutates that vector in declaration order: Gain, Remap, Clamp, and
-/// ResponseCurve are pointwise; Envelope is a sequential one-pole smoother.
+/// mutates that vector in declaration order. Envelope is a sequential
+/// one-pole smoother; all other transforms are pointwise.
 /// Every transform runs during preparation while the raw input remains
 /// shareable, so frame evaluation only samples the completed series.
 pub fn prepare_transformed_scalar_signal(

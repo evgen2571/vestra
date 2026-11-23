@@ -49,8 +49,7 @@ claims should name the adapter, graphics API and driver. See the
 
 ## Parity and coverage
 
-CPU and WGPU implement the same project semantics, but support is not uniform:
-Spectrum2D and particle systems are not fully verified on WGPU, Motion Tile
-needs a hardware adapter, and per-effect differences remain documented rather
-than claimed. The [feature matrix](feature-support.md) is the authoritative
-per-feature support record.
+Spectrum2D path layouts and waves use a shared CPU source rasterizer with
+WGPU effects, masks and compositing. Legacy bar layouts have dedicated
+rendering paths. Particle systems and effects have operation-specific
+coverage. See the [feature matrix](feature-support.md) for details.

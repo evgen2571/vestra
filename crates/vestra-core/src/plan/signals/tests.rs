@@ -6,8 +6,8 @@ use crate::plan::signals::{
     AudioSignalContractError, ClampTransform, CompiledScalarSignal, CompiledSignalTransform,
     CubicResponseCurve, EnvelopeTransform, GainTransform, PreparedScalarSignal,
     PreparedScalarSignalError, RawScalarSignal, RemapTransform, ScalarSignalInterner,
-    SignalPreparationError, SignalTransformContractError, prepare_scalar_signals,
-    prepare_transformed_scalar_signal,
+    SignalPreparationError, SignalTransformContractError, SpectrumResponseTransform,
+    prepare_scalar_signals, prepare_transformed_scalar_signal,
 };
 
 fn signal(start: u128, interval: u128, samples: &[f64]) -> PreparedScalarSignal {
@@ -220,6 +220,25 @@ fn remap_descends_and_transform_contracts_validate() {
         Err(SignalTransformContractError::InvalidClampRange)
     );
     assert!(ClampTransform::new(5.0, 5.0).is_ok());
+}
+
+#[test]
+fn spectrum_response_lifts_quiet_bands_and_preserves_loud_band_contrast() {
+    let raw = signal(0, 1, &[0.0, 0.0002, 0.25, 0.5]);
+    let weighted = prepare_transformed_scalar_signal(
+        &raw,
+        &[CompiledSignalTransform::SpectrumResponse(
+            SpectrumResponseTransform::new(0.25, 1.9, Some(0.6)).unwrap(),
+        )],
+    )
+    .unwrap();
+    assert_eq!(weighted.sample(0), 0.0);
+    assert!((0.2..0.25).contains(&weighted.sample(1)));
+    assert!((0.95..1.0).contains(&weighted.sample(2)));
+    assert!(weighted.sample(3) > weighted.sample(2) && weighted.sample(3) < 1.0);
+
+    assert!(SpectrumResponseTransform::new(0.0, 1.9, Some(0.6)).is_err());
+    assert!(SpectrumResponseTransform::new(1.0, 1.0, Some(1.0)).is_err());
 }
 
 #[test]

@@ -34,9 +34,6 @@ const FEATURE_HOP_NANOS: u128 = NANOS_PER_SECOND / 100;
 
 use spectrum::StftAnalyzer;
 
-#[cfg(test)]
-use vestra_core::plan::AudioFrequencyBand;
-
 pub use pcm::{MasterPcmSpec, consume_master_pcm};
 
 #[cfg(test)]
@@ -115,12 +112,13 @@ impl MasterAnalysisCoordinator {
         let mut peak = false;
         let mut bands = Vec::new();
         for requirement in requirements.iter() {
-            match requirement {
-                AudioAnalysisRequirement::Master(AudioScalarFeature::Rms) => rms = true,
-                AudioAnalysisRequirement::Master(AudioScalarFeature::Peak) => peak = true,
-                AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(band)) => {
-                    bands.push(*band)
-                }
+            let AudioAnalysisRequirement::Master(feature) = *requirement;
+            match feature {
+                AudioScalarFeature::Rms => rms = true,
+                AudioScalarFeature::Peak => peak = true,
+                AudioScalarFeature::BandEnergy(_)
+                | AudioScalarFeature::LeftBandEnergy(_)
+                | AudioScalarFeature::RightBandEnergy(_) => bands.push(feature),
             }
         }
         let hops = project_frames

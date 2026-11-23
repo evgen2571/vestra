@@ -71,6 +71,14 @@ def test_effect_exports_signatures_annotations_and_properties_match_baseline(
     exports = expected["exports"] + (
         ["list_system_fonts", "ResourceLimits"] if module_name == "vestra" else []
     )
+    if module_name in {"vestra", "vestra.authoring"}:
+        exports += [
+            "Spectrum2DEllipseLayout",
+            "Spectrum2DPathLayout",
+            "Spectrum2DStereo",
+            "Spectrum2DStyle",
+            "Spectrum2DWave",
+        ]
     assert list(getattr(module, "__all__", [])) == exports
     # Also catches accidental imports/classes outside an explicit __all__.
     names = []
@@ -324,7 +332,7 @@ def test_json_v1_schema_parser_validation_and_roundtrip_match_baseline(case):
     ] == case["diagnostics"]
 
 
-def test_generated_schema_preserves_baseline_and_adds_only_group_size():
+def test_generated_schema_preserves_baseline_outside_group_size_and_spectrum_options():
     schema = json.loads(SCHEMA_PATH.read_bytes())
     assert schema["$defs"]["group"]["properties"].pop("size") == {
         "type": "object",
@@ -335,6 +343,25 @@ def test_generated_schema_preserves_baseline_and_adds_only_group_size():
             for field in ("width", "height")
         },
     }
+    definitions = schema["$defs"]
+    spectrum = definitions["spectrum2d"]["properties"]
+    assert spectrum.pop("wave") == {"$ref": "#/$defs/spectrum2d_wave"}
+    assert spectrum.pop("style") == {"default": "bars", "enum": ["bars", "wave", "both"]}
+    assert spectrum.pop("response_power") == {
+        "default": 1.0, "exclusiveMinimum": 0, "maximum": 1, "type": "number"
+    }
+    assert spectrum.pop("soft_knee") == {
+        "exclusiveMaximum": 1, "minimum": 0, "type": "number"
+    }
+    layouts = definitions["spectrum2d_layout"]["oneOf"]
+    assert [branch["properties"]["type"]["const"] for branch in layouts] == [
+        "linear", "radial", "ellipse", "path"
+    ]
+    del layouts[2:]
+    assert definitions.pop("spectrum2d_wave")["properties"]["stereo"] == {
+        "$ref": "#/$defs/spectrum2d_stereo"
+    }
+    assert definitions.pop("spectrum2d_stereo")["additionalProperties"] is False
     baseline = (json.dumps(schema, indent=2, sort_keys=True) + "\n").encode()
     assert sha256(baseline).hexdigest() == JSON_V1["schema_sha256"]
 

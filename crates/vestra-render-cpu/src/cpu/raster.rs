@@ -24,7 +24,7 @@ pub(crate) fn draw_layer(
     colour_transform: ColourTransform,
     timings: &mut CpuHotPathTimings,
     profiling_enabled: bool,
-) -> Option<u64> {
+) -> Result<Option<u64>, crate::Diagnostic> {
     let motion_tile = layer.effects.iter().find_map(motion_tile_parameters);
     let motion_tile_started = profiling_enabled
         .then(std::time::Instant::now)
@@ -65,7 +65,7 @@ pub(crate) fn draw_layer(
                     prepared.fully_opaque(),
                     layer,
                 ) {
-                    return Some(bytes);
+                    return Ok(Some(bytes));
                 }
                 let started = profiling_enabled.then(std::time::Instant::now);
                 draw_raster_with_motion_tile(
@@ -107,7 +107,7 @@ pub(crate) fn draw_layer(
                     prepared.fully_opaque(),
                     layer,
                 ) {
-                    return Some(bytes);
+                    return Ok(Some(bytes));
                 }
                 draw_raster_with_motion_tile(
                     canvas,
@@ -146,7 +146,7 @@ pub(crate) fn draw_layer(
                     prepared.fully_opaque(),
                     layer,
                 ) {
-                    return Some(bytes);
+                    return Ok(Some(bytes));
                 }
                 draw_raster_with_motion_tile(
                     canvas,
@@ -189,7 +189,7 @@ pub(crate) fn draw_layer(
                     prepared.fully_opaque(),
                     layer,
                 ) {
-                    return Some(bytes);
+                    return Ok(Some(bytes));
                 }
                 draw_raster_with_motion_tile(
                     canvas,
@@ -210,6 +210,24 @@ pub(crate) fn draw_layer(
                 );
             }
         }
+        EvaluatedSource::Spectrum2D { layout, wave, .. }
+            if vestra_render_common::spectrum2d::uses_path_raster(layout, wave.is_some()) =>
+        {
+            let source = vestra_render_common::spectrum2d::rasterize(
+                &layer.source,
+                canvas.width(),
+                canvas.height(),
+            )?;
+            for (destination, pixel) in canvas.pixels_mut().zip(source.pixels()) {
+                if pixel[3] != 0 {
+                    *destination = source_over(
+                        *destination,
+                        apply_colour_transform(*pixel, colour_transform),
+                        opacity,
+                    );
+                }
+            }
+        }
         EvaluatedSource::Spectrum2D {
             bands,
             x,
@@ -221,6 +239,7 @@ pub(crate) fn draw_layer(
             layout,
             gradient,
             colour,
+            ..
         } => spectrum2d::rasterize(
             canvas,
             bands,
@@ -254,7 +273,7 @@ pub(crate) fn draw_layer(
     if let Some(started) = motion_tile_started {
         timings.motion_tile += started.elapsed();
     }
-    None
+    Ok(None)
 }
 
 /// Copy a source row-for-row when the evaluated layer is exactly an opaque,

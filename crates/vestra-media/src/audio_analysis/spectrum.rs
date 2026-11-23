@@ -7,9 +7,7 @@ use std::{
 use rustfft::{FftPlanner, num_complex::Complex};
 
 use vestra_core::{
-    plan::{
-        AudioAnalysisRequirement, AudioFrequencyBand, AudioScalarFeature, PreparedScalarSignal,
-    },
+    plan::{AudioAnalysisRequirement, AudioScalarFeature, PreparedScalarSignal},
     plan_audio::MASTER_AUDIO_SAMPLE_RATE,
 };
 
@@ -34,22 +32,29 @@ pub(super) struct StftAnalyzer {
     left: Vec<Complex<f64>>,
     right: Vec<Complex<f64>>,
     fft_scratch: Vec<Complex<f64>>,
-    power: Vec<f64>,
-    power_prefix: Vec<f64>,
+    power_prefix: [Vec<f64>; 3],
     fft: Arc<dyn rustfft::Fft<f64>>,
     expected_samples: usize,
     #[cfg(test)]
     fft_calls: usize,
 }
 
+#[derive(Clone, Copy)]
+enum PowerLane {
+    Mixed,
+    Left,
+    Right,
+}
+
 struct BandDescriptor {
-    band: AudioFrequencyBand,
+    feature: AudioScalarFeature,
+    lane: PowerLane,
     bins: Range<usize>,
 }
 
 impl StftAnalyzer {
     pub(super) fn new(
-        bands: Vec<AudioFrequencyBand>,
+        bands: Vec<AudioScalarFeature>,
         expected_samples: usize,
     ) -> Result<Self, AudioAnalysisError> {
         let window = (0..STFT_SIZE_FRAMES)
@@ -66,8 +71,10 @@ impl StftAnalyzer {
             .into_iter()
             .map(BandDescriptor::new)
             .collect::<Result<Vec<_>, _>>()?;
+        let mut power_prefix = std::array::from_fn(|_| Vec::new());
         let mut samples = Vec::with_capacity(bands.len());
-        for _ in &bands {
+        for band in &bands {
+            power_prefix[band.lane as usize].resize(STFT_SIZE_FRAMES / 2 + 2, 0.0);
             let mut values = Vec::new();
             values
                 .try_reserve_exact(expected_samples)
@@ -88,8 +95,7 @@ impl StftAnalyzer {
             left: vec![Complex::new(0.0, 0.0); STFT_SIZE_FRAMES],
             right: vec![Complex::new(0.0, 0.0); STFT_SIZE_FRAMES],
             fft_scratch,
-            power: vec![0.0; STFT_SIZE_FRAMES / 2 + 1],
-            power_prefix: vec![0.0; STFT_SIZE_FRAMES / 2 + 2],
+            power_prefix,
             fft,
             expected_samples,
             #[cfg(test)]
@@ -125,31 +131,28 @@ impl StftAnalyzer {
             record_fft_calls(2);
         }
         let denominator = STFT_SIZE_FRAMES as f64 * self.window_energy;
-        for k in 0..self.power.len() {
-            let left = self.left[k].norm_sqr();
-            let right = self.right[k].norm_sqr();
-            let one_sided = if k == 0 || k == STFT_SIZE_FRAMES / 2 {
-                1.0
-            } else {
-                2.0
-            };
-            let value = one_sided * (left + right) * 0.5 / denominator;
-            if !value.is_finite() || value < 0.0 {
-                return Err(AudioAnalysisError::NonFiniteFeature);
+        for bin in 0..=STFT_SIZE_FRAMES / 2 {
+            let left = self.left[bin].norm_sqr();
+            let right = self.right[bin].norm_sqr();
+            let weighted = bin_weight(bin);
+            let powers = [
+                weighted * (left + right) * 0.5,
+                weighted * left,
+                weighted * right,
+            ];
+            for (prefix, power) in self.power_prefix.iter_mut().zip(powers) {
+                if !prefix.is_empty() {
+                    let cumulative = prefix[bin] + power / denominator;
+                    if !cumulative.is_finite() {
+                        return Err(AudioAnalysisError::NonFiniteFeature);
+                    }
+                    prefix[bin + 1] = cumulative;
+                }
             }
-            self.power[k] = value;
-        }
-        self.power_prefix[0] = 0.0;
-        for (index, value) in self.power.iter().copied().enumerate() {
-            let prefix = self.power_prefix[index] + value;
-            if !prefix.is_finite() {
-                return Err(AudioAnalysisError::NonFiniteFeature);
-            }
-            self.power_prefix[index + 1] = prefix;
         }
         for (descriptor, output) in self.bands.iter().zip(&mut self.samples) {
-            let value =
-                self.power_prefix[descriptor.bins.end] - self.power_prefix[descriptor.bins.start];
+            let prefix = &self.power_prefix[descriptor.lane as usize];
+            let value = prefix[descriptor.bins.end] - prefix[descriptor.bins.start];
             if !value.is_finite() || value < 0.0 {
                 return Err(AudioAnalysisError::NonFiniteFeature);
             }
@@ -168,10 +171,21 @@ impl StftAnalyzer {
             .iter()
             .zip(&self.samples)
             .all(|(descriptor, output)| {
-                let direct = self.power[descriptor.bins.clone()].iter().sum::<f64>();
-                let prefix = self.power_prefix[descriptor.bins.end]
-                    - self.power_prefix[descriptor.bins.start];
-                (direct - prefix).abs() < 1e-12 && (output[0] - direct).abs() < 1e-12
+                let direct = descriptor
+                    .bins
+                    .clone()
+                    .map(|bin| {
+                        let left = self.left[bin].norm_sqr();
+                        let right = self.right[bin].norm_sqr();
+                        let power = match descriptor.lane {
+                            PowerLane::Mixed => (left + right) * 0.5,
+                            PowerLane::Left => left,
+                            PowerLane::Right => right,
+                        };
+                        bin_weight(bin) * power / (STFT_SIZE_FRAMES as f64 * self.window_energy)
+                    })
+                    .sum::<f64>();
+                (output[0] - direct).abs() < 1e-12
             })
     }
 
@@ -190,9 +204,7 @@ impl StftAnalyzer {
             .zip(self.samples)
             .map(|(descriptor, values)| {
                 Ok((
-                    AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(
-                        descriptor.band,
-                    )),
+                    AudioAnalysisRequirement::Master(descriptor.feature),
                     PreparedScalarSignal::new(0, FEATURE_HOP_NANOS, values)
                         .map_err(|_| AudioAnalysisError::TimingOverflow)?,
                 ))
@@ -206,7 +218,13 @@ impl StftAnalyzer {
 }
 
 impl BandDescriptor {
-    fn new(band: AudioFrequencyBand) -> Result<Self, AudioAnalysisError> {
+    fn new(feature: AudioScalarFeature) -> Result<Self, AudioAnalysisError> {
+        let (band, lane) = match feature {
+            AudioScalarFeature::BandEnergy(band) => (band, PowerLane::Mixed),
+            AudioScalarFeature::LeftBandEnergy(band) => (band, PowerLane::Left),
+            AudioScalarFeature::RightBandEnergy(band) => (band, PowerLane::Right),
+            _ => return Err(AudioAnalysisError::InvalidSpectrumState),
+        };
         let resolution = f64::from(MASTER_AUDIO_SAMPLE_RATE) / STFT_SIZE_FRAMES as f64;
         let end_inclusive = STFT_SIZE_FRAMES / 2;
         let start = (0..=end_inclusive)
@@ -223,8 +241,17 @@ impl BandDescriptor {
             return Err(AudioAnalysisError::InvalidSpectrumState);
         }
         Ok(Self {
-            band,
+            feature,
+            lane,
             bins: start..end,
         })
+    }
+}
+
+fn bin_weight(index: usize) -> f64 {
+    if index == 0 || index == STFT_SIZE_FRAMES / 2 {
+        1.0
+    } else {
+        2.0
     }
 }

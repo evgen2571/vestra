@@ -10,8 +10,8 @@ use crate::test_support::write_mono_wav;
 
 use vestra_core::{
     plan::{
-        ClampTransform, CompiledSignalTransform, CubicResponseCurve, EnvelopeTransform,
-        GainTransform, RemapTransform, prepare_transformed_scalar_signal,
+        AudioFrequencyBand, ClampTransform, CompiledSignalTransform, CubicResponseCurve,
+        EnvelopeTransform, GainTransform, RemapTransform, prepare_transformed_scalar_signal,
     },
     plan_audio::{AudioClipPlan, AudioTrackPlan},
     project::AudioFadeCurve,
@@ -520,12 +520,12 @@ fn band_energy_is_power_normalized_and_stereo_phase_safe() {
 #[test]
 fn band_energy_uses_shared_prefix_sums_for_overlapping_ranges() {
     let bands = vec![
-        band(40.0, 500.0),
-        band(100.0, 2_000.0),
-        band(500.0, 12_000.0),
+        AudioScalarFeature::BandEnergy(band(40.0, 900.0)),
+        AudioScalarFeature::LeftBandEnergy(band(100.0, 2_000.0)),
+        AudioScalarFeature::RightBandEnergy(band(500.0, 12_000.0)),
     ];
     let mut analyzer = StftAnalyzer::new(bands, 1).expect("STFT analyzer");
-    let pcm = bin_sine(64, 0.5, 1.0, STFT_SIZE_FRAMES / 2);
+    let pcm = bin_sine(64, 0.5, 0.25, STFT_SIZE_FRAMES / 2);
     for frame in pcm.chunks_exact(CHANNELS as usize) {
         analyzer.push([frame[0], frame[1]]).expect("PCM");
     }
@@ -566,6 +566,44 @@ fn band_energy_averages_channel_power_without_time_domain_downmixing() {
         [&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(in_band))]
         .sample(timestamp);
     assert!((left_only_energy / stereo_energy - 0.5).abs() < 1e-12);
+}
+
+#[test]
+fn channel_band_energy_uses_existing_ffts_and_preserves_mixed_values() {
+    let in_band = band(250.0, 500.0);
+    let mixed = AudioScalarFeature::BandEnergy(in_band);
+    let left = AudioScalarFeature::LeftBandEnergy(in_band);
+    let right = AudioScalarFeature::RightBandEnergy(in_band);
+    let frame_count = STFT_SIZE_FRAMES * 3;
+    let mut pcm = bin_sine(32, 0.5, 0.0, frame_count);
+    let timestamp = FEATURE_HOP_NANOS * 5;
+    for (active, silent) in [(left, right), (right, left)] {
+        let mut legacy =
+            MasterAnalysisCoordinator::new(&requirements(&[mixed]), frame_count as u64).unwrap();
+        legacy.push(&pcm).unwrap();
+        let mut stereo = MasterAnalysisCoordinator::new(
+            &requirements(&[mixed, left, right]),
+            frame_count as u64,
+        )
+        .unwrap();
+        stereo.push(&pcm).unwrap();
+        assert_eq!(legacy.fft_calls(), stereo.fft_calls());
+        let combined = legacy.finish().unwrap();
+        let channels = stereo.finish().unwrap();
+        let sample =
+            |feature| channels[&AudioAnalysisRequirement::Master(feature)].sample(timestamp);
+        assert_eq!(
+            sample(mixed),
+            combined[&AudioAnalysisRequirement::Master(mixed)].sample(timestamp)
+        );
+        assert!(sample(active) > 0.1);
+        assert!((sample(active) - 2.0 * sample(mixed)).abs() < 1e-12);
+        assert_eq!(sample(silent), 0.0);
+
+        for frame in pcm.chunks_exact_mut(2) {
+            frame.swap(0, 1);
+        }
+    }
 }
 
 #[test]
@@ -805,6 +843,8 @@ fn extracts_the_production_master_graph() {
             AudioScalarFeature::Rms,
             AudioScalarFeature::Peak,
             AudioScalarFeature::BandEnergy(full),
+            AudioScalarFeature::LeftBandEnergy(full),
+            AudioScalarFeature::RightBandEnergy(full),
         ]),
         &mix,
         0.01,
@@ -814,10 +854,11 @@ fn extracts_the_production_master_graph() {
     .expect("analyze production Master graph");
     assert!(features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Rms)].sample(0) > 0.0);
     assert!(features[&AudioAnalysisRequirement::Master(AudioScalarFeature::Peak)].sample(0) > 0.0);
-    assert!(
-        features[&AudioAnalysisRequirement::Master(AudioScalarFeature::BandEnergy(full))].sample(0)
-            > 0.0
-    );
+    let energy = |feature| features[&AudioAnalysisRequirement::Master(feature)].sample(0);
+    let mixed = energy(AudioScalarFeature::BandEnergy(full));
+    assert!(mixed > 0.0);
+    assert_eq!(mixed, energy(AudioScalarFeature::LeftBandEnergy(full)));
+    assert_eq!(mixed, energy(AudioScalarFeature::RightBandEnergy(full)));
 }
 
 #[test]

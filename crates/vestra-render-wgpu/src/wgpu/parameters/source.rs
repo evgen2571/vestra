@@ -238,6 +238,7 @@ pub(in crate::wgpu) fn spectrum2d(
             value.sweep_angle_degrees.to_radians() as f32,
             value.inner_radius_ratio as f32,
         ),
+        _ => unreachable!("path layouts use the shared Spectrum2D rasterizer"),
     };
     let (start, end) = gradient.map_or((colour, colour), |(direction, start, end)| {
         flags |= SPECTRUM_FLAG_GRADIENT;

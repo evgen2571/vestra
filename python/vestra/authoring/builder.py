@@ -16,7 +16,8 @@ from .effects import ClipEffectCollection, PostEffectCollection
 from .errors import AuthoringError
 from .flashes import FlashCollection
 from .spectrum2d import (
-    Spectrum2DEffectPreset, Spectrum2DPreset, Spectrum2DValue, Spectrum2DLayout, Spectrum2DGradient, Spectrum2DLinearLayout, _UNSET, _Unset,
+    Spectrum2DEffectPreset, Spectrum2DGradient, Spectrum2DLayout, Spectrum2DLinearLayout,
+    Spectrum2DPreset, Spectrum2DStyle, Spectrum2DValue, Spectrum2DWave, _UNSET, _Unset,
     _resolve_spectrum2d_source,
 )
 from .transitions import TransitionCollection
@@ -487,6 +488,8 @@ class ProjectBuilder:
         width: int | float = 0.80, height: int | float = 0.25,
         bar_gap_ratio: int | float = 0.20, colour: Color | str = "#ffffff",
         min_bar_height_ratio: int | float = 0.0, layout: Spectrum2DLayout = Spectrum2DLinearLayout(), gradient: Spectrum2DGradient | None = None,
+        style: Spectrum2DStyle = "bars", wave: Spectrum2DWave | None = None,
+        soft_knee: int | float | None = None, response_power: int | float = 1.0,
     ) -> Spectrum2DClip: ...
 
     @overload
@@ -499,6 +502,8 @@ class ProjectBuilder:
         width: int | float = 0.80, height: int | float = 0.25,
         bar_gap_ratio: int | float = 0.20, colour: Color | str = "#ffffff",
         min_bar_height_ratio: int | float = 0.0, layout: Spectrum2DLayout = Spectrum2DLinearLayout(), gradient: Spectrum2DGradient | None = None,
+        style: Spectrum2DStyle = "bars", wave: Spectrum2DWave | None = None,
+        soft_knee: int | float | None = None, response_power: int | float = 1.0,
     ) -> Spectrum2DClip: ...
 
     def add_spectrum2d_clip(
@@ -510,9 +515,10 @@ class ProjectBuilder:
         release_seconds: object = _UNSET, x: object = _UNSET, y: object = _UNSET,
         width: object = _UNSET, height: object = _UNSET, bar_gap_ratio: object = _UNSET,
         colour: object = _UNSET, min_bar_height_ratio: object = _UNSET,
-        layout: object = _UNSET, gradient: object = _UNSET,
+        layout: object = _UNSET, gradient: object = _UNSET, style: object = _UNSET,
+        wave: object = _UNSET, soft_knee: object = _UNSET, response_power: object = _UNSET,
     ) -> Spectrum2DClip:
-        """Create a Master-audio-driven normalized linear Spectrum2D clip.
+        """Create a Master-audio-driven Spectrum2D clip.
 
         Explicit Spectrum2D arguments override the selected authoring preset.
         """
@@ -524,6 +530,7 @@ class ProjectBuilder:
                 "release_seconds": release_seconds, "x": x, "y": y, "width": width,
                 "height": height, "bar_gap_ratio": bar_gap_ratio, "colour": colour,
                 "min_bar_height_ratio": min_bar_height_ratio, "layout": layout, "gradient": gradient,
+                "style": style, "wave": wave, "soft_knee": soft_knee, "response_power": response_power,
             }),
         )
         staged = Spectrum2DClip._create(
@@ -539,7 +546,10 @@ class ProjectBuilder:
             colour=cast(Color | str, source["colour"]),
             min_bar_height_ratio=cast(int | float, source["min_bar_height_ratio"]),
             layout=cast(Spectrum2DLayout, source["layout"]),
-            gradient=cast(Spectrum2DGradient | None, source.get("gradient")),
+            gradient=source.get("gradient"),
+            style=source["style"], wave=source["wave"],
+            soft_knee=cast(int | float | None, source["soft_knee"]),
+            response_power=cast(int | float, source["response_power"]),
         )
         if id is not None:
             self._ids.validate("clip", id)

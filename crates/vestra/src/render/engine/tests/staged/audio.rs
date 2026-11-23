@@ -386,6 +386,7 @@ fn prepared_audio_analysis_is_reused_across_random_access_and_video_operations()
     );
     let band_signal_ids = plan.scalar_signals.iter().map(|(id, _)| id).collect();
     plan.layers[0].source = CompiledVisualSource::Spectrum2D {
+        wave: None,
         band_signals: band_signal_ids,
         x: 0.1,
         y: 0.1,

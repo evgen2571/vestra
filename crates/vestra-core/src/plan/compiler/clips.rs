@@ -7,16 +7,99 @@ use crate::{
     animation::Track,
     domain::{Crop, Point},
     plan::{
-        CompiledComposition, CompiledLayer, CompiledScalarProperty, CompiledSizing,
-        CompiledTransformTracks, CompiledVisualSource, DrawKey, ScalarPropertyConstraint,
-        ScalarPropertyTarget, ScalarSignalInterner,
+        AudioAnalysisTap, AudioFrequencyBand, AudioScalarFeature, AudioScalarSignal,
+        ClampTransform, CompiledComposition, CompiledLayer, CompiledScalarProperty,
+        CompiledScalarSignal, CompiledSignalTransform, CompiledSizing, CompiledSpectrum2DWave,
+        CompiledTransformTracks, CompiledVisualSource, DrawKey, EnvelopeTransform, GainTransform,
+        RawScalarSignal, ScalarPropertyConstraint, ScalarPropertyTarget, ScalarSignalId,
+        ScalarSignalInterner, SignalTransformContractError, signals::SpectrumResponseTransform,
     },
-    project::{Clip, VisualSource, parse_colour},
+    project::{Clip, Spectrum2D, Spectrum2DStyle, VisualSource, parse_colour},
 };
 
 use crate::plan::{time as plan_time, tracks as plan_tracks};
 
 use super::{CompilationContext, assets, effects, output};
+
+fn compile_spectrum_audio(
+    spectrum: &Spectrum2D,
+    interner: &mut ScalarSignalInterner,
+) -> Result<(Vec<ScalarSignalId>, Option<CompiledSpectrum2DWave>), Diagnostic> {
+    let response_error = |error: SignalTransformContractError| {
+        Diagnostic::error(
+            "VESTRA-PLAN-SPECTRUM2D-RESPONSE",
+            Category::Internal,
+            error.to_string(),
+            "",
+        )
+    };
+    let mut transforms = if spectrum.response_power == 1.0 && spectrum.soft_knee.is_none() {
+        vec![
+            CompiledSignalTransform::Gain(
+                GainTransform::new(spectrum.sensitivity).map_err(response_error)?,
+            ),
+            CompiledSignalTransform::Clamp(ClampTransform::new(0.0, 1.0).map_err(response_error)?),
+        ]
+    } else {
+        vec![CompiledSignalTransform::SpectrumResponse(
+            SpectrumResponseTransform::new(
+                spectrum.response_power,
+                spectrum.sensitivity,
+                spectrum.soft_knee,
+            )
+            .map_err(response_error)?,
+        )]
+    };
+    transforms.push(CompiledSignalTransform::Envelope(EnvelopeTransform::new(
+        plan_time::to_nanos(spectrum.attack_seconds, "Spectrum2D attack")?,
+        plan_time::to_nanos(spectrum.release_seconds, "Spectrum2D release")?,
+    )));
+    let bands = spectrum
+        .logarithmic_bands()
+        .into_iter()
+        .map(|(min_hz, max_hz)| {
+            AudioFrequencyBand::new(min_hz, max_hz).map_err(|error| {
+                Diagnostic::error(
+                    "VESTRA-PLAN-SPECTRUM2D-BAND",
+                    Category::Internal,
+                    error.to_string(),
+                    "",
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut intern_bands = |feature: fn(AudioFrequencyBand) -> AudioScalarFeature| {
+        bands
+            .iter()
+            .map(|&band| {
+                interner.intern(CompiledScalarSignal::new(
+                    RawScalarSignal::Audio(AudioScalarSignal {
+                        tap: AudioAnalysisTap::Master,
+                        feature: feature(band),
+                    }),
+                    transforms.clone(),
+                ))
+            })
+            .collect()
+    };
+    let stereo = spectrum.wave.stereo.is_some();
+    let mixed = if spectrum.style == Spectrum2DStyle::Wave && stereo {
+        Vec::new()
+    } else {
+        intern_bands(AudioScalarFeature::BandEnergy)
+    };
+    let wave = (spectrum.style != Spectrum2DStyle::Bars).then(|| CompiledSpectrum2DWave {
+        style: spectrum.style,
+        settings: Arc::new(spectrum.wave.clone()),
+        channels: stereo.then(|| {
+            [
+                intern_bands(AudioScalarFeature::LeftBandEnergy),
+                intern_bands(AudioScalarFeature::RightBandEnergy),
+            ]
+        }),
+    });
+    Ok((mixed, wave))
+}
 
 #[derive(Clone, Copy)]
 struct GroupTiming {
@@ -149,66 +232,11 @@ pub(super) fn compile(
                     ))
                 })
                 .transpose()?;
-            let band_signals = spectrum
-                .logarithmic_bands()
-                .into_iter()
-                .map(|(min_hz, max_hz)| {
-                    let band =
-                        crate::plan::AudioFrequencyBand::new(min_hz, max_hz).map_err(|error| {
-                            Diagnostic::error(
-                                "VESTRA-PLAN-SPECTRUM2D-BAND",
-                                Category::Internal,
-                                error.to_string(),
-                                "",
-                            )
-                        })?;
-                    let signal = crate::plan::CompiledScalarSignal::new(
-                        crate::plan::RawScalarSignal::Audio(crate::plan::AudioScalarSignal {
-                            tap: crate::plan::AudioAnalysisTap::Master,
-                            feature: crate::plan::AudioScalarFeature::BandEnergy(band),
-                        }),
-                        vec![
-                            crate::plan::CompiledSignalTransform::Gain(
-                                crate::plan::GainTransform::new(spectrum.sensitivity).map_err(
-                                    |error| {
-                                        Diagnostic::error(
-                                            "VESTRA-PLAN-SPECTRUM2D-RESPONSE",
-                                            Category::Internal,
-                                            error.to_string(),
-                                            "",
-                                        )
-                                    },
-                                )?,
-                            ),
-                            crate::plan::CompiledSignalTransform::Clamp(
-                                crate::plan::ClampTransform::new(0.0, 1.0).map_err(|error| {
-                                    Diagnostic::error(
-                                        "VESTRA-PLAN-SPECTRUM2D-RESPONSE",
-                                        Category::Internal,
-                                        error.to_string(),
-                                        "",
-                                    )
-                                })?,
-                            ),
-                            crate::plan::CompiledSignalTransform::Envelope(
-                                crate::plan::EnvelopeTransform::new(
-                                    plan_time::to_nanos(
-                                        spectrum.attack_seconds,
-                                        "Spectrum2D attack",
-                                    )?,
-                                    plan_time::to_nanos(
-                                        spectrum.release_seconds,
-                                        "Spectrum2D release",
-                                    )?,
-                                ),
-                            ),
-                        ],
-                    );
-                    Ok(context.scalar_signal_interner.intern(signal))
-                })
-                .collect::<Result<Vec<_>, Diagnostic>>()?;
+            let (band_signals, wave) =
+                compile_spectrum_audio(spectrum, context.scalar_signal_interner)?;
             CompiledVisualSource::Spectrum2D {
                 band_signals,
+                wave,
                 x: spectrum.x,
                 y: spectrum.y,
                 width: spectrum.width,

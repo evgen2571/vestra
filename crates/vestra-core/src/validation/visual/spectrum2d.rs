@@ -1,6 +1,6 @@
 //! Spectrum2D source validation.
 
-use crate::{Category, Diagnostic};
+use crate::{Category, Diagnostic, project::Spectrum2DLayout};
 
 pub(super) fn validate_spectrum2d(
     spectrum: &crate::project::Spectrum2D,
@@ -122,7 +122,7 @@ pub(super) fn validate_spectrum2d(
         ));
     }
     match &spectrum.layout {
-        crate::project::Spectrum2DLayout::Linear(layout) => {
+        Spectrum2DLayout::Linear(layout) => {
             if matches!(
                 layout.band_mapping,
                 crate::project::Spectrum2DBandMapping::CenterOut
@@ -136,7 +136,7 @@ pub(super) fn validate_spectrum2d(
                 ));
             }
         }
-        crate::project::Spectrum2DLayout::Radial(layout) => {
+        Spectrum2DLayout::Radial(layout) => {
             if !layout.inner_radius_ratio.is_finite()
                 || !(0.0..1.0).contains(&layout.inner_radius_ratio)
             {
@@ -147,11 +147,7 @@ pub(super) fn validate_spectrum2d(
                     format!("{path}/layout/inner_radius_ratio"),
                 ));
             }
-            if !layout.start_angle_degrees.is_finite()
-                || !layout.sweep_angle_degrees.is_finite()
-                || layout.sweep_angle_degrees <= 0.0
-                || layout.sweep_angle_degrees > 360.0
-            {
+            if !valid_angles(layout.start_angle_degrees, layout.sweep_angle_degrees) {
                 errors.push(Diagnostic::error(
                     "VESTRA-SPECTRUM2D-LAYOUT",
                     Category::Semantic,
@@ -171,7 +167,65 @@ pub(super) fn validate_spectrum2d(
                 ));
             }
         }
+        Spectrum2DLayout::Ellipse(layout) => {
+            for (field, radius) in [("radius_x", layout.radius_x), ("radius_y", layout.radius_y)] {
+                if !(radius > 0.0 && radius <= 0.5) {
+                    errors.push(Diagnostic::error(
+                        "VESTRA-SPECTRUM2D-LAYOUT",
+                        Category::Semantic,
+                        "Spectrum2D ellipse radii must be in (0, 0.5]",
+                        format!("{path}/layout/{field}"),
+                    ));
+                }
+            }
+            if !valid_angles(layout.start_angle_degrees, layout.sweep_angle_degrees) {
+                errors.push(Diagnostic::error(
+                    "VESTRA-SPECTRUM2D-LAYOUT",
+                    Category::Semantic,
+                    "Spectrum2D ellipse angles are invalid",
+                    format!("{path}/layout"),
+                ));
+            }
+        }
+        Spectrum2DLayout::Path(layout) => {
+            let minimum = if layout.closed { 3 } else { 2 };
+            if !(minimum..=256).contains(&layout.points.len())
+                || layout
+                    .points
+                    .iter()
+                    .any(|point| !(0.0..=1.0).contains(&point.x) || !(0.0..=1.0).contains(&point.y))
+                || layout.points.windows(2).any(|pair| pair[0] == pair[1])
+                || (layout.closed && layout.points.first() == layout.points.last())
+            {
+                errors.push(Diagnostic::error(
+                    "VESTRA-SPECTRUM2D-LAYOUT",
+                    Category::Semantic,
+                    "Spectrum2D path requires 2 to 256 normalized points (at least 3 for closed paths) and nonzero segments",
+                    format!("{path}/layout/points"),
+                ));
+            }
+        }
     }
+    if !(spectrum.response_power > 0.0 && spectrum.response_power <= 1.0) {
+        errors.push(Diagnostic::error(
+            "VESTRA-SPECTRUM2D-RESPONSE",
+            Category::Semantic,
+            "Spectrum2D response_power must be in (0, 1]",
+            format!("{path}/response_power"),
+        ));
+    }
+    if spectrum
+        .soft_knee
+        .is_some_and(|knee| !(0.0..1.0).contains(&knee))
+    {
+        errors.push(Diagnostic::error(
+            "VESTRA-SPECTRUM2D-RESPONSE",
+            Category::Semantic,
+            "Spectrum2D soft_knee must be in [0, 1)",
+            format!("{path}/soft_knee"),
+        ));
+    }
+    validate_wave(&spectrum.wave, &format!("{path}/wave"), errors);
     if let Some(gradient) = &spectrum.gradient {
         for (field, colour) in [
             ("start_colour", &gradient.start_colour),
@@ -194,5 +248,61 @@ pub(super) fn validate_spectrum2d(
             "Spectrum2D colour must use #RRGGBB or #RRGGBBAA",
             format!("{path}/colour"),
         ));
+    }
+}
+
+fn valid_angles(start: f64, sweep: f64) -> bool {
+    start.is_finite() && sweep > 0.0 && sweep <= 360.0
+}
+
+fn validate_wave(wave: &crate::project::Spectrum2DWave, path: &str, errors: &mut Vec<Diagnostic>) {
+    let mut number = |field, valid: bool| {
+        if !valid {
+            errors.push(Diagnostic::error(
+                "VESTRA-SPECTRUM2D-WAVE",
+                Category::Semantic,
+                "Spectrum2D wave parameter is outside its supported range",
+                format!("{path}/{field}"),
+            ));
+        }
+    };
+    number(
+        "stroke_width",
+        wave.stroke_width > 0.0 && wave.stroke_width <= 64.0,
+    );
+    number("glow_radius", (0.0..=32.0).contains(&wave.glow_radius));
+    for (field, value) in [
+        ("fill_opacity", wave.fill_opacity),
+        ("glow_opacity", wave.glow_opacity),
+        ("bar_opacity", wave.bar_opacity),
+    ] {
+        number(field, (0.0..=1.0).contains(&value));
+    }
+    let mut colours = [
+        ("colour", wave.colour.as_deref()),
+        ("stereo/left_colour", None),
+        ("stereo/right_colour", None),
+    ];
+    if let Some(stereo) = &wave.stereo {
+        number(
+            "stereo/left_weight",
+            (0.0..=1.0).contains(&stereo.left_weight),
+        );
+        number(
+            "stereo/right_weight",
+            (0.0..=1.0).contains(&stereo.right_weight),
+        );
+        colours[1].1 = stereo.left_colour.as_deref();
+        colours[2].1 = stereo.right_colour.as_deref();
+    }
+    for (field, colour) in colours {
+        if colour.is_some_and(|value| crate::project::parse_colour(value).is_none()) {
+            errors.push(Diagnostic::error(
+                "VESTRA-SPECTRUM2D-WAVE",
+                Category::Semantic,
+                "Spectrum2D wave colours must use #RRGGBB or #RRGGBBAA",
+                format!("{path}/{field}"),
+            ));
+        }
     }
 }

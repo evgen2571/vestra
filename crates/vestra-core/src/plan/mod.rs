@@ -23,7 +23,7 @@ pub use effect_passes::{
 };
 pub use evaluation::{
     EvaluatedComposition, EvaluatedEffect, EvaluatedFrame, EvaluatedLayer, EvaluatedMask,
-    EvaluatedMaskInput, EvaluatedSource, EvaluatedTrackMatte,
+    EvaluatedMaskInput, EvaluatedSource, EvaluatedSpectrum2DWave, EvaluatedTrackMatte,
 };
 pub use evaluation::{evaluate, evaluate_effect, evaluate_with_context};
 pub use input::PlanCompileInput;

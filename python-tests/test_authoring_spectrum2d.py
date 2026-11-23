@@ -1,4 +1,8 @@
 import json
+import math
+import os
+import struct
+import wave
 from pathlib import Path
 
 import pytest
@@ -65,6 +69,9 @@ def test_spectrum2d_defaults_conform_across_native_python_and_schema() -> None:
         for field, property_schema in schema_properties.items()  # type: ignore[union-attr]
         if "default" in property_schema
     }
+    assert schema_defaults.pop("style") == clip.style == "bars"
+    assert schema_defaults.pop("response_power") == clip.response_power == 1.0
+    assert "style" not in rust_source and "response_power" not in rust_source
     assert schema_defaults == {field: rust_source[field] for field in schema_defaults}
     assert not list(VALIDATOR.iter_errors(project.to_dict()))
 
@@ -301,3 +308,186 @@ def test_spectrum2d_with_authored_audio_validates() -> None:
     reloaded = vestra.ProjectSnapshot.from_dict(authored, base_directory=ROOT).to_dict()
     assert reloaded["visual"]["clips"][0]["source"] == authored["visual"]["clips"][0]["source"]  # type: ignore[index]
     assert project.validate().is_valid
+
+
+def test_spectrum2d_path_and_stereo_style_lower_identically() -> None:
+    path = vestra.Spectrum2DPathLayout(
+        [(0, 1), (0.5, 0), (1, 1)], closed=True, direction="right", band_mapping="reverse"
+    )
+    wave = vestra.Spectrum2DWave(
+        stroke_width=3, color="#ADD8FF", fill_opacity=0.24, glow_radius=8, bar_opacity=0.25,
+        stereo=vestra.Spectrum2DStereo(left_color="#FFAAAA", right_weight=0.9),
+    )
+    source = vestra.Spectrum2D(
+        layout=path, style="both", wave=wave, soft_knee=0.6, response_power=0.25,
+    )
+    expected = source.to_canonical()
+    assert expected["layout"] == {
+        "type": "path", "points": [{"x": 0, "y": 1}, {"x": 0.5, "y": 0}, {"x": 1, "y": 1}],
+        "closed": True, "direction": "right", "band_mapping": "reverse",
+    }
+    assert expected["style"] == "both"
+    assert expected["wave"] == {
+        "stroke_width": 3, "colour": "#add8ff", "fill_opacity": 0.24, "glow_radius": 8,
+        "glow_opacity": 0.45, "bar_opacity": 0.25,
+        "stereo": {"left_colour": "#ffaaaa", "left_weight": 0.65, "right_weight": 0.9},
+    }
+    assert expected["soft_knee"] == 0.6 and expected["response_power"] == 0.25
+
+    authored = builder().add_spectrum2d_clip(
+        start=0, duration=0.2, layer=1, layout=path, style="both", wave=wave,
+        soft_knee=0.6, response_power=0.25,
+    )
+    assert authored.to_canonical()["source"] == expected
+
+    from vestra.lowering import LoweringContext
+
+    project = vestra.Project(size=(64, 64), fps=10, duration=0.2)
+    project.root.add(source)
+    lowered = builder()
+    LoweringContext(lowered).lower_composition(project.root)
+    canonical = lowered.to_dict()
+    assert canonical["visual"]["clips"][0]["source"] == expected
+    assert not list(VALIDATOR.iter_errors(canonical))
+
+
+def test_stereo_glow_preset_settings_can_be_replaced_or_cleared() -> None:
+    preset = vestra.Spectrum2D(preset="stereo_glow")
+    assert preset.style == "both" and preset.wave is not None and preset.wave.stereo is not None
+    assert 0 < preset.wave.bar_opacity < 1 and preset.wave.glow_radius > 0
+    assert preset.wave.stereo.left_weight != preset.wave.stereo.right_weight
+    assert "preset" not in preset.to_canonical()
+
+    layout = vestra.Spectrum2DEllipseLayout(0.4, 0.3, start_angle_degrees=180, sweep_angle_degrees=180)
+    patched = vestra.Spectrum2D(
+        preset="stereo_glow", layout=layout, style="wave", wave=None, soft_knee=None, response_power=1,
+    )
+    canonical = patched.to_canonical()
+    assert canonical["layout"] == {
+        "type": "ellipse", "radius_x": 0.4, "radius_y": 0.3,
+        "start_angle_degrees": 180, "sweep_angle_degrees": 180,
+        "direction": "outward", "band_mapping": "forward",
+    }
+    assert canonical["style"] == "wave"
+    assert not {"wave", "soft_knee", "response_power"} & canonical.keys()
+    assert canonical["band_count"] == 32
+
+    advanced = _preset_clip(
+        "stereo_glow", layout=layout, style="wave", wave=None, soft_knee=None, response_power=1,
+    )
+    assert advanced["source"] == canonical
+
+
+def test_spectrum2d_new_settings_reject_invalid_geometry_and_response() -> None:
+    with pytest.raises(ValueError, match="radius_y"):
+        vestra.Spectrum2DEllipseLayout(0.4, 0)
+    with pytest.raises(ValueError, match="sweep_angle_degrees"):
+        vestra.Spectrum2DEllipseLayout(0.4, 0.3, sweep_angle_degrees=361)
+    with pytest.raises(ValueError, match="differ"):
+        vestra.Spectrum2DPathLayout([(0, 0), (1, 1), (0, 0)], closed=True)
+    with pytest.raises(ValueError, match="differ"):
+        vestra.Spectrum2DPathLayout([(0, 0), (0, 0)])
+    with pytest.raises(ValueError, match="normalized"):
+        vestra.Spectrum2DPathLayout([(0, -1), (1, 1)])
+    with pytest.raises(ValueError, match="glow_radius"):
+        vestra.Spectrum2DWave(glow_radius=float("inf"))
+    with pytest.raises(ValueError, match="left_weight"):
+        vestra.Spectrum2DStereo(left_weight=-1)
+    with pytest.raises(ValueError, match="soft_knee"):
+        vestra.Spectrum2D(soft_knee=1)
+    with pytest.raises(ValueError, match="response_power"):
+        vestra.Spectrum2D(response_power=0)
+
+
+def _write_channel_tones(path: Path) -> None:
+    payload = bytearray(96_000 * 4)
+    for frame in range(96_000):
+        tone = round(16_000 * math.sin(math.tau * 440 * frame / 48_000))
+        struct.pack_into(
+            "<hh",
+            payload,
+            frame * 4,
+            tone if 12_000 <= frame < 36_000 else 0,
+            tone if 48_000 <= frame < 72_000 else 0,
+        )
+    with wave.open(str(path), "wb") as output:
+        output.setparams((2, 2, 48_000, 0, "NONE", "not compressed"))
+        output.writeframes(payload)
+
+
+def _prepare_spectrum(project: vestra.Project, backend: str) -> vestra.PreparedProject:
+    try:
+        return project.prepare(backend=backend)
+    except vestra.PreparationError as error:
+        unavailable = {"WGPU-ADAPTER-NOT-FOUND", "WGPU-NO-COMPATIBLE-ADAPTER"}
+        if (
+            backend != "wgpu"
+            or os.environ.get("VESTRA_REQUIRE_WGPU") == "1"
+            or not error.diagnostics
+            or any(diagnostic.code not in unavailable for diagnostic in error.diagnostics)
+        ):
+            raise
+        pytest.skip("no compatible WGPU adapter")
+
+
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_stereo_spectrum_renders_only_the_active_channel(tmp_path: Path, backend: str) -> None:
+    audio = tmp_path / "channels.wav"
+    _write_channel_tones(audio)
+    project = vestra.Project(size=(96, 72), fps=20, duration=2, background="#00000000", output_audio=False)
+    project.audio.track("stereo").add(audio)
+    project.root.add(vestra.Spectrum2D(
+        preset="stereo_glow", style="wave", attack_seconds=0, release_seconds=0,
+        wave=vestra.Spectrum2DWave(
+            glow_radius=4,
+            stereo=vestra.Spectrum2DStereo(left_color="#ff0000", right_color="#00ff00"),
+        ),
+    ))
+    prepared = _prepare_spectrum(project, backend)
+    right = prepared.render_frame_number(25).to_bytes()
+    left = prepared.render_frame_number(10).to_bytes()
+    silent = prepared.render_frame_number(1).to_bytes()
+    assert max(left[0::4]) == 255 and max(left[1::4]) == 0
+    assert max(right[1::4]) == 255 and max(right[0::4]) == 0
+    assert max(silent[3::4]) == 0
+    assert prepared.render_frame_number(25).to_bytes() == right
+
+
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_ellipse_mask_clips_the_wave_and_halo(tmp_path: Path, backend: str) -> None:
+    audio = tmp_path / "left.wav"
+    _write_channel_tones(audio)
+    size = (128, 96)
+    rx, ry = 32, 19.2
+
+    def frame(invert: bool | None) -> bytes:
+        project = vestra.Project(size=size, fps=20, duration=2, background="#00000000", output_audio=False)
+        project.audio.track("audio").add(audio)
+        spectrum = project.root.add(vestra.Spectrum2D(
+            layout=vestra.Spectrum2DEllipseLayout(
+                rx / size[0], ry / size[1], start_angle_degrees=270,
+                sweep_angle_degrees=180, direction="both",
+            ),
+            x=0, y=0, width=1, height=1, band_count=1,
+            min_hz=300, max_hz=600, response_power=0.5, sensitivity=1.5,
+            style="wave", wave=vestra.Spectrum2DWave(fill_opacity=0.6, glow_radius=6),
+        ))
+        if invert is not None:
+            mask = spectrum.masks.add(vestra.Ellipse(width=2 * rx, height=2 * ry, fill="#ffffff"))
+            mask.invert = invert
+        return _prepare_spectrum(project, backend).render_frame_number(10).to_bytes()
+
+    unmasked, inside, outside = frame(None), frame(False), frame(True)
+    inside_samples = []
+    outside_samples = []
+    for y in range(size[1]):
+        for x in range(size[0]):
+            distance = math.hypot((x + 0.5 - 64) / rx, (y + 0.5 - 48) / ry)
+            alpha = (y * size[0] + x) * 4 + 3
+            if distance < 0.85:
+                inside_samples.append(alpha)
+            elif distance > 1.15:
+                outside_samples.append(alpha)
+    for samples, kept, clipped in [(inside_samples, inside, outside), (outside_samples, outside, inside)]:
+        assert any(unmasked[i] > 0 for i in samples)
+        assert all(kept[i] == unmasked[i] and clipped[i] == 0 for i in samples)

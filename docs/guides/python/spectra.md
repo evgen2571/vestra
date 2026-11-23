@@ -122,6 +122,41 @@ centre; the default outward direction extends bars from that inner radius.
 Set `start_angle_degrees` and `sweep_angle_degrees` for an arc, or choose
 `direction="inward"` or `"both"` for a different growth direction.
 
+## Follow an ellipse and clip it
+
+The upper-half-ellipse example plays the same audio through five panels.
+The first three compare inward, outward and both-sided growth. The last two
+start with both sides and apply a filled ellipse mask, with inversion in the
+last panel. The silhouette and the arc use the same local rectangle and radii.
+The script generates its audio and writes or replaces `spectrum-paths.mp4`.
+[Download spectrum_paths.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/spectrum_paths.py).
+
+```bash
+uv run python spectrum_paths.py
+```
+
+For another shape, supply points to `Spectrum2DPathLayout` and choose the growth side
+relative to the point order. For mask sizing and coordinate formulas, see
+[the source reference](../../reference/sources/spectrum2d.md#transform-and-clip-the-result).
+
+## Draw glowing stereo waves
+
+```python
+project.root.add(Spectrum2D(preset="stereo_glow"))
+```
+
+The complete example plays three passages with left input, right input and
+both inputs. The tinted waves follow their channels. The faint bars follow the
+master mix. The script writes or replaces `stereo-spectrum.mp4`.
+[Download stereo_spectrum.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/stereo_spectrum.py).
+
+```bash
+uv run python stereo_spectrum.py
+```
+
+Pass `--wave-only` to hide the bars, or `--backend wgpu` to render with an
+available WGPU adapter. Both scripts accept `--output` to choose the filename.
+
 ## Adapt the response to a recording
 
 | Setting | What to adjust |
@@ -129,6 +164,7 @@ Set `start_angle_degrees` and `sweep_angle_degrees` for an arc, or choose
 | Frequency range | Focus on bass or treble, or widen it to show more of the mix. `max_hz` must fit prepared audio Nyquist. |
 | `band_count` | More bands show finer frequency divisions but narrower bars; the current maximum is 48. |
 | `sensitivity` | Increase it when bars barely move; lower it when many bars stay at full height. The example's 250 is tuned to the generated phrase. |
+| Response shaping | Use a lower `response_power` to lift quiet bands and a `soft_knee` to preserve differences near the peak. |
 | Attack / release | Short attack follows onsets; longer release keeps bars legible between pulses. These are separate from scalar-signal `envelope`. |
 | `min_bar_height_ratio` | Keep inactive bands visible as a baseline, or use zero to hide silent bars. |
 | Layout and gaps | Change readability and geometry without changing the input recording. |
@@ -150,7 +186,6 @@ bass-and-melody recording, and `audio-spectra.mp4` in the current directory, plu
 the project for analysis, while `output_audio = False` makes the videos silent.
 Change that flag to publish sound with the same visuals.
 
-The preview is an actual CPU render. WGPU source dispatch exists, but full
-visual parity for Spectrum2D is not verified. See
+The linear/radial preview was rendered on CPU. See
 [preview reproduction](../../development/documentation.md#reproduce-visual-learning-studies)
 for contributor checks and regeneration.

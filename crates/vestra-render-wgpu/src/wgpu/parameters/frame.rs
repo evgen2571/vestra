@@ -7,7 +7,8 @@ use vestra_core::plan::{EvaluatedFrame, EvaluatedSource};
 use super::{self as parameters, FrameParameterArena, LayerParameters};
 use crate::wgpu::{
     frame_plan::{GpuFramePlan, GpuOperation},
-    particles::{self, ParticleUpload, append_particle_upload},
+    layer_upload::{LayerUpload, append_layer_upload},
+    particles,
     resources::SourceResources,
 };
 use crate::{Diagnostic, project::BlendMode};
@@ -23,12 +24,13 @@ pub(in crate::wgpu) fn encode_parameters(
     sources: &SourceResources,
     particle_instances: &mut Vec<particles::GpuParticleInstance>,
     particle_pixels: &mut Vec<u8>,
-    particle_upload_bytes: &mut Vec<u8>,
-    particle_uploads: &mut Vec<Option<ParticleUpload>>,
+    layer_upload_bytes: &mut Vec<u8>,
+    layer_uploads: &mut Vec<Option<LayerUpload>>,
+    max_buffer_size: u64,
 ) -> Result<(), Diagnostic> {
     particle_instances.clear();
-    particle_upload_bytes.clear();
-    particle_uploads.clear();
+    layer_upload_bytes.clear();
+    layer_uploads.clear();
     let mut local_frame = EvaluatedFrame {
         time: frame.time,
         background: frame.background,
@@ -207,8 +209,10 @@ pub(in crate::wgpu) fn encode_parameters(
                 })?;
             }
             GpuOperation::RenderSpectrum2DLayer { layer_index, .. } => {
+                let source = &plan.layers[*layer_index].source;
                 let EvaluatedSource::Spectrum2D {
                     bands,
+                    wave,
                     x,
                     y,
                     width,
@@ -218,10 +222,27 @@ pub(in crate::wgpu) fn encode_parameters(
                     layout,
                     gradient,
                     colour,
-                } = &plan.layers[*layer_index].source
+                } = source
                 else {
                     unreachable!("Spectrum2D frame operation must reference Spectrum2D source")
                 };
+                if vestra_render_common::spectrum2d::uses_path_raster(layout, wave.is_some()) {
+                    let image = vestra_render_common::spectrum2d::rasterize(
+                        source,
+                        frame.width,
+                        frame.height,
+                    )?;
+                    layer_uploads.push(Some(append_layer_upload(
+                        layer_upload_bytes,
+                        image.as_raw(),
+                        frame.width,
+                        frame.height,
+                        max_buffer_size,
+                    )?));
+                    arena.push(&LayerParameters::zeroed())?;
+                    continue;
+                }
+                layer_uploads.push(None);
                 arena.push(&parameters::spectrum2d(
                     frame,
                     bands,
@@ -250,7 +271,7 @@ pub(in crate::wgpu) fn encode_parameters(
                 else {
                     unreachable!("particle frame operation must reference particle source")
                 };
-                particle_uploads.push(None);
+                layer_uploads.push(None);
                 *instance_offset = u32::try_from(particle_instances.len()).map_err(|_| {
                     Diagnostic::error(
                         "WGPU-PARTICLE-COUNT",
@@ -300,13 +321,14 @@ pub(in crate::wgpu) fn encode_parameters(
                         vestra_core::plan::ColourTransform::default(),
                     );
                     let pixels = image.into_raw();
-                    let upload = append_particle_upload(
-                        particle_upload_bytes,
+                    let upload = append_layer_upload(
+                        layer_upload_bytes,
                         &pixels,
                         frame.width,
                         frame.height,
+                        max_buffer_size,
                     )?;
-                    particle_uploads
+                    layer_uploads
                         .last_mut()
                         .expect("upload entry exists")
                         .replace(upload);

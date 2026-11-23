@@ -82,6 +82,11 @@ from .sources import (
     Shape,
     Source,
     Spectrum2D,
+    Spectrum2DEllipseLayout,
+    Spectrum2DPathLayout,
+    Spectrum2DStereo,
+    Spectrum2DStyle,
+    Spectrum2DWave,
     Text,
     Video,
 )
@@ -327,4 +332,9 @@ __all__ = [
     "DitherMatrix",
     "list_system_fonts",
     "ResourceLimits",
+    "Spectrum2DEllipseLayout",
+    "Spectrum2DPathLayout",
+    "Spectrum2DStereo",
+    "Spectrum2DStyle",
+    "Spectrum2DWave",
 ]

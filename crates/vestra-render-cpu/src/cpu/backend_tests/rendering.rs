@@ -12,6 +12,7 @@ fn spectrum2d_uses_normal_opacity_and_bloom_pipeline() {
     let plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
     let decoded = DecodedAssets::build(&plan).expect("fixture images decode");
     let spectrum = EvaluatedSource::Spectrum2D {
+        wave: None,
         bands: vec![1.0],
         x: 0.0,
         y: 0.0,

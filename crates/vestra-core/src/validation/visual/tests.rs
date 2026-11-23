@@ -234,6 +234,49 @@ fn spectrum2d_layout_boundaries_are_validated() {
 }
 
 #[test]
+fn spectrum2d_paths_and_waves_validate_canonical_options() {
+    use serde_json::json;
+
+    let valid = [
+        json!({"layout": {"type": "ellipse", "radius_x": 0.45, "radius_y": 0.25,
+                          "start_angle_degrees": 270, "sweep_angle_degrees": 180}}),
+        json!({"layout": {"type": "path", "points": [{"x": 0, "y": 0}, {"x": 1, "y": 1}]},
+               "style": "both", "wave": {"stereo": {"left_colour": "#3388aa"}},
+               "soft_knee": 0.6, "response_power": 0.25}),
+    ];
+    for source in valid {
+        let spectrum = serde_json::from_value(source).expect("canonical source options");
+        assert!(errors(spectrum).is_empty());
+    }
+
+    let invalid = [
+        json!({"layout": {"type": "ellipse", "radius_x": 0, "radius_y": 0.3}}),
+        json!({"layout": {"type": "ellipse", "radius_x": 0.3, "radius_y": 0.3,
+                          "sweep_angle_degrees": 361}}),
+        json!({"layout": {"type": "path", "points": [{"x": 0, "y": 0}, {"x": 0, "y": 0}]}}),
+        json!({"layout": {"type": "path", "closed": true,
+                          "points": [{"x": 0, "y": 0}, {"x": 1, "y": 1}]}}),
+        json!({"layout": {"type": "path", "closed": true,
+                          "points": [{"x": 0, "y": 0}, {"x": 1, "y": 1}, {"x": 0, "y": 0}]}}),
+        json!({"style": "wave", "wave": {"stroke_width": 0}}),
+        json!({"style": "wave", "wave": {"stereo": {"right_weight": 2}}}),
+        json!({"response_power": 0}),
+        json!({"soft_knee": 1}),
+    ];
+    for source in invalid {
+        let spectrum = serde_json::from_value(source.clone()).expect("known fields");
+        assert!(!errors(spectrum).is_empty(), "accepted {source}");
+    }
+
+    for source in [
+        json!({"soft_knee": null}),
+        json!({"wave": {"stereo": null}}),
+    ] {
+        assert!(serde_json::from_value::<Spectrum2D>(source).is_err());
+    }
+}
+
+#[test]
 fn spectrum2d_gap_boundaries_are_validated() {
     for (bar_gap_ratio, valid) in [
         (0.0, true),

@@ -30,6 +30,7 @@ PUBLIC_NAMES = {
     "ZoomBlurEffect", "available_effects", "effect_definition",
     "Spectrum2DPreset",
     "Spectrum2DGradient", "Spectrum2DLinearLayout", "Spectrum2DRadialLayout",
+    "Spectrum2DEllipseLayout", "Spectrum2DPathLayout", "Spectrum2DStereo", "Spectrum2DStyle", "Spectrum2DWave",
     "ParticleSystemClip", "ParticleSystem", "PointEmitter", "RectangleEmitter", "CircleEmitter",
     "ParticleBurst", "ScalarRange", "ParticlePrimitive", "ParticleBlendMode", "ParticleLifetimeStyle",
     "ScalarLifetimeStop", "ColourLifetimeStop", "ParticleAudioReactive", "ambient_stars", "snow",

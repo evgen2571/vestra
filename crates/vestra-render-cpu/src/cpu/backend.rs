@@ -198,14 +198,13 @@ impl CpuBackend {
             WorkerCompletion::Failed {
                 worker_id,
                 frame_number,
-                message,
-                code,
+                mut diagnostic,
             } => {
                 self.worker_busy[worker_id] = false;
                 self.failed_frame_number = Some(frame_number);
-                let error = Self::diagnostic(code, format!("{message} (frame {frame_number})"));
-                self.failed = Some(error.clone());
-                Err(error)
+                diagnostic.message = format!("{} (frame {frame_number})", diagnostic.message);
+                self.failed = Some(diagnostic.clone());
+                Err(diagnostic)
             }
         }
     }

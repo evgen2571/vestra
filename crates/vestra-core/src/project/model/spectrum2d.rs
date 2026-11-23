@@ -1,5 +1,7 @@
 //! Authored Spectrum2D analysis parameters, layout and gradients.
 
+use super::optional_non_null;
+use crate::domain::Point;
 use serde::{Deserialize, Serialize};
 
 pub const SPECTRUM2D_MIN_BAND_COUNT: usize = 1;
@@ -114,11 +116,57 @@ const fn default_spectrum2d_sweep_angle_degrees() -> f64 {
     360.0
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Spectrum2DPathBandMapping {
+    #[default]
+    Forward,
+    Reverse,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Spectrum2DPathDirection {
+    #[default]
+    Left,
+    Right,
+    Both,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Spectrum2DEllipseLayout {
+    pub radius_x: f64,
+    pub radius_y: f64,
+    #[serde(default)]
+    pub start_angle_degrees: f64,
+    #[serde(default = "default_spectrum2d_sweep_angle_degrees")]
+    pub sweep_angle_degrees: f64,
+    #[serde(default)]
+    pub direction: Spectrum2DRadialDirection,
+    #[serde(default)]
+    pub band_mapping: Spectrum2DPathBandMapping,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Spectrum2DPathLayout {
+    pub points: Vec<Point>,
+    #[serde(default)]
+    pub closed: bool,
+    #[serde(default)]
+    pub direction: Spectrum2DPathDirection,
+    #[serde(default)]
+    pub band_mapping: Spectrum2DPathBandMapping,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Spectrum2DLayout {
     Linear(Spectrum2DLinearLayout),
     Radial(Spectrum2DRadialLayout),
+    Ellipse(Spectrum2DEllipseLayout),
+    Path(Spectrum2DPathLayout),
 }
 impl Default for Spectrum2DLayout {
     fn default() -> Self {
@@ -141,6 +189,97 @@ pub struct Spectrum2DGradient {
 
 fn default_spectrum2d_colour() -> String {
     "#ffffff".to_owned()
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Spectrum2DStyle {
+    #[default]
+    Bars,
+    Wave,
+    Both,
+}
+
+impl Spectrum2DStyle {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct Spectrum2DStereo {
+    #[serde(
+        deserialize_with = "optional_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub left_colour: Option<String>,
+    #[serde(
+        deserialize_with = "optional_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub right_colour: Option<String>,
+    pub left_weight: f64,
+    pub right_weight: f64,
+}
+
+impl Default for Spectrum2DStereo {
+    fn default() -> Self {
+        Self {
+            left_colour: None,
+            right_colour: None,
+            left_weight: 0.65,
+            right_weight: 1.0,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct Spectrum2DWave {
+    pub stroke_width: f64,
+    #[serde(
+        deserialize_with = "optional_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub colour: Option<String>,
+    pub fill_opacity: f64,
+    pub glow_radius: f64,
+    pub glow_opacity: f64,
+    pub bar_opacity: f64,
+    #[serde(
+        deserialize_with = "optional_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub stereo: Option<Spectrum2DStereo>,
+}
+
+impl Spectrum2DWave {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+impl Default for Spectrum2DWave {
+    fn default() -> Self {
+        Self {
+            stroke_width: 2.0,
+            colour: None,
+            fill_opacity: 0.18,
+            glow_radius: 0.0,
+            glow_opacity: 0.45,
+            bar_opacity: 1.0,
+            stereo: None,
+        }
+    }
+}
+
+const fn default_response_power() -> f64 {
+    1.0
+}
+
+fn is_default_response_power(value: &f64) -> bool {
+    *value == default_response_power()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -176,6 +315,21 @@ pub struct Spectrum2D {
     pub layout: Spectrum2DLayout,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gradient: Option<Spectrum2DGradient>,
+    #[serde(default, skip_serializing_if = "Spectrum2DStyle::is_default")]
+    pub style: Spectrum2DStyle,
+    #[serde(default, skip_serializing_if = "Spectrum2DWave::is_default")]
+    pub wave: Spectrum2DWave,
+    #[serde(
+        default = "default_response_power",
+        skip_serializing_if = "is_default_response_power"
+    )]
+    pub response_power: f64,
+    #[serde(
+        default,
+        deserialize_with = "optional_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub soft_knee: Option<f64>,
 }
 
 impl Default for Spectrum2D {
@@ -196,6 +350,10 @@ impl Default for Spectrum2D {
             colour: default_spectrum2d_colour(),
             layout: Default::default(),
             gradient: None,
+            style: Default::default(),
+            wave: Default::default(),
+            response_power: default_response_power(),
+            soft_knee: None,
         }
     }
 }

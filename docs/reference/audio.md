@@ -91,6 +91,7 @@ failure cases and native path restrictions.
 pitch both scale by the rate, so a 440 Hz tone moves to about 484 Hz at 1.10×.
 Either mode uses the planned sample count at the 48 kHz mixer rate. Fades
 and gain automation use the processed clip's clock.
+Rust callers constructing `AudioEffect::PlaybackSpeed` set `link_pitch` explicitly.
 
 Both spatial effects use `mix=0` for dry passthrough and `mix=1` for wet
 only. Room reverb adds short stereo reflections that decay over the

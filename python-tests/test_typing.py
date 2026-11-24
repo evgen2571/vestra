@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import vestra
 from vestra import AdapterDeviceType, Editor, FilteredDelay, Frame, PrepareOptions, Project, ProjectSnapshot, RoomReverb, Source, Transform, VestraError
 from vestra.authoring import (
-    AudioAsset, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, Crop, CropKeyframe, FilteredDelayAudioEffect, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
+    AudioAsset, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, Crop, CropKeyframe, FilteredDelayAudioEffect, FilterSweepAudioEffect, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
     PlaybackSpeedAudioEffect, Preset, ProjectBuilder, RoomReverbAudioEffect, ScalarKeyframe, Sizing, SolidColorClip,
 )
 from vestra.audio import AudioClip, AudioTimeline, AudioTrack, PlaybackSpeed
@@ -106,7 +106,11 @@ if TYPE_CHECKING:
     linked: PlaybackSpeedAudioEffect = audio_clip.effects.add_playback_speed(rate=1.10, link_pitch=True)
     delay: FilteredDelayAudioEffect = track.effects.add_filtered_delay(delay_ms=125, repeats=2, mix=0.1, cutoff_hz=2300)
     room: RoomReverbAudioEffect = builder.audio.effects.add_room_reverb(decay_seconds=0.5, mix=0.03)
-    assert linked and delay and room
+    cutoff: vestra.AudioFilterKeyframe = vestra.AudioFilterKeyframe(time=0, frequency_hz=220)
+    sweep: FilterSweepAudioEffect = audio_clip.effects.add_filter_sweep(
+        mode="high_pass", keyframes=[cutoff],
+    )
+    assert linked and delay and room and sweep
     scalar_keyframe: ScalarKeyframe = image_clip.opacity.keyframe(
         time=0.0, value=0.0, interpolation=Interpolation.EASE_OUT,
     )
@@ -132,6 +136,12 @@ if TYPE_CHECKING:
     audio_track: AudioTrack = audio_timeline.track("music")
     high_level_audio_clip: AudioClip = audio_track.add("tone.wav", start=0, trim_end=1)
     high_level_audio_clip.effects.add(PlaybackSpeed(1.25, link_pitch=True))
+    high_level_audio_clip.effects.extend([
+        vestra.BeatRepeat(slice_start=0.125, slice_duration=0.125, output_start=0.25, repeats=2),
+        vestra.FilterSweep(mode="low_pass", keyframes=(cutoff,)),
+        vestra.PitchShift(semitones=-1),
+        vestra.TapeStop(start=0.55, duration=0.2),
+    ])
     audio_track.effects.add(FilteredDelay(delay_ms=125, repeats=2, mix=0.1, cutoff_hz=2300))
     audio_timeline.effects.add(RoomReverb(decay_seconds=0.5, mix=0.03))
     assert audio_track.project is high_level_project

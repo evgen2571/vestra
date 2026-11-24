@@ -102,19 +102,21 @@ def test_nightcore_example_publishes_remixed_audio_and_drives_spectrum(tmp_path)
     assert rms(2.65, 2.85) < 0.0001
 
     authored = project.prepare(backend="cpu")
-    # Keep the same spectrum source, linked speed and EQ for the comparison.
     snapshot = project.snapshot()
-    dry = snapshot.to_dict()
-    music, throw = dry["audio"]["tracks"]
-    music["effects"] = [
-        effect for effect in music["effects"] if effect["type"] != "room_reverb"
-    ]
-    throw["mute"] = True
-    baseline = Editor().prepare(
-        ProjectSnapshot.from_dict(dry, base_directory=snapshot.base_directory),
-        PrepareOptions(backend=BackendPreference.CPU),
-    )
-    for frame in (7, 67):  # Room tail at 0.233 s and delay throw at 2.233 s
+    for frame, bypass in ((7, "room_reverb"), (67, "filtered_delay")):
+        # Compare each tail while keeping the rest of the mix identical.
+        control = snapshot.to_dict()
+        music, throw = control["audio"]["tracks"]
+        if bypass == "room_reverb":
+            music["effects"] = [
+                effect for effect in music["effects"] if effect["type"] != bypass
+            ]
+        else:
+            throw["mute"] = True
+        baseline = Editor().prepare(
+            ProjectSnapshot.from_dict(control, base_directory=snapshot.base_directory),
+            PrepareOptions(backend=BackendPreference.CPU),
+        )
         assert authored.render_frame_number(frame).to_bytes() != (
             baseline.render_frame_number(frame).to_bytes()
-        )
+        ), f"{bypass} must affect master analysis"

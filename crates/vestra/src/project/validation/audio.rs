@@ -27,47 +27,16 @@ fn validate_effects(
                 format!("{effect_path}/type"),
             ));
         }
-        for parameter in definition.parameters {
-            let value = match effect {
-                AudioEffect::ParametricEq {
-                    frequency_hz,
-                    gain_db,
-                    q,
-                    ..
-                } => match parameter.name {
-                    "frequency_hz" => *frequency_hz,
-                    "gain_db" => *gain_db,
-                    "q" => *q,
-                    _ => continue,
-                },
-                AudioEffect::PlaybackSpeed { rate, .. } => {
-                    if parameter.name == "rate" {
-                        *rate
-                    } else {
-                        continue;
-                    }
-                }
-                AudioEffect::BassBoost {
-                    gain_db,
-                    frequency_hz,
-                    ..
-                } => match parameter.name {
-                    "gain_db" => *gain_db,
-                    "frequency_hz" => *frequency_hz,
-                    _ => continue,
-                },
-            };
-            if !parameter.accepts_number(value) {
-                errors.push(Diagnostic::error(
-                    "VESTRA-AUDIO-EFFECT-PARAMETER",
-                    Category::Semantic,
-                    format!(
-                        "audio effect `{}` parameter `{}` is outside its declared range",
-                        definition.id, parameter.name
-                    ),
-                    format!("{effect_path}/{}", parameter.name),
-                ));
-            }
+        for name in effect.invalid_numeric_parameters() {
+            errors.push(Diagnostic::error(
+                "VESTRA-AUDIO-EFFECT-PARAMETER",
+                Category::Semantic,
+                format!(
+                    "audio effect `{}` parameter `{name}` is outside its declared range",
+                    definition.id
+                ),
+                format!("{effect_path}/{name}"),
+            ));
         }
     }
 }

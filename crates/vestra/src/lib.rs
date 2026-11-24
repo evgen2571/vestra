@@ -38,8 +38,8 @@ pub use vestra_progress::{
 
 pub use vestra_core::audio_effect_definition::{
     AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectKind,
-    AudioEffectParameterDescriptor, AudioEffectParameterKind, AudioEffectScope,
-    audio_effect_descriptors,
+    AudioEffectParameterDefault, AudioEffectParameterDescriptor, AudioEffectParameterKind,
+    AudioEffectScope, audio_effect_descriptors,
 };
 pub use vestra_core::domain::Point;
 pub use vestra_core::effect_definition::{

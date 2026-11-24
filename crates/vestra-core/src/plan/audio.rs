@@ -16,6 +16,17 @@ pub enum AudioEffectOperation {
     },
     PlaybackSpeed {
         rate: f64,
+        link_pitch: bool,
+    },
+    RoomReverb {
+        decay_seconds: f64,
+        mix: f64,
+    },
+    FilteredDelay {
+        delay_ms: f64,
+        repeats: u8,
+        mix: f64,
+        cutoff_hz: f64,
     },
 }
 
@@ -31,8 +42,10 @@ impl AudioEffectOperation {
     /// always remains at least one sample long.
     pub fn transform_duration_samples(self, input: u64) -> Result<u64, AudioDurationError> {
         match self {
-            Self::ParametricEq { .. } => Ok(input),
-            Self::PlaybackSpeed { rate } => {
+            Self::ParametricEq { .. } | Self::RoomReverb { .. } | Self::FilteredDelay { .. } => {
+                Ok(input)
+            }
+            Self::PlaybackSpeed { rate, .. } => {
                 if !rate.is_finite() || rate <= 0.0 {
                     return Err(AudioDurationError::InvalidRate);
                 }
@@ -83,6 +96,17 @@ pub enum CompiledAudioEffect {
     },
     PlaybackSpeed {
         rate: f64,
+        link_pitch: bool,
+    },
+    RoomReverb {
+        decay_seconds: f64,
+        mix: f64,
+    },
+    FilteredDelay {
+        delay_ms: f64,
+        repeats: u8,
+        mix: f64,
+        cutoff_hz: f64,
     },
 }
 
@@ -113,9 +137,27 @@ impl CompiledAudioEffect {
                     q,
                 }],
             },
-            Self::PlaybackSpeed { rate: 1.0 } => AudioEffectPassPlan::default(),
-            Self::PlaybackSpeed { rate } => AudioEffectPassPlan {
-                operations: vec![AudioEffectOperation::PlaybackSpeed { rate }],
+            Self::PlaybackSpeed { rate: 1.0, .. }
+            | Self::RoomReverb { mix: 0.0, .. }
+            | Self::FilteredDelay { mix: 0.0, .. } => AudioEffectPassPlan::default(),
+            Self::PlaybackSpeed { rate, link_pitch } => AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::PlaybackSpeed { rate, link_pitch }],
+            },
+            Self::RoomReverb { decay_seconds, mix } => AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::RoomReverb { decay_seconds, mix }],
+            },
+            Self::FilteredDelay {
+                delay_ms,
+                repeats,
+                mix,
+                cutoff_hz,
+            } => AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::FilteredDelay {
+                    delay_ms,
+                    repeats,
+                    mix,
+                    cutoff_hz,
+                }],
             },
         }
     }
@@ -141,9 +183,30 @@ fn compile_effect(effect: &AudioEffect) -> CompiledAudioEffect {
             gain_db: *gain_db,
             frequency_hz: *frequency_hz,
         },
-        AudioEffect::PlaybackSpeed { rate, .. } => {
-            CompiledAudioEffect::PlaybackSpeed { rate: *rate }
-        }
+        AudioEffect::PlaybackSpeed {
+            rate, link_pitch, ..
+        } => CompiledAudioEffect::PlaybackSpeed {
+            rate: *rate,
+            link_pitch: *link_pitch,
+        },
+        AudioEffect::RoomReverb {
+            decay_seconds, mix, ..
+        } => CompiledAudioEffect::RoomReverb {
+            decay_seconds: *decay_seconds,
+            mix: *mix,
+        },
+        AudioEffect::FilteredDelay {
+            delay_ms,
+            repeats,
+            mix,
+            cutoff_hz,
+            ..
+        } => CompiledAudioEffect::FilteredDelay {
+            delay_ms: *delay_ms,
+            repeats: *repeats,
+            mix: *mix,
+            cutoff_hz: *cutoff_hz,
+        },
     }
 }
 
@@ -561,6 +624,7 @@ mod tests {
             AudioEffect::PlaybackSpeed {
                 id: "fast".to_owned(),
                 rate: 2.0,
+                link_pitch: true,
             },
             AudioEffect::ParametricEq {
                 id: "eq".to_owned(),
@@ -571,6 +635,7 @@ mod tests {
             AudioEffect::PlaybackSpeed {
                 id: "slow".to_owned(),
                 rate: 0.5,
+                link_pitch: false,
             },
         ];
         let plan = compile_effects(&effects);
@@ -579,7 +644,8 @@ mod tests {
         assert_eq!(
             compile_effects(&[AudioEffect::PlaybackSpeed {
                 id: "identity".to_owned(),
-                rate: 1.0
+                rate: 1.0,
+                link_pitch: true
             }])
             .operations,
             Vec::new()
@@ -587,8 +653,67 @@ mod tests {
     }
 
     #[test]
+    fn spatial_effects_lower_in_order_without_extending_the_clip() {
+        let effects = [
+            AudioEffect::FilteredDelay {
+                id: "dry".into(),
+                delay_ms: 200.0,
+                repeats: 2,
+                mix: 0.0,
+                cutoff_hz: 3_000.0,
+            },
+            AudioEffect::RoomReverb {
+                id: "room".into(),
+                decay_seconds: 0.5,
+                mix: 0.03,
+            },
+            AudioEffect::PlaybackSpeed {
+                id: "speed".into(),
+                rate: 1.1,
+                link_pitch: true,
+            },
+            AudioEffect::FilteredDelay {
+                id: "echo".into(),
+                delay_ms: 200.0,
+                repeats: 2,
+                mix: 0.2,
+                cutoff_hz: 3_000.0,
+            },
+            AudioEffect::RoomReverb {
+                id: "identity".into(),
+                decay_seconds: 0.5,
+                mix: 0.0,
+            },
+        ];
+        let plan = compile_effects(&effects);
+        assert_eq!(
+            plan.operations,
+            [
+                AudioEffectOperation::RoomReverb {
+                    decay_seconds: 0.5,
+                    mix: 0.03
+                },
+                AudioEffectOperation::PlaybackSpeed {
+                    rate: 1.1,
+                    link_pitch: true
+                },
+                AudioEffectOperation::FilteredDelay {
+                    delay_ms: 200.0,
+                    repeats: 2,
+                    mix: 0.2,
+                    cutoff_hz: 3_000.0,
+                },
+            ]
+        );
+        assert_eq!(plan.transform_duration_samples(52_800), Ok(48_000));
+    }
+
+    #[test]
     fn playback_speed_duration_rounds_and_preserves_non_empty_output() {
-        let operation = AudioEffectOperation::PlaybackSpeed { rate: 2.0 };
+        let operation = AudioEffectOperation::PlaybackSpeed {
+            rate: 2.0,
+            link_pitch: false,
+        };
         assert_eq!(operation.transform_duration_samples(480_000), Ok(240_000));
         assert_eq!(operation.transform_duration_samples(1), Ok(1));
         assert_eq!(operation.transform_duration_samples(0), Ok(0));
@@ -619,6 +744,7 @@ mod tests {
                     effects: vec![AudioEffect::PlaybackSpeed {
                         id: "speed".to_owned(),
                         rate: 2.0,
+                        link_pitch: true,
                     }],
                 }],
             }],

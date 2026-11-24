@@ -189,6 +189,60 @@ mod tests {
     }
 
     #[test]
+    fn audio_remix_effects_round_trip_and_legacy_speed_omits_link_pitch() {
+        for value in [
+            serde_json::json!({"id": "speed", "type": "playback_speed", "rate": 1.1}),
+            serde_json::json!({
+                "id": "speed", "type": "playback_speed", "rate": 1.1, "link_pitch": true
+            }),
+            serde_json::json!({
+                "id": "room", "type": "room_reverb", "decay_seconds": 0.5, "mix": 0.03
+            }),
+            serde_json::json!({
+                "id": "echo", "type": "filtered_delay", "delay_ms": 230.0, "repeats": 2,
+                "mix": 0.2, "cutoff_hz": 2500.0
+            }),
+        ] {
+            let effect: AudioEffect =
+                serde_json::from_value(value.clone()).expect("authored audio effect parses");
+            assert_eq!(serde_json::to_value(effect).unwrap(), value);
+        }
+
+        for invalid in [
+            serde_json::Value::Null,
+            serde_json::json!(1),
+            serde_json::json!("true"),
+        ] {
+            assert!(
+                serde_json::from_value::<AudioEffect>(serde_json::json!({
+                    "id": "speed", "type": "playback_speed", "rate": 1.1, "link_pitch": invalid
+                }))
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn filtered_delay_accepts_integral_json_numbers_for_repeats() {
+        let mut effect = serde_json::json!({
+            "id": "echo", "type": "filtered_delay", "delay_ms": 200, "mix": 0.5,
+            "cutoff_hz": 2400, "repeats": 2.0
+        });
+        assert!(matches!(
+            serde_json::from_value::<AudioEffect>(effect.clone()).unwrap(),
+            AudioEffect::FilteredDelay { repeats: 2, .. }
+        ));
+        for invalid in [
+            serde_json::json!(1.5),
+            serde_json::json!(true),
+            serde_json::Value::Null,
+        ] {
+            effect["repeats"] = invalid;
+            assert!(serde_json::from_value::<AudioEffect>(effect.clone()).is_err());
+        }
+    }
+
+    #[test]
     fn bass_boost_serde_applies_defaults_and_preserves_explicit_values() {
         let defaults: AudioEffect = serde_json::from_value(serde_json::json!({
             "id": "bass", "type": "bass_boost"

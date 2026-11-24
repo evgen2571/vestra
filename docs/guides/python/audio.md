@@ -180,6 +180,34 @@ echoes after the final note.
 --8<-- "examples/tutorials/nightcore_remix.py"
 ```
 
+## Edit into a chorus
+
+[Download phrase_remix.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/phrase_remix.py).
+It generates a 120 BPM stereo mix and renders the edits with a spectrum driven
+by the processed master. Rerunning the command replaces `phrase-remix.mp4`.
+
+```bash
+uv run python phrase_remix.py
+```
+
+- Raise the lead-in's high-pass cutoff from 20 to 900 Hz so the bass recedes.
+  Stack the beat repeat after the sweep so the repeat plays the filtered slice.
+- At 120 BPM, an eighth note lasts `30 / BPM` seconds (0.25 s), and a sixteenth
+  lasts `15 / BPM` seconds (0.125 s). Play the first sixteenth of the last beat
+  four times to fill the half-second before the chorus.
+- Place the chorus on a new clip at 2 seconds to bring back the full mix.
+  Shift it up two semitones while keeping the beat positions.
+- In the next clip, slow the tape from 3.25 to 3.625 seconds, then let it stay
+  silent through the end of the clip. The separate clip at 4 seconds brings
+  back the downbeat.
+
+See the [audio effect reference](../../reference/audio.md#effects) for parameter
+ranges and clip-local timing.
+
+```python
+--8<-- "examples/tutorials/phrase_remix.py"
+```
+
 ## Try an example with no external recording
 
 The [audio response program](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/audio_response.py)

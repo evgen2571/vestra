@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, TypeAlias, cast
+from typing import TYPE_CHECKING, Iterable, Sequence, TypeAlias, cast
 
 from .authoring._internal import _number as _finite_number
 from .authoring.audio import AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe
-from .authoring.audio_effects import audio_effect_definition
+from .authoring.audio_effects import _effect_values, audio_effect_definition
 from .authoring.signals import MasterAudioSignals
 from .authoring.errors import AuthoringError
 
@@ -20,9 +20,9 @@ if TYPE_CHECKING:
     from .editor import Project
 
 
-def _number(value: int | float, name: str, *, nonnegative: bool = True) -> float:
+def _number(value: int | float, name: str) -> float:
     result = _finite_number(value, name)
-    if nonnegative and result < 0:
+    if result < 0:
         raise ValueError(f"{name} must be non-negative")
     return result
 
@@ -55,36 +55,6 @@ def _identifier(value: str | None, namespace: str) -> str | None:
     return value
 
 
-def _effect_values(effect_type: str, values: Mapping[str, object]) -> dict[str, float]:
-    definition = audio_effect_definition(effect_type)
-    parameters = cast(Sequence[Mapping[str, object]], definition["parameters"])
-    descriptors = {str(item["name"]): item for item in parameters}
-    if set(values) != set(descriptors):
-        unknown = set(values) - set(descriptors)
-        missing = set(descriptors) - set(values)
-        raise TypeError(
-            f"invalid parameters for {effect_type!r}: unknown={unknown}, missing={missing}"
-        )
-    result: dict[str, float] = {}
-    for name, raw in values.items():
-        value = _number(cast(int | float, raw), name, nonnegative=False)
-        descriptor = descriptors[name]
-        minimum = cast(float | None, descriptor["minimum"])
-        maximum = cast(float | None, descriptor["maximum"])
-        minimum_exclusive = cast(bool, descriptor["minimum_exclusive"])
-        maximum_exclusive = cast(bool, descriptor["maximum_exclusive"])
-        if minimum is not None and (
-            value <= minimum if minimum_exclusive else value < minimum
-        ):
-            raise ValueError(f"{name} is outside its authored range")
-        if maximum is not None and (
-            value >= maximum if maximum_exclusive else value > maximum
-        ):
-            raise ValueError(f"{name} is outside its authored range")
-        result[name] = value
-    return result
-
-
 @dataclass(frozen=True, slots=True)
 class ParametricEq:
     """Parametric equalizer effect, valid on clips, tracks, and master."""
@@ -95,7 +65,7 @@ class ParametricEq:
 
     def __post_init__(self) -> None:
         values = _effect_values(
-            "parametric_eq",
+            audio_effect_definition("parametric_eq"),
             {
                 "frequency_hz": self.frequency_hz,
                 "gain_db": self.gain_db,
@@ -122,7 +92,7 @@ class BassBoost:
 
     def __post_init__(self) -> None:
         values = _effect_values(
-            "bass_boost",
+            audio_effect_definition("bass_boost"),
             {
                 "gain_db": self.gain_db,
                 "frequency_hz": self.frequency_hz,
@@ -141,24 +111,78 @@ class BassBoost:
 
 @dataclass(frozen=True, slots=True)
 class PlaybackSpeed:
-    """Playback speed effect, valid only on clips."""
+    """Clip playback speed with optional linked pitch."""
 
     rate: float
+    link_pitch: bool = False
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "rate", _effect_values("playback_speed", {"rate": self.rate})["rate"]
+        values = _effect_values(
+            audio_effect_definition("playback_speed"),
+            {"rate": self.rate, "link_pitch": self.link_pitch},
         )
+        object.__setattr__(self, "rate", values["rate"])
 
     @property
     def type(self) -> str:
         return "playback_speed"
 
-    def parameters(self) -> dict[str, float]:
+    def parameters(self) -> dict[str, float | bool]:
+        if self.link_pitch:
+            return {"rate": self.rate, "link_pitch": True}
         return {"rate": self.rate}
 
 
-AudioEffectValue: TypeAlias = ParametricEq | BassBoost | PlaybackSpeed
+@dataclass(frozen=True, slots=True)
+class RoomReverb:
+    """Short room reflections for clip, track, and master stacks."""
+
+    decay_seconds: float
+    mix: float
+
+    def __post_init__(self) -> None:
+        values = _effect_values(audio_effect_definition(self.type), self.parameters())
+        for name, value in values.items():
+            object.__setattr__(self, name, value)
+
+    @property
+    def type(self) -> str:
+        return "room_reverb"
+
+    def parameters(self) -> dict[str, float]:
+        return {"decay_seconds": self.decay_seconds, "mix": self.mix}
+
+
+@dataclass(frozen=True, slots=True)
+class FilteredDelay:
+    """Low-pass filtered repeats for clip, track, and master stacks."""
+
+    delay_ms: float
+    repeats: int
+    mix: float
+    cutoff_hz: float
+
+    def __post_init__(self) -> None:
+        values = _effect_values(audio_effect_definition(self.type), self.parameters())
+        for name, value in values.items():
+            object.__setattr__(self, name, value)
+
+    @property
+    def type(self) -> str:
+        return "filtered_delay"
+
+    def parameters(self) -> dict[str, float | int]:
+        return {
+            "delay_ms": self.delay_ms,
+            "repeats": self.repeats,
+            "mix": self.mix,
+            "cutoff_hz": self.cutoff_hz,
+        }
+
+
+AudioEffectValue: TypeAlias = (
+    ParametricEq | BassBoost | PlaybackSpeed | RoomReverb | FilteredDelay
+)
 
 
 class AudioEffectStack:
@@ -177,8 +201,12 @@ class AudioEffectStack:
         return tuple(self._items)
 
     def _validate(self, effect: AudioEffectValue) -> None:
-        if not isinstance(effect, (ParametricEq, BassBoost, PlaybackSpeed)):
-            raise TypeError("effect must be ParametricEq, BassBoost, or PlaybackSpeed")
+        if not isinstance(
+            effect, (ParametricEq, BassBoost, PlaybackSpeed, RoomReverb, FilteredDelay)
+        ):
+            raise TypeError(
+                "effect must be ParametricEq, BassBoost, PlaybackSpeed, RoomReverb, or FilteredDelay"
+            )
         definition = audio_effect_definition(effect.type)
         scopes = cast(Sequence[str], definition["scopes"])
         if self._scope not in scopes:
@@ -596,6 +624,8 @@ __all__ = [
     "AudioTrack",
     "AudioEffectValue",
     "BassBoost",
+    "FilteredDelay",
     "ParametricEq",
     "PlaybackSpeed",
+    "RoomReverb",
 ]

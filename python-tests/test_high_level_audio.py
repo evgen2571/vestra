@@ -242,6 +242,42 @@ def test_audio_effect_extend_appends_each_value_once_in_order() -> None:
     assert stack.items == tuple(values)
 
 
+def test_remix_effects_lower_in_stack_order(tmp_path: Path) -> None:
+    authored = project(tmp_path)
+    track = authored.audio.track()
+    clip = track.add("tone.wav", trim_end=1)
+    clip.effects.extend([PlaybackSpeed(1.10, link_pitch=True), BassBoost(1.5)])
+    track.effects.add(vestra.FilteredDelay(125, 2, 0.1, 2300))
+    authored.audio.effects.add(vestra.RoomReverb(0.5, 0.03))
+    data = authored.snapshot().to_dict()["audio"]
+    assert [effect["type"] for effect in data["tracks"][0]["clips"][0]["effects"]] == [
+        "playback_speed",
+        "bass_boost",
+    ]
+    assert data["tracks"][0]["clips"][0]["effects"][0]["link_pitch"] is True
+    assert data["tracks"][0]["effects"][0] == {
+        "id": data["tracks"][0]["effects"][0]["id"],
+        "type": "filtered_delay",
+        "delay_ms": 125.0,
+        "repeats": 2,
+        "mix": 0.1,
+        "cutoff_hz": 2300.0,
+    }
+    assert data["effects"][0] == {
+        "id": data["effects"][0]["id"],
+        "type": "room_reverb",
+        "decay_seconds": 0.5,
+        "mix": 0.03,
+    }
+    assert PlaybackSpeed(1.10).parameters() == {"rate": 1.10}
+    with pytest.raises(TypeError, match="link_pitch must be a boolean"):
+        PlaybackSpeed(1.10, link_pitch=1)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="repeats must be an integer"):
+        vestra.FilteredDelay(125, 1.5, 0.1, 2300)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="decay_seconds"):
+        vestra.RoomReverb(3, 0.03)
+
+
 def test_snapshot_is_independent_and_empty_master_effects_are_preserved(
     tmp_path: Path,
 ) -> None:

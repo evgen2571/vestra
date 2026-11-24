@@ -4,8 +4,9 @@ use std::{fs, path::PathBuf, process::ExitCode};
 
 use serde_json::{Map, Value, json};
 use vestra::{
-    AudioEffectParameterDescriptor, AudioEffectParameterKind, EffectParameterDescriptor,
-    EffectParameterKind, audio_effect_descriptors, visual_effect_descriptors,
+    AudioEffectParameterDescriptor, AudioEffectParameterKind, AudioFilterKeyframe, AudioFilterMode,
+    EffectParameterDescriptor, EffectParameterKind, audio_effect_descriptors,
+    visual_effect_descriptors,
 };
 
 #[path = "../../../../../scripts/effects/schema.rs"]
@@ -99,6 +100,33 @@ fn audio_parameter_schema(parameter: &AudioEffectParameterDescriptor) -> Value {
         AudioEffectParameterKind::Number => "number",
         AudioEffectParameterKind::Integer => "integer",
         AudioEffectParameterKind::Boolean => "boolean",
+        AudioEffectParameterKind::FilterMode => {
+            return json!({"type": "string", "enum": AudioFilterMode::ALL});
+        }
+        AudioEffectParameterKind::FilterKeyframes => {
+            let keyframe = json!({
+                "type": "object",
+                "required": ["time", "frequency_hz"],
+                "additionalProperties": false,
+                "properties": {
+                    "time": {"type": "number", "minimum": 0},
+                    "frequency_hz": {
+                        "type": "number",
+                        "minimum": AudioFilterKeyframe::MIN_FREQUENCY_HZ,
+                        "maximum": AudioFilterKeyframe::MAX_FREQUENCY_HZ
+                    }
+                }
+            });
+            let mut first = keyframe.clone();
+            first["properties"]["time"]["const"] = json!(0);
+            return json!({
+                "type": "array",
+                "minItems": 1,
+                "maxItems": AudioFilterKeyframe::MAX_COUNT,
+                "prefixItems": [first],
+                "items": keyframe
+            });
+        }
     };
     let mut schema = Map::from_iter([(String::from("type"), json!(kind))]);
     apply_number_constraint(&mut schema, parameter);

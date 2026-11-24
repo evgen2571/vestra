@@ -24,8 +24,8 @@ pub use animation::{
 };
 pub use assets::{Asset, AssetType};
 pub use audio::{
-    AudioClip, AudioEffect, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation,
-    AudioGainKeyframe, AudioTimeline, AudioTrack,
+    AudioClip, AudioEffect, AudioFadeCurve, AudioFilterKeyframe, AudioFilterMode,
+    AudioGainAutomation, AudioGainInterpolation, AudioGainKeyframe, AudioTimeline, AudioTrack,
 };
 pub use colour::parse_colour;
 pub use effects::{

@@ -28,6 +28,8 @@ pub enum AudioEffectParameterKind {
     Number,
     Integer,
     Boolean,
+    FilterMode,
+    FilterKeyframes,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -61,10 +63,28 @@ impl AudioEffectParameterDescriptor {
         }
     }
 
+    const fn required(name: &'static str, kind: AudioEffectParameterKind) -> Self {
+        Self {
+            minimum: None,
+            maximum: None,
+            kind,
+            ..Self::bounded(name, 0.0, 0.0)
+        }
+    }
+
+    const fn nonnegative(name: &'static str) -> Self {
+        Self {
+            minimum: Some(0.0),
+            ..Self::required(name, AudioEffectParameterKind::Number)
+        }
+    }
+
     #[must_use]
     pub fn accepts_number(self, value: f64) -> bool {
-        self.kind != AudioEffectParameterKind::Boolean
-            && value.is_finite()
+        matches!(
+            self.kind,
+            AudioEffectParameterKind::Number | AudioEffectParameterKind::Integer
+        ) && value.is_finite()
             && (self.kind != AudioEffectParameterKind::Integer || value.fract() == 0.0)
             && self.minimum.is_none_or(|minimum| {
                 if self.minimum_exclusive {
@@ -98,6 +118,10 @@ pub enum AudioEffectKind {
     PlaybackSpeed,
     RoomReverb,
     FilteredDelay,
+    BeatRepeat,
+    FilterSweep,
+    PitchShift,
+    TapeStop,
 }
 
 impl AudioEffectKind {
@@ -107,6 +131,10 @@ impl AudioEffectKind {
         Self::PlaybackSpeed,
         Self::RoomReverb,
         Self::FilteredDelay,
+        Self::BeatRepeat,
+        Self::FilterSweep,
+        Self::PitchShift,
+        Self::TapeStop,
     ];
 
     #[must_use]
@@ -245,6 +273,54 @@ impl AudioEffectKind {
                     parameters: PARAMETERS,
                 }
             }
+            Self::BeatRepeat => preserving_clip_effect(
+                "beat_repeat",
+                const {
+                    &[
+                        AudioEffectParameterDescriptor::nonnegative("slice_start"),
+                        AudioEffectParameterDescriptor::bounded("slice_duration", 0.01, 1.0),
+                        AudioEffectParameterDescriptor::nonnegative("output_start"),
+                        AudioEffectParameterDescriptor {
+                            kind: AudioEffectParameterKind::Integer,
+                            ..AudioEffectParameterDescriptor::bounded("repeats", 1.0, 8.0)
+                        },
+                    ]
+                },
+            ),
+            Self::FilterSweep => preserving_clip_effect(
+                "filter_sweep",
+                const {
+                    &[
+                        AudioEffectParameterDescriptor::required(
+                            "mode",
+                            AudioEffectParameterKind::FilterMode,
+                        ),
+                        AudioEffectParameterDescriptor::required(
+                            "keyframes",
+                            AudioEffectParameterKind::FilterKeyframes,
+                        ),
+                    ]
+                },
+            ),
+            Self::PitchShift => preserving_clip_effect(
+                "pitch_shift",
+                const {
+                    &[AudioEffectParameterDescriptor::bounded(
+                        "semitones",
+                        -12.0,
+                        12.0,
+                    )]
+                },
+            ),
+            Self::TapeStop => preserving_clip_effect(
+                "tape_stop",
+                const {
+                    &[
+                        AudioEffectParameterDescriptor::nonnegative("start"),
+                        AudioEffectParameterDescriptor::bounded("duration", 0.05, 2.0),
+                    ]
+                },
+            ),
         }
     }
 
@@ -256,8 +332,24 @@ impl AudioEffectKind {
             "playback_speed" => Some(Self::PlaybackSpeed),
             "room_reverb" => Some(Self::RoomReverb),
             "filtered_delay" => Some(Self::FilteredDelay),
+            "beat_repeat" => Some(Self::BeatRepeat),
+            "filter_sweep" => Some(Self::FilterSweep),
+            "pitch_shift" => Some(Self::PitchShift),
+            "tape_stop" => Some(Self::TapeStop),
             _ => None,
         }
+    }
+}
+
+const fn preserving_clip_effect(
+    id: &'static str,
+    parameters: &'static [AudioEffectParameterDescriptor],
+) -> AudioEffectDefinition {
+    AudioEffectDefinition {
+        id,
+        parameters,
+        scopes: &[AudioEffectScope::Clip],
+        duration_behavior: AudioEffectDurationBehavior::Preserve,
     }
 }
 
@@ -303,6 +395,30 @@ mod tests {
                 repeats: 2,
                 mix: 0.2,
                 cutoff_hz: 2500.0,
+            },
+            AudioEffect::BeatRepeat {
+                id: "repeat".into(),
+                slice_start: 0.0,
+                slice_duration: 0.125,
+                output_start: 0.25,
+                repeats: 2,
+            },
+            AudioEffect::FilterSweep {
+                id: "sweep".into(),
+                mode: crate::project::AudioFilterMode::HighPass,
+                keyframes: vec![crate::project::AudioFilterKeyframe {
+                    time: 0.0,
+                    frequency_hz: 80.0,
+                }],
+            },
+            AudioEffect::PitchShift {
+                id: "shift".into(),
+                semitones: 2.0,
+            },
+            AudioEffect::TapeStop {
+                id: "stop".into(),
+                start: 0.5,
+                duration: 0.25,
             },
         ];
         let ids = effects

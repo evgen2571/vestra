@@ -79,6 +79,10 @@ def test_effect_exports_signatures_annotations_and_properties_match_baseline(
             "Spectrum2DStyle",
             "Spectrum2DWave",
         ]
+    if module_name == "vestra":
+        exports += ["FilteredDelay", "RoomReverb"]
+    if module_name == "vestra.authoring":
+        exports += ["FilteredDelayAudioEffect", "RoomReverbAudioEffect"]
     assert list(getattr(module, "__all__", [])) == exports
     # Also catches accidental imports/classes outside an explicit __all__.
     names = []

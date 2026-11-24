@@ -2083,3 +2083,33 @@ fn raw_spatial_plan_rejects_invalid_effect_parameters() {
         assert!(error.to_string().contains(parameter));
     }
 }
+
+#[test]
+fn room_reverb_keeps_wet_energy_across_decay_limits_for_short_clips() {
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let path = directory.path().join("short-impulse.wav");
+    write_stereo_wav(&path, 48_000, std::iter::once([0.75, 0.0]));
+    let mut mix = single_clip_mix(AudioClipPlan {
+        path,
+        selected_duration: 1.0 / 48_000.0,
+        processed_duration: 1.0 / 48_000.0,
+        ..automation_test_clip()
+    });
+    let project_duration = 2.1;
+    for decay_seconds in [0.1, 2.0] {
+        mix.effects.operations = vec![AudioEffectOperation::RoomReverb {
+            decay_seconds,
+            mix: 1.0,
+        }];
+        let graph = compile(&mix, project_duration).expect("short impulse graph");
+        let samples = render_pcm(&graph, 1.0);
+        assert_eq!(samples.len(), 100_800 * 2);
+        let decay_frames = seconds_to_samples(decay_seconds).unwrap() as usize;
+        let energy = samples[..decay_frames * 2]
+            .chunks_exact(2)
+            .map(|frame| f64::from(frame[0] / 0.75).powi(2))
+            .sum::<f64>();
+        assert!((0.8..1.2).contains(&energy), "wet impulse energy: {energy}");
+        assert!(stereo_window_peak(&samples, decay_frames, 100_800) < 1e-6);
+    }
+}

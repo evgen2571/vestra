@@ -472,6 +472,18 @@
         },
         {
           "$ref": "#/$defs/filtered_delay_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/beat_repeat_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/filter_sweep_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/pitch_shift_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/tape_stop_audio_effect"
         }
       ]
     },
@@ -583,6 +595,45 @@
       "required": [
         "id",
         "type"
+      ],
+      "type": "object"
+    },
+    "beat_repeat_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "output_start": {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "repeats": {
+          "maximum": 8.0,
+          "minimum": 1.0,
+          "type": "integer"
+        },
+        "slice_duration": {
+          "maximum": 1.0,
+          "minimum": 0.01,
+          "type": "number"
+        },
+        "slice_start": {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "type": {
+          "const": "beat_repeat"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "slice_start",
+        "slice_duration",
+        "output_start",
+        "repeats"
       ],
       "type": "object"
     },
@@ -1698,6 +1749,79 @@
           "$ref": "#/$defs/motion_blur_effect"
         }
       ]
+    },
+    "filter_sweep_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "keyframes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "frequency_hz": {
+                "maximum": 20000.0,
+                "minimum": 20.0,
+                "type": "number"
+              },
+              "time": {
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "time",
+              "frequency_hz"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "prefixItems": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "frequency_hz": {
+                  "maximum": 20000.0,
+                  "minimum": 20.0,
+                  "type": "number"
+                },
+                "time": {
+                  "const": 0,
+                  "minimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "time",
+                "frequency_hz"
+              ],
+              "type": "object"
+            }
+          ],
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "low_pass",
+            "high_pass",
+            "band_pass"
+          ],
+          "type": "string"
+        },
+        "type": {
+          "const": "filter_sweep"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "mode",
+        "keyframes"
+      ],
+      "type": "object"
     },
     "filtered_delay_audio_effect": {
       "additionalProperties": false,
@@ -3585,6 +3709,29 @@
       ],
       "type": "object"
     },
+    "pitch_shift_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "semitones": {
+          "maximum": 12.0,
+          "minimum": -12.0,
+          "type": "number"
+        },
+        "type": {
+          "const": "pitch_shift"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "semitones"
+      ],
+      "type": "object"
+    },
     "pixel_sort_effect": {
       "additionalProperties": false,
       "properties": {
@@ -5004,6 +5151,34 @@
           "type": "number"
         }
       },
+      "type": "object"
+    },
+    "tape_stop_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "maximum": 2.0,
+          "minimum": 0.05,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "type": {
+          "const": "tape_stop"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "start",
+        "duration"
+      ],
       "type": "object"
     },
     "text": {

@@ -25,6 +25,8 @@ PUBLIC_NAMES = {
     "GaussianBlurEffect", "GenericEffect", "GlowEffect", "ImageAsset", "ImageClip", "Interpolation", "JsonValue", "MotionBlurEffect",
     "AudioEffect", "AudioEffectCollection", "FilteredDelayAudioEffect", "ParametricEqAudioEffect", "PlaybackSpeedAudioEffect", "RoomReverbAudioEffect",
     "available_audio_effects", "audio_effect_definition",
+    "AudioFilterKeyframe", "AudioFilterMode", "BeatRepeatAudioEffect",
+    "FilterSweepAudioEffect", "PitchShiftAudioEffect", "TapeStopAudioEffect",
     "Point", "PointKeyframe", "PointTrack", "PostEffectCollection", "Preset", "PresetCollection", "ProjectBuilder",
     "Quality", "SaturationEffect", "ScalarKeyframe", "ScalarSignal", "ScalarTrack", "SharpenEffect", "ShapeClip", "Sizing", "SolidColorClip", "VideoAsset", "VideoClip",
     "Timeline", "TintEffect", "Transform", "TransitionCollection", "VignetteEffect", "ZoomBlurDirection", "Spectrum2DClip", "GroupClip",

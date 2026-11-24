@@ -11,6 +11,12 @@ from .audio_effects import (
     ParametricEqAudioEffect,
     PlaybackSpeedAudioEffect,
     RoomReverbAudioEffect,
+    AudioFilterKeyframe,
+    AudioFilterMode,
+    BeatRepeatAudioEffect,
+    FilterSweepAudioEffect,
+    PitchShiftAudioEffect,
+    TapeStopAudioEffect,
     available_audio_effects,
     audio_effect_definition,
 )
@@ -207,4 +213,10 @@ __all__ = [
     "Spectrum2DWave",
     "FilteredDelayAudioEffect",
     "RoomReverbAudioEffect",
+    "AudioFilterKeyframe",
+    "AudioFilterMode",
+    "BeatRepeatAudioEffect",
+    "FilterSweepAudioEffect",
+    "PitchShiftAudioEffect",
+    "TapeStopAudioEffect",
 ]

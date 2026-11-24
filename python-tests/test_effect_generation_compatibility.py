@@ -80,9 +80,16 @@ def test_effect_exports_signatures_annotations_and_properties_match_baseline(
             "Spectrum2DWave",
         ]
     if module_name == "vestra":
-        exports += ["FilteredDelay", "RoomReverb"]
+        exports += [
+            "FilteredDelay", "RoomReverb", "AudioFilterKeyframe", "AudioFilterMode",
+            "BeatRepeat", "FilterSweep", "PitchShift", "TapeStop",
+        ]
     if module_name == "vestra.authoring":
-        exports += ["FilteredDelayAudioEffect", "RoomReverbAudioEffect"]
+        exports += [
+            "FilteredDelayAudioEffect", "RoomReverbAudioEffect", "AudioFilterKeyframe",
+            "AudioFilterMode", "BeatRepeatAudioEffect", "FilterSweepAudioEffect",
+            "PitchShiftAudioEffect", "TapeStopAudioEffect",
+        ]
     assert list(getattr(module, "__all__", [])) == exports
     # Also catches accidental imports/classes outside an explicit __all__.
     names = []
@@ -374,6 +381,10 @@ def test_generated_schema_preserves_baseline_outside_group_size_spectrum_and_aud
         assert definitions.pop(name)["properties"]["type"] == {"const": effect}
         for scope in ("clip", "track", "master"):
             definitions[f"audio_{scope}_effect"]["oneOf"].remove({"$ref": f"#/$defs/{name}"})
+    for effect in ("beat_repeat", "filter_sweep", "pitch_shift", "tape_stop"):
+        name = f"{effect}_audio_effect"
+        assert definitions.pop(name)["properties"]["type"] == {"const": effect}
+        definitions["audio_clip_effect"]["oneOf"].remove({"$ref": f"#/$defs/{name}"})
     baseline = (json.dumps(schema, indent=2, sort_keys=True) + "\n").encode()
     assert sha256(baseline).hexdigest() == JSON_V1["schema_sha256"]
 

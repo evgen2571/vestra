@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+from dataclasses import dataclass
+from math import floor
 from types import MappingProxyType
-from typing import Mapping, cast
+from typing import Literal, Mapping, Sequence, TypeAlias, cast
 
 from ._internal import _IdAllocator, _Owner, _number
 from vestra._native import audio_effect_definitions as _native_audio_effect_definitions
@@ -28,9 +31,57 @@ def audio_effect_definition(effect_type: str) -> Mapping[str, object]:
     raise ValueError(f"unknown audio effect type: {effect_type!r}")
 
 
+AudioFilterMode: TypeAlias = Literal["low_pass", "high_pass", "band_pass"]
+
+
+@dataclass(frozen=True, slots=True)
+class AudioFilterKeyframe:
+    """A filter cutoff or center frequency at a processed clip-local time."""
+
+    time: float
+    frequency_hz: float
+
+    def __post_init__(self) -> None:
+        time = _number(self.time, "time")
+        frequency_hz = _number(self.frequency_hz, "frequency_hz")
+        if not 0 <= time <= 2**64 / 48_000:
+            raise ValueError("time must be non-negative and representable at 48 kHz")
+        if not 20 <= frequency_hz <= 20_000:
+            raise ValueError("frequency_hz must be between 20 and 20000")
+        object.__setattr__(self, "time", time)
+        object.__setattr__(self, "frequency_hz", frequency_hz)
+
+    def to_canonical(self) -> dict[str, float]:
+        return {"time": self.time, "frequency_hz": self.frequency_hz}
+
+
+def _filter_keyframes(raw: object) -> list[dict[str, float]]:
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+        raise TypeError("keyframes must be a sequence")
+    if not 1 <= len(raw) <= 256:
+        raise ValueError("keyframes must contain between 1 and 256 entries")
+    keyframes: list[dict[str, float]] = []
+    previous = -1
+    for item in raw:
+        if isinstance(item, AudioFilterKeyframe):
+            keyframe = item
+        elif isinstance(item, Mapping) and set(item) == {"time", "frequency_hz"}:
+            keyframe = AudioFilterKeyframe(item["time"], item["frequency_hz"])
+        else:
+            raise TypeError("keyframes must contain AudioFilterKeyframe values or canonical objects")
+        exact = keyframe.time * 48_000
+        whole = floor(exact)
+        sample = whole + (exact - whole >= 0.5)
+        if (not keyframes and keyframe.time != 0) or sample <= previous:
+            raise ValueError("keyframes must start at zero and strictly increase at 48 kHz")
+        keyframes.append(keyframe.to_canonical())
+        previous = sample
+    return keyframes
+
+
 def _effect_values(
     definition: Mapping[str, object], parameters: Mapping[str, object]
-) -> dict[str, float | int | bool]:
+) -> dict[str, object]:
     parameter_definitions = cast(tuple[Mapping[str, object], ...], definition["parameters"])
     descriptors = {str(parameter["name"]): parameter for parameter in parameter_definitions}
     raw_values = dict(parameters)
@@ -43,7 +94,7 @@ def _effect_values(
         raise TypeError(
             f"invalid parameters for {definition['id']!r}: unknown={unknown}, missing={missing}"
         )
-    values: dict[str, float | int | bool] = {}
+    values: dict[str, object] = {}
     for name, raw in raw_values.items():
         descriptor = descriptors[name]
         kind = descriptor["kind"]
@@ -51,6 +102,14 @@ def _effect_values(
             if not isinstance(raw, bool):
                 raise TypeError(f"{name} must be a boolean")
             values[name] = raw
+            continue
+        if kind == "filter_mode":
+            if not isinstance(raw, str) or raw not in {"low_pass", "high_pass", "band_pass"}:
+                raise ValueError("mode must be low_pass, high_pass, or band_pass")
+            values[name] = raw
+            continue
+        if kind == "filter_keyframes":
+            values[name] = _filter_keyframes(raw)
             continue
         value: float | int
         if kind == "integer":
@@ -91,7 +150,7 @@ class AudioEffect:
     @property
     def type(self) -> str: return self._type
 
-    def to_canonical(self) -> dict[str, object]: return dict(self._data)
+    def to_canonical(self) -> dict[str, object]: return deepcopy(self._data)
 
 
 class ParametricEqAudioEffect(AudioEffect):
@@ -111,6 +170,22 @@ class RoomReverbAudioEffect(AudioEffect):
 
 
 class FilteredDelayAudioEffect(AudioEffect):
+    pass
+
+
+class BeatRepeatAudioEffect(AudioEffect):
+    pass
+
+
+class FilterSweepAudioEffect(AudioEffect):
+    pass
+
+
+class PitchShiftAudioEffect(AudioEffect):
+    pass
+
+
+class TapeStopAudioEffect(AudioEffect):
     pass
 
 
@@ -178,4 +253,44 @@ class AudioEffectCollection:
             {"delay_ms": delay_ms, "repeats": repeats, "mix": mix, "cutoff_hz": cutoff_hz},
             id,
             FilteredDelayAudioEffect,
+        )
+
+    def add_beat_repeat(
+        self,
+        *,
+        slice_start: float,
+        slice_duration: float,
+        output_start: float,
+        repeats: int,
+        id: str | None = None,
+    ) -> BeatRepeatAudioEffect:
+        return self._add(  # type: ignore[return-value]
+            "beat_repeat",
+            {
+                "slice_start": slice_start, "slice_duration": slice_duration,
+                "output_start": output_start, "repeats": repeats,
+            },
+            id,
+            BeatRepeatAudioEffect,
+        )
+
+    def add_filter_sweep(
+        self,
+        *,
+        mode: AudioFilterMode,
+        keyframes: Sequence[AudioFilterKeyframe],
+        id: str | None = None,
+    ) -> FilterSweepAudioEffect:
+        return self._add(  # type: ignore[return-value]
+            "filter_sweep", {"mode": mode, "keyframes": keyframes}, id, FilterSweepAudioEffect,
+        )
+
+    def add_pitch_shift(self, *, semitones: float, id: str | None = None) -> PitchShiftAudioEffect:
+        return self._add(  # type: ignore[return-value]
+            "pitch_shift", {"semitones": semitones}, id, PitchShiftAudioEffect,
+        )
+
+    def add_tape_stop(self, *, start: float, duration: float, id: str | None = None) -> TapeStopAudioEffect:
+        return self._add(  # type: ignore[return-value]
+            "tape_stop", {"start": start, "duration": duration}, id, TapeStopAudioEffect,
         )

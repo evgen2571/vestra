@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Iterable, Sequence, TypeAlias, cast
 
 from .authoring._internal import _number as _finite_number
 from .authoring.audio import AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe
-from .authoring.audio_effects import _effect_values, audio_effect_definition
+from .authoring.audio_effects import AudioFilterKeyframe, AudioFilterMode, _effect_values, audio_effect_definition
 from .authoring.signals import MasterAudioSignals
 from .authoring.errors import AuthoringError
 
@@ -180,10 +180,102 @@ class FilteredDelay:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class BeatRepeat:
+    """Replace a clip-local window with a repeated slice from the clip."""
+
+    slice_start: float
+    slice_duration: float
+    output_start: float
+    repeats: int
+
+    def __post_init__(self) -> None:
+        values = _effect_values(audio_effect_definition(self.type), self.parameters())
+        for name, value in values.items():
+            object.__setattr__(self, name, value)
+
+    @property
+    def type(self) -> str:
+        return "beat_repeat"
+
+    def parameters(self) -> dict[str, float | int]:
+        return {
+            "slice_start": self.slice_start,
+            "slice_duration": self.slice_duration,
+            "output_start": self.output_start,
+            "repeats": self.repeats,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class FilterSweep:
+    """Sweep a clip filter's cutoff or center frequency between keyframes."""
+
+    mode: AudioFilterMode
+    keyframes: Sequence[AudioFilterKeyframe]
+
+    def __post_init__(self) -> None:
+        keyframes = tuple(self.keyframes)
+        if any(not isinstance(keyframe, AudioFilterKeyframe) for keyframe in keyframes):
+            raise TypeError("keyframes must contain AudioFilterKeyframe values")
+        _effect_values(
+            audio_effect_definition(self.type), {"mode": self.mode, "keyframes": keyframes},
+        )
+        object.__setattr__(self, "keyframes", keyframes)
+
+    @property
+    def type(self) -> str:
+        return "filter_sweep"
+
+    def parameters(self) -> dict[str, object]:
+        return {
+            "mode": self.mode,
+            "keyframes": [keyframe.to_canonical() for keyframe in self.keyframes],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PitchShift:
+    """Shift a clip's pitch in semitones at its original tempo."""
+
+    semitones: float
+
+    def __post_init__(self) -> None:
+        values = _effect_values(audio_effect_definition(self.type), self.parameters())
+        object.__setattr__(self, "semitones", values["semitones"])
+
+    @property
+    def type(self) -> str:
+        return "pitch_shift"
+
+    def parameters(self) -> dict[str, float]:
+        return {"semitones": self.semitones}
+
+
+@dataclass(frozen=True, slots=True)
+class TapeStop:
+    """Slow down a clip to silence during a clip-local interval."""
+
+    start: float
+    duration: float
+
+    def __post_init__(self) -> None:
+        values = _effect_values(audio_effect_definition(self.type), self.parameters())
+        for name, value in values.items():
+            object.__setattr__(self, name, value)
+
+    @property
+    def type(self) -> str:
+        return "tape_stop"
+
+    def parameters(self) -> dict[str, float]:
+        return {"start": self.start, "duration": self.duration}
+
+
 AudioEffectValue: TypeAlias = (
     ParametricEq | BassBoost | PlaybackSpeed | RoomReverb | FilteredDelay
+    | BeatRepeat | FilterSweep | PitchShift | TapeStop
 )
-
 
 class AudioEffectStack:
     """Ordered, scope-aware collection of high-level audio effect values."""
@@ -202,11 +294,10 @@ class AudioEffectStack:
 
     def _validate(self, effect: AudioEffectValue) -> None:
         if not isinstance(
-            effect, (ParametricEq, BassBoost, PlaybackSpeed, RoomReverb, FilteredDelay)
+            effect, (ParametricEq, BassBoost, PlaybackSpeed, RoomReverb, FilteredDelay,
+                     BeatRepeat, FilterSweep, PitchShift, TapeStop)
         ):
-            raise TypeError(
-                "effect must be ParametricEq, BassBoost, PlaybackSpeed, RoomReverb, or FilteredDelay"
-            )
+            raise TypeError("effect must be an audio effect value")
         definition = audio_effect_definition(effect.type)
         scopes = cast(Sequence[str], definition["scopes"])
         if self._scope not in scopes:
@@ -628,4 +719,10 @@ __all__ = [
     "ParametricEq",
     "PlaybackSpeed",
     "RoomReverb",
+    "AudioFilterKeyframe",
+    "AudioFilterMode",
+    "BeatRepeat",
+    "FilterSweep",
+    "PitchShift",
+    "TapeStop",
 ]

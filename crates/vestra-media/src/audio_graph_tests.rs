@@ -1760,6 +1760,45 @@ fn linked_and_preserving_speed_change_tempo_with_different_pitch() {
 }
 
 #[test]
+fn fractional_linked_speed_keeps_cues_at_the_authored_rate() {
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let path = directory.path().join("cue.wav");
+    let cue = 47_000;
+    let mut source = vec![0.0; 48_000];
+    source[cue] = 0.75;
+    write_mono_wav_samples(&path, 48_000, &source);
+
+    let rate = 0.250_010_5;
+    let operation = AudioEffectOperation::PlaybackSpeed {
+        rate,
+        link_pitch: true,
+    };
+    let frames = operation.transform_duration_samples(48_000).unwrap() as usize;
+    let clip = AudioClipPlan {
+        path,
+        selected_duration: 1.0,
+        processed_duration: frames as f64 / 48_000.0,
+        effects: AudioEffectPassPlan {
+            operations: vec![operation],
+        },
+        ..automation_test_clip()
+    };
+    let graph = compile(&single_clip_mix(clip), frames as f64 / 48_000.0).expect("speed graph");
+    let samples = render_pcm(&graph, 1.0);
+    assert_eq!(samples.len(), frames * 2);
+    let (peak_frame, _) = samples
+        .chunks_exact(2)
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a[0].abs().total_cmp(&b[0].abs()))
+        .unwrap();
+    let expected = (cue as f64 / rate).round() as usize;
+    assert!(
+        peak_frame.abs_diff(expected) <= 1,
+        "cue at {peak_frame}, expected {expected}"
+    );
+}
+
+#[test]
 fn room_reverb_decays_in_stereo_and_respects_tail_boundaries() {
     let directory = tempfile::tempdir().expect("temporary audio directory");
     let path = directory.path().join("impulse.wav");

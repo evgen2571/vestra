@@ -59,8 +59,8 @@ See [project format](project-format.md#audio) for the canonical object fields.
 | --- | --- |
 | `start` | Project timeline seconds. |
 | `trim_start`, `trim_end` | Source-media seconds. |
-| `fade_in`, `fade_out` | Durations relative to the selected clip. |
-| Gain-automation keyframe `time` | Clip-local seconds. |
+| `fade_in`, `fade_out` | Durations within the clip after playback speed. |
+| Gain-automation keyframe `time` | Clip-local seconds after playback speed. |
 
 Fades default to 0 and their curves to `linear`. Gain automation uses `linear`
 or `hold` interpolation. `trim_end` must follow `trim_start`; validation also
@@ -83,11 +83,36 @@ failure cases and native path restrictions.
 | --- | --- | --- |
 | `parametric_eq` / `ParametricEq` | Required `frequency_hz` >0 through 24000 Hz, `gain_db` -24..24 dB, `q` >0 through 100 | clip, track, master; preserves duration |
 | `bass_boost` / `BassBoost` | `gain_db=6` from 0..24 dB, `frequency_hz=100` from 20..250 Hz | clip, track, master; preserves duration |
-| `playback_speed` / `PlaybackSpeed` | Required `rate` 0.25..4; dimensionless speed multiplier | clip only; transforms duration |
+| `playback_speed` / `PlaybackSpeed` | Required `rate` from 0.25 through 4. Boolean `link_pitch` defaults to `false` in JSON and `False` in Python. | Clip only. Divides the selected duration by the rate. |
+| `room_reverb` / `RoomReverb` | Required `decay_seconds` from 0.1 through 2 seconds and `mix` from 0 through 1. | Clip, track, master. Preserves duration. |
+| `filtered_delay` / `FilteredDelay` | Required `delay_ms` from 1 through 1000 ms, integer `repeats` from 1 through 8, `mix` from 0 through 1 and `cutoff_hz` from 20 Hz up to (exclusive) 24000 Hz. | Clip, track, master. Preserves duration. |
 
-Effects execute in stack order. High-level Python exposes `ParametricEq`,
-`BassBoost`, `PlaybackSpeed`, and `AudioEffectStack`; advanced canonical
-authoring uses the same descriptor catalog.
+`PlaybackSpeed(rate=1.10)` preserves pitch. With `link_pitch=True`, tempo and
+pitch both scale by the rate, so a 440 Hz tone moves to about 484 Hz at 1.10×.
+Either mode uses the planned sample count at the 48 kHz mixer rate. Fades
+and gain automation use the processed clip's clock.
+
+Both spatial effects use `mix=0` for dry passthrough and `mix=1` for wet
+only. Room reverb adds short stereo reflections that decay over the
+requested response length. Filtered delay places the first repeat one delay
+interval later and spaces the remaining repeats by the same interval,
+rounded to 48 kHz samples. Each repeat has half the gain of the previous
+one. Only the repeats pass through the low-pass filter. For an eighth-note
+delay, divide 30,000 by the **remixed** tempo in beats per minute.
+
+Effects run in authored order within each stack. Each clip is trimmed and
+processed before clip gain, gain automation, fades and timeline placement.
+Each track processes its summed clips before track gain. The master stack
+processes the sum of all tracks. Clip-level tails stay within the processed
+clip span. Track and master tails can ring past the source clips within the
+resolved project span. To hear more of the tail, leave space in the project
+after the source ends. The effects never add duration on their own.
+
+Add these values to an `AudioEffectStack` in high-level Python. The advanced
+`AudioEffectCollection` exposes `add_playback_speed`, `add_room_reverb` and
+`add_filtered_delay` with the same parameter names. See the
+[generated stereo remix](../guides/python/audio.md#remix-a-stereo-phrase) for
+settings and timing.
 
 ## Crossfades
 

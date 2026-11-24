@@ -1,4 +1,4 @@
-use crate::test_support::{write_mono_wav, write_mono_wav_samples};
+use crate::test_support::{write_mono_wav, write_mono_wav_samples, write_stereo_wav};
 
 use super::{
     AudioGraphCompileOptions, automation_expression, compile, compile_with_options,
@@ -1384,32 +1384,6 @@ fn render_pcm(graph: &super::FfmpegAudioGraph, duration: f64) -> Vec<f32> {
         .chunks_exact(4)
         .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("f32")))
         .collect()
-}
-
-fn write_stereo_wav(
-    path: &std::path::Path,
-    sample_rate: u32,
-    frames: impl ExactSizeIterator<Item = [f32; 2]>,
-) {
-    let data_length = (frames.len() * 4) as u32;
-    let mut bytes = Vec::with_capacity(44 + data_length as usize);
-    bytes.extend_from_slice(b"RIFF");
-    bytes.extend_from_slice(&(36 + data_length).to_le_bytes());
-    bytes.extend_from_slice(b"WAVEfmt ");
-    bytes.extend_from_slice(&16_u32.to_le_bytes());
-    bytes.extend_from_slice(&1_u16.to_le_bytes());
-    bytes.extend_from_slice(&2_u16.to_le_bytes());
-    bytes.extend_from_slice(&sample_rate.to_le_bytes());
-    bytes.extend_from_slice(&(sample_rate * 4).to_le_bytes());
-    bytes.extend_from_slice(&4_u16.to_le_bytes());
-    bytes.extend_from_slice(&16_u16.to_le_bytes());
-    bytes.extend_from_slice(b"data");
-    bytes.extend_from_slice(&data_length.to_le_bytes());
-    for sample in frames.flatten() {
-        let pcm = (sample * i16::MAX as f32).round() as i16;
-        bytes.extend_from_slice(&pcm.to_le_bytes());
-    }
-    fs::write(path, bytes).expect("fixture WAV");
 }
 
 fn write_sine_wav(path: &std::path::Path, frequency: f64, amplitude: f32) {

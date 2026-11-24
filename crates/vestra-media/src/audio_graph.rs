@@ -13,6 +13,8 @@ use vestra_core::{
 use crate::MediaError;
 
 const MIX_SAMPLE_RATE: u64 = MASTER_AUDIO_SAMPLE_RATE as u64;
+// FFmpeg takes integer sample rates. Scale both virtual clocks to preserve the ratio.
+const LINKED_SPEED_CLOCK: u64 = 100_000_000;
 
 /// The graph owns mixer semantics, while its caller owns FFmpeg input layout.
 /// Encoders place audio after video at index 1; standalone analysis starts at 0.
@@ -351,12 +353,12 @@ impl GraphBuilder {
                             rate,
                             link_pitch,
                         })?;
-                        let resample_rate = (MIX_SAMPLE_RATE as f64 * rate).round();
+                        let resample_rate = (LINKED_SPEED_CLOCK as f64 * rate).round();
                         // Flush the resampler even when the selected clip is shorter than its filter.
                         self.filter(
                             &input,
                             &format!(
-                                "apad=pad_len=128,asetrate={resample_rate:.0},aresample={MIX_SAMPLE_RATE},apad=whole_len={processed},atrim=end_sample={processed},asetpts=N/SR/TB"
+                                "apad=pad_len=128,asetrate={resample_rate:.0},aresample={LINKED_SPEED_CLOCK},asetrate={MIX_SAMPLE_RATE},apad=whole_len={processed},atrim=end_sample={processed},asetpts=N/SR/TB"
                             ),
                         )
                     } else {

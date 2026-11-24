@@ -12,4 +12,8 @@ Try [nightcore_remix.py](nightcore_remix.py) for a generated stereo remix
 with linked speed, room reverb and a filtered delay throw.
 [Run the remix](../../docs/guides/python/audio.md#remix-a-stereo-phrase)
 
+Try [phrase_remix.py](phrase_remix.py) for a stereo lead-in, chorus and
+turnaround using filter sweep, beat repeat, pitch shift and tape stop.
+[Run the phrase remix](../../docs/guides/python/audio.md#edit-into-a-chorus)
+
 To regenerate previews, see [documentation media](../../docs/development/documentation-media.md#reproduce-tutorial-previews).

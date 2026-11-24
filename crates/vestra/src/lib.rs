@@ -48,12 +48,12 @@ pub use vestra_core::effect_definition::{
 };
 pub use vestra_core::plan_audio::MASTER_AUDIO_NYQUIST_HZ;
 pub use vestra_core::project::{
-    AudioEffect, AudioFadeCurve, AudioGainInterpolation, Mask, MaskCoverageMode, MaskInput,
-    MaskOperation, Quality, Spectrum2D, Spectrum2DBandMapping, Spectrum2DEllipseLayout,
-    Spectrum2DGradient, Spectrum2DGradientDirection, Spectrum2DLayout, Spectrum2DLinearAnchor,
-    Spectrum2DLinearLayout, Spectrum2DPathBandMapping, Spectrum2DPathDirection,
-    Spectrum2DPathLayout, Spectrum2DRadialDirection, Spectrum2DRadialLayout, Spectrum2DStereo,
-    Spectrum2DStyle, Spectrum2DWave,
+    AudioEffect, AudioFadeCurve, AudioFilterKeyframe, AudioFilterMode, AudioGainInterpolation,
+    Mask, MaskCoverageMode, MaskInput, MaskOperation, Quality, Spectrum2D, Spectrum2DBandMapping,
+    Spectrum2DEllipseLayout, Spectrum2DGradient, Spectrum2DGradientDirection, Spectrum2DLayout,
+    Spectrum2DLinearAnchor, Spectrum2DLinearLayout, Spectrum2DPathBandMapping,
+    Spectrum2DPathDirection, Spectrum2DPathLayout, Spectrum2DRadialDirection,
+    Spectrum2DRadialLayout, Spectrum2DStereo, Spectrum2DStyle, Spectrum2DWave,
 };
 pub use vestra_core::{Category, Diagnostic, Severity};
 #[cfg(feature = "wgpu")]

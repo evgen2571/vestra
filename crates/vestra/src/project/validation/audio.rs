@@ -5,7 +5,10 @@ use crate::{
     project::{AssetType, AudioTimeline},
 };
 use vestra_core::audio_effect_definition::AudioEffectScope;
-use vestra_core::{plan_audio::compile_effects, project::AudioEffect};
+use vestra_core::{
+    plan_audio::{compile_effects, invalid_clip_effect_timing},
+    project::AudioEffect,
+};
 
 fn validate_effects(
     effects: &[AudioEffect],
@@ -82,6 +85,17 @@ pub(crate) fn validate(
                 Ok(samples) => samples,
                 Err(_) => continue,
             };
+            if clip.trim_end.is_none()
+                && let Some((index, field)) =
+                    invalid_clip_effect_timing(&clip.effects, selected_samples)
+            {
+                errors.push(Diagnostic::error(
+                    "VESTRA-AUDIO-EFFECT-TIMING",
+                    Category::Semantic,
+                    "audio effect timing exceeds the clip span at this point in the stack",
+                    format!("{path}/effects/{index}/{field}"),
+                ));
+            }
             let processed_samples =
                 match compile_effects(&clip.effects).transform_duration_samples(selected_samples) {
                     Ok(samples) => samples,

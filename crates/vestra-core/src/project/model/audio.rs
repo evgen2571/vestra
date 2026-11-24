@@ -89,6 +89,28 @@ pub enum AudioEffect {
         mix: f64,
         cutoff_hz: f64,
     },
+    BeatRepeat {
+        id: String,
+        slice_start: f64,
+        slice_duration: f64,
+        output_start: f64,
+        #[serde(deserialize_with = "deserialize_repeat_count")]
+        repeats: u8,
+    },
+    FilterSweep {
+        id: String,
+        mode: AudioFilterMode,
+        keyframes: Vec<AudioFilterKeyframe>,
+    },
+    PitchShift {
+        id: String,
+        semitones: f64,
+    },
+    TapeStop {
+        id: String,
+        start: f64,
+        duration: f64,
+    },
 }
 
 impl AudioEffect {
@@ -99,7 +121,11 @@ impl AudioEffect {
             | Self::BassBoost { id, .. }
             | Self::PlaybackSpeed { id, .. }
             | Self::RoomReverb { id, .. }
-            | Self::FilteredDelay { id, .. } => id,
+            | Self::FilteredDelay { id, .. }
+            | Self::BeatRepeat { id, .. }
+            | Self::FilterSweep { id, .. }
+            | Self::PitchShift { id, .. }
+            | Self::TapeStop { id, .. } => id,
         }
     }
 
@@ -111,6 +137,10 @@ impl AudioEffect {
             Self::PlaybackSpeed { .. } => AudioEffectKind::PlaybackSpeed,
             Self::RoomReverb { .. } => AudioEffectKind::RoomReverb,
             Self::FilteredDelay { .. } => AudioEffectKind::FilteredDelay,
+            Self::BeatRepeat { .. } => AudioEffectKind::BeatRepeat,
+            Self::FilterSweep { .. } => AudioEffectKind::FilterSweep,
+            Self::PitchShift { .. } => AudioEffectKind::PitchShift,
+            Self::TapeStop { .. } => AudioEffectKind::TapeStop,
         }
         .definition()
     }
@@ -138,11 +168,43 @@ impl AudioEffect {
                     (Self::FilteredDelay { delay_ms, .. }, "delay_ms") => *delay_ms,
                     (Self::FilteredDelay { repeats, .. }, "repeats") => f64::from(*repeats),
                     (Self::FilteredDelay { cutoff_hz, .. }, "cutoff_hz") => *cutoff_hz,
+                    (Self::BeatRepeat { slice_start, .. }, "slice_start") => *slice_start,
+                    (Self::BeatRepeat { slice_duration, .. }, "slice_duration") => *slice_duration,
+                    (Self::BeatRepeat { output_start, .. }, "output_start") => *output_start,
+                    (Self::BeatRepeat { repeats, .. }, "repeats") => f64::from(*repeats),
+                    (Self::PitchShift { semitones, .. }, "semitones") => *semitones,
+                    (Self::TapeStop { start, .. }, "start") => *start,
+                    (Self::TapeStop { duration, .. }, "duration") => *duration,
                     _ => return None,
                 };
                 (!parameter.accepts_number(value)).then_some(parameter.name)
             })
     }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioFilterMode {
+    LowPass,
+    HighPass,
+    BandPass,
+}
+
+impl AudioFilterMode {
+    pub const ALL: [Self; 3] = [Self::LowPass, Self::HighPass, Self::BandPass];
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct AudioFilterKeyframe {
+    pub time: f64,
+    pub frequency_hz: f64,
+}
+
+impl AudioFilterKeyframe {
+    pub const MAX_COUNT: usize = 256;
+    pub const MIN_FREQUENCY_HZ: f64 = 20.0;
+    pub const MAX_FREQUENCY_HZ: f64 = 20_000.0;
 }
 
 // JSON Schema's integer type includes integral JSON numbers such as 2.0.

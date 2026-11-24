@@ -8,4 +8,8 @@ Start with the [first animation tutorial](../../docs/getting-started/first-anima
 or run [first_animation.py](first_animation.py). The effects catalog needs
 `landscape-study.jpg` beside the script if downloaded separately. [Shared study image](../../assets/images/README.md)
 
+Try [nightcore_remix.py](nightcore_remix.py) for a generated stereo remix
+with linked speed, room reverb and a filtered delay throw.
+[Run the remix](../../docs/guides/python/audio.md#remix-a-stereo-phrase)
+
 To regenerate previews, see [documentation media](../../docs/development/documentation-media.md#reproduce-tutorial-previews).

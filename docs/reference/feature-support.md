@@ -79,12 +79,12 @@ All supported forms below use schema-v1 `masks` or `matte` fields. See
 | ASCII / pseudo-ASCII | Supported | Supported on the adapters listed below. |
 | Halftone, bounded pixel sorting, CRT styling | Supported | Supported on the adapters listed below. |
 | Transitions | Supported | Not fully verified visually. |
-| Audio clips | Shared media execution; renderer status does not apply. | Shared media execution; renderer status does not apply. |
+| Audio clips and effects | Shared media execution; renderer status does not apply. | Shared media execution; renderer status does not apply. |
 
 See [effects](effects.md), [transitions](transitions.md) and [audio](audio.md)
 for constructor, canonical and preparation contracts. Transitions support direct
-endpoints and adapter-mediated Python endpoints. Audio clips support Python
-authoring and canonical `audio` timelines.
+endpoints and adapter-mediated Python endpoints. Audio clips and effects
+support Python authoring and canonical `audio` timelines.
 
 ## Effect presentation scope
 

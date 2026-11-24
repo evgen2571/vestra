@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     Category, Diagnostic,
-    project::{AssetType, Project},
+    plan::audio::{invalid_clip_effect_timing, seconds_to_samples},
+    project::{AssetType, AudioEffect, AudioFilterKeyframe, Project},
 };
 
 use super::{ResourceLimits, nonnegative};
@@ -61,12 +62,26 @@ pub(super) fn validate(
         total += track.clips.len();
         for (clip_index, clip) in track.clips.iter().enumerate() {
             let clip_path = format!("{path}/clips/{clip_index}");
+            let errors_before_effects = errors.len();
             validate_audio_effects(
                 &clip.effects,
                 crate::audio_effect_definition::AudioEffectScope::Clip,
                 &format!("{clip_path}/effects"),
                 errors,
             );
+            if errors.len() == errors_before_effects
+                && let Some(selected) = clip
+                    .trim_end
+                    .and_then(|end| seconds_to_samples(end - clip.trim_start))
+                && let Some((index, field)) = invalid_clip_effect_timing(&clip.effects, selected)
+            {
+                errors.push(Diagnostic::error(
+                    "VESTRA-AUDIO-EFFECT-TIMING",
+                    Category::Semantic,
+                    "audio effect timing exceeds the clip span at this point in the stack",
+                    format!("{clip_path}/effects/{index}/{field}"),
+                ));
+            }
             if clip.id.trim().is_empty() || !clip_ids.insert(clip.id.clone()) {
                 errors.push(Diagnostic::error(
                     "VESTRA-AUDIO-CLIP-ID",
@@ -229,6 +244,56 @@ fn validate_audio_effects(
                 format!("{path}/{index}/{name}"),
             ));
         }
+        if let AudioEffect::FilterSweep { keyframes, .. } = effect {
+            validate_filter_keyframes(keyframes, &format!("{path}/{index}/keyframes"), errors);
+        }
+    }
+}
+
+fn validate_filter_keyframes(
+    keyframes: &[AudioFilterKeyframe],
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if !(1..=AudioFilterKeyframe::MAX_COUNT).contains(&keyframes.len()) {
+        errors.push(Diagnostic::error(
+            "VESTRA-AUDIO-FILTER-KEYFRAMES",
+            Category::Semantic,
+            format!(
+                "filter sweep requires 1 through {} keyframes",
+                AudioFilterKeyframe::MAX_COUNT
+            ),
+            path,
+        ));
+        return;
+    }
+    let mut previous = None;
+    for (index, keyframe) in keyframes.iter().enumerate() {
+        let sample = seconds_to_samples(keyframe.time);
+        if sample.is_none()
+            || (index == 0 && keyframe.time != 0.0)
+            || previous.is_some_and(|previous| sample <= Some(previous))
+        {
+            errors.push(Diagnostic::error(
+                "VESTRA-AUDIO-FILTER-KEYFRAME-TIME",
+                Category::Semantic,
+                "filter keyframes must start at zero and strictly increase at 48 kHz",
+                format!("{path}/{index}/time"),
+            ));
+        }
+        if sample.is_some() {
+            previous = sample;
+        }
+        if !(AudioFilterKeyframe::MIN_FREQUENCY_HZ..=AudioFilterKeyframe::MAX_FREQUENCY_HZ)
+            .contains(&keyframe.frequency_hz)
+        {
+            errors.push(Diagnostic::error(
+                "VESTRA-AUDIO-FILTER-FREQUENCY",
+                Category::Semantic,
+                "filter frequency is outside its declared range",
+                format!("{path}/{index}/frequency_hz"),
+            ));
+        }
     }
 }
 
@@ -247,6 +312,69 @@ mod tests {
         AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectScope,
     };
     use crate::project::AudioEffect;
+
+    #[test]
+    fn remix_effects_validate_clip_scope_ranges_and_filter_keyframes() {
+        let effects = [
+            AudioEffect::BeatRepeat {
+                id: "repeat".into(),
+                slice_start: 0.0,
+                slice_duration: 0.001,
+                output_start: 0.1,
+                repeats: 9,
+            },
+            AudioEffect::FilterSweep {
+                id: "sweep".into(),
+                mode: crate::project::AudioFilterMode::HighPass,
+                keyframes: vec![
+                    crate::project::AudioFilterKeyframe {
+                        time: 0.0,
+                        frequency_hz: 80.0,
+                    },
+                    crate::project::AudioFilterKeyframe {
+                        time: 0.000_001,
+                        frequency_hz: 25_000.0,
+                    },
+                ],
+            },
+            AudioEffect::PitchShift {
+                id: "pitch".into(),
+                semitones: f64::NAN,
+            },
+            AudioEffect::TapeStop {
+                id: "stop".into(),
+                start: -0.01,
+                duration: 3.0,
+            },
+        ];
+        let mut errors = Vec::new();
+        validate_audio_effects(&effects, AudioEffectScope::Master, "/effects", &mut errors);
+        assert_eq!(
+            errors
+                .iter()
+                .filter(|error| error.code == "VESTRA-AUDIO-EFFECT-SCOPE")
+                .count(),
+            4
+        );
+        let pointers = errors
+            .iter()
+            .filter_map(|error| error.pointer.as_deref())
+            .collect::<Vec<_>>();
+        for expected in [
+            "/effects/0/slice_duration",
+            "/effects/0/repeats",
+            "/effects/1/keyframes/1/time",
+            "/effects/1/keyframes/1/frequency_hz",
+            "/effects/2/semitones",
+            "/effects/3/start",
+            "/effects/3/duration",
+        ] {
+            assert!(
+                pointers.contains(&expected),
+                "{expected} missing from {pointers:?}"
+            );
+        }
+    }
 
     #[test]
     fn spatial_effects_validate_ranges_at_all_scopes() {

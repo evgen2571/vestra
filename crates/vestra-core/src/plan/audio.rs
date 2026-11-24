@@ -4,10 +4,13 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::{
     Category, Diagnostic,
-    project::{AudioEffect, AudioFadeCurve, AudioGainAutomation, AudioTimeline},
+    project::{
+        AudioEffect, AudioFadeCurve, AudioFilterKeyframe, AudioFilterMode, AudioGainAutomation,
+        AudioTimeline,
+    },
 };
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AudioEffectOperation {
     ParametricEq {
         frequency_hz: f64,
@@ -28,6 +31,23 @@ pub enum AudioEffectOperation {
         mix: f64,
         cutoff_hz: f64,
     },
+    BeatRepeat {
+        slice_start: f64,
+        slice_duration: f64,
+        output_start: f64,
+        repeats: u8,
+    },
+    FilterSweep {
+        mode: AudioFilterMode,
+        keyframes: Vec<AudioFilterKeyframe>,
+    },
+    PitchShift {
+        semitones: f64,
+    },
+    TapeStop {
+        start: f64,
+        duration: f64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,12 +60,10 @@ impl AudioEffectOperation {
     /// Transform a non-negative 48 kHz sample count. Playback speed uses
     /// nearest-integer rounding, with ties away from zero; a non-empty input
     /// always remains at least one sample long.
-    pub fn transform_duration_samples(self, input: u64) -> Result<u64, AudioDurationError> {
+    pub fn transform_duration_samples(&self, input: u64) -> Result<u64, AudioDurationError> {
         match self {
-            Self::ParametricEq { .. } | Self::RoomReverb { .. } | Self::FilteredDelay { .. } => {
-                Ok(input)
-            }
             Self::PlaybackSpeed { rate, .. } => {
+                let rate = *rate;
                 if !rate.is_finite() || rate <= 0.0 {
                     return Err(AudioDurationError::InvalidRate);
                 }
@@ -58,6 +76,41 @@ impl AudioEffectOperation {
                 }
                 Ok((output as u64).max(1))
             }
+            _ => Ok(input),
+        }
+    }
+
+    /// Return the field that would place this edit outside its input span.
+    #[must_use]
+    pub fn invalid_clip_timing(&self, samples: u64) -> Option<&'static str> {
+        let exceeds_clip = |start, length| {
+            seconds_to_samples(start)
+                .zip(length)
+                .and_then(|(start, length)| start.checked_add(length))
+                .is_none_or(|end| end > samples)
+        };
+        match self {
+            Self::BeatRepeat {
+                slice_start,
+                slice_duration,
+                output_start,
+                repeats,
+            } => {
+                let slice = seconds_to_samples(*slice_duration);
+                if exceeds_clip(*slice_start, slice) {
+                    Some("slice_start")
+                } else {
+                    let length = slice.and_then(|slice| slice.checked_mul(u64::from(*repeats)));
+                    exceeds_clip(*output_start, length).then_some("output_start")
+                }
+            }
+            Self::FilterSweep { keyframes, .. } => keyframes
+                .last()
+                .and_then(|keyframe| exceeds_clip(keyframe.time, Some(0)).then_some("keyframes")),
+            Self::TapeStop { start, duration } => {
+                exceeds_clip(*start, seconds_to_samples(*duration)).then_some("start")
+            }
+            _ => None,
         }
     }
 }
@@ -113,57 +166,57 @@ pub enum CompiledAudioEffect {
 impl CompiledAudioEffect {
     #[must_use]
     pub fn lower(self) -> AudioEffectPassPlan {
+        AudioEffectPassPlan {
+            operations: self.operation().into_iter().collect(),
+        }
+    }
+
+    fn operation(self) -> Option<AudioEffectOperation> {
         match self {
-            Self::BassBoost { gain_db: 0.0, .. } => AudioEffectPassPlan::default(),
+            Self::BassBoost { gain_db: 0.0, .. }
+            | Self::ParametricEq { gain_db: 0.0, .. }
+            | Self::PlaybackSpeed { rate: 1.0, .. }
+            | Self::RoomReverb { mix: 0.0, .. }
+            | Self::FilteredDelay { mix: 0.0, .. } => None,
             Self::BassBoost {
                 gain_db,
                 frequency_hz,
-            } => AudioEffectPassPlan {
-                operations: vec![AudioEffectOperation::ParametricEq {
-                    frequency_hz,
-                    gain_db,
-                    q: BASS_BOOST_Q,
-                }],
-            },
-            Self::ParametricEq { gain_db: 0.0, .. } => AudioEffectPassPlan::default(),
+            } => Some(AudioEffectOperation::ParametricEq {
+                frequency_hz,
+                gain_db,
+                q: BASS_BOOST_Q,
+            }),
             Self::ParametricEq {
                 frequency_hz,
                 gain_db,
                 q,
-            } => AudioEffectPassPlan {
-                operations: vec![AudioEffectOperation::ParametricEq {
-                    frequency_hz,
-                    gain_db,
-                    q,
-                }],
-            },
-            Self::PlaybackSpeed { rate: 1.0, .. }
-            | Self::RoomReverb { mix: 0.0, .. }
-            | Self::FilteredDelay { mix: 0.0, .. } => AudioEffectPassPlan::default(),
-            Self::PlaybackSpeed { rate, link_pitch } => AudioEffectPassPlan {
-                operations: vec![AudioEffectOperation::PlaybackSpeed { rate, link_pitch }],
-            },
-            Self::RoomReverb { decay_seconds, mix } => AudioEffectPassPlan {
-                operations: vec![AudioEffectOperation::RoomReverb { decay_seconds, mix }],
-            },
+            } => Some(AudioEffectOperation::ParametricEq {
+                frequency_hz,
+                gain_db,
+                q,
+            }),
+            Self::PlaybackSpeed { rate, link_pitch } => {
+                Some(AudioEffectOperation::PlaybackSpeed { rate, link_pitch })
+            }
+            Self::RoomReverb { decay_seconds, mix } => {
+                Some(AudioEffectOperation::RoomReverb { decay_seconds, mix })
+            }
             Self::FilteredDelay {
                 delay_ms,
                 repeats,
                 mix,
                 cutoff_hz,
-            } => AudioEffectPassPlan {
-                operations: vec![AudioEffectOperation::FilteredDelay {
-                    delay_ms,
-                    repeats,
-                    mix,
-                    cutoff_hz,
-                }],
-            },
+            } => Some(AudioEffectOperation::FilteredDelay {
+                delay_ms,
+                repeats,
+                mix,
+                cutoff_hz,
+            }),
         }
     }
 }
 
-fn compile_effect(effect: &AudioEffect) -> CompiledAudioEffect {
+fn compile_effect(effect: &AudioEffect) -> Option<AudioEffectOperation> {
     match effect {
         AudioEffect::ParametricEq {
             frequency_hz,
@@ -207,16 +260,70 @@ fn compile_effect(effect: &AudioEffect) -> CompiledAudioEffect {
             mix: *mix,
             cutoff_hz: *cutoff_hz,
         },
+        AudioEffect::BeatRepeat {
+            slice_start,
+            slice_duration,
+            output_start,
+            repeats,
+            ..
+        } => {
+            return Some(AudioEffectOperation::BeatRepeat {
+                slice_start: *slice_start,
+                slice_duration: *slice_duration,
+                output_start: *output_start,
+                repeats: *repeats,
+            });
+        }
+        AudioEffect::FilterSweep {
+            mode, keyframes, ..
+        } => {
+            return Some(AudioEffectOperation::FilterSweep {
+                mode: *mode,
+                keyframes: keyframes.clone(),
+            });
+        }
+        AudioEffect::PitchShift { semitones: 0.0, .. } => return None,
+        AudioEffect::PitchShift { semitones, .. } => {
+            return Some(AudioEffectOperation::PitchShift {
+                semitones: *semitones,
+            });
+        }
+        AudioEffect::TapeStop {
+            start, duration, ..
+        } => {
+            return Some(AudioEffectOperation::TapeStop {
+                start: *start,
+                duration: *duration,
+            });
+        }
     }
+    .operation()
 }
 
 pub fn compile_effects(effects: &[AudioEffect]) -> AudioEffectPassPlan {
     AudioEffectPassPlan {
-        operations: effects
-            .iter()
-            .flat_map(|effect| compile_effect(effect).lower().operations)
-            .collect(),
+        operations: effects.iter().filter_map(compile_effect).collect(),
     }
+}
+
+/// Validate clip edit windows in authored order, with each effect seeing
+/// the processed duration of the preceding effects.
+pub fn invalid_clip_effect_timing(
+    effects: &[AudioEffect],
+    mut samples: u64,
+) -> Option<(usize, &'static str)> {
+    for (index, operation) in effects
+        .iter()
+        .enumerate()
+        .filter_map(|(index, effect)| compile_effect(effect).map(|operation| (index, operation)))
+    {
+        if let Some(field) = operation.invalid_clip_timing(samples) {
+            return Some((index, field));
+        }
+        // Invalid speed is diagnosed by parameter/duration validation.
+        samples = operation.transform_duration_samples(samples).ok()?;
+    }
+    None
 }
 
 /// Authoritative rate for the Master mixer and its future analysis consumers.
@@ -438,6 +545,71 @@ mod tests {
             mute: id == "clip-a",
             effects: Vec::new(),
         }
+    }
+
+    #[test]
+    fn remix_windows_are_rounded_on_each_effects_input_clock() {
+        let speed = AudioEffect::PlaybackSpeed {
+            id: "speed".into(),
+            rate: 2.0,
+            link_pitch: true,
+        };
+        let repeat = AudioEffect::BeatRepeat {
+            id: "repeat".into(),
+            slice_start: 0.1,
+            slice_duration: 0.100_01,
+            output_start: 0.6,
+            repeats: 2,
+        };
+        assert_eq!(
+            super::invalid_clip_effect_timing(&[speed.clone(), repeat.clone()], 48_000),
+            Some((1, "output_start"))
+        );
+        let reordered = [repeat, speed];
+        assert_eq!(super::invalid_clip_effect_timing(&reordered, 48_000), None);
+        assert_eq!(
+            compile_effects(&reordered).transform_duration_samples(48_000),
+            Ok(24_000)
+        );
+        let effects = [
+            AudioEffect::FilterSweep {
+                id: "sweep".into(),
+                mode: crate::project::AudioFilterMode::LowPass,
+                keyframes: vec![
+                    crate::project::AudioFilterKeyframe {
+                        time: 0.0,
+                        frequency_hz: 100.0,
+                    },
+                    crate::project::AudioFilterKeyframe {
+                        time: 1.0,
+                        frequency_hz: 1000.0,
+                    },
+                ],
+            },
+            AudioEffect::TapeStop {
+                id: "stop".into(),
+                start: 0.8,
+                duration: 0.2,
+            },
+            AudioEffect::PitchShift {
+                id: "dry".into(),
+                semitones: 0.0,
+            },
+        ];
+        assert_eq!(super::invalid_clip_effect_timing(&effects, 48_000), None);
+        assert_eq!(
+            super::invalid_clip_effect_timing(&effects, 47_999),
+            Some((0, "keyframes"))
+        );
+        assert_eq!(
+            super::invalid_clip_effect_timing(&effects[1..], 47_999),
+            Some((0, "start"))
+        );
+        assert_eq!(compile_effects(&effects).operations.len(), 2);
+        assert_eq!(
+            compile_effects(&effects).transform_duration_samples(48_000),
+            Ok(48_000)
+        );
     }
 
     #[test]

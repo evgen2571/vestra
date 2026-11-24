@@ -124,8 +124,8 @@ def test_phrase_remix_preserves_downbeats_and_drives_the_spectrum(tmp_path):
             assert np.corrcoef(first[:, channel], repeated[:, channel])[0, 1] > 0.95
 
     assert peak(2.10, 2.37, 400, 560) == pytest.approx(494, abs=5)
-    early = peak(3.27, 3.34, 200, 550)
-    late = peak(3.47, 3.54, 130, 550)
+    early = peak(3.27, 3.34, 130, 680)
+    late = peak(3.47, 3.54, 130, 680)
     assert early > 1.5 * late
     assert rms(3.75, 3.96) < 0.001
     assert rms(4.00, 4.04) > 0.04

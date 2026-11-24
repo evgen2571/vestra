@@ -24,3 +24,29 @@ pub(crate) fn write_mono_wav_samples(path: &Path, sample_rate: u32, samples: &[f
     }
     std::fs::write(path, bytes).expect("fixture WAV");
 }
+
+pub(crate) fn write_stereo_wav(
+    path: &Path,
+    sample_rate: u32,
+    frames: impl ExactSizeIterator<Item = [f32; 2]>,
+) {
+    let data_length = (frames.len() * 4) as u32;
+    let mut bytes = Vec::with_capacity(44 + data_length as usize);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_length).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&2_u16.to_le_bytes());
+    bytes.extend_from_slice(&sample_rate.to_le_bytes());
+    bytes.extend_from_slice(&(sample_rate * 4).to_le_bytes());
+    bytes.extend_from_slice(&4_u16.to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_length.to_le_bytes());
+    for sample in frames.flatten() {
+        let pcm = (sample * i16::MAX as f32).round() as i16;
+        bytes.extend_from_slice(&pcm.to_le_bytes());
+    }
+    std::fs::write(path, bytes).expect("fixture WAV");
+}

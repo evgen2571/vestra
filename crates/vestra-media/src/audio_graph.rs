@@ -7,7 +7,7 @@ use vestra_core::{
         AudioClipPlan, AudioEffectOperation, AudioEffectPassPlan, AudioMixPlan,
         MASTER_AUDIO_SAMPLE_RATE,
     },
-    project::{AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation},
+    project::{AudioEffect, AudioFadeCurve, AudioGainAutomation, AudioGainInterpolation},
 };
 
 use crate::MediaError;
@@ -101,7 +101,7 @@ pub(crate) fn compile_with_options(
         let Some(track_mix) = graph.mix(&clips, "track") else {
             continue;
         };
-        let track_effects = graph.apply_effect_chain(track_mix, &track.effects)?;
+        let track_effects = graph.apply_effect_chain(track_mix, &track.effects, None)?;
         let track_label = graph.label("track");
         graph.filters.push(format!(
             "[{track_effects}]volume=volume={}[{track_label}]",
@@ -112,7 +112,7 @@ pub(crate) fn compile_with_options(
     let master = graph.mix(&tracks, "master").ok_or_else(|| {
         MediaError::InvalidAudioTiming("audio graph has no audible contributors".to_owned())
     })?;
-    let master_effects = graph.apply_effect_chain(master, &mix.effects)?;
+    let master_effects = graph.apply_effect_chain(master, &mix.effects, None)?;
     let mixed_output = if options.output_range.is_some() {
         "timeline_audio"
     } else {
@@ -201,21 +201,7 @@ impl GraphBuilder {
                 "[{input_index}:a]aformat=sample_rates={MIX_SAMPLE_RATE}:sample_fmts=fltp:channel_layouts=stereo[{normalized}]"
             ));
             let branch_count = self.sources[source_index].branch_count;
-            let branches = if branch_count == 1 {
-                vec![normalized]
-            } else {
-                let branches = (0..branch_count)
-                    .map(|_| self.label("branch"))
-                    .collect::<Vec<_>>();
-                self.filters.push(format!(
-                    "[{normalized}]asplit={branch_count}{}",
-                    branches
-                        .iter()
-                        .map(|branch| format!("[{branch}]"))
-                        .collect::<String>()
-                ));
-                branches
-            };
+            let branches = self.split(normalized, branch_count);
             self.sources[source_index].branches = branches;
         }
     }
@@ -266,7 +252,11 @@ impl GraphBuilder {
         self.filters.push(format!(
             "[{source_branch}]atrim=start_sample={trim_start}:end_sample={trim_end},asetpts=N/SR/TB[{normalized}]"
         ));
-        let effected = self.apply_effect_chain(normalized, &clip.effects)?;
+        let effected = self.apply_effect_chain(
+            normalized,
+            &clip.effects,
+            Some(seconds_to_samples(clip.selected_duration)?),
+        )?;
         let effected = if clip.effects.has_duration_transform() {
             let output = self.label("duration");
             self.filters.push(format!(
@@ -300,41 +290,204 @@ impl GraphBuilder {
         Ok(label)
     }
 
+    fn filter(&mut self, input: &str, filter: &str) -> String {
+        let output = self.label("effect");
+        self.filters.push(format!("[{input}]{filter}[{output}]"));
+        output
+    }
+
+    fn split(&mut self, input: String, count: usize) -> Vec<String> {
+        if count == 1 {
+            return vec![input];
+        }
+        let branches = (0..count).map(|_| self.label("branch")).collect::<Vec<_>>();
+        self.filters.push(format!(
+            "[{input}]asplit={count}{}",
+            branches
+                .iter()
+                .map(|branch| format!("[{branch}]"))
+                .collect::<String>(),
+        ));
+        branches
+    }
+
     fn apply_effect_chain(
         &mut self,
         mut input: String,
         effects: &AudioEffectPassPlan,
+        mut clip_samples: Option<u64>,
     ) -> Result<String, MediaError> {
-        for operation in &effects.operations {
-            let output = self.label("effect");
-            let filter = match operation {
+        for &operation in &effects.operations {
+            input = match operation {
                 AudioEffectOperation::ParametricEq {
                     frequency_hz,
                     gain_db,
                     q,
-                } => format!(
-                    "[{input}]equalizer=f={}:width_type=q:width={}:g={}[{output}]",
-                    number(*frequency_hz),
-                    number(*q),
-                    number(*gain_db)
+                } => self.filter(
+                    &input,
+                    &format!(
+                        "equalizer=f={}:width_type=q:width={}:g={}",
+                        number(frequency_hz),
+                        number(q),
+                        number(gain_db),
+                    ),
                 ),
-                AudioEffectOperation::PlaybackSpeed { rate } => {
-                    let stages = decompose_atempo(*rate)?;
-                    let mut current = input.clone();
-                    for stage in stages {
-                        let staged = self.label("tempo");
-                        self.filters
-                            .push(format!("[{current}]atempo={}[{staged}]", number(stage)));
-                        current = staged;
+                AudioEffectOperation::PlaybackSpeed { rate, link_pitch } => {
+                    let samples = clip_samples.ok_or_else(|| {
+                        MediaError::InvalidAudioTiming("playback speed requires a clip".to_owned())
+                    })?;
+                    let processed =
+                        operation
+                            .transform_duration_samples(samples)
+                            .map_err(|error| {
+                                MediaError::InvalidAudioTiming(format!(
+                                    "invalid playback speed duration: {error:?}"
+                                ))
+                            })?;
+                    clip_samples = Some(processed);
+                    if link_pitch {
+                        validate_effect_parameters(&AudioEffect::PlaybackSpeed {
+                            id: String::new(),
+                            rate,
+                            link_pitch,
+                        })?;
+                        let resample_rate = (MIX_SAMPLE_RATE as f64 * rate).round();
+                        // Flush the resampler even when the selected clip is shorter than its filter.
+                        self.filter(
+                            &input,
+                            &format!(
+                                "apad=pad_len=128,asetrate={resample_rate:.0},aresample={MIX_SAMPLE_RATE},apad=whole_len={processed},atrim=end_sample={processed},asetpts=N/SR/TB"
+                            ),
+                        )
+                    } else {
+                        for stage in decompose_atempo(rate)? {
+                            input = self.filter(&input, &format!("atempo={}", number(stage)));
+                        }
+                        input
                     }
-                    input = current;
-                    continue;
+                }
+                AudioEffectOperation::RoomReverb { decay_seconds, mix } => {
+                    validate_effect_parameters(&AudioEffect::RoomReverb {
+                        id: String::new(),
+                        decay_seconds,
+                        mix,
+                    })?;
+                    self.apply_wet_effect(input, mix, clip_samples, |graph, wet| {
+                        graph.room_reverb(wet, decay_seconds)
+                    })?
+                }
+                AudioEffectOperation::FilteredDelay {
+                    delay_ms,
+                    repeats,
+                    mix,
+                    cutoff_hz,
+                } => {
+                    validate_effect_parameters(&AudioEffect::FilteredDelay {
+                        id: String::new(),
+                        delay_ms,
+                        repeats,
+                        mix,
+                        cutoff_hz,
+                    })?;
+                    self.apply_wet_effect(input, mix, clip_samples, |graph, wet| {
+                        graph.filtered_delay(wet, delay_ms, repeats, cutoff_hz)
+                    })?
                 }
             };
-            self.filters.push(filter);
-            input = output;
         }
         Ok(input)
+    }
+
+    fn apply_wet_effect(
+        &mut self,
+        input: String,
+        mix: f64,
+        clip_samples: Option<u64>,
+        wet_filter: impl FnOnce(&mut Self, &str) -> Result<String, MediaError>,
+    ) -> Result<String, MediaError> {
+        if mix == 0.0 {
+            return Ok(input);
+        }
+        let (dry, wet_input) = if mix == 1.0 {
+            (None, input)
+        } else {
+            let dry = self.label("dry");
+            let wet = self.label("wet");
+            self.filters
+                .push(format!("[{input}]asplit=2[{dry}][{wet}]"));
+            (Some(dry), wet)
+        };
+        let wet = wet_filter(self, &wet_input)?;
+        let output = if let Some(dry) = dry {
+            let output = self.label("effect");
+            self.filters.push(format!(
+                "[{dry}][{wet}]amix=inputs=2:duration=longest:normalize=0:weights='{} {}'[{output}]",
+                number(1.0 - mix),
+                number(mix),
+            ));
+            output
+        } else {
+            wet
+        };
+        // Later clip effects receive the current clip span, even before a speed change.
+        Ok(if let Some(samples) = clip_samples {
+            self.filter(
+                &output,
+                &format!("atrim=end_sample={samples},asetpts=N/SR/TB"),
+            )
+        } else {
+            output
+        })
+    }
+
+    fn room_reverb(&mut self, input: &str, decay_seconds: f64) -> Result<String, MediaError> {
+        const PREDELAY_SAMPLES: u64 = MIX_SAMPLE_RATE * 8 / 1000;
+        let decay_samples = seconds_to_samples(decay_seconds)?;
+        let response_samples = decay_samples - PREDELAY_SAMPLES;
+        let wet = self.filter(input, &format!("apad=pad_len={}", decay_samples - 1));
+        let impulse = self.label("room_impulse");
+        // A seeded, darkened noise response diffuses reflections and falls 60 dB across the tail.
+        self.filters.push(format!(
+            "anoisesrc=r={MIX_SAMPLE_RATE}:seed=1234,atrim=end_sample={response_samples},lowpass=f=6500,aeval=exprs='val(0)*pow(0.001,n/{response_samples})',adelay={PREDELAY_SAMPLES}S:all=1[{impulse}]"
+        ));
+        let output = self.label("effect");
+        self.filters.push(format!(
+            "[{wet}][{impulse}]afir=irfmt=mono:irnorm=2:minp=64:maxp=4096[{output}]"
+        ));
+        Ok(output)
+    }
+
+    fn filtered_delay(
+        &mut self,
+        input: &str,
+        delay_ms: f64,
+        repeats: u8,
+        cutoff_hz: f64,
+    ) -> Result<String, MediaError> {
+        let spacing = seconds_to_samples(delay_ms / 1000.0)?;
+        // Feed a few zeroed cycles through the low-pass so a hit at EOF can still ring.
+        let padding = seconds_to_samples(4.0 / cutoff_hz)?;
+        let wet = self.filter(
+            input,
+            &format!("apad=pad_len={padding},lowpass=f={}", number(cutoff_hz)),
+        );
+        let sum = 2.0 * (1.0 - 0.5_f64.powi(i32::from(repeats)));
+        let branches = self.split(wet, usize::from(repeats));
+        let echoes = branches
+            .iter()
+            .enumerate()
+            .map(|(index, branch)| {
+                let delay = spacing * (index as u64 + 1);
+                let gain = 0.5_f64.powi(index as i32) / sum;
+                self.filter(
+                    branch,
+                    &format!("adelay={delay}S:all=1,volume=volume={}", number(gain)),
+                )
+            })
+            .collect::<Vec<_>>();
+        self.mix(&echoes, "echo").ok_or_else(|| {
+            MediaError::InvalidAudioTiming("filtered delay requires at least one repeat".to_owned())
+        })
     }
 
     fn mix(&mut self, inputs: &[String], kind: &str) -> Option<String> {
@@ -355,6 +508,16 @@ impl GraphBuilder {
             }
         }
     }
+}
+
+fn validate_effect_parameters(effect: &AudioEffect) -> Result<(), MediaError> {
+    if let Some(parameter) = effect.invalid_numeric_parameters().next() {
+        return Err(MediaError::InvalidAudioTiming(format!(
+            "{} parameter {parameter} is outside its declared range",
+            effect.definition().id,
+        )));
+    }
+    Ok(())
 }
 
 fn decompose_atempo(rate: f64) -> Result<Vec<f64>, MediaError> {

@@ -286,7 +286,10 @@ fn configurable_input_base_shifts_only_source_references() {
     };
     let mut sped = clip("first", "first.wav");
     sped.processed_duration = 0.5;
-    sped.effects.operations = vec![AudioEffectOperation::PlaybackSpeed { rate: 2.0 }];
+    sped.effects.operations = vec![AudioEffectOperation::PlaybackSpeed {
+        rate: 2.0,
+        link_pitch: false,
+    }];
     let mix = AudioMixPlan {
         tracks: vec![AudioTrackPlan {
             id: "track".to_owned(),
@@ -1174,7 +1177,11 @@ fn pcm_graph_normalizes_44100_mono_to_48000_stereo() {
     let mono = directory.path().join("mono-44100.wav");
     let stereo_source = directory.path().join("stereo-48000.wav");
     write_mono_wav(&mono, 44_100, 44_100, 0.08);
-    write_stereo_wav(&stereo_source, 48_000, 48_000, 0.06);
+    write_stereo_wav(
+        &stereo_source,
+        48_000,
+        std::iter::repeat_n([0.06; 2], 48_000),
+    );
     let clip = |id: &str, path: PathBuf| AudioClipPlan {
         id: id.to_owned(),
         asset: id.to_owned(),
@@ -1379,9 +1386,12 @@ fn render_pcm(graph: &super::FfmpegAudioGraph, duration: f64) -> Vec<f32> {
         .collect()
 }
 
-fn write_stereo_wav(path: &std::path::Path, sample_rate: u32, samples: usize, amplitude: f32) {
-    let pcm = (amplitude * i16::MAX as f32).round() as i16;
-    let data_length = (samples * 4) as u32;
+fn write_stereo_wav(
+    path: &std::path::Path,
+    sample_rate: u32,
+    frames: impl ExactSizeIterator<Item = [f32; 2]>,
+) {
+    let data_length = (frames.len() * 4) as u32;
     let mut bytes = Vec::with_capacity(44 + data_length as usize);
     bytes.extend_from_slice(b"RIFF");
     bytes.extend_from_slice(&(36 + data_length).to_le_bytes());
@@ -1395,8 +1405,8 @@ fn write_stereo_wav(path: &std::path::Path, sample_rate: u32, samples: usize, am
     bytes.extend_from_slice(&16_u16.to_le_bytes());
     bytes.extend_from_slice(b"data");
     bytes.extend_from_slice(&data_length.to_le_bytes());
-    for _ in 0..samples {
-        bytes.extend_from_slice(&pcm.to_le_bytes());
+    for sample in frames.flatten() {
+        let pcm = (sample * i16::MAX as f32).round() as i16;
         bytes.extend_from_slice(&pcm.to_le_bytes());
     }
     fs::write(path, bytes).expect("fixture WAV");
@@ -1465,7 +1475,10 @@ fn playback_speed_preserves_effect_order_and_normalizes_before_fader() {
             gain_db: -6.0,
             q: 0.8,
         },
-        AudioEffectOperation::PlaybackSpeed { rate: 2.0 },
+        AudioEffectOperation::PlaybackSpeed {
+            rate: 2.0,
+            link_pitch: false,
+        },
         AudioEffectOperation::ParametricEq {
             frequency_hz: 800.0,
             gain_db: 3.0,
@@ -1513,7 +1526,10 @@ fn playback_speed_executes_to_the_planned_sample_count() {
         clip.path = source.clone();
         clip.selected_duration = 2.0;
         clip.processed_duration = processed_duration;
-        clip.effects.operations = vec![AudioEffectOperation::PlaybackSpeed { rate }];
+        clip.effects.operations = vec![AudioEffectOperation::PlaybackSpeed {
+            rate,
+            link_pitch: false,
+        }];
         let mix = AudioMixPlan {
             tracks: vec![AudioTrackPlan {
                 id: "track".to_owned(),
@@ -1552,7 +1568,10 @@ fn playback_speed_keeps_fade_and_automation_in_processed_local_time() {
             },
         ],
     });
-    clip.effects.operations = vec![AudioEffectOperation::PlaybackSpeed { rate: 2.0 }];
+    clip.effects.operations = vec![AudioEffectOperation::PlaybackSpeed {
+        rate: 2.0,
+        link_pitch: false,
+    }];
     let mix = AudioMixPlan {
         tracks: vec![AudioTrackPlan {
             id: "track".to_owned(),
@@ -1580,7 +1599,10 @@ fn reused_source_speed_is_branch_local_and_keeps_one_input() {
     let mut sped = plain.clone();
     sped.id = "sped".to_owned();
     sped.processed_duration = 0.5;
-    sped.effects.operations = vec![AudioEffectOperation::PlaybackSpeed { rate: 2.0 }];
+    sped.effects.operations = vec![AudioEffectOperation::PlaybackSpeed {
+        rate: 2.0,
+        link_pitch: false,
+    }];
     let mix = AudioMixPlan {
         tracks: vec![AudioTrackPlan {
             id: "track".to_owned(),
@@ -1654,4 +1676,410 @@ fn tone_window_correlation(samples: &[f32], frequency: f64, start: usize, frames
         .sum::<f64>()
         .abs()
         / frames as f64
+}
+
+fn single_clip_mix(clip: AudioClipPlan) -> AudioMixPlan {
+    AudioMixPlan {
+        tracks: vec![AudioTrackPlan {
+            id: "track".into(),
+            mute: false,
+            gain: 1.0,
+            clips: vec![clip],
+            effects: AudioEffectPassPlan::default(),
+        }],
+        effects: AudioEffectPassPlan::default(),
+    }
+}
+
+fn stereo_window_peak(samples: &[f32], start: usize, end: usize) -> f32 {
+    samples[start * 2..end * 2]
+        .iter()
+        .fold(0.0_f32, |peak, sample| peak.max(sample.abs()))
+}
+
+#[test]
+fn linked_and_preserving_speed_change_tempo_with_different_pitch() {
+    use vestra_core::project::{AudioGainAutomation, AudioGainInterpolation, AudioGainKeyframe};
+
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let path = directory.path().join("tone.wav");
+    write_sine_wav(&path, 440.0, 0.5);
+
+    for (link_pitch, expected_hz) in [(true, 484.0), (false, 440.0)] {
+        let clip = AudioClipPlan {
+            path: path.clone(),
+            trim_start: 0.05,
+            selected_duration: 0.44,
+            processed_duration: 0.4,
+            fade_out: 0.075,
+            gain_automation: Some(AudioGainAutomation {
+                keyframes: vec![
+                    AudioGainKeyframe {
+                        time: 0.0,
+                        gain: 1.0,
+                        interpolation: AudioGainInterpolation::Hold,
+                    },
+                    AudioGainKeyframe {
+                        time: 0.15,
+                        gain: 0.5,
+                        interpolation: AudioGainInterpolation::Hold,
+                    },
+                ],
+            }),
+            effects: AudioEffectPassPlan {
+                operations: vec![AudioEffectOperation::PlaybackSpeed {
+                    rate: 1.10,
+                    link_pitch,
+                }],
+            },
+            ..automation_test_clip()
+        };
+        let graph = compile(&single_clip_mix(clip), 0.55).expect("speed graph");
+        let samples = render_pcm(&graph, 1.0);
+        let frames = samples[2 * 4_800..2 * 14_400].chunks_exact(2);
+        let rising_crossings = frames
+            .clone()
+            .zip(frames.skip(1))
+            .filter(|(first, next)| first[0] <= 0.0 && next[0] > 0.0)
+            .count();
+        let measured_hz = rising_crossings as f64 / 0.2;
+        assert!(
+            (measured_hz - expected_hz).abs() <= 5.0,
+            "expected {expected_hz} Hz, got {measured_hz} Hz"
+        );
+
+        assert_eq!(samples.len(), 26_400 * 2);
+        assert!(stereo_window_peak(&samples, 19_200, 26_400) < 1e-6);
+        assert!(stereo_window_peak(&samples, 18_800, 19_200) > 0.001);
+        let before_hold = stereo_window_peak(&samples, 5_760, 6_720);
+        let after_hold = stereo_window_peak(&samples, 7_680, 8_640);
+        let fade_peak = stereo_window_peak(&samples, 17_280, 18_240);
+        assert!((after_hold / before_hold - 0.5).abs() < 0.02);
+        assert!(fade_peak < after_hold * 0.6);
+    }
+}
+
+#[test]
+fn room_reverb_decays_in_stereo_and_respects_tail_boundaries() {
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let path = directory.path().join("impulse.wav");
+    let impulse_frame = 2_400;
+    write_stereo_wav(
+        &path,
+        48_000,
+        (0..4800).map(|frame| {
+            if frame == impulse_frame {
+                [0.75, -0.25]
+            } else {
+                [0.0; 2]
+            }
+        }),
+    );
+    let plain = single_clip_mix(AudioClipPlan {
+        selected_duration: 0.1,
+        processed_duration: 0.1,
+        path,
+        ..automation_test_clip()
+    });
+    let effect = AudioEffectOperation::RoomReverb {
+        decay_seconds: 0.5,
+        mix: 1.0,
+    };
+    let mut on_clip = plain.clone();
+    on_clip.tracks[0].clips[0].effects.operations.push(effect);
+    let mut on_track = plain.clone();
+    on_track.tracks[0].effects.operations.push(effect);
+    let mut on_master = plain;
+    on_master.effects.operations.push(effect);
+
+    let render = |mix: &AudioMixPlan, duration| {
+        render_pcm(&compile(mix, duration).expect("room graph"), 1.0)
+    };
+    let track = render(&on_track, 0.65);
+    assert_eq!(track.len(), 31_200 * 2);
+    assert!(stereo_window_peak(&track, 0, impulse_frame + 336) < 1e-6);
+    let early = stereo_window_peak(&track, impulse_frame + 480, impulse_frame + 1_440);
+    let late = stereo_window_peak(&track, impulse_frame + 12_000, impulse_frame + 12_960);
+    assert!(early > 0.005);
+    assert!(
+        late > 1e-5 && late < early * 0.1,
+        "early {early}, late {late}"
+    );
+    assert!(stereo_window_peak(&track, impulse_frame + 24_000, 31_200) < 1e-6);
+    for frame in track.chunks_exact(2) {
+        assert!((frame[0] + 3.0 * frame[1]).abs() < 1e-5);
+    }
+    let clip = render(&on_clip, 0.65);
+    assert_eq!(clip.len(), track.len());
+    assert!(stereo_window_peak(&clip, 3_000, 4_800) > 0.005);
+    assert!(stereo_window_peak(&clip, 4_800, 31_200) < 1e-6);
+
+    let master = render(&on_master, 0.15);
+    assert_eq!(master.len(), 7_200 * 2);
+    assert!(stereo_window_peak(&master, 4_800, 7_200) > 0.001);
+
+    let selected_graph = compile_with_options(
+        &on_master,
+        0.15,
+        AudioGraphCompileOptions {
+            first_audio_input_index: 0,
+            output_range: Some((0.1, 0.2)),
+        },
+    )
+    .expect("selected room graph");
+    let selected = render_pcm(&selected_graph, 1.0);
+    assert_eq!(selected.len(), 4_800 * 2);
+    assert_eq!(&selected[..4_800], &master[9_600..]);
+    assert!(selected[4_800..].iter().all(|sample| *sample == 0.0));
+}
+
+#[test]
+fn filtered_delay_repeats_on_exact_samples_and_low_passes_only_the_wet_path() {
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let path = directory.path().join("delay-fixture.wav");
+    let tone_frames = 1_920;
+    let impulse_frame = 2_304;
+    let spacing = seconds_to_samples(0.1113).unwrap() as usize;
+    write_stereo_wav(
+        &path,
+        48_000,
+        (0..impulse_frame + 1).map(|frame| {
+            if frame == impulse_frame {
+                [0.75; 2]
+            } else if frame < tone_frames {
+                [200.0, 8_000.0].map(|hz| {
+                    (0.3 * (std::f64::consts::TAU * hz * frame as f64 / 48_000.0).sin()) as f32
+                })
+            } else {
+                [0.0; 2]
+            }
+        }),
+    );
+    let clip_duration = (impulse_frame + 1) as f64 / 48_000.0;
+    let mut mix = single_clip_mix(AudioClipPlan {
+        path,
+        selected_duration: clip_duration,
+        processed_duration: clip_duration,
+        ..automation_test_clip()
+    });
+    let effect = AudioEffectOperation::FilteredDelay {
+        delay_ms: 111.3,
+        repeats: 2,
+        mix: 0.5,
+        cutoff_hz: 900.0,
+    };
+    mix.tracks[0].effects.operations.push(effect);
+
+    let samples = render_pcm(&compile(&mix, 0.45).expect("delay graph"), 1.0);
+    assert_eq!(samples.len(), 21_600 * 2);
+    let channel_peak = |start, end, channel| {
+        samples[start * 2..end * 2]
+            .chunks_exact(2)
+            .fold(0.0_f32, |peak, frame| {
+                peak.max(frame[channel as usize].abs())
+            })
+    };
+    assert!(channel_peak(480, 1_440, 1) > 0.125, "dry highs intact");
+    assert!(channel_peak(spacing + 480, spacing + 1_440, 0) > 0.08);
+    assert!(channel_peak(spacing + 480, spacing + 1_440, 1) < 0.005);
+    let impulse_at = impulse_frame + spacing;
+    assert!(stereo_window_peak(&samples, impulse_at - 10, impulse_at) < 1e-6);
+    assert!(stereo_window_peak(&samples, impulse_at, impulse_at + 1) > 0.0001);
+    let first = stereo_window_peak(&samples, impulse_at, impulse_at + 100);
+    let second = stereo_window_peak(&samples, impulse_at + spacing, impulse_at + spacing + 100);
+    assert!(first > 0.01);
+    assert!((second / first - 0.5).abs() < 1e-4);
+    assert!(stereo_window_peak(&samples, 15_000, 21_600) < 1e-6);
+
+    mix.tracks[0].effects.operations.clear();
+    mix.tracks[0].clips[0].effects.operations.push(effect);
+    let clip = render_pcm(&compile(&mix, 0.45).expect("clip delay graph"), 1.0);
+    assert!(stereo_window_peak(&clip, impulse_frame + 1, 21_600) < 1e-6);
+    mix.tracks[0].clips[0].effects.operations.clear();
+    mix.effects.operations.push(effect);
+    let master = render_pcm(&compile(&mix, 0.45).expect("master delay graph"), 1.0);
+    assert_eq!(master, samples);
+}
+
+#[test]
+fn spatial_effects_leave_silence_and_zero_mix_unchanged() {
+    use vestra_core::{plan_audio::compile_effects, project::AudioEffect};
+
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let signal = directory.path().join("signal.wav");
+    let silence = directory.path().join("silence.wav");
+    write_mono_wav(&signal, 48_000, 4_800, 0.25);
+    write_mono_wav(&silence, 48_000, 4_800, 0.0);
+    let mut mix = single_clip_mix(AudioClipPlan {
+        selected_duration: 0.1,
+        processed_duration: 0.1,
+        path: signal,
+        ..automation_test_clip()
+    });
+    let dry = render_pcm(&compile(&mix, 0.4).expect("dry graph"), 1.0);
+    let spatial_effects = |mix| {
+        compile_effects(&[
+            AudioEffect::RoomReverb {
+                id: "room".into(),
+                decay_seconds: 0.5,
+                mix,
+            },
+            AudioEffect::FilteredDelay {
+                id: "echo".into(),
+                delay_ms: 100.0,
+                repeats: 2,
+                mix,
+                cutoff_hz: 2_000.0,
+            },
+        ])
+    };
+    mix.effects = spatial_effects(0.0);
+    assert_eq!(render_pcm(&compile(&mix, 0.4).expect("zero mix"), 1.0), dry);
+    mix.tracks[0].clips[0].path = silence;
+    mix.effects = spatial_effects(0.5);
+    let silent = render_pcm(&compile(&mix, 0.4).expect("silence graph"), 1.0);
+    assert_eq!(silent.len(), 19_200 * 2);
+    assert!(silent.iter().all(|sample| *sample == 0.0));
+}
+
+#[test]
+fn delay_before_linked_speed_is_scaled_and_clipped_in_effect_order() {
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let path = directory.path().join("impulse.wav");
+    write_stereo_wav(
+        &path,
+        48_000,
+        (0..4_800).map(|frame| if frame == 1_920 { [0.8; 2] } else { [0.0; 2] }),
+    );
+    let mut mix = single_clip_mix(AudioClipPlan {
+        path,
+        selected_duration: 0.1,
+        processed_duration: 0.05,
+        effects: AudioEffectPassPlan {
+            operations: vec![
+                AudioEffectOperation::FilteredDelay {
+                    delay_ms: 40.0,
+                    repeats: 2,
+                    mix: 1.0,
+                    cutoff_hz: 2_000.0,
+                },
+                AudioEffectOperation::PlaybackSpeed {
+                    rate: 2.0,
+                    link_pitch: true,
+                },
+            ],
+        },
+        ..automation_test_clip()
+    });
+    let render = |mix: &AudioMixPlan| render_pcm(&compile(mix, 0.1).expect("stack graph"), 1.0);
+    let first = render(&mix);
+    assert!(stereo_window_peak(&first, 1_900, 2_000) > 0.01);
+    assert!(stereo_window_peak(&first, 2_400, 4_800) < 1e-6);
+
+    mix.tracks[0].clips[0].effects.operations.reverse();
+    let reversed = render(&mix);
+    assert!(reversed.iter().all(|sample| sample.abs() < 1e-6));
+}
+
+#[test]
+fn linked_speed_keeps_nonempty_sub_filter_length_audio() {
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let path = directory.path().join("one-frame.wav");
+    write_stereo_wav(&path, 48_000, std::iter::once([0.7; 2]));
+    let duration = 1.0 / 48_000.0;
+    let mix = single_clip_mix(AudioClipPlan {
+        path,
+        selected_duration: duration,
+        processed_duration: duration,
+        effects: AudioEffectPassPlan {
+            operations: vec![AudioEffectOperation::PlaybackSpeed {
+                rate: 4.0,
+                link_pitch: true,
+            }],
+        },
+        ..automation_test_clip()
+    });
+    let graph = compile(&mix, duration).expect("linked speed graph");
+    let samples = render_pcm(&graph, 1.0);
+    assert_eq!(samples.len(), 2);
+    assert!(samples.iter().all(|sample| *sample > 0.1));
+}
+
+#[test]
+fn preserve_pitch_followed_by_wet_effects_keeps_processed_clip_timing() {
+    let directory = tempfile::tempdir().expect("temporary audio directory");
+    let path = directory.path().join("tone.wav");
+    write_sine_wav(&path, 440.0, 0.5);
+    for (effect, onset) in [
+        (
+            AudioEffectOperation::RoomReverb {
+                decay_seconds: 0.5,
+                mix: 1.0,
+            },
+            2_784,
+        ),
+        (
+            AudioEffectOperation::FilteredDelay {
+                delay_ms: 50.0,
+                repeats: 1,
+                mix: 1.0,
+                cutoff_hz: 2_000.0,
+            },
+            4_800,
+        ),
+    ] {
+        let mix = single_clip_mix(AudioClipPlan {
+            path: path.clone(),
+            start: 0.05,
+            selected_duration: 0.5,
+            processed_duration: 0.25,
+            fade_out: 0.075,
+            effects: AudioEffectPassPlan {
+                operations: vec![
+                    AudioEffectOperation::PlaybackSpeed {
+                        rate: 2.0,
+                        link_pitch: false,
+                    },
+                    effect,
+                ],
+            },
+            ..automation_test_clip()
+        });
+        let graph = compile(&mix, 0.5).expect("wet speed graph");
+        let samples = render_pcm(&graph, 1.0);
+        assert_eq!(samples.len(), 48_000);
+        assert!(stereo_window_peak(&samples, 0, onset) < 1e-6);
+        assert!(stereo_window_peak(&samples, onset, onset + 960) > 0.005);
+        let steady = stereo_window_peak(&samples, 9_900, 10_860);
+        let faded = stereo_window_peak(&samples, 13_680, 14_160);
+        assert!(faded > 0.001 && faded < steady * 0.3);
+        assert!(stereo_window_peak(&samples, 14_400, 24_000) < 1e-6);
+    }
+}
+
+#[test]
+fn raw_spatial_plan_rejects_invalid_effect_parameters() {
+    let mut mix = single_clip_mix(automation_test_clip());
+    for (effect, parameter) in [
+        (
+            AudioEffectOperation::RoomReverb {
+                decay_seconds: 0.001,
+                mix: 0.5,
+            },
+            "decay_seconds",
+        ),
+        (
+            AudioEffectOperation::FilteredDelay {
+                delay_ms: 100.0,
+                repeats: 255,
+                mix: 0.5,
+                cutoff_hz: 900.0,
+            },
+            "repeats",
+        ),
+    ] {
+        mix.effects.operations = vec![effect];
+        let error = compile(&mix, 0.5).unwrap_err();
+        assert!(error.to_string().contains(parameter));
+    }
 }

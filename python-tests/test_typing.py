@@ -3,10 +3,10 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 import vestra
-from vestra import AdapterDeviceType, Editor, Frame, PrepareOptions, Project, ProjectSnapshot, Source, Transform, VestraError
+from vestra import AdapterDeviceType, Editor, FilteredDelay, Frame, PrepareOptions, Project, ProjectSnapshot, RoomReverb, Source, Transform, VestraError
 from vestra.authoring import (
-    AudioAsset, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, Crop, CropKeyframe, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
-    Preset, ProjectBuilder, ScalarKeyframe, Sizing, SolidColorClip,
+    AudioAsset, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, Crop, CropKeyframe, FilteredDelayAudioEffect, ImageAsset, ImageClip, Interpolation, Point, PointKeyframe,
+    PlaybackSpeedAudioEffect, Preset, ProjectBuilder, RoomReverbAudioEffect, ScalarKeyframe, Sizing, SolidColorClip,
 )
 from vestra.audio import AudioClip, AudioTimeline, AudioTrack, PlaybackSpeed
 
@@ -103,6 +103,10 @@ if TYPE_CHECKING:
     ])
     incoming_audio_clip = track.add_clip(asset=audio, start=0.5, trim_end=1.0)
     builder.audio.crossfade(audio_clip, incoming_audio_clip, curve=AudioFadeCurve.EQUAL_POWER)
+    linked: PlaybackSpeedAudioEffect = audio_clip.effects.add_playback_speed(rate=1.10, link_pitch=True)
+    delay: FilteredDelayAudioEffect = track.effects.add_filtered_delay(delay_ms=125, repeats=2, mix=0.1, cutoff_hz=2300)
+    room: RoomReverbAudioEffect = builder.audio.effects.add_room_reverb(decay_seconds=0.5, mix=0.03)
+    assert linked and delay and room
     scalar_keyframe: ScalarKeyframe = image_clip.opacity.keyframe(
         time=0.0, value=0.0, interpolation=Interpolation.EASE_OUT,
     )
@@ -127,7 +131,9 @@ if TYPE_CHECKING:
     audio_timeline: AudioTimeline = high_level_project.audio
     audio_track: AudioTrack = audio_timeline.track("music")
     high_level_audio_clip: AudioClip = audio_track.add("tone.wav", start=0, trim_end=1)
-    high_level_audio_clip.effects.add(PlaybackSpeed(1.25))
+    high_level_audio_clip.effects.add(PlaybackSpeed(1.25, link_pitch=True))
+    audio_track.effects.add(FilteredDelay(delay_ms=125, repeats=2, mix=0.1, cutoff_hz=2300))
+    audio_timeline.effects.add(RoomReverb(decay_seconds=0.5, mix=0.03))
     assert audio_track.project is high_level_project
 
 
@@ -188,6 +194,8 @@ def test_negative_high_level_audio_fixture_is_rejected() -> None:
         check=False, capture_output=True, text=True,
     )
     assert result.returncode == 1
+    assert 'Argument "link_pitch" to "PlaybackSpeed" has incompatible type "int"' in result.stdout
+    assert 'Argument "repeats" to "FilteredDelay" has incompatible type "float"' in result.stdout
 
 
 def test_negative_high_level_signal_fixture_is_rejected() -> None:

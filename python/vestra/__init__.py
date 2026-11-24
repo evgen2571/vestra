@@ -65,8 +65,10 @@ from .audio import (
     AudioTimeline,
     AudioTrack,
     BassBoost,
+    FilteredDelay,
     ParametricEq,
     PlaybackSpeed,
+    RoomReverb,
 )
 from .sources import (
     Circle,
@@ -337,4 +339,6 @@ __all__ = [
     "Spectrum2DStereo",
     "Spectrum2DStyle",
     "Spectrum2DWave",
+    "FilteredDelay",
+    "RoomReverb",
 ]

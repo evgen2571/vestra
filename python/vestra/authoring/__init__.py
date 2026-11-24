@@ -3,7 +3,17 @@
 from .builder import JsonValue, ProjectBuilder
 from .assets import AudioAsset, ImageAsset, VideoAsset
 from .audio import AudioClip, AudioFadeCurve, AudioGainInterpolation, AudioGainKeyframe, AudioTimeline, AudioTrack
-from .audio_effects import AudioEffect, AudioEffectCollection, BassBoostAudioEffect, ParametricEqAudioEffect, PlaybackSpeedAudioEffect, available_audio_effects, audio_effect_definition
+from .audio_effects import (
+    AudioEffect,
+    AudioEffectCollection,
+    BassBoostAudioEffect,
+    FilteredDelayAudioEffect,
+    ParametricEqAudioEffect,
+    PlaybackSpeedAudioEffect,
+    RoomReverbAudioEffect,
+    available_audio_effects,
+    audio_effect_definition,
+)
 from .signals import ScalarSignal
 from .animation import CropKeyframe, PointKeyframe, ScalarKeyframe
 from .clips import GroupClip, ImageClip, VideoClip, ParticleSystemClip, ShapeClip, SolidColorClip, Spectrum2DClip
@@ -195,4 +205,6 @@ __all__ = [
     "Spectrum2DStereo",
     "Spectrum2DStyle",
     "Spectrum2DWave",
+    "FilteredDelayAudioEffect",
+    "RoomReverbAudioEffect",
 ]

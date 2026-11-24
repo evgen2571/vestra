@@ -129,25 +129,73 @@ def test_playback_speed_typed_and_generic_authoring_are_clip_only() -> None:
     typed_asset = typed.add_audio_asset("tone.wav")
     typed_clip = typed.audio.add_track(id="music").add_clip(asset=typed_asset, start=0, trim_end=0.5)
     typed_effect = typed_clip.effects.add_playback_speed(rate=2.0)
+    assert "link_pitch" not in typed_effect.to_canonical()
+    linked_effect = typed_clip.effects.add_playback_speed(rate=1.10, link_pitch=True)
+    assert linked_effect.to_canonical()["link_pitch"] is True
 
     generic = builder()
     generic_asset = generic.add_audio_asset("tone.wav")
     generic_clip = generic.audio.add_track(id="music").add_clip(asset=generic_asset, start=0, trim_end=0.5)
     generic_effect = generic_clip.effects.add_effect("playback_speed", rate=2.0)
+    generic_clip.effects.add_effect("playback_speed", rate=1.10, link_pitch=True)
     assert typed.to_dict() == generic.to_dict()
     assert typed_effect.__class__.__name__ == "PlaybackSpeedAudioEffect"
     assert generic_effect.__class__.__name__ == "AudioEffect"
 
     track = generic.audio.tracks[0]
     with pytest.raises(ValueError, match="not valid at this scope"):
-        track.effects.add_playback_speed(rate=2.0)
+        track.effects.add_playback_speed(rate=2.0, link_pitch=True)
     with pytest.raises(ValueError, match="not valid at this scope"):
         generic.audio.effects.add_effect("playback_speed", rate=2.0)
+    with pytest.raises(TypeError, match="link_pitch must be a boolean"):
+        generic_clip.effects.add_effect("playback_speed", rate=2.0, link_pitch=1)
+
+
+def test_typed_room_reverb_and_filtered_delay_round_trip_at_each_scope() -> None:
+    project_builder = builder()
+    asset = project_builder.add_audio_asset("tone.wav")
+    track = project_builder.audio.add_track()
+    clip = track.add_clip(asset=asset, start=0, trim_end=0.5)
+    for scope in (clip, track, project_builder.audio):
+        room = scope.effects.add_room_reverb(decay_seconds=0.5, mix=0.03)
+        delay = scope.effects.add_filtered_delay(delay_ms=125, repeats=2, mix=0.1, cutoff_hz=2300)
+        assert room.to_canonical() == {
+            "id": room.id, "type": "room_reverb", "decay_seconds": 0.5, "mix": 0.03,
+        }
+        assert delay.to_canonical() == {
+            "id": delay.id, "type": "filtered_delay", "delay_ms": 125.0, "repeats": 2,
+            "mix": 0.1, "cutoff_hz": 2300.0,
+        }
+        assert type(delay.to_canonical()["repeats"]) is int
+    assert project_builder.build().to_dict() == project_builder.to_dict()
+
+
+@pytest.mark.parametrize(("effect_type", "parameters", "error", "name"), [
+    ("room_reverb", {"decay_seconds": 0.09, "mix": 0}, ValueError, "decay_seconds"),
+    ("room_reverb", {"decay_seconds": 2, "mix": 1.01}, ValueError, "mix"),
+    ("filtered_delay", {"delay_ms": 0, "repeats": 1, "mix": 0.2, "cutoff_hz": 400}, ValueError, "delay_ms"),
+    ("filtered_delay", {"delay_ms": 1, "repeats": True, "mix": 0.2, "cutoff_hz": 400}, TypeError, "repeats"),
+    ("filtered_delay", {"delay_ms": 1, "repeats": 1.5, "mix": 0.2, "cutoff_hz": 400}, TypeError, "repeats"),
+    ("filtered_delay", {"delay_ms": 1, "repeats": 9, "mix": 0.2, "cutoff_hz": 400}, ValueError, "repeats"),
+    ("filtered_delay", {"delay_ms": 1, "repeats": 1, "mix": 0.2, "cutoff_hz": 24000}, ValueError, "cutoff_hz"),
+])
+def test_spatial_audio_effect_parameters_are_validated(
+    effect_type: str,
+    parameters: dict[str, object],
+    error: type[TypeError] | type[ValueError],
+    name: str,
+) -> None:
+    effects = builder().audio.effects
+    with pytest.raises(error, match=name):
+        effects.add_effect(effect_type, **parameters)
+    assert not effects.items
 
 
 def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
     definitions = available_audio_effects()
-    assert [definition["id"] for definition in definitions] == ["parametric_eq", "bass_boost", "playback_speed"]
+    assert [definition["id"] for definition in definitions] == [
+        "parametric_eq", "bass_boost", "playback_speed", "room_reverb", "filtered_delay",
+    ]
     definition = audio_effect_definition("parametric_eq")
     assert set(definition["scopes"]) == {"clip", "track", "master"}
     assert definition["duration_behavior"] == "preserve"
@@ -161,6 +209,9 @@ def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
     assert speed["duration_behavior"] == "transform"
     assert speed["parameters"][0]["minimum"] == 0.25
     assert speed["parameters"][0]["maximum"] == 4.0
+    assert speed["parameters"][1]["name"] == "link_pitch"
+    assert speed["parameters"][1]["kind"] == "boolean"
+    assert speed["parameters"][1]["default"] is False
     bass = audio_effect_definition("bass_boost")
     assert bass["scopes"] == ("clip", "track", "master")
     assert bass["duration_behavior"] == "preserve"
@@ -187,14 +238,13 @@ def test_generic_audio_authoring_smoke_covers_every_registered_effect() -> None:
     asset = project_builder.add_audio_asset("tone.wav")
     clip = project_builder.audio.add_track().add_clip(asset=asset, start=0, trim_end=0.5)
     for definition in available_audio_effects():
-        parameters = {}
+        parameters: dict[str, float | int] = {}
         for parameter in definition["parameters"]:
+            if parameter["default"] is not None:
+                continue
             minimum, maximum = parameter["minimum"], parameter["maximum"]
-            parameters[str(parameter["name"])] = (
-                (float(minimum) + float(maximum)) / 2
-                if minimum is not None and maximum is not None
-                else float(minimum) + 1.0
-            )
+            midpoint = (float(minimum) + float(maximum)) / 2
+            parameters[str(parameter["name"])] = int(midpoint) if parameter["kind"] == "integer" else midpoint
         clip.effects.add_effect(str(definition["id"]), **parameters)
     assert len(clip.effects.items) == len(available_audio_effects())
 

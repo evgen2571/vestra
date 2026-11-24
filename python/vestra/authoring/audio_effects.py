@@ -28,6 +28,50 @@ def audio_effect_definition(effect_type: str) -> Mapping[str, object]:
     raise ValueError(f"unknown audio effect type: {effect_type!r}")
 
 
+def _effect_values(
+    definition: Mapping[str, object], parameters: Mapping[str, object]
+) -> dict[str, float | int | bool]:
+    parameter_definitions = cast(tuple[Mapping[str, object], ...], definition["parameters"])
+    descriptors = {str(parameter["name"]): parameter for parameter in parameter_definitions}
+    raw_values = dict(parameters)
+    for name, descriptor in descriptors.items():
+        if name not in raw_values and descriptor["default"] is not None:
+            raw_values[name] = descriptor["default"]
+    if set(raw_values) != set(descriptors):
+        unknown = set(raw_values) - set(descriptors)
+        missing = set(descriptors) - set(raw_values)
+        raise TypeError(
+            f"invalid parameters for {definition['id']!r}: unknown={unknown}, missing={missing}"
+        )
+    values: dict[str, float | int | bool] = {}
+    for name, raw in raw_values.items():
+        descriptor = descriptors[name]
+        kind = descriptor["kind"]
+        if kind == "boolean":
+            if not isinstance(raw, bool):
+                raise TypeError(f"{name} must be a boolean")
+            values[name] = raw
+            continue
+        value: float | int
+        if kind == "integer":
+            if isinstance(raw, bool) or not isinstance(raw, int):
+                raise TypeError(f"{name} must be an integer")
+            value = raw
+        else:
+            value = _number(raw, name)
+        minimum = cast(float | None, descriptor["minimum"])
+        maximum = cast(float | None, descriptor["maximum"])
+        minimum_exclusive = cast(bool, descriptor["minimum_exclusive"])
+        maximum_exclusive = cast(bool, descriptor["maximum_exclusive"])
+        if (
+            (minimum is not None and (value <= minimum if minimum_exclusive else value < minimum))
+            or (maximum is not None and (value >= maximum if maximum_exclusive else value > maximum))
+        ):
+            raise ValueError(f"{name} is outside its authored range")
+        values[name] = value
+    return values
+
+
 class AudioEffect:
     __slots__ = ("_owner", "_id", "_type", "_data")
     _owner: _Owner
@@ -62,6 +106,14 @@ class BassBoostAudioEffect(AudioEffect):
     pass
 
 
+class RoomReverbAudioEffect(AudioEffect):
+    pass
+
+
+class FilteredDelayAudioEffect(AudioEffect):
+    pass
+
+
 class AudioEffectCollection:
     __slots__ = ("_owner", "_ids", "_scope", "_scope_kind", "_items")
     _owner: _Owner
@@ -84,30 +136,10 @@ class AudioEffectCollection:
         scopes = cast(tuple[str, ...], definition["scopes"])
         if self._scope_kind not in scopes:
             raise ValueError(f"audio effect {effect_type!r} is not valid at this scope")
-        parameter_definitions = cast(tuple[Mapping[str, object], ...], definition["parameters"])
-        descriptors = {str(parameter["name"]): parameter for parameter in parameter_definitions}
-        raw_values = dict(parameters)
-        for name, descriptor in descriptors.items():
-            if name not in raw_values and descriptor.get("default") is not None:
-                raw_values[name] = descriptor["default"]
-        if set(raw_values) != set(descriptors):
-            unknown = set(raw_values) - set(descriptors)
-            missing = set(descriptors) - set(raw_values)
-            raise TypeError(f"invalid parameters for {effect_type!r}: unknown={unknown}, missing={missing}")
-        values: dict[str, float] = {}
-        for name, raw in raw_values.items():
-            value = _number(cast(int | float, raw), name)
-            descriptor = descriptors[name]
-            minimum = cast(float | None, descriptor["minimum"])
-            maximum = cast(float | None, descriptor["maximum"])
-            minimum_exclusive = cast(bool, descriptor["minimum_exclusive"])
-            maximum_exclusive = cast(bool, descriptor["maximum_exclusive"])
-            if (
-                (minimum is not None and (value <= minimum if minimum_exclusive else value < minimum))
-                or (maximum is not None and (value >= maximum if maximum_exclusive else value > maximum))
-            ):
-                raise ValueError(f"{name} is outside its authored range")
-            values[name] = value
+        values = _effect_values(definition, parameters)
+        # Keep default-speed effects in their original canonical form.
+        if values.get("link_pitch") is False:
+            del values["link_pitch"]
         effect_id = self._ids.allocate("audio-effect", scope=self._scope) if identifier is None else self._ids.reserve("audio-effect", identifier, scope=self._scope)
         effect = effect_class._create(self._owner, effect_id, effect_type, values)
         self._items.append(effect)
@@ -119,8 +151,31 @@ class AudioEffectCollection:
     def add_parametric_eq(self, *, frequency_hz: int | float, gain_db: int | float, q: int | float, id: str | None = None) -> ParametricEqAudioEffect:
         return self._add("parametric_eq", {"frequency_hz": frequency_hz, "gain_db": gain_db, "q": q}, id, ParametricEqAudioEffect)  # type: ignore[return-value]
 
-    def add_playback_speed(self, *, rate: int | float, id: str | None = None) -> PlaybackSpeedAudioEffect:
-        return self._add("playback_speed", {"rate": rate}, id, PlaybackSpeedAudioEffect)  # type: ignore[return-value]
+    def add_playback_speed(
+        self, *, rate: int | float, link_pitch: bool = False, id: str | None = None
+    ) -> PlaybackSpeedAudioEffect:
+        return self._add("playback_speed", {"rate": rate, "link_pitch": link_pitch}, id, PlaybackSpeedAudioEffect)  # type: ignore[return-value]
 
     def add_bass_boost(self, *, gain_db: int | float = 6.0, frequency_hz: int | float = 100.0, id: str | None = None) -> BassBoostAudioEffect:
         return self._add("bass_boost", {"gain_db": gain_db, "frequency_hz": frequency_hz}, id, BassBoostAudioEffect)  # type: ignore[return-value]
+
+    def add_room_reverb(
+        self, *, decay_seconds: int | float, mix: int | float, id: str | None = None
+    ) -> RoomReverbAudioEffect:
+        return self._add("room_reverb", {"decay_seconds": decay_seconds, "mix": mix}, id, RoomReverbAudioEffect)  # type: ignore[return-value]
+
+    def add_filtered_delay(
+        self,
+        *,
+        delay_ms: int | float,
+        repeats: int,
+        mix: int | float,
+        cutoff_hz: int | float,
+        id: str | None = None,
+    ) -> FilteredDelayAudioEffect:
+        return self._add(  # type: ignore[return-value]
+            "filtered_delay",
+            {"delay_ms": delay_ms, "repeats": repeats, "mix": mix, "cutoff_hz": cutoff_hz},
+            id,
+            FilteredDelayAudioEffect,
+        )

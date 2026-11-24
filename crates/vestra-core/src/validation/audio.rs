@@ -190,11 +190,7 @@ fn validate_audio_effects(
 ) {
     let mut ids = BTreeSet::new();
     for (index, effect) in effects.iter().enumerate() {
-        let id = match effect {
-            crate::project::AudioEffect::ParametricEq { id, .. }
-            | crate::project::AudioEffect::BassBoost { id, .. }
-            | crate::project::AudioEffect::PlaybackSpeed { id, .. } => id,
-        };
+        let id = effect.id();
         if id.trim().is_empty() {
             errors.push(Diagnostic::error(
                 "VESTRA-AUDIO-EFFECT-ID",
@@ -222,47 +218,16 @@ fn validate_audio_effects(
                 format!("{path}/{index}/type"),
             ));
         }
-        for parameter in definition.parameters {
-            let value = match effect {
-                crate::project::AudioEffect::ParametricEq {
-                    frequency_hz,
-                    gain_db,
-                    q,
-                    ..
-                } => match parameter.name {
-                    "frequency_hz" => *frequency_hz,
-                    "gain_db" => *gain_db,
-                    "q" => *q,
-                    _ => continue,
-                },
-                crate::project::AudioEffect::PlaybackSpeed { rate, .. } => {
-                    if parameter.name == "rate" {
-                        *rate
-                    } else {
-                        continue;
-                    }
-                }
-                crate::project::AudioEffect::BassBoost {
-                    gain_db,
-                    frequency_hz,
-                    ..
-                } => match parameter.name {
-                    "gain_db" => *gain_db,
-                    "frequency_hz" => *frequency_hz,
-                    _ => continue,
-                },
-            };
-            if !parameter.accepts_number(value) {
-                errors.push(Diagnostic::error(
-                    "VESTRA-AUDIO-EFFECT-PARAMETER",
-                    Category::Semantic,
-                    format!(
-                        "audio effect `{}` parameter `{}` is outside its declared range",
-                        definition.id, parameter.name
-                    ),
-                    format!("{path}/{index}/{}", parameter.name),
-                ));
-            }
+        for name in effect.invalid_numeric_parameters() {
+            errors.push(Diagnostic::error(
+                "VESTRA-AUDIO-EFFECT-PARAMETER",
+                Category::Semantic,
+                format!(
+                    "audio effect `{}` parameter `{name}` is outside its declared range",
+                    definition.id
+                ),
+                format!("{path}/{index}/{name}"),
+            ));
         }
     }
 }
@@ -277,10 +242,54 @@ fn audio_effect_supports_scope(
 
 #[cfg(test)]
 mod tests {
-    use super::audio_effect_supports_scope;
+    use super::{audio_effect_supports_scope, validate_audio_effects};
     use crate::audio_effect_definition::{
         AudioEffectDefinition, AudioEffectDurationBehavior, AudioEffectScope,
     };
+    use crate::project::AudioEffect;
+
+    #[test]
+    fn spatial_effects_validate_ranges_at_all_scopes() {
+        let effects = [
+            AudioEffect::RoomReverb {
+                id: "room".into(),
+                decay_seconds: 0.5,
+                mix: f64::NAN,
+            },
+            AudioEffect::FilteredDelay {
+                id: "echo".into(),
+                delay_ms: 0.99,
+                repeats: 9,
+                mix: 0.0,
+                cutoff_hz: 24_000.0,
+            },
+        ];
+        for scope in [
+            AudioEffectScope::Clip,
+            AudioEffectScope::Track,
+            AudioEffectScope::Master,
+        ] {
+            let mut diagnostics = Vec::new();
+            validate_audio_effects(&effects, scope, "/effects", &mut diagnostics);
+            assert!(
+                diagnostics
+                    .iter()
+                    .all(|error| error.code == "VESTRA-AUDIO-EFFECT-PARAMETER")
+            );
+            assert_eq!(
+                diagnostics
+                    .iter()
+                    .map(|error| error.pointer.as_deref().unwrap())
+                    .collect::<Vec<_>>(),
+                [
+                    "/effects/0/mix",
+                    "/effects/1/delay_ms",
+                    "/effects/1/repeats",
+                    "/effects/1/cutoff_hz"
+                ]
+            );
+        }
+    }
 
     #[test]
     fn audio_effect_scope_helper_rejects_a_descriptor_outside_its_declared_scope() {

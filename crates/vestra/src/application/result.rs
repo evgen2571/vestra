@@ -112,19 +112,9 @@ pub fn inspect_result(path: &Path, inspection: Inspection) -> InspectResult {
     let inspect_effects = |effects: &[vestra_core::project::AudioEffect]| {
         effects
             .iter()
-            .map(|effect| match effect {
-                vestra_core::project::AudioEffect::ParametricEq { id, .. } => InspectAudioEffect {
-                    id: id.clone(),
-                    kind: "parametric_eq".to_owned(),
-                },
-                vestra_core::project::AudioEffect::PlaybackSpeed { id, .. } => InspectAudioEffect {
-                    id: id.clone(),
-                    kind: "playback_speed".to_owned(),
-                },
-                vestra_core::project::AudioEffect::BassBoost { id, .. } => InspectAudioEffect {
-                    id: id.clone(),
-                    kind: "bass_boost".to_owned(),
-                },
+            .map(|effect| InspectAudioEffect {
+                id: effect.id().to_owned(),
+                kind: effect.definition().id.to_owned(),
             })
             .collect::<Vec<_>>()
     };

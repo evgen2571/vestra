@@ -336,7 +336,7 @@ def test_json_v1_schema_parser_validation_and_roundtrip_match_baseline(case):
     ] == case["diagnostics"]
 
 
-def test_generated_schema_preserves_baseline_outside_group_size_and_spectrum_options():
+def test_generated_schema_preserves_baseline_outside_group_size_spectrum_and_audio_remixes():
     schema = json.loads(SCHEMA_PATH.read_bytes())
     assert schema["$defs"]["group"]["properties"].pop("size") == {
         "type": "object",
@@ -366,6 +366,14 @@ def test_generated_schema_preserves_baseline_outside_group_size_and_spectrum_opt
         "$ref": "#/$defs/spectrum2d_stereo"
     }
     assert definitions.pop("spectrum2d_stereo")["additionalProperties"] is False
+    assert definitions["playback_speed_audio_effect"]["properties"].pop("link_pitch") == {
+        "default": False, "type": "boolean",
+    }
+    for effect in ("room_reverb", "filtered_delay"):
+        name = f"{effect}_audio_effect"
+        assert definitions.pop(name)["properties"]["type"] == {"const": effect}
+        for scope in ("clip", "track", "master"):
+            definitions[f"audio_{scope}_effect"]["oneOf"].remove({"$ref": f"#/$defs/{name}"})
     baseline = (json.dumps(schema, indent=2, sort_keys=True) + "\n").encode()
     assert sha256(baseline).hexdigest() == JSON_V1["schema_sha256"]
 

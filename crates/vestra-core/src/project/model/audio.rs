@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::audio_effect_definition::{AudioEffectDefinition, AudioEffectKind};
+
 use super::optional_non_null;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -71,23 +73,89 @@ pub enum AudioEffect {
     PlaybackSpeed {
         id: String,
         rate: f64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        link_pitch: bool,
+    },
+    RoomReverb {
+        id: String,
+        decay_seconds: f64,
+        mix: f64,
+    },
+    FilteredDelay {
+        id: String,
+        delay_ms: f64,
+        #[serde(deserialize_with = "deserialize_repeat_count")]
+        repeats: u8,
+        mix: f64,
+        cutoff_hz: f64,
     },
 }
 
 impl AudioEffect {
     #[must_use]
-    pub fn definition(&self) -> crate::audio_effect_definition::AudioEffectDefinition {
+    pub fn id(&self) -> &str {
         match self {
-            Self::ParametricEq { .. } => {
-                crate::audio_effect_definition::AudioEffectKind::ParametricEq.definition()
-            }
-            Self::BassBoost { .. } => {
-                crate::audio_effect_definition::AudioEffectKind::BassBoost.definition()
-            }
-            Self::PlaybackSpeed { .. } => {
-                crate::audio_effect_definition::AudioEffectKind::PlaybackSpeed.definition()
-            }
+            Self::ParametricEq { id, .. }
+            | Self::BassBoost { id, .. }
+            | Self::PlaybackSpeed { id, .. }
+            | Self::RoomReverb { id, .. }
+            | Self::FilteredDelay { id, .. } => id,
         }
+    }
+
+    #[must_use]
+    pub fn definition(&self) -> AudioEffectDefinition {
+        match self {
+            Self::ParametricEq { .. } => AudioEffectKind::ParametricEq,
+            Self::BassBoost { .. } => AudioEffectKind::BassBoost,
+            Self::PlaybackSpeed { .. } => AudioEffectKind::PlaybackSpeed,
+            Self::RoomReverb { .. } => AudioEffectKind::RoomReverb,
+            Self::FilteredDelay { .. } => AudioEffectKind::FilteredDelay,
+        }
+        .definition()
+    }
+
+    /// Return the names of numeric parameters outside the authored range.
+    pub fn invalid_numeric_parameters(&self) -> impl Iterator<Item = &'static str> {
+        self.definition()
+            .parameters
+            .iter()
+            .filter_map(move |parameter| {
+                let value = match (self, parameter.name) {
+                    (
+                        Self::ParametricEq { frequency_hz, .. }
+                        | Self::BassBoost { frequency_hz, .. },
+                        "frequency_hz",
+                    ) => *frequency_hz,
+                    (
+                        Self::ParametricEq { gain_db, .. } | Self::BassBoost { gain_db, .. },
+                        "gain_db",
+                    ) => *gain_db,
+                    (Self::ParametricEq { q, .. }, "q") => *q,
+                    (Self::PlaybackSpeed { rate, .. }, "rate") => *rate,
+                    (Self::RoomReverb { decay_seconds, .. }, "decay_seconds") => *decay_seconds,
+                    (Self::RoomReverb { mix, .. } | Self::FilteredDelay { mix, .. }, "mix") => *mix,
+                    (Self::FilteredDelay { delay_ms, .. }, "delay_ms") => *delay_ms,
+                    (Self::FilteredDelay { repeats, .. }, "repeats") => f64::from(*repeats),
+                    (Self::FilteredDelay { cutoff_hz, .. }, "cutoff_hz") => *cutoff_hz,
+                    _ => return None,
+                };
+                (!parameter.accepts_number(value)).then_some(parameter.name)
+            })
+    }
+}
+
+// JSON Schema's integer type includes integral JSON numbers such as 2.0.
+fn deserialize_repeat_count<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u8, D::Error> {
+    let value = f64::deserialize(deserializer)?;
+    if value.fract() == 0.0 && (0.0..=f64::from(u8::MAX)).contains(&value) {
+        Ok(value as u8)
+    } else {
+        Err(serde::de::Error::custom(
+            "repeat count must be an unsigned integer",
+        ))
     }
 }
 

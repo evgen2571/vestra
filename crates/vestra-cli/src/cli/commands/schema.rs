@@ -4,8 +4,8 @@ use std::{fs, path::PathBuf, process::ExitCode};
 
 use serde_json::{Map, Value, json};
 use vestra::{
-    AudioEffectParameterDescriptor, EffectParameterDescriptor, EffectParameterKind,
-    audio_effect_descriptors, visual_effect_descriptors,
+    AudioEffectParameterDescriptor, AudioEffectParameterKind, EffectParameterDescriptor,
+    EffectParameterKind, audio_effect_descriptors, visual_effect_descriptors,
 };
 
 #[path = "../../../../../scripts/effects/schema.rs"]
@@ -95,7 +95,12 @@ fn set_spectrum2d_nyquist_bound(
 }
 
 fn audio_parameter_schema(parameter: &AudioEffectParameterDescriptor) -> Value {
-    let mut schema = Map::from_iter([(String::from("type"), json!("number"))]);
+    let kind = match parameter.kind {
+        AudioEffectParameterKind::Number => "number",
+        AudioEffectParameterKind::Integer => "integer",
+        AudioEffectParameterKind::Boolean => "boolean",
+    };
+    let mut schema = Map::from_iter([(String::from("type"), json!(kind))]);
     apply_number_constraint(&mut schema, parameter);
     Value::Object(schema)
 }

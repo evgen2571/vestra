@@ -399,14 +399,25 @@ for value in (0, 0.249, 4.001):
     candidate["audio"]["tracks"][0]["clips"][0]["effects"][0]["rate"] = value
     assert errors(candidate), "playback speed out-of-range value must fail"
 
+for value in (False, True, None, 1, "true"):
+    candidate = copy.deepcopy(clip_with_speed)
+    candidate["audio"]["tracks"][0]["clips"][0]["effects"][0]["link_pitch"] = value
+    assert bool(errors(candidate)) == (type(value) is not bool)
+
+room = {"id": "room", "type": "room_reverb", "decay_seconds": 0.5, "mix": 0.03}
+delay = {
+    "id": "delay", "type": "filtered_delay", "delay_ms": 230.0, "repeats": 2,
+    "mix": 0.2, "cutoff_hz": 2500.0,
+}
+
 for scope in ("master", "track", "clip"):
     scoped = copy.deepcopy(audio_timeline)
     if scope == "master":
-        scoped["audio"]["effects"] = [audio_effect]
+        scoped["audio"]["effects"] = [audio_effect, room, delay]
     elif scope == "track":
-        scoped["audio"]["tracks"][0]["effects"] = [audio_effect]
+        scoped["audio"]["tracks"][0]["effects"] = [audio_effect, room, delay]
     else:
-        scoped["audio"]["tracks"][0]["clips"][0]["effects"] = [audio_effect]
+        scoped["audio"]["tracks"][0]["clips"][0]["effects"] = [audio_effect, room, delay]
     assert not errors(scoped), f"audio effects must validate at {scope} scope"
 
 def with_master_effect(effect):
@@ -425,6 +436,21 @@ for field, invalid, valid in [
     for value in valid:
         candidate = {**audio_effect, field: value}
         assert not errors(with_master_effect(candidate)), f"valid {field} boundary must pass"
+
+for effect, field, valid, invalid in [
+    (room, "decay_seconds", (0.1, 2.0), (0.099, 2.001, None)),
+    (room, "mix", (0.0, 1.0), (-0.01, 1.01, None)),
+    (delay, "delay_ms", (1.0, 1000.0), (0.999, 1000.001, None)),
+    (delay, "repeats", (1, 8), (0, 9, 1.5, True, None)),
+    (delay, "mix", (0.0, 1.0), (-0.01, 1.01, None)),
+    (delay, "cutoff_hz", (20.0, 23999.0), (19.99, 24000.0, None)),
+]:
+    for value in valid:
+        assert not errors(with_master_effect({**effect, field: value}))
+    for value in invalid:
+        assert errors(with_master_effect({**effect, field: value}))
+    without_field = {key: value for key, value in effect.items() if key != field}
+    assert errors(with_master_effect(without_field))
 
 assert errors(with_master_effect({**audio_effect, "made_up": 123})), "unknown audio effect fields must fail"
 

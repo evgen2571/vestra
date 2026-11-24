@@ -404,6 +404,40 @@ for value in (False, True, None, 1, "true"):
     candidate["audio"]["tracks"][0]["clips"][0]["effects"][0]["link_pitch"] = value
     assert bool(errors(candidate)) == (type(value) is not bool)
 
+remix_effects = [
+    {"id": "repeat", "type": "beat_repeat", "slice_start": 0.25,
+     "slice_duration": 0.125, "output_start": 0.5, "repeats": 4},
+    {"id": "sweep", "type": "filter_sweep", "mode": "high_pass",
+     "keyframes": [{"time": 0, "frequency_hz": 40}, {"time": 0.5, "frequency_hz": 3200}]},
+    {"id": "shift", "type": "pitch_shift", "semitones": 2},
+    {"id": "stop", "type": "tape_stop", "start": 0.75, "duration": 0.25},
+]
+clip_with_remix = copy.deepcopy(audio_timeline)
+clip_with_remix["audio"]["tracks"][0]["clips"][0]["effects"] = remix_effects
+assert not errors(clip_with_remix), "remix effects must validate at clip scope"
+for effect in remix_effects:
+    for scope in ("master", "track"):
+        scoped = copy.deepcopy(audio_timeline)
+        target = scoped["audio"] if scope == "master" else scoped["audio"]["tracks"][0]
+        target["effects"] = [effect]
+        assert errors(scoped), f"{effect['type']} must reject {scope} scope"
+
+for index, field, invalid in [
+    (0, "repeats", 1.5),
+    (0, "slice_duration", 0),
+    (1, "mode", "notch"),
+    (1, "keyframes", []),
+    (1, "keyframes", [{"time": 0.1, "frequency_hz": 40}]),
+    (1, "keyframes", [{"time": 0, "frequency_hz": 24000}]),
+    (1, "keyframes", [{"time": 0, "frequency_hz": 40, "extra": 1}]),
+    (2, "semitones", -12.01),
+    (3, "duration", None),
+    (3, "duration", 2.01),
+]:
+    candidate = copy.deepcopy(clip_with_remix)
+    candidate["audio"]["tracks"][0]["clips"][0]["effects"][index][field] = invalid
+    assert errors(candidate), f"invalid remix {field} must fail"
+
 room = {"id": "room", "type": "room_reverb", "decay_seconds": 0.5, "mix": 0.03}
 delay = {
     "id": "delay", "type": "filtered_delay", "delay_ms": 230.0, "repeats": 2,

@@ -1,5 +1,5 @@
 ---
-description: Place and trim audio, add fades, choose processing scopes, and crossfade overlapping clips.
+description: Place and trim audio, add fades, choose processing scopes, crossfade clips, and remix a stereo phrase.
 ---
 
 # Add audio
@@ -148,6 +148,37 @@ positive overlap and an explicit outgoing `trim_end`; conflicting fade settings
 are rejected. It calculates overlap from authored trim spans, so do not use it
 to infer overlap after a duration-changing playback-speed effect. See
 [audio contracts](../../reference/audio.md#crossfades).
+
+## Remix a stereo phrase
+
+[Download nightcore_remix.py](https://raw.githubusercontent.com/evgen2571/vestra/develop/examples/tutorials/nightcore_remix.py).
+It generates a 100 BPM stereo phrase, remixes it, and draws a spectrum from
+the processed master. The command replaces `nightcore-remix.mp4` in the
+current directory.
+
+```bash
+uv run python nightcore_remix.py
+```
+
+Add `--bass-boost` for a 2 dB lift near 110 Hz. Listen for the shorter,
+higher-pitched phrase, a quiet room sound on the main track, and two dark
+echoes after the final note.
+
+- `PlaybackSpeed(rate=1.10, link_pitch=True)` raises the tempo to 110 BPM
+  and shifts pitch by the same ratio. A 2.4-second source clip plays in
+  about 2.18 seconds.
+- `RoomReverb(decay_seconds=0.5, mix=0.03)` adds a quiet room tail to the
+  music track. The three-second project leaves space for the tails.
+- The last note starts at 1.8 seconds in the source. Trim it to a separate
+  clip, use the same linked speed, and place it at `1.8 / 1.10` seconds to
+  align both clips. Put the delay on the throw track with `mix=1.0` so that
+  track contributes only repeats. Track gain controls their level without
+  affecting the main track. An eighth note is `30_000 / (100 * 1.10)` ms,
+  or about 273 ms here.
+
+```python
+--8<-- "examples/tutorials/nightcore_remix.py"
+```
 
 ## Try an example with no external recording
 

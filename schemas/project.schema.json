@@ -466,6 +466,12 @@
         },
         {
           "$ref": "#/$defs/playback_speed_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/room_reverb_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/filtered_delay_audio_effect"
         }
       ]
     },
@@ -476,6 +482,12 @@
         },
         {
           "$ref": "#/$defs/bass_boost_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/room_reverb_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/filtered_delay_audio_effect"
         }
       ]
     },
@@ -536,6 +548,12 @@
         },
         {
           "$ref": "#/$defs/bass_boost_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/room_reverb_audio_effect"
+        },
+        {
+          "$ref": "#/$defs/filtered_delay_audio_effect"
         }
       ]
     },
@@ -1680,6 +1698,47 @@
           "$ref": "#/$defs/motion_blur_effect"
         }
       ]
+    },
+    "filtered_delay_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "cutoff_hz": {
+          "exclusiveMaximum": 24000.0,
+          "minimum": 20.0,
+          "type": "number"
+        },
+        "delay_ms": {
+          "maximum": 1000.0,
+          "minimum": 1.0,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mix": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "repeats": {
+          "maximum": 8.0,
+          "minimum": 1.0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "filtered_delay"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "delay_ms",
+        "repeats",
+        "mix",
+        "cutoff_hz"
+      ],
+      "type": "object"
     },
     "flash": {
       "additionalProperties": false,
@@ -3654,6 +3713,10 @@
           "minLength": 1,
           "type": "string"
         },
+        "link_pitch": {
+          "default": false,
+          "type": "boolean"
+        },
         "rate": {
           "maximum": 4.0,
           "minimum": 0.25,
@@ -3862,6 +3925,35 @@
         "type",
         "amount",
         "center"
+      ],
+      "type": "object"
+    },
+    "room_reverb_audio_effect": {
+      "additionalProperties": false,
+      "properties": {
+        "decay_seconds": {
+          "maximum": 2.0,
+          "minimum": 0.1,
+          "type": "number"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mix": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "type": {
+          "const": "room_reverb"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "decay_seconds",
+        "mix"
       ],
       "type": "object"
     },

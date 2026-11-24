@@ -86,6 +86,10 @@ failure cases and native path restrictions.
 | `playback_speed` / `PlaybackSpeed` | Required `rate` from 0.25 through 4. Boolean `link_pitch` defaults to `false` in JSON and `False` in Python. | Clip only. Divides the selected duration by the rate. |
 | `room_reverb` / `RoomReverb` | Required `decay_seconds` from 0.1 through 2 seconds and `mix` from 0 through 1. | Clip, track, master. Preserves duration. |
 | `filtered_delay` / `FilteredDelay` | Required `delay_ms` from 1 through 1000 ms, integer `repeats` from 1 through 8, `mix` from 0 through 1 and `cutoff_hz` from 20 Hz up to (exclusive) 24000 Hz. | Clip, track, master. Preserves duration. |
+| `beat_repeat` / `BeatRepeat` | Required `slice_start` and `output_start` in non-negative seconds, `slice_duration` from 0.01 through 1 second, and integer `repeats` from 1 through 8 total plays. | Clip only. Preserves duration. |
+| `filter_sweep` / `FilterSweep` | Required `mode` (`low_pass`, `high_pass`, or `band_pass`) and 1–256 `keyframes` with `time` in seconds and `frequency_hz` from 20 through 20,000 Hz. | Clip only. Preserves duration. |
+| `pitch_shift` / `PitchShift` | Required `semitones` from -12 through +12, including fractional values. Zero passes the input through unchanged. | Clip only. Preserves tempo and duration. |
+| `tape_stop` / `TapeStop` | Required `start` in non-negative seconds and `duration` from 0.05 through 2 seconds. | Clip only. Preserves duration. |
 
 `PlaybackSpeed(rate=1.10)` preserves pitch. With `link_pitch=True`, tempo and
 pitch both scale by the rate, so a 440 Hz tone moves to about 484 Hz at 1.10×.
@@ -101,6 +105,34 @@ rounded to 48 kHz samples. Each repeat has half the gain of the previous
 one. Only the repeats pass through the low-pass filter. For an eighth-note
 delay, divide 30,000 by the **remixed** tempo in beats per minute.
 
+The four remix effects use the processed clip-local clock at their position in
+the stack. Time zero is the first sample after trimming and preceding effects,
+including any `PlaybackSpeed`. For example, if playback speed comes first, a
+two-second source clip at 2× supplies a one-second span to the next effect.
+
+- **Beat repeat** reads a stereo slice from its input and replaces the window
+  starting at `output_start` with the authored number of plays. Both the slice
+  and the replacement window must fit in the clip. Start times and slice length
+  round to the nearest 48 kHz sample. The replacement window is the rounded
+  slice length times `repeats`. Short fades smooth the joins. At your chosen BPM,
+  use `30 / BPM` seconds for an eighth note or `15 / BPM` for a sixteenth note.
+- **Filter sweep** uses a two-pole filter with fixed Q of 0.707. Set cutoff in
+  low-pass or high-pass mode and center frequency in band-pass mode. In
+  Python, use `AudioFilterKeyframe(time, frequency_hz)`. In JSON, use objects
+  with those two fields. Keyframes start at zero, strictly increase at 48 kHz
+  resolution, and can reach the end of the clip. Frequency interpolates linearly
+  in Hz, updates every 2.5 ms, and holds after the last keyframe.
+- **Pitch shift** resamples the audio and applies inverse tempo compensation.
+  A +2 semitone shift moves 440 Hz to approximately 494 Hz. Individual attacks
+  can shift by a few tens of milliseconds. The portable processor shifts
+  formants with pitch. FFmpeg's optional Rubber Band filter offers formant
+  preservation in builds that include it. Vestra currently exposes the portable
+  processor for both full mixes and isolated vocals.
+- **Tape stop** slows speed and pitch together over the authored interval and
+  fades to silence. The interval must fit in the clip. The clip stays silent
+  after the stop. Start the next phrase on a separate clip to bring the mix back
+  on the downbeat.
+
 Effects run in authored order within each stack. Each clip is trimmed and
 processed before clip gain, gain automation, fades and timeline placement.
 Each track processes its summed clips before track gain. The master stack
@@ -110,10 +142,11 @@ resolved project span. To hear more of the tail, leave space in the project
 after the source ends. The effects never add duration on their own.
 
 Add these values to an `AudioEffectStack` in high-level Python. The advanced
-`AudioEffectCollection` exposes `add_playback_speed`, `add_room_reverb` and
-`add_filtered_delay` with the same parameter names. See the
-[generated stereo remix](../guides/python/audio.md#remix-a-stereo-phrase) for
-settings and timing.
+`AudioEffectCollection` exposes typed methods with the same parameter names,
+including `add_beat_repeat`, `add_filter_sweep`, `add_pitch_shift`, and
+`add_tape_stop`. The generic `add_effect` accepts the canonical tag and its
+parameters. See the [chorus edit recipe](../guides/python/audio.md#edit-into-a-chorus)
+for an example that uses all four edits.
 
 ## Crossfades
 

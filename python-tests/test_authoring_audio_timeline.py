@@ -195,6 +195,7 @@ def test_audio_effect_metadata_is_discoverable_and_immutable() -> None:
     definitions = available_audio_effects()
     assert [definition["id"] for definition in definitions] == [
         "parametric_eq", "bass_boost", "playback_speed", "room_reverb", "filtered_delay",
+        "beat_repeat", "filter_sweep", "pitch_shift", "tape_stop",
     ]
     definition = audio_effect_definition("parametric_eq")
     assert set(definition["scopes"]) == {"clip", "track", "master"}
@@ -238,13 +239,21 @@ def test_generic_audio_authoring_smoke_covers_every_registered_effect() -> None:
     asset = project_builder.add_audio_asset("tone.wav")
     clip = project_builder.audio.add_track().add_clip(asset=asset, start=0, trim_end=0.5)
     for definition in available_audio_effects():
-        parameters: dict[str, float | int] = {}
+        parameters: dict[str, object] = {}
         for parameter in definition["parameters"]:
             if parameter["default"] is not None:
                 continue
-            minimum, maximum = parameter["minimum"], parameter["maximum"]
-            midpoint = (float(minimum) + float(maximum)) / 2
-            parameters[str(parameter["name"])] = int(midpoint) if parameter["kind"] == "integer" else midpoint
+            kind = parameter["kind"]
+            if kind == "filter_mode":
+                value = "low_pass"
+            elif kind == "filter_keyframes":
+                value = [{"time": 0, "frequency_hz": 500}]
+            else:
+                minimum = float(parameter["minimum"])
+                value = int(minimum) if kind == "integer" else minimum
+                if parameter["minimum_exclusive"]:
+                    value += 0.1
+            parameters[str(parameter["name"])] = value
         clip.effects.add_effect(str(definition["id"]), **parameters)
     assert len(clip.effects.items) == len(available_audio_effects())
 

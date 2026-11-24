@@ -12,6 +12,9 @@ use vestra_core::{
 
 use crate::MediaError;
 
+mod remix_edits;
+mod remix_tone;
+
 const MIX_SAMPLE_RATE: u64 = MASTER_AUDIO_SAMPLE_RATE as u64;
 // FFmpeg takes integer sample rates. Scale both virtual clocks to preserve the ratio.
 const LINKED_SPEED_CLOCK: u64 = 100_000_000;
@@ -319,8 +322,8 @@ impl GraphBuilder {
         effects: &AudioEffectPassPlan,
         mut clip_samples: Option<u64>,
     ) -> Result<String, MediaError> {
-        for &operation in &effects.operations {
-            input = match operation {
+        for operation in &effects.operations {
+            input = match *operation {
                 AudioEffectOperation::ParametricEq {
                     frequency_hz,
                     gain_db,
@@ -395,9 +398,79 @@ impl GraphBuilder {
                         graph.filtered_delay(wet, delay_ms, repeats, cutoff_hz)
                     })?
                 }
+                AudioEffectOperation::BeatRepeat {
+                    slice_start,
+                    slice_duration,
+                    output_start,
+                    repeats,
+                } => {
+                    validate_effect_parameters(&AudioEffect::BeatRepeat {
+                        id: String::new(),
+                        slice_start,
+                        slice_duration,
+                        output_start,
+                        repeats,
+                    })?;
+                    let (input, _) = self.remix_input(&input, operation, clip_samples)?;
+                    self.beat_repeat(
+                        input,
+                        seconds_to_samples(slice_start)?,
+                        seconds_to_samples(slice_duration)?,
+                        seconds_to_samples(output_start)?,
+                        repeats,
+                    )?
+                }
+                AudioEffectOperation::FilterSweep {
+                    mode,
+                    ref keyframes,
+                } => {
+                    let (input, _) = self.remix_input(&input, operation, clip_samples)?;
+                    self.filter_sweep(&input, mode, keyframes)?
+                }
+                AudioEffectOperation::PitchShift { semitones: 0.0 } => input,
+                AudioEffectOperation::PitchShift { semitones } => {
+                    let (input, samples) = self.remix_input(&input, operation, clip_samples)?;
+                    self.pitch_shift(&input, semitones, samples)?
+                }
+                AudioEffectOperation::TapeStop { start, duration } => {
+                    validate_effect_parameters(&AudioEffect::TapeStop {
+                        id: String::new(),
+                        start,
+                        duration,
+                    })?;
+                    let (input, samples) = self.remix_input(&input, operation, clip_samples)?;
+                    self.tape_stop(
+                        input,
+                        seconds_to_samples(start)?,
+                        seconds_to_samples(duration)?,
+                        samples,
+                    )?
+                }
             };
         }
         Ok(input)
+    }
+
+    fn remix_input(
+        &mut self,
+        input: &str,
+        operation: &AudioEffectOperation,
+        clip_samples: Option<u64>,
+    ) -> Result<(String, u64), MediaError> {
+        let samples = clip_samples.ok_or_else(|| {
+            MediaError::InvalidAudioTiming("remix effects require a clip".to_owned())
+        })?;
+        if let Some(field) = operation.invalid_clip_timing(samples) {
+            return Err(MediaError::InvalidAudioTiming(format!(
+                "remix effect {field} exceeds the clip span"
+            )));
+        }
+        // Independent trim-edge rounding and atempo can differ from the planned sample count.
+        let stage = self.filter(
+            input,
+            &format!("apad=whole_len={samples},atrim=end_sample={samples},asetpts=N/SR/TB"),
+        );
+        Ok((stage, samples))
     }
 
     fn apply_wet_effect(

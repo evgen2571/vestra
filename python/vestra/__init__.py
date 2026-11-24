@@ -69,6 +69,12 @@ from .audio import (
     ParametricEq,
     PlaybackSpeed,
     RoomReverb,
+    AudioFilterKeyframe,
+    AudioFilterMode,
+    BeatRepeat,
+    FilterSweep,
+    PitchShift,
+    TapeStop,
 )
 from .sources import (
     Circle,
@@ -341,4 +347,10 @@ __all__ = [
     "Spectrum2DWave",
     "FilteredDelay",
     "RoomReverb",
+    "AudioFilterKeyframe",
+    "AudioFilterMode",
+    "BeatRepeat",
+    "FilterSweep",
+    "PitchShift",
+    "TapeStop",
 ]

@@ -450,9 +450,14 @@ impl GraphBuilder {
         self.filters.push(format!(
             "anoisesrc=r={MIX_SAMPLE_RATE}:seed=1234,atrim=end_sample={response_samples},lowpass=f=6500,aeval=exprs='val(0)*pow(0.001,n/{response_samples})',adelay={PREDELAY_SAMPLES}S:all=1[{impulse}]"
         ));
+        // The portable FIR default normalizes by the sum of absolute coefficients.
+        // Restore roughly unit energy using the exponential envelope's L1/L2 ratio.
+        let gain =
+            (4.0 * response_samples as f64 / (std::f64::consts::PI * 1000.0_f64.ln())).sqrt();
         let output = self.label("effect");
         self.filters.push(format!(
-            "[{wet}][{impulse}]afir=irfmt=mono:irnorm=2:minp=64:maxp=4096[{output}]"
+            "[{wet}][{impulse}]afir=irfmt=mono:minp=64:maxp=4096,volume=volume={}[{output}]",
+            number(gain),
         ));
         Ok(output)
     }

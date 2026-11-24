@@ -1825,9 +1825,12 @@ fn room_reverb_decays_in_stereo_and_respects_tail_boundaries() {
         mix: 1.0,
     };
     let mut on_clip = plain.clone();
-    on_clip.tracks[0].clips[0].effects.operations.push(effect);
+    on_clip.tracks[0].clips[0]
+        .effects
+        .operations
+        .push(effect.clone());
     let mut on_track = plain.clone();
-    on_track.tracks[0].effects.operations.push(effect);
+    on_track.tracks[0].effects.operations.push(effect.clone());
     let mut on_master = plain;
     on_master.effects.operations.push(effect);
 
@@ -1907,7 +1910,7 @@ fn filtered_delay_repeats_on_exact_samples_and_low_passes_only_the_wet_path() {
         mix: 0.5,
         cutoff_hz: 900.0,
     };
-    mix.tracks[0].effects.operations.push(effect);
+    mix.tracks[0].effects.operations.push(effect.clone());
 
     let samples = render_pcm(&compile(&mix, 0.45).expect("delay graph"), 1.0);
     assert_eq!(samples.len(), 21_600 * 2);
@@ -1931,7 +1934,10 @@ fn filtered_delay_repeats_on_exact_samples_and_low_passes_only_the_wet_path() {
     assert!(stereo_window_peak(&samples, 15_000, 21_600) < 1e-6);
 
     mix.tracks[0].effects.operations.clear();
-    mix.tracks[0].clips[0].effects.operations.push(effect);
+    mix.tracks[0].clips[0]
+        .effects
+        .operations
+        .push(effect.clone());
     let clip = render_pcm(&compile(&mix, 0.45).expect("clip delay graph"), 1.0);
     assert!(stereo_window_peak(&clip, impulse_frame + 1, 21_600) < 1e-6);
     mix.tracks[0].clips[0].effects.operations.clear();
@@ -2152,3 +2158,6 @@ fn room_reverb_keeps_wet_energy_across_decay_limits_for_short_clips() {
         assert!(stereo_window_peak(&samples, decay_frames, 100_800) < 1e-6);
     }
 }
+
+#[path = "audio_graph/remix_tone_tests.rs"]
+mod remix_tone;

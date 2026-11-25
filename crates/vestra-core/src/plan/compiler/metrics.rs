@@ -64,7 +64,14 @@ fn record_layers(compilation: &mut CompilationStats, layers: &[CompiledLayer]) {
             }
             CompiledVisualSource::SolidColor { .. } => compilation.solid_color_source_count += 1,
             CompiledVisualSource::Shape { .. } => {}
-            CompiledVisualSource::Text { .. } => {}
+            CompiledVisualSource::Text { animation, .. } => {
+                if let Some(track) = animation
+                    .as_ref()
+                    .and_then(|animation| animation.reveal.as_ref())
+                {
+                    compilation.keyframe_count += track_keyframe_count(track);
+                }
+            }
             CompiledVisualSource::Spectrum2D { .. } => compilation.spectrum2d_source_count += 1,
             CompiledVisualSource::ParticleSystem(_) => {}
             CompiledVisualSource::Group(composition) => {

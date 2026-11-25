@@ -315,12 +315,14 @@ impl FramePlanBuilder {
                     parameters_index: self.parameter_count,
                 })
             }
-            EvaluatedSource::Text { text_index } => self.push(GpuOperation::RenderRasterLayer {
-                layer_index,
-                source_index: *text_index,
-                destination: TextureSlot::Layer,
-                parameters_index: self.parameter_count,
-            }),
+            EvaluatedSource::Text { text_index, .. } => {
+                self.push(GpuOperation::RenderRasterLayer {
+                    layer_index,
+                    source_index: *text_index,
+                    destination: TextureSlot::Layer,
+                    parameters_index: self.parameter_count,
+                })
+            }
             EvaluatedSource::SolidColor { .. } => self.push(GpuOperation::RenderSolidLayer {
                 layer_index,
                 destination: TextureSlot::Layer,

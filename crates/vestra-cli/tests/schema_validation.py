@@ -158,6 +158,8 @@ text_style = {
     "fallback_fonts": ["font"],
     "stroke_color": "#22222280", "stroke_width": 1.5,
     "background_color": "#00114488", "background_padding": 5,
+    "reveal": {"base_value": 0, "keyframes": [{"time": 1, "value": 1, "interpolation": "linear"}]},
+    "word_highlight": {"colour": "#ffee44", "words": [{"start": 0, "end": 1, "text_start": 0, "text_end": 6}]},
 }
 styled_text["visual"]["clips"][0]["source"].update(text_style)
 assert not errors(styled_text), "styled text with fallback font IDs must validate"
@@ -168,6 +170,10 @@ for fields in [
     {"stroke_width": 1},
     {"background_color": "red"},
     {"background_padding": 5},
+    {"reveal": None},
+    {"reveal": {"base_value": 1.1}},
+    {"reveal": {"base_value": 0, "keyframes": [{"time": 1, "value": -1, "interpolation": "linear"}]}},
+    {"word_highlight": {"colour": "#ffee44", "words": [{"start": 0, "end": 1, "text_start": 0.5, "text_end": 6}]}},
 ]:
     invalid = copy.deepcopy(text_with_transform)
     invalid["visual"]["clips"][0]["source"].update(fields)

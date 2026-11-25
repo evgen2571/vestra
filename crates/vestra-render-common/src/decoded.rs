@@ -185,17 +185,7 @@ impl DecodedAssets {
             };
             let prepared =
                 crate::text::prepare(text, font_system, cache, decoded_source_bytes, &plan.limits)?;
-            let bytes = u64::from(prepared.pixels.width())
-                .checked_mul(u64::from(prepared.pixels.height()))
-                .and_then(|pixels| pixels.checked_mul(4))
-                .ok_or_else(|| {
-                    Diagnostic::error(
-                        "VESTRA-TEXT-SIZE",
-                        Category::Media,
-                        "prepared text bytes overflow",
-                        "",
-                    )
-                })?;
+            let bytes = prepared.byte_len();
             decoded_source_bytes = decoded_source_bytes.checked_add(bytes).ok_or_else(|| {
                 Diagnostic::error(
                     "VESTRA-TEXT-TOTAL-SIZE",

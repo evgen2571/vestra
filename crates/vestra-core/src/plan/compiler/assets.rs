@@ -269,7 +269,7 @@ pub(super) fn lookup_video(
 pub(super) fn finalize_text_indices(layers: &mut [crate::plan::CompiledLayer], offset: usize) {
     fn resolve(source: &mut crate::plan::CompiledVisualSource, offset: usize) {
         match source {
-            crate::plan::CompiledVisualSource::Text { text_index } => *text_index += offset,
+            crate::plan::CompiledVisualSource::Text { text_index, .. } => *text_index += offset,
             crate::plan::CompiledVisualSource::Group(group) => {
                 finalize_text_indices(&mut std::sync::Arc::make_mut(group).layers, offset);
             }

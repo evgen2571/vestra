@@ -8,20 +8,24 @@ use cosmic_text::{
 use image::RgbaImage;
 use vestra_core::{
     Category, Diagnostic,
+    plan::TextAnimationFrame,
     project::{TextAlignment, TextSource, parse_colour},
     validation::ResourceLimits,
 };
 
 use crate::geometry::IntrinsicSize;
 
+mod animation;
 mod style;
 
+pub use animation::TextRasterState;
 use style::TextPainter;
 
 #[derive(Clone, Debug)]
 pub struct PreparedText {
     pub(crate) pixels: Arc<RgbaImage>,
     pub(crate) intrinsic_size: IntrinsicSize,
+    animation: Option<Arc<animation::PreparedTextAnimation>>,
 }
 
 impl PreparedText {
@@ -30,6 +34,39 @@ impl PreparedText {
     }
     pub fn intrinsic_size(&self) -> IntrinsicSize {
         self.intrinsic_size
+    }
+
+    #[must_use]
+    pub fn byte_len(&self) -> u64 {
+        self.pixels.as_raw().len() as u64
+            + self
+                .animation
+                .as_ref()
+                .map_or(0, |animation| animation.bytes)
+    }
+
+    #[must_use]
+    pub fn is_animated(&self) -> bool {
+        self.animation.is_some()
+    }
+
+    #[must_use]
+    pub fn raster_state(&self, frame: TextAnimationFrame) -> TextRasterState {
+        self.animation
+            .as_ref()
+            .map_or_else(TextRasterState::default, |animation| {
+                animation.raster_state(frame)
+            })
+    }
+
+    #[must_use]
+    pub fn pixels_at(&self, state: TextRasterState) -> Arc<RgbaImage> {
+        match &self.animation {
+            Some(animation) if state != TextRasterState::default() => {
+                Arc::new(animation.paint(state))
+            }
+            _ => Arc::clone(&self.pixels),
+        }
     }
 }
 
@@ -188,9 +225,21 @@ pub(crate) fn prepare(
             emit(x, y, rgba, coverage);
         });
     });
+    let intrinsic_size = painter.size;
+    let animation = animation::prepare(
+        source,
+        &buffer,
+        font_system,
+        cache,
+        painter,
+        colour,
+        existing_decoded_bytes,
+        limits,
+    )?;
     Ok(PreparedText {
         pixels: Arc::new(pixels),
-        intrinsic_size: painter.size,
+        intrinsic_size,
+        animation,
     })
 }
 
@@ -396,6 +445,8 @@ mod tests {
             stroke_width: 0.0,
             background_color: None,
             background_padding: 0.0,
+            reveal: None,
+            word_highlight: None,
         };
 
         let prepared = prepare(
@@ -408,6 +459,55 @@ mod tests {
         .expect("text prepares");
 
         assert_eq!(prepared.intrinsic_size.logical_height, 120.0);
+    }
+
+    #[test]
+    fn text_reveal_starts_at_the_right_for_rtl_text() {
+        let font_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/assets/VestraTest-Regular.ttf");
+        let mut font_system = load_fonts([font_path.as_path()], false).expect("test font");
+        let mut cache = SwashCache::new();
+        let source: TextSource = serde_json::from_value(serde_json::json!({
+            "text": "אב", "font": "font", "font_size": 48.0,
+            "fill": "#ffffff", "align": "right", "max_width": 100.0,
+            "reveal": {"base_value": 0.5}
+        }))
+        .expect("RTL text source");
+        let prepared = prepare(
+            &source,
+            &mut font_system,
+            &mut cache,
+            0,
+            &ResourceLimits::default(),
+        )
+        .expect("prepare shaped RTL text");
+        let partial = prepared.pixels_at(prepared.raster_state(TextAnimationFrame {
+            reveal: 0.5,
+            active_range: None,
+        }));
+        let leftmost_ink = |image: &RgbaImage| {
+            image
+                .enumerate_pixels()
+                .filter(|(_, _, pixel)| pixel[3] != 0)
+                .map(|(x, _, _)| x)
+                .min()
+                .expect("text has ink")
+        };
+        assert_eq!(partial.dimensions(), prepared.pixels().dimensions());
+        assert!(leftmost_ink(&partial) > leftmost_ink(prepared.pixels()));
+        assert!(
+            partial.enumerate_pixels().all(|(x, y, pixel)| {
+                pixel[3] == 0 || pixel == prepared.pixels().get_pixel(x, y)
+            })
+        );
+
+        let limits = ResourceLimits {
+            maximum_decoded_asset_bytes: prepared.byte_len() - 1,
+            ..ResourceLimits::default()
+        };
+        let error = prepare(&source, &mut font_system, &mut cache, 0, &limits)
+            .expect_err("animation glyphs count toward the decoded source budget");
+        assert_eq!(error.code, "VESTRA-LIMIT-DECODED-ASSET");
     }
 
     #[test]
@@ -430,6 +530,8 @@ mod tests {
             stroke_width: 0.0,
             background_color: None,
             background_padding: 0.0,
+            reveal: None,
+            word_highlight: None,
         };
         let limits = ResourceLimits {
             maximum_source_pixels: 1,

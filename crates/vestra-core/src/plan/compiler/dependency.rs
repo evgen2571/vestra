@@ -11,6 +11,17 @@ pub(super) fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
         crate::plan::CompiledVisualSource::Video { .. }
         | crate::plan::CompiledVisualSource::Spectrum2D { .. }
         | crate::plan::CompiledVisualSource::ParticleSystem(_) => TemporalDependency::Dynamic,
+        crate::plan::CompiledVisualSource::Text {
+            animation: Some(animation),
+            ..
+        } if !animation.words.is_empty()
+            || animation
+                .reveal
+                .as_ref()
+                .is_some_and(|track| !static_track(track)) =>
+        {
+            TemporalDependency::Dynamic
+        }
         crate::plan::CompiledVisualSource::Group(composition) => composition.dependency,
         _ => TemporalDependency::Static,
     };
@@ -25,14 +36,7 @@ pub(super) fn layer_dependency(layer: &CompiledLayer) -> TemporalDependency {
             &layer.source,
             crate::plan::CompiledVisualSource::Image { crop, .. } if !static_track(crop)
         ),
-        matches!(
-            &layer.source,
-            crate::plan::CompiledVisualSource::Video { .. }
-                | crate::plan::CompiledVisualSource::Spectrum2D { .. }
-                | crate::plan::CompiledVisualSource::ParticleSystem(_)
-        ),
-        matches!(&layer.source, crate::plan::CompiledVisualSource::Group(composition)
-            if composition.dependency == TemporalDependency::Dynamic),
+        source_dependency(&layer.source) == TemporalDependency::Dynamic,
         layer.opacity.has_modifiers() || !static_track(&layer.opacity.authored_track),
         layer
             .opacity_contributions
@@ -341,7 +345,10 @@ mod tests {
                 start_nanos: 0,
                 id: "text".into(),
             },
-            source: crate::plan::CompiledVisualSource::Text { text_index: 0 },
+            source: crate::plan::CompiledVisualSource::Text {
+                text_index: 0,
+                animation: None,
+            },
             transform: transform(),
             transform_contributions: vec![],
             opacity: scalar(1.0),

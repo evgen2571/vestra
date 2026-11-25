@@ -167,8 +167,11 @@ pub(crate) fn draw_layer(
                 );
             }
         }
-        EvaluatedSource::Text { text_index } => {
-            let prepared = assets.text_source(*text_index);
+        EvaluatedSource::Text {
+            text_index,
+            animation,
+        } => {
+            let prepared = assets.text_source(*text_index, *animation);
             if layer.transform.is_valid() {
                 if let Some(bytes) = copy_opaque_raster(
                     canvas,

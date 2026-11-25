@@ -8,6 +8,7 @@ from .group import Group, GroupChild
 from .video import Video
 from .shapes import Circle, Ellipse, Line, Polygon, Rectangle, Shape
 from .text import Text
+from .text_animation import WordHighlight, WordTiming
 from .particles import (
     CircleEmitter,
     ColourLifetimeStop,
@@ -47,6 +48,8 @@ __all__ = [
     "Line",
     "Polygon",
     "Text",
+    "WordHighlight",
+    "WordTiming",
     "Color",
     "SolidColor",
     "Source",

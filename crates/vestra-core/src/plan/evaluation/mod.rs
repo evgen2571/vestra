@@ -122,6 +122,7 @@ pub enum EvaluatedSource {
     },
     Text {
         text_index: usize,
+        animation: crate::plan::TextAnimationFrame,
     },
     Spectrum2D {
         bands: Vec<f32>,
@@ -506,8 +507,18 @@ fn evaluate_source(
             shape_index: *shape_index,
             sizing: CompiledSizing::Original,
         },
-        CompiledVisualSource::Text { text_index } => EvaluatedSource::Text {
+        CompiledVisualSource::Text {
+            text_index,
+            animation,
+        } => EvaluatedSource::Text {
             text_index: *text_index,
+            animation: animation.as_ref().map_or_else(
+                crate::plan::TextAnimationFrame::default,
+                |animation| {
+                    *evaluated_track_count += u64::from(animation.reveal.is_some());
+                    animation.evaluate(relative)
+                },
+            ),
         },
         CompiledVisualSource::Spectrum2D {
             band_signals,

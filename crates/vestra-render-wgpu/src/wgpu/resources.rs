@@ -367,9 +367,20 @@ impl SourceResources {
                 "",
             ));
         }
+        source.upload(queue, pixels);
+        Ok(())
+    }
+}
+
+impl PreparedRasterTexture {
+    pub(super) fn upload(&self, queue: &wgpu::Queue, pixels: &RgbaImage) {
+        debug_assert_eq!(
+            (self.intrinsic_size.width, self.intrinsic_size.height),
+            pixels.dimensions()
+        );
         queue.write_texture(
             wgpu::ImageCopyTexture {
-                texture: &source._texture,
+                texture: &self._texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -386,6 +397,5 @@ impl SourceResources {
                 depth_or_array_layers: 1,
             },
         );
-        Ok(())
     }
 }

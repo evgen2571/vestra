@@ -314,6 +314,7 @@ impl FramePlanBuilder {
             EvaluatedSource::Shape { shape_index, .. }
             | EvaluatedSource::Text {
                 text_index: shape_index,
+                ..
             } => {
                 self.push(GpuOperation::RenderRasterLayer {
                     layer_index,

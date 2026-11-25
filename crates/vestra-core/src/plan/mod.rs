@@ -11,8 +11,10 @@ mod scalar_property;
 pub(crate) mod schedule;
 mod signals;
 pub mod sizing;
+mod text_animation;
 pub mod time;
 pub mod tracks;
+pub use text_animation::{CompiledTextAnimation, TextAnimationFrame};
 
 pub use crate::stylization::EvaluatedPalette;
 pub use compiler::{CompileOptions, compile};

@@ -9,8 +9,10 @@ from typing import Literal
 
 from ..authoring._internal import _number as _finite
 from ..authoring.values import Color, color_to_canonical
+from ..properties.scalar import BindableScalarProperty, ScalarProperty
 from ..properties.transform import Transform, TransformPoint, TransformScale
 from .base import Source
+from .text_animation import WordHighlight
 
 TextAlignment = Literal["left", "center", "right"]
 
@@ -40,7 +42,7 @@ class Text(Source):
     __slots__ = (
         "_text", "_font", "_font_is_path", "_fallback_fonts", "_font_size", "_fill",
         "_align", "_max_width", "_line_spacing", "_letter_spacing", "_stroke_color",
-        "_stroke_width", "_background_color", "_background_padding",
+        "_stroke_width", "_background_color", "_background_padding", "_reveal", "_word_highlight",
     )
 
     def __init__(
@@ -59,6 +61,8 @@ class Text(Source):
         stroke_width: int | float = 0.0,
         background_color: Color | str | None = None,
         background_padding: int | float = 0.0,
+        reveal: int | float | ScalarProperty = 1.0,
+        word_highlight: WordHighlight | None = None,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,
@@ -101,6 +105,19 @@ class Text(Source):
         self._background_padding = _finite(background_padding, "background_padding")
         if self._background_padding < 0 or (self._background_padding > 0 and background_color is None):
             raise ValueError("background_padding must be non-negative and requires background_color")
+        self._reveal = ScalarProperty(1.0, minimum=0.0, maximum=1.0)
+        if isinstance(reveal, ScalarProperty):
+            if isinstance(reveal, BindableScalarProperty) and reveal.bindings:
+                raise ValueError("text reveal does not support signal bindings")
+            reveal._copy_to(self._reveal)
+        else:
+            self._reveal.value = reveal
+        if word_highlight is not None:
+            if not isinstance(word_highlight, WordHighlight):
+                raise TypeError("word_highlight must be a WordHighlight")
+            if any(word.text_end > len(text) for word in word_highlight.words):
+                raise ValueError("word text offsets must be within the text")
+        self._word_highlight = word_highlight
 
     @property
     def text(self) -> str: return self._text
@@ -133,6 +150,15 @@ class Text(Source):
     @property
     def background_padding(self) -> float: return self._background_padding
 
+    @property
+    def reveal(self) -> ScalarProperty:
+        """Fraction of shaped text clusters shown, keyframeable in clip-local seconds."""
+        return self._reveal
+
+    @property
+    def word_highlight(self) -> WordHighlight | None:
+        return self._word_highlight
+
     def to_canonical(self) -> dict[str, object]:
         data: dict[str, object] = {"type": "text", "text": self.text, "font": self.font,
                 "font_size": self.font_size, "fill": self.fill, "align": self.align,
@@ -147,6 +173,10 @@ class Text(Source):
         if self.background_color is not None:
             data["background_color"] = self.background_color
             data["background_padding"] = self.background_padding
+        if self.reveal.value != 1.0 or self.reveal.keyframes:
+            data["reveal"] = self.reveal.to_canonical()
+        if self.word_highlight is not None:
+            data["word_highlight"] = self.word_highlight.to_canonical()
         return data
 
 

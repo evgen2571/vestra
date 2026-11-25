@@ -1,7 +1,8 @@
 //! Persistent source textures, reusable working textures, and readback state.
 
 use std::sync::Arc;
-use vestra_core::plan::RenderPlan;
+use vestra_core::plan::{RenderPlan, TextAnimationFrame};
+use vestra_render_common::{ByteLruCache, CacheStats, PreparedText, TextRasterState};
 
 use crate::{Category, Diagnostic, geometry::IntrinsicSize, render::DecodedAssets};
 use image::RgbaImage;
@@ -33,8 +34,33 @@ pub(super) struct PreparedRasterTexture {
     pub(super) intrinsic_size: IntrinsicSize,
 }
 
+pub(super) enum RasterSource {
+    Texture(PreparedRasterTexture),
+    Text(PreparedText),
+}
+
+impl RasterSource {
+    pub(super) fn intrinsic_size(&self) -> IntrinsicSize {
+        match self {
+            Self::Texture(texture) => texture.intrinsic_size,
+            Self::Text(text) => text.intrinsic_size(),
+        }
+    }
+
+    pub(super) fn prepared_texture(&self) -> Option<&PreparedRasterTexture> {
+        match self {
+            Self::Texture(texture) => Some(texture),
+            Self::Text(_) => None,
+        }
+    }
+}
+
+const TEXT_TEXTURE_CACHE_BYTES: u64 = 8 * 1024 * 1024;
+
 pub(super) struct SourceResources {
-    pub(super) raster_textures: Vec<PreparedRasterTexture>,
+    pub(super) rasters: Vec<RasterSource>,
+    pub(super) prepared_raster_count: usize,
+    text_textures: ByteLruCache<usize, (TextRasterState, Arc<PreparedRasterTexture>)>,
     pub(super) glyph_atlases: Vec<PreparedRasterTexture>,
     pub(super) solid_texture: PreparedRasterTexture,
     pub(super) uploaded_texture_bytes: u64,
@@ -63,46 +89,16 @@ impl SourceResources {
                     "",
                 ));
             }
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("vestra source"),
-                size: wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                image.as_raw(),
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(image.width() * 4),
-                    rows_per_image: Some(image.height()),
-                },
-                wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-            );
-            uploaded_texture_bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
-            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            textures.push(PreparedRasterTexture {
-                _texture: texture,
-                view,
-                intrinsic_size: IntrinsicSize::new(image.width(), image.height()),
-            });
+            uploaded_texture_bytes += image.as_raw().len() as u64;
+            textures.push(RasterSource::Texture(
+                PreparedRasterTexture::create_and_upload(
+                    device,
+                    queue,
+                    "vestra source",
+                    image,
+                    IntrinsicSize::new(image.width(), image.height()),
+                ),
+            ));
         }
         for (shape_index, _) in plan.shapes.iter().enumerate() {
             let prepared = decoded.shape(shape_index);
@@ -116,100 +112,20 @@ impl SourceResources {
                     "",
                 ));
             }
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("vestra prepared shape"),
-                size: wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                image.as_raw(),
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(image.width() * 4),
-                    rows_per_image: Some(image.height()),
-                },
-                wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-            );
-            uploaded_texture_bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
-            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            textures.push(PreparedRasterTexture {
-                _texture: texture,
-                view,
-                intrinsic_size: prepared.intrinsic_size(),
-            });
+            uploaded_texture_bytes += image.as_raw().len() as u64;
+            textures.push(RasterSource::Texture(
+                PreparedRasterTexture::create_and_upload(
+                    device,
+                    queue,
+                    "vestra prepared shape",
+                    image,
+                    prepared.intrinsic_size(),
+                ),
+            ));
         }
-        for text_index in 0..plan.texts.len() {
-            let prepared = decoded.text(text_index);
-            let image = prepared.pixels().as_ref();
-            if image.width() > max_texture_dimension_2d || image.height() > max_texture_dimension_2d
-            {
-                return Err(Diagnostic::error(
-                    "WGPU-SOURCE-DIMENSIONS",
-                    Category::Backend,
-                    "prepared text exceeds adapter texture dimensions",
-                    "",
-                ));
-            }
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("vestra prepared text"),
-                size: wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                image.as_raw(),
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(image.width() * 4),
-                    rows_per_image: Some(image.height()),
-                },
-                wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-            );
-            uploaded_texture_bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
-            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            textures.push(PreparedRasterTexture {
-                _texture: texture,
-                view,
-                intrinsic_size: prepared.intrinsic_size(),
-            });
-        }
+        textures.extend(
+            (0..plan.texts.len()).map(|index| RasterSource::Text(decoded.text(index).clone())),
+        );
         for image in dynamic_frames {
             if image.width() > max_texture_dimension_2d || image.height() > max_texture_dimension_2d
             {
@@ -220,46 +136,16 @@ impl SourceResources {
                     "",
                 ));
             }
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("vestra dynamic video source"),
-                size: wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                image.as_raw(),
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(image.width() * 4),
-                    rows_per_image: Some(image.height()),
-                },
-                wgpu::Extent3d {
-                    width: image.width(),
-                    height: image.height(),
-                    depth_or_array_layers: 1,
-                },
-            );
-            uploaded_texture_bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
-            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            textures.push(PreparedRasterTexture {
-                _texture: texture,
-                view,
-                intrinsic_size: IntrinsicSize::new(image.width(), image.height()),
-            });
+            uploaded_texture_bytes += image.as_raw().len() as u64;
+            textures.push(RasterSource::Texture(
+                PreparedRasterTexture::create_and_upload(
+                    device,
+                    queue,
+                    "vestra dynamic video source",
+                    image,
+                    IntrinsicSize::new(image.width(), image.height()),
+                ),
+            ));
         }
         let mut glyph_atlases = Vec::with_capacity(plan.glyph_atlases.len());
         for atlas in decoded.glyph_atlases() {
@@ -332,7 +218,11 @@ impl SourceResources {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Ok(Self {
-            raster_textures: textures,
+            prepared_raster_count: textures.len() - plan.texts.len(),
+            rasters: textures,
+            text_textures: ByteLruCache::new(
+                TEXT_TEXTURE_CACHE_BYTES.min(plan.limits.maximum_cache_bytes),
+            ),
             glyph_atlases,
             solid_texture: PreparedRasterTexture {
                 _texture: texture,
@@ -343,20 +233,67 @@ impl SourceResources {
         })
     }
 
+    pub(super) fn text_texture(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        source_index: usize,
+        animation: TextAnimationFrame,
+    ) -> Result<Arc<PreparedRasterTexture>, Diagnostic> {
+        let Some(RasterSource::Text(text)) = self.rasters.get(source_index) else {
+            return Err(Diagnostic::error(
+                "WGPU-FRAME-PLAN",
+                Category::Backend,
+                format!("GPU frame operation references missing text source {source_index}"),
+                "",
+            ));
+        };
+        let state = text.raster_state(animation);
+        if let Some((uploaded, texture)) = self.text_textures.get(&source_index)
+            && *uploaded == state
+        {
+            return Ok(Arc::clone(texture));
+        }
+
+        let pixels = text.pixels_at(state);
+        // Keep pixels immutable while encoded or submitted frames still bind this texture.
+        let raster = Arc::new(PreparedRasterTexture::create_and_upload(
+            device,
+            queue,
+            "vestra text source",
+            &pixels,
+            text.intrinsic_size(),
+        ));
+        self.text_textures.insert(
+            source_index,
+            (state, Arc::clone(&raster)),
+            pixels.as_raw().len() as u64,
+        );
+        Ok(raster)
+    }
+
+    pub(super) fn text_cache_stats(&self) -> CacheStats {
+        self.text_textures.stats()
+    }
+
     pub(super) fn upload_video(
         &self,
         queue: &wgpu::Queue,
         source_index: usize,
         pixels: &RgbaImage,
     ) -> Result<(), Diagnostic> {
-        let source = self.raster_textures.get(source_index).ok_or_else(|| {
-            Diagnostic::error(
-                "WGPU-VIDEO-SOURCE",
-                Category::Backend,
-                "dynamic video source index is out of range",
-                "",
-            )
-        })?;
+        let source = self
+            .rasters
+            .get(source_index)
+            .and_then(RasterSource::prepared_texture)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-VIDEO-SOURCE",
+                    Category::Backend,
+                    "dynamic video source index is out of range",
+                    "",
+                )
+            })?;
         if source.intrinsic_size.width != pixels.width()
             || source.intrinsic_size.height != pixels.height()
         {
@@ -373,7 +310,37 @@ impl SourceResources {
 }
 
 impl PreparedRasterTexture {
-    pub(super) fn upload(&self, queue: &wgpu::Queue, pixels: &RgbaImage) {
+    fn create_and_upload(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        label: &str,
+        pixels: &RgbaImage,
+        intrinsic_size: IntrinsicSize,
+    ) -> Self {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d {
+                width: pixels.width(),
+                height: pixels.height(),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let raster = Self {
+            view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            _texture: texture,
+            intrinsic_size,
+        };
+        raster.upload(queue, pixels);
+        raster
+    }
+
+    fn upload(&self, queue: &wgpu::Queue, pixels: &RgbaImage) {
         debug_assert_eq!(
             (self.intrinsic_size.width, self.intrinsic_size.height),
             pixels.dimensions()

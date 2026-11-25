@@ -13,7 +13,6 @@ use std::{
 #[cfg(all(test, feature = "adapter-tests"))]
 use image::RgbaImage;
 use vestra_core::plan::{EvaluatedFrame, EvaluatedSource, RenderPlan};
-use vestra_render_common::{PreparedText, TextRasterState};
 
 use crate::{
     Diagnostic,
@@ -36,7 +35,7 @@ use super::{
     polling::{drain, nonblocking, wait_for_one},
     readback::ReadbackRing,
     requirements::{GpuRequirements, ResourceEstimates},
-    resources::{FrameResources, SourceResources},
+    resources::{FrameResources, PreparedRasterTexture, SourceResources},
     texture_pool::{StaticLayerTexture, create_static_layer_texture, static_layer_texture_bytes},
     topology::PlanTopology,
     video_pool::VideoPool,
@@ -67,7 +66,6 @@ pub struct WgpuBackend {
     static_cache_population_renders: u64,
     pending_static_layers: PendingStaticLayers,
     temporary_texture_reuses: u64,
-    animated_texts: BTreeMap<usize, AnimatedTextTexture>,
     video_pool: VideoPool,
     video_pts: BTreeMap<usize, i64>,
     video_upload_count: u64,
@@ -76,11 +74,6 @@ pub struct WgpuBackend {
     // them. Rust drops fields in declaration order; resources must outlive
     // their parent WGPU context.
     context: GpuContext,
-}
-
-struct AnimatedTextTexture {
-    prepared: PreparedText,
-    uploaded: TextRasterState,
 }
 
 struct FrameSlotResources {
@@ -253,7 +246,7 @@ impl WgpuBackend {
         tracing::debug!(
             target: "vestra.render.wgpu",
             stage = "prepare",
-            resource_count = sources.raster_textures.len(),
+            resource_count = sources.prepared_raster_count,
             resource_bytes = sources.uploaded_texture_bytes,
             elapsed_ms = crate::trace_milliseconds(upload_started.elapsed()),
             "WGPU source resources prepared"
@@ -297,10 +290,10 @@ impl WgpuBackend {
             pipeline_depth,
         )?;
         let mut stats = decoded.stats().clone();
-        stats.source_texture_count = sources.raster_textures.len();
+        stats.source_texture_count = sources.prepared_raster_count;
         stats.source_texture_bytes = sources.uploaded_texture_bytes;
         stats.sampler_count = 0;
-        stats.uploaded_texture_count = sources.raster_textures.len();
+        stats.uploaded_texture_count = sources.prepared_raster_count;
         stats.uploaded_texture_bytes = sources.uploaded_texture_bytes;
         stats.readback_buffer_count = pipeline_depth;
         stats.readback_buffer_bytes = resource_estimates.readback_buffer_bytes;
@@ -343,20 +336,6 @@ impl WgpuBackend {
             static_cache_population_renders: 0,
             pending_static_layers: PendingStaticLayers::default(),
             temporary_texture_reuses: 0,
-            animated_texts: (0..plan.texts.len())
-                .filter_map(|index| {
-                    let text = decoded.text(index);
-                    text.is_animated().then(|| {
-                        (
-                            plan.images.len() + plan.shapes.len() + index,
-                            AnimatedTextTexture {
-                                prepared: text.clone(),
-                                uploaded: TextRasterState::default(),
-                            },
-                        )
-                    })
-                })
-                .collect(),
             video_pool,
             video_pts: video_slot_assets
                 .iter()
@@ -422,8 +401,12 @@ impl WgpuBackend {
         Some(ready)
     }
 
-    fn upload_dynamic_sources(&mut self, plan: &GpuFramePlan) -> Result<(), Diagnostic> {
-        let mut requested = BTreeMap::new();
+    fn upload_raster_sources(
+        &mut self,
+        plan: &GpuFramePlan,
+    ) -> Result<BTreeMap<usize, Arc<PreparedRasterTexture>>, Diagnostic> {
+        let mut videos = BTreeMap::new();
+        let mut texts = BTreeMap::new();
         for operation in &plan.operations {
             let GpuOperation::RenderRasterLayer { layer_index, .. } = operation else {
                 continue;
@@ -435,25 +418,27 @@ impl WgpuBackend {
                     source_time,
                     ..
                 } => {
-                    requested.insert(*source_index, (*asset_index, *source_time));
+                    videos.insert(*source_index, (*asset_index, *source_time));
                 }
                 EvaluatedSource::Text {
-                    text_index,
                     animation,
-                } if let Some(text) = self.animated_texts.get_mut(text_index) => {
-                    let state = text.prepared.raster_state(*animation);
-                    if text.uploaded != state {
-                        let pixels = text.prepared.pixels_at(state);
-                        // Queue writes are ordered before this frame's submission and after earlier frames.
-                        self.sources.raster_textures[*text_index]
-                            .upload(&self.context.queue, &pixels);
-                        text.uploaded = state;
+                    text_index,
+                } => {
+                    if let std::collections::btree_map::Entry::Vacant(entry) =
+                        texts.entry(*layer_index)
+                    {
+                        entry.insert(self.sources.text_texture(
+                            &self.context.device,
+                            &self.context.queue,
+                            *text_index,
+                            *animation,
+                        )?);
                     }
                 }
                 _ => {}
             }
         }
-        for (source_index, frame) in self.video_pool.frames(requested)? {
+        for (source_index, frame) in self.video_pool.frames(videos)? {
             if self.video_pts.get(&source_index) != Some(&frame.pts) {
                 self.sources
                     .upload_video(&self.context.queue, source_index, &frame.pixels)?;
@@ -462,7 +447,7 @@ impl WgpuBackend {
                 self.video_pts.insert(source_index, frame.pts);
             }
         }
-        Ok(())
+        Ok(texts)
     }
 }
 
@@ -554,14 +539,14 @@ impl RenderBackend for WgpuBackend {
             &cache_targets,
         );
         let upload_result = plan
-            .validate(self.sources.raster_textures.len())
-            .and_then(|()| self.upload_dynamic_sources(&plan));
+            .validate(self.sources.rasters.len())
+            .and_then(|()| self.upload_raster_sources(&plan));
         let slot = &mut self.slots[token.slot_index];
         if slot.uses > 0 {
             self.staged.parameter_slot_reuse_count += 1;
         }
         slot.uses += 1;
-        if let Err(error) = upload_result.and_then(|()| {
+        let text_textures = match upload_result.and_then(|text_textures| {
             slot.parameters.reset();
             encode_parameters(
                 &mut slot.parameters,
@@ -573,12 +558,16 @@ impl RenderBackend for WgpuBackend {
                 &mut slot.layer_upload_bytes,
                 &mut slot.layer_uploads,
                 self.context.device.limits().max_buffer_size,
-            )
+            )?;
+            Ok(text_textures)
         }) {
-            let error = self.runtime_context(error, Some(token));
-            self.abort();
-            return Err(error);
-        }
+            Ok(text_textures) => text_textures,
+            Err(error) => {
+                let error = self.runtime_context(error, Some(token));
+                self.abort();
+                return Err(error);
+            }
+        };
         let mut particle_buffer = slot.particle_buffer.take();
         if !slot.particle_instances.is_empty() {
             let required = slot
@@ -649,6 +638,7 @@ impl RenderBackend for WgpuBackend {
             &self.pipelines,
             &self.frame,
             &slot.bind_groups,
+            &text_textures,
             &plan,
             &slot.parameters,
             &slot.parameter_buffer,
@@ -843,13 +833,18 @@ impl RenderBackend for WgpuBackend {
 
     fn stats(&mut self) -> PreparationStats {
         debug_assert_eq!(
-            self.stats.source_texture_bytes,
+            self.sources.uploaded_texture_bytes,
             self.resource_estimates.source_texture_bytes
         );
         debug_assert_eq!(
             self.stats.readback_buffer_bytes,
             self.resource_estimates.readback_buffer_bytes
         );
+        let text_cache = self.sources.text_cache_stats();
+        self.stats.source_texture_count =
+            self.sources.prepared_raster_count + text_cache.current_entries;
+        self.stats.source_texture_bytes =
+            self.sources.uploaded_texture_bytes + text_cache.current_bytes;
         let cache = self.static_layers.stats();
         self.stats.static_cache_hits = cache.hits;
         self.stats.static_cache_misses = cache.misses;

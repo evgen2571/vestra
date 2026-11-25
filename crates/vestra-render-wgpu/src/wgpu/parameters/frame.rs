@@ -65,7 +65,7 @@ pub(in crate::wgpu) fn encode_parameters(
                     .source
                     .raster_presentation()
                     .expect("raster frame operation must reference a raster source");
-                let intrinsic = sources.raster_textures[*source_index].intrinsic_size;
+                let intrinsic = sources.rasters[*source_index].intrinsic_size();
                 let parameters = parameters::raster(
                     frame,
                     intrinsic,
@@ -106,7 +106,7 @@ pub(in crate::wgpu) fn encode_parameters(
                 let intrinsic = if *source_layer {
                     crate::render::geometry::IntrinsicSize::new(owner_extent.0, owner_extent.1)
                 } else {
-                    sources.raster_textures[*source_index].intrinsic_size
+                    sources.rasters[*source_index].intrinsic_size()
                 };
                 let mut parameters = parameters::raster(
                     &mask_frame,

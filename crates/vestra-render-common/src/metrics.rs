@@ -110,7 +110,8 @@ pub struct PreparationStats {
     pub schedule_event_count: usize,
     pub active_item_consideration_count: u64,
     pub rendered_frame_count: u64,
-    /// WGPU source images uploaded once for this render. CPU leaves this zero.
+    /// WGPU source storage kept at preparation or in the text cache. CPU leaves this zero.
+    /// Excludes transient text textures held only by active submissions.
     pub source_texture_count: usize,
     pub source_texture_bytes: u64,
     /// Manual bilinear sampling uses textureLoad, so WGPU creates no sampler.

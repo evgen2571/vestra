@@ -6,7 +6,10 @@ The WGPU backend in `vestra-render-wgpu` implements the common `RenderBackend` c
 
 The backend obtains a shared root WGPU instance, selects an adapter under the requested graphics API, requests the device and queue, then builds pipelines, textures, buffers, source resources and readback state. `AdapterInfo` records the actual graphics backend and device classification so the SDK can distinguish a hardware adapter from software WGPU.
 
-Preparation uploads static image/font/source data and creates reusable GPU resources.
+Preparation uploads images, shapes, initial video frames, and effect glyph
+atlases, and creates reusable GPU resources. Text shaping and rasterization
+still happen during preparation. WGPU uploads a prepared text raster when a
+frame first draws it, which keeps caption geometry stable when seeking.
 
 ## Frame execution
 
@@ -51,6 +54,18 @@ The backend has bounded in-flight work. Resource reuse follows completion:
 2. Associate submitted work with its GPU completion token.
 3. Release or reuse those resources only when completion makes it safe.
 
+Text source textures have a least-recently-used cache separate from the
+whole-layer cache. The text cache retains one raster state per source and is
+capped at 8 MiB or the project's cache limit, whichever is smaller. Larger
+rasters are uploaded for the frame that needs them. WGPU retains textures
+referenced by encoded or in-flight commands through completion, even if the
+cache has already evicted them.
+
+The source texture counters include cached text rasters. Preparation upload
+counters exclude on-demand text uploads. Text rasters on the host still count
+toward the decoded source limits, and submission-only textures are outside
+the retained-source counters.
+
 `VESTRA_WGPU_IN_FLIGHT` controls implementation pipeline depth only when valid;
 it is not a semantic setting. A `PreparedProject` owns one backend instance and
 is not freely concurrent because these resources and submissions share state.
@@ -88,8 +103,8 @@ pipelines stay in WGPU, alongside private planning/resource tests. Cross-backend
 parity tests live in the facade and use public submission/completion contracts.
 
 Bind groups remain owned by the backend's frame slots. Most are prepared once;
-bindings for static cached textures are created on demand during command
-encoding and counted in that scope. Topology, requirements, pipelines, texture
+bindings for text and static cached textures are created on demand during
+command encoding and counted in that scope. Topology, requirements, pipelines, texture
 pools and readback have separate resource responsibilities.
 
 Shader labels and ordered static WGSL fragments derive from `registry.rs`;

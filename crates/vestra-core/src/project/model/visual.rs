@@ -144,13 +144,15 @@ pub struct ShapeSource {
     pub stroke_width: f64,
 }
 
-/// A static, file-backed text source. Layout and raster data are prepared by
+/// A file-backed text source. Layout and raster data are prepared by
 /// the renderer and are intentionally absent from the canonical model.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct TextSource {
     pub text: String,
     pub font: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fallback_fonts: Vec<String>,
     pub font_size: f64,
     pub fill: String,
     #[serde(default)]
@@ -163,6 +165,21 @@ pub struct TextSource {
     pub line_spacing: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub letter_spacing: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_color: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub stroke_width: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub background_padding: f64,
+}
+
+impl TextSource {
+    /// Font asset IDs in shaping priority order, starting with the primary font.
+    pub fn font_ids(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.font.as_str()).chain(self.fallback_fonts.iter().map(String::as_str))
+    }
 }
 
 const fn default_text_line_spacing() -> f64 {
@@ -242,12 +259,17 @@ mod tests {
         let source = VisualSource::Text(TextSource {
             text: "AV ffi\nΔ".to_owned(),
             font: "font-000001".to_owned(),
+            fallback_fonts: vec!["font-000002".to_owned()],
             font_size: 48.0,
             fill: "#ffffff80".to_owned(),
             align: TextAlignment::Center,
             max_width: Some(640.0),
             line_spacing: 1.2,
             letter_spacing: 2.0,
+            stroke_color: Some("#111111".to_owned()),
+            stroke_width: 1.5,
+            background_color: Some("#22222280".to_owned()),
+            background_padding: 4.0,
         });
         let value = serde_json::to_value(&source).expect("text serializes");
         assert_eq!(value["type"], "text");

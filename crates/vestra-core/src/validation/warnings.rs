@@ -54,7 +54,7 @@ fn collect_used_visual_source_assets<'a>(
             used_assets.insert(asset.as_str());
         }
         crate::project::VisualSource::Text(text) => {
-            used_assets.insert(text.font.as_str());
+            used_assets.extend(text.font_ids());
         }
         crate::project::VisualSource::Group(group) => {
             collect_used_visual_assets(&group.clips, used_assets);

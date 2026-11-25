@@ -5,7 +5,11 @@
     reason = "asset decoding preserves machine-readable diagnostics"
 )]
 
-use std::{collections::BTreeMap, sync::Arc, time::Instant};
+use std::{
+    collections::{BTreeMap, btree_map::Entry},
+    sync::Arc,
+    time::Instant,
+};
 
 use cosmic_text::SwashCache;
 use image::RgbaImage;
@@ -151,36 +155,34 @@ impl DecodedAssets {
             }
             shapes.push(crate::shape_raster::prepare(shape));
         }
-        let mut font_systems = BTreeMap::new();
-        for font in plan
+        let font_paths: BTreeMap<_, _> = plan
             .fonts
             .iter()
-            .filter(|font| plan.texts.iter().any(|text| text.font == font.id))
-        {
-            font_systems.insert(font.id.clone(), crate::text::load_font(&font.path)?);
-        }
-        let mut glyph_caches = font_systems
-            .keys()
-            .map(|font_id| (font_id.clone(), SwashCache::new()))
-            .collect::<BTreeMap<_, _>>();
+            .map(|font| (font.id.as_str(), font.path.as_path()))
+            .collect();
+        let mut font_caches = BTreeMap::new();
         let mut texts = Vec::with_capacity(plan.texts.len());
         for text in &plan.texts {
-            let font_system = font_systems.get_mut(&text.font).ok_or_else(|| {
-                Diagnostic::error(
-                    "VESTRA-TEXT-FONT",
-                    Category::Media,
-                    "prepared text has no font asset",
-                    "",
-                )
-            })?;
-            let cache = glyph_caches.get_mut(&text.font).ok_or_else(|| {
-                Diagnostic::error(
-                    "VESTRA-TEXT-FONT",
-                    Category::Media,
-                    "prepared text has no font cache",
-                    "",
-                )
-            })?;
+            let stack: Vec<_> = text.font_ids().collect();
+            let ordered_fallback = !text.fallback_fonts.is_empty();
+            let (font_system, cache) = match font_caches.entry(stack) {
+                Entry::Occupied(entry) => entry.into_mut(),
+                Entry::Vacant(entry) => {
+                    let paths = entry
+                        .key()
+                        .iter()
+                        .map(|id| {
+                            font_paths.get(id).copied().ok_or_else(|| {
+                                crate::text::font_error(format!(
+                                    "prepared text has no font asset '{id}'"
+                                ))
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let system = crate::text::load_fonts(paths, ordered_fallback)?;
+                    entry.insert((system, SwashCache::new()))
+                }
+            };
             let prepared =
                 crate::text::prepare(text, font_system, cache, decoded_source_bytes, &plan.limits)?;
             let bytes = u64::from(prepared.pixels.width())

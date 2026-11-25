@@ -56,7 +56,6 @@ from ._native import (
 # Mutable high-level editor model. ``ProjectSnapshot`` remains the stable
 # public name for the immutable native project type.
 from .editor import Composition, CompositionLayer, Layer, Project as Project
-from .authoring.animation import PointKeyframe
 from .audio import (
     AudioClip,
     AudioEffectStack,
@@ -228,7 +227,6 @@ __all__ = [
     "Interpolation",
     "CubicBezier",
     "Point",
-    "PointKeyframe",
     "Crop",
     "BlendMode",
     "Mask",

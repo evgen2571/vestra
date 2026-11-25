@@ -343,7 +343,7 @@ def test_json_v1_schema_parser_validation_and_roundtrip_match_baseline(case):
     ] == case["diagnostics"]
 
 
-def test_generated_schema_preserves_baseline_outside_group_size_spectrum_and_audio_remixes():
+def test_generated_schema_preserves_baseline_with_documented_extensions():
     schema = json.loads(SCHEMA_PATH.read_bytes())
     assert schema["$defs"]["group"]["properties"].pop("size") == {
         "type": "object",
@@ -355,6 +355,16 @@ def test_generated_schema_preserves_baseline_outside_group_size_spectrum_and_aud
         },
     }
     definitions = schema["$defs"]
+    particles = definitions["particle_system"]["properties"]
+    assert particles.pop("emitter_keyframes") == {
+        "items": {"$ref": "#/$defs/point_keyframe"},
+        "type": "array",
+    }
+    assert particles["emission"]["properties"].pop("pre_roll") == {
+        "default": 0.0,
+        "minimum": 0,
+        "type": "number",
+    }
     spectrum = definitions["spectrum2d"]["properties"]
     assert spectrum.pop("wave") == {"$ref": "#/$defs/spectrum2d_wave"}
     assert spectrum.pop("style") == {"default": "bars", "enum": ["bars", "wave", "both"]}

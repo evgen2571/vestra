@@ -444,7 +444,10 @@ def test_video_and_particle_masks_lower_through_their_normal_source_models() -> 
 @pytest.mark.parametrize(
     "placement", ["direct", "group child", "transformed group child", "group child mask"],
 )
-def test_particle_mask_preserves_reactive_tracks_and_zero_size_coverage(placement: str) -> None:
+@pytest.mark.parametrize("backend", ["cpu", "wgpu"])
+def test_particle_mask_preserves_reactive_tracks_and_zero_size_coverage(
+    placement: str, backend: str
+) -> None:
     project = Project(size=(32, 32), fps=2, duration=1, base_directory=ROOT)
     project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
     layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
@@ -482,7 +485,7 @@ def test_particle_mask_preserves_reactive_tracks_and_zero_size_coverage(placemen
         source = source["clips"][0]["masks"][0]["input"]["source"]
     assert source["particle"]["audio_reactive"] == reactive.to_canonical()
 
-    prepared = _prepare(project, "cpu")
+    prepared = _prepare(project, backend)
     assert max(prepared.render_frame_seconds(0).to_bytes()[0::4]) == 0
     visible = prepared.render_frame_seconds(0.5).to_bytes()[0::4]
     assert 0 < max(visible) < 128

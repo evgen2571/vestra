@@ -43,6 +43,8 @@ pub enum MediaError {
         encoder: &'static str,
         format: &'static str,
     },
+    #[error("cannot encode selectable subtitles: {0}")]
+    SubtitleEncoding(String),
     #[error("cannot encode animation: {0}")]
     AnimationEncoding(String),
     #[error("cannot write animation: {0}")]

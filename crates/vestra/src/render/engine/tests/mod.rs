@@ -135,8 +135,12 @@ pub(crate) fn render_prepared(
             .unwrap_or_else(|| prepared.plan.configured_output.clone()),
     );
     lifecycle.stage(RenderStage::Preparing);
-    let result =
-        super::static_render::render_prepared_with_lifecycle(prepared, options, &mut lifecycle);
+    let result = super::static_render::render_prepared_with_lifecycle(
+        prepared,
+        options,
+        &[],
+        &mut lifecycle,
+    );
     super::runner::finish_lifecycle(&mut lifecycle, &result);
     result
 }

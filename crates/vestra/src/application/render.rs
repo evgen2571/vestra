@@ -270,6 +270,7 @@ pub(crate) fn prepare_project(
 pub(crate) fn render_prepared_project(
     prepared: &mut PreparedRender,
     request: RenderRequest,
+    subtitles: &[crate::SubtitleCue],
     lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, ApplicationRenderError> {
     let summary = render_prepared_with_lifecycle(
@@ -282,6 +283,7 @@ pub(crate) fn render_prepared_project(
             #[cfg(test)]
             backend_preference: request.backend_preference,
         },
+        subtitles,
         lifecycle,
     )
     .map_err(|error| ApplicationRenderError::Render {

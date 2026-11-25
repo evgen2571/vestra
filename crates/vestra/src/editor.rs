@@ -562,6 +562,7 @@ impl Editor {
         let mut summary = match application::render_prepared_project(
             &mut prepared,
             render_request,
+            &request.subtitles,
             &mut lifecycle,
         ) {
             Ok(summary) => summary,
@@ -734,9 +735,16 @@ pub struct SdkRenderRequest {
     /// Select project samples in the half-open interval `[start, end)`.
     pub start: Duration,
     pub end: Option<Duration>,
+    /// Optional plain-text MP4 subtitle cues on the project timeline.
+    pub subtitles: Vec<crate::SubtitleCue>,
 }
 
 impl SdkRenderRequest {
+    #[must_use]
+    pub fn with_subtitles(mut self, subtitles: Vec<crate::SubtitleCue>) -> Self {
+        self.subtitles = subtitles;
+        self
+    }
     #[must_use]
     pub const fn with_resolution(mut self, width: u32, height: u32) -> Self {
         self.resolution = Some((width, height));

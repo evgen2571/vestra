@@ -142,6 +142,7 @@ pub struct PreparedVideoRenderRequest {
     overwrite: bool,
     start: Duration,
     end: Option<Duration>,
+    subtitles: Vec<crate::SubtitleCue>,
     progress_mode: vestra_progress::ProgressMode,
 }
 
@@ -153,6 +154,7 @@ impl PreparedVideoRenderRequest {
             overwrite: false,
             start: Duration::ZERO,
             end: None,
+            subtitles: Vec::new(),
             progress_mode: vestra_progress::ProgressMode::Auto,
         }
     }
@@ -165,6 +167,11 @@ impl PreparedVideoRenderRequest {
     pub const fn with_range(mut self, start: Duration, end: Option<Duration>) -> Self {
         self.start = start;
         self.end = end;
+        self
+    }
+    #[must_use]
+    pub fn with_subtitles(mut self, subtitles: Vec<crate::SubtitleCue>) -> Self {
+        self.subtitles = subtitles;
         self
     }
     #[must_use]
@@ -684,6 +691,7 @@ impl PreparedProject {
         let summary = match application::render_prepared_project(
             &mut self.prepared,
             render_request,
+            &request.subtitles,
             &mut lifecycle,
         ) {
             Ok(summary) => summary,

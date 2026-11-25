@@ -9,7 +9,7 @@ use vestra_core::plan::{CompiledParticleSystem, EvaluatedParticleAppearance};
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
 pub(super) struct GpuParticleInstance {
-    pub(super) position_size_rotation_opacity: [f32; 4],
+    pub(super) position_size_rotation: [f32; 4],
     pub(super) colour: [f32; 4],
 }
 
@@ -40,11 +40,12 @@ pub(super) fn pack_into(
             ));
         }
         let instance = GpuParticleInstance {
-            position_size_rotation_opacity: [
+            position_size_rotation: [
                 particle.position.x as f32,
                 particle.position.y as f32,
                 particle.size as f32,
-                particle.rotation_degrees as f32,
+                // Square coverage repeats every quarter-turn, including exact axes.
+                (particle.rotation_degrees % 90.0) as f32,
             ],
             colour: [
                 f32::from(particle.colour[0]) / 255.0,
@@ -54,7 +55,7 @@ pub(super) fn pack_into(
             ],
         };
         if instance
-            .position_size_rotation_opacity
+            .position_size_rotation
             .into_iter()
             .chain(instance.colour)
             .any(|value| !value.is_finite())

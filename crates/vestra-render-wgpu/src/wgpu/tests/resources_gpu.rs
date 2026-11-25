@@ -276,7 +276,7 @@ fn gpu_resources_are_reused_across_frames_when_an_adapter_is_available() {
     assert_eq!(initial.sampler_count, 0);
     assert_eq!(
         initial.output_texture_count,
-        4 + usize::from(plan.compilation.effect_pass_count > 0)
+        3 + usize::from(plan.compilation.effect_pass_count > 0)
             + usize::from(plan.compilation.effect_pass_count > 1)
             + usize::from(super::frame_plan::plan_requires_auxiliary(&plan))
             + super::frame_plan::GpuFramePlan::required_group_depth(&plan) * 2

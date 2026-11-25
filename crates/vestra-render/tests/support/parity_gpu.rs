@@ -758,6 +758,140 @@ fn gpu_multiple_additive_particles_render_beyond_single_frame_buffer_limit() {
     }
 }
 
+fn small_particle_project(
+    background: &str,
+    position: (f64, f64),
+    particle: Value,
+    bursts: Value,
+) -> crate::project::Project {
+    serde_json::from_value(json!({
+        "schema_version": 1,
+        "output": {
+            "path": "particle-parity.mp4", "width": 32, "height": 32,
+            "frame_rate": "24/1", "background": background, "quality": "preview",
+            "audio": false, "duration_mode": "explicit", "duration": 2.0
+        },
+        "assets": [],
+        "visual": {
+            "clips": [{
+                "id": "particles",
+                "source": {
+                    "type": "particle_system",
+                    "emitter": {"type": "point", "position": {"x": position.0, "y": position.1}},
+                    "emission": {"bursts": bursts},
+                    "particle": particle
+                },
+                "start": 0.0, "duration": 2.0, "layer": 0,
+                "opacity": {"base_value": 1.0}
+            }]
+        }
+    }))
+    .expect("particle parity fixture parses")
+}
+
+#[test]
+fn gpu_particles_preserve_isolated_faint_straight_colour() {
+    for (opacity, alpha) in [(0.02, 5), (0.004, 1), (0.07, 18)] {
+        let project = small_particle_project(
+            "#00000000",
+            (0.5, 0.5),
+            json!({"size": 0.25, "colour": "#0D4480", "opacity": opacity}),
+            json!([{"time": 0, "count": 1}]),
+        );
+        eprintln!("particle parity fixture=isolated opacity={opacity} time_ns=0");
+        let Some(output) = render_project_parity(project, 0, 0) else {
+            return;
+        };
+        assert_eq!(output.get_pixel(16, 16).0, [13, 68, 128, alpha]);
+        assert_eq!(output.get_pixel(0, 0).0, [0, 0, 0, 0]);
+    }
+}
+
+#[test]
+fn gpu_particles_preserve_translucent_overlap_on_both_backgrounds() {
+    for (background, expected) in [
+        ("#00000000", [120, 108, 81, 10]),
+        ("#102030", [20, 35, 49, 255]),
+    ] {
+        let project = small_particle_project(
+            background,
+            (0.5, 0.5),
+            json!({
+                "size": 0.25, "opacity": 0.02,
+                "lifetime_style": {"colour": [
+                    {"t": 0.0, "colour": "#E09422"},
+                    {"t": 0.5, "colour": "#0D4480"}
+                ]}
+            }),
+            json!([{"time": 0, "count": 1}, {"time": 0.5, "count": 1}]),
+        );
+        eprintln!("particle parity fixture=overlap background={background} time_ns=500000000");
+        // CPU rounds its straight-alpha result after each particle. WGPU
+        // quantizes the premultiplied result to bytes only at resolve.
+        let Some(output) = render_project_parity(project, 500_000_000, 1) else {
+            return;
+        };
+        assert!(
+            output
+                .get_pixel(16, 16)
+                .0
+                .into_iter()
+                .zip(expected)
+                .all(|(actual, expected)| actual.abs_diff(expected) <= 1),
+            "unexpected overlap pixel on {background}: {:?}",
+            output.get_pixel(16, 16),
+        );
+    }
+}
+
+#[test]
+fn gpu_particles_include_pixel_centres_on_primitive_boundaries() {
+    for (primitive, rotation, x, covered_pixels) in [
+        ("square", 0.0, 16.5 / 32.0, 81),
+        ("square", 180.0, 16.5 / 32.0, 81),
+        ("square", 45.0, 16.5 / 32.0, 61),
+        // This angle has sin = 3/5 and cos = 4/5, so some pixel centres
+        // land precisely on an edge even though the square is rotated.
+        ("square", 3.0_f64.atan2(4.0).to_degrees(), 16.5 / 32.0, 69),
+        ("disc", 0.0, 16.5 / 32.0, 49),
+        ("square", 0.0, -0.5 / 32.0, 36),
+        ("square", 45.0, -0.5 / 32.0, 25),
+        ("disc", 0.0, -0.5 / 32.0, 20),
+        ("square", 45.0, -1.0, 0),
+    ] {
+        let project = small_particle_project(
+            "#00000000",
+            (x, 16.5 / 32.0),
+            json!({"size": 0.25, "primitive": primitive, "rotation_degrees": rotation}),
+            json!([{"time": 0, "count": 1}]),
+        );
+        eprintln!(
+            "particle parity fixture=coverage primitive={primitive} rotation={rotation} x={x} time_ns=0"
+        );
+        let Some(output) = render_project_parity(project, 0, 0) else {
+            return;
+        };
+        assert_eq!(
+            output.pixels().filter(|pixel| pixel[3] != 0).count(),
+            covered_pixels
+        );
+    }
+}
+
+#[test]
+fn gpu_particles_preserve_additive_overlap_bytes() {
+    let project = small_particle_project(
+        "#00000000",
+        (0.5, 0.5),
+        json!({"size": 0.25, "colour": "#64000080", "blend_mode": "additive"}),
+        json!([{"time": 0, "count": 2}]),
+    );
+    eprintln!("particle parity fixture=additive-overlap time_ns=0");
+    if let Some(output) = render_project_parity(project, 0, 0) {
+        assert_eq!(output.get_pixel(16, 16).0, [134, 0, 0, 192]);
+    }
+}
+
 #[test]
 fn gpu_particle_system_inside_group_matches_cpu_on_vulkan() {
     let particle = json!({

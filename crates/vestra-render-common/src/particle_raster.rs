@@ -47,27 +47,21 @@ pub fn rasterize_instances(
             continue;
         }
         let half = size / 2.0;
-        let (half_x, half_y) = match primitive {
-            ParticlePrimitive::Disc => (half, half),
+        let ((sin, cos), extent) = match primitive {
+            ParticlePrimitive::Disc => ((0.0, 1.0), half),
             ParticlePrimitive::Square => {
-                let radians = particle.rotation_degrees.to_radians();
-                let extent = half * (radians.cos().abs() + radians.sin().abs());
-                (extent, extent)
+                let radians = (particle.rotation_degrees % 90.0).to_radians();
+                let (sin, cos) = radians.sin_cos();
+                ((sin, cos), half * (cos.abs() + sin.abs()))
             }
         };
-        let Some((min_x, max_x)) = pixel_bounds(cx - half_x, cx + half_x, width) else {
+        let Some((min_x, max_x)) = pixel_bounds(cx - extent, cx + extent, width) else {
             continue;
         };
-        let Some((min_y, max_y)) = pixel_bounds(cy - half_y, cy + half_y, height) else {
+        let Some((min_y, max_y)) = pixel_bounds(cy - extent, cy + extent, height) else {
             continue;
         };
         let source = crate::blend::apply_colour_transform(Rgba(particle.colour), colour_transform);
-        let (sin, cos) = if matches!(primitive, ParticlePrimitive::Square) {
-            let radians = particle.rotation_degrees.to_radians();
-            (radians.sin(), radians.cos())
-        } else {
-            (0.0, 1.0)
-        };
         let radius_squared = half * half;
         for py in min_y..max_y {
             for px in min_x..max_x {

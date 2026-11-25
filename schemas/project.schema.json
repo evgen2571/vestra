@@ -5194,6 +5194,49 @@
     },
     "text": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "stroke_width": {
+                "const": 0
+              }
+            }
+          },
+          "if": {
+            "required": [
+              "stroke_color"
+            ]
+          },
+          "then": {
+            "properties": {
+              "stroke_width": {
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "stroke_width"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "background_padding": {
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "background_padding"
+            ]
+          },
+          "then": {
+            "required": [
+              "background_color"
+            ]
+          }
+        }
+      ],
       "properties": {
         "align": {
           "default": "left",
@@ -5202,6 +5245,21 @@
             "center",
             "right"
           ]
+        },
+        "background_color": {
+          "$ref": "#/$defs/colour"
+        },
+        "background_padding": {
+          "default": 0.0,
+          "minimum": 0,
+          "type": "number"
+        },
+        "fallback_fonts": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
         },
         "fill": {
           "$ref": "#/$defs/colour"
@@ -5224,6 +5282,14 @@
         },
         "max_width": {
           "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "stroke_color": {
+          "$ref": "#/$defs/colour"
+        },
+        "stroke_width": {
+          "default": 0.0,
+          "minimum": 0,
           "type": "number"
         },
         "text": {

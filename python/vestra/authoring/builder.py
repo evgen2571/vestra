@@ -1,6 +1,6 @@
 """The mutable Python builder that feeds the native canonical parser."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from math import isfinite
 import os
 from pathlib import Path
@@ -338,11 +338,17 @@ class ProjectBuilder:
         self, *, source: dict[str, object], font: FontAsset, start: int | float,
         duration: int | float, layer: int, visible: bool = True,
         opacity: int | float = 1.0, id: str | None = None,
+        fallback_fonts: Sequence[FontAsset] = (),
     ) -> TextClip:
         if not isinstance(font, FontAsset):
             raise TypeError("font must be FontAsset")
         _require_owner(self._owner, font._owner)
-        staged = TextClip._create(self._owner, "", source, font, start=start, duration=duration,
+        fallbacks = tuple(fallback_fonts)
+        for fallback in fallbacks:
+            if not isinstance(fallback, FontAsset):
+                raise TypeError("fallback_fonts must contain FontAsset values")
+            _require_owner(self._owner, fallback._owner)
+        staged = TextClip._create(self._owner, "", source, font, fallbacks, start=start, duration=duration,
                                   layer=layer, visible=visible, opacity=opacity)
         staged._id = self._ids.allocate("clip", "text") if id is None else self._ids.reserve("clip", id)
         staged._attach_effects(ClipEffectCollection._create(self._owner, self._ids, staged))

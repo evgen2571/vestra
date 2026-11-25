@@ -6,6 +6,7 @@ import vestra
 from vestra import Crossfade, Image, Rectangle, Text
 from vestra.effects import GaussianBlur
 from vestra.lowering import source_capabilities
+from vestra.sources.text import TextAlignment
 
 
 FONT = "tests/assets/VestraTest-Regular.ttf"
@@ -137,6 +138,12 @@ def test_text_uses_generic_wgpu_raster_presentation() -> None:
         ({"line_spacing": 0}, "line_spacing"),
         ({"letter_spacing": float("nan")}, "letter_spacing"),
         ({"align": "justify"}, "align"),
+        ({"fallback_fonts": "some font"}, "fallback_fonts"),
+        ({"stroke_color": "#ffffff"}, "stroke_width"),
+        ({"stroke_width": 2}, "stroke_color"),
+        ({"stroke_color": "#ffffff", "stroke_width": -1}, "stroke_width"),
+        ({"background_padding": 5}, "background_color"),
+        ({"background_color": "#ffffff", "background_padding": -1}, "background_padding"),
     ],
 )
 def test_text_rejects_invalid_layout_values(kwargs: dict[str, object], message: str) -> None:
@@ -273,3 +280,89 @@ def test_default_text_uses_shared_cpu_wgpu_raster() -> None:
     gpu = _render_frame(project, 0, "wgpu").to_bytes()
     assert any(gpu[index:index + 3] != bytes(3) for index in range(0, len(gpu), 4))
     assert max(abs(left - right) for left, right in zip(cpu, gpu)) <= 2
+
+
+def test_natural_multiline_width_aligns_each_line() -> None:
+    def line_bounds(align: TextAlignment) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
+        project = vestra.Project(size=(240, 120), fps=1, duration=1)
+        project.root.add(Text("AAAA\nA", font=FONT, font_size=40, align=align, position=(0, 0), anchor=(0, 0)))
+        pixels = project.render_frame(0, backend="cpu").to_bytes()
+        first = _ink_bounds(pixels[: 240 * 40 * 4], 240, 40)
+        second = _ink_bounds(pixels[240 * 40 * 4 :], 240, 80)
+        assert first is not None and second is not None
+        return first, second
+
+    first, left = line_bounds("left")
+    assert left[0] == first[0]
+    widest, center = line_bounds("center")
+    assert widest == first
+    assert abs((center[0] + center[2]) - (first[0] + first[2])) <= 2
+    widest, right = line_bounds("right")
+    assert widest == first
+    assert abs(right[2] - first[2]) <= 1
+
+
+def test_mixed_script_uses_fallbacks_in_snapshot_order() -> None:
+    from pathlib import Path
+
+    regular = Path("tests/assets/VestraFallbackFixture-Regular.ttf")
+    bold = Path("tests/assets/VestraFallbackFixture-Bold.ttf")
+
+    def render(text: str, fallback_fonts: tuple[Path, ...] = ()) -> bytes:
+        project = vestra.Project(size=(160, 120), fps=1, duration=1, base_directory=".")
+        source = Text(text, font=FONT, fallback_fonts=fallback_fonts, font_size=40, position=(0, 0), anchor=(0, 0))
+        project.root.add(source)
+        snapshot = project.snapshot()
+        data = snapshot.to_dict()
+        assets = {asset["id"]: asset["source"] for asset in data["assets"]}
+        saved = data["visual"]["clips"][0]["source"]
+        assert [assets[font] for font in saved.get("fallback_fonts", [])] == [str(path) for path in fallback_fonts]
+        # Use the same public preparation path a reader of the saved JSON uses.
+        reloaded = vestra.ProjectSnapshot.from_json(snapshot.to_json(), base_directory=".")
+        options = vestra.PrepareOptions(backend=vestra.BackendPreference.CPU)
+        return vestra.Editor().prepare(reloaded, options).render_frame_number(0).to_bytes()
+
+    regular_first = render("A ก", (regular, bold))
+    bold_first = render("A ก", (bold, regular))
+    assert regular_first == render("A ก", (regular,))
+    assert bold_first == render("A ก", (bold,))
+    primary_only = render("A ก")
+    assert len({regular_first, bold_first, primary_only}) == 3
+    assert all(
+        regular_first[row : row + 25 * 4] == bold_first[row : row + 25 * 4]
+        for row in range(0, len(regular_first), 160 * 4)
+    )
+
+
+def test_text_style_extends_raster_without_moving_ink() -> None:
+    def render(**style) -> bytes:
+        project = vestra.Project(size=(140, 100), fps=1, duration=1, background="#00000000")
+        project.root.add(Text(
+            "A", font=FONT, font_size=40, align="center", max_width=60,
+            position=(0.5, 0.5), anchor=(0.5, 1.0), **style,
+        ))
+        return project.render_frame(0, backend="cpu").to_bytes()
+
+    def coords(data: bytes, rgb: bytes) -> set[tuple[int, int]]:
+        return {
+            (pixel % 140, pixel // 140)
+            for pixel in range(140 * 100)
+            if data[pixel * 4 : pixel * 4 + 3] == rgb and data[pixel * 4 + 3] == 255
+        }
+
+    bare = render()
+    styled = render(
+        stroke_color="#ff000080", stroke_width=2.5,
+        background_color="#0000ff40", background_padding=5,
+    )
+    white_ink = coords(bare, b"\xff\xff\xff")
+    assert white_ink and coords(styled, b"\xff\xff\xff") == white_ink
+    assert styled[(54 * 140 + 35) * 4 : (54 * 140 + 35) * 4 + 4] == b"\x00\x00\xff\x40"
+    assert styled[(55 * 140 + 35) * 4 : (55 * 140 + 35) * 4 + 4] == b"\x00\x00\x00\x00"
+    assert any(
+        red > 0 and green == 0 and blue > 0 and 64 < alpha < 255
+        for red, green, blue, alpha in zip(styled[::4], styled[1::4], styled[2::4], styled[3::4])
+    )
+    hollow = render(fill="#ffffff00", stroke_color="#ff0000", stroke_width=2)
+    assert not coords(hollow, b"\xff\xff\xff")
+    assert coords(hollow, b"\xff\x00\x00")

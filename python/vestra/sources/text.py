@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from math import isfinite
 from typing import Literal
 
@@ -23,22 +24,41 @@ def _positive(value: int | float, name: str) -> float:
     return result
 
 
-class Text(Source):
-    """A static text source using the bundled default, an installed family, or a file."""
+def _font_selector(value: str | os.PathLike[str], name: str) -> tuple[str, bool]:
+    try:
+        selector = os.fspath(value)
+    except TypeError as error:
+        raise TypeError(f"{name} must be str or PathLike[str]") from error
+    if not isinstance(selector, str) or not selector.strip():
+        raise ValueError(f"{name} must be a non-empty family name or file path")
+    return selector, not isinstance(value, str)
 
-    __slots__ = ("_text", "_font", "_font_is_path", "_font_size", "_fill", "_align", "_max_width", "_line_spacing", "_letter_spacing")
+
+class Text(Source):
+    """Text using the bundled default, an installed family, or a font file."""
+
+    __slots__ = (
+        "_text", "_font", "_font_is_path", "_fallback_fonts", "_font_size", "_fill",
+        "_align", "_max_width", "_line_spacing", "_letter_spacing", "_stroke_color",
+        "_stroke_width", "_background_color", "_background_padding",
+    )
 
     def __init__(
         self,
         text: str,
         *,
         font: str | os.PathLike[str] | None = None,
+        fallback_fonts: Sequence[str | os.PathLike[str]] = (),
         font_size: int | float = 48,
         fill: Color | str = "#ffffff",
         align: TextAlignment = "left",
         max_width: int | float | None = None,
         line_spacing: int | float = 1.0,
         letter_spacing: int | float = 0.0,
+        stroke_color: Color | str | None = None,
+        stroke_width: int | float = 0.0,
+        background_color: Color | str | None = None,
+        background_padding: int | float = 0.0,
         transform: Transform | None = None,
         position: TransformPoint | None = None,
         anchor: TransformPoint | None = None,
@@ -56,28 +76,39 @@ class Text(Source):
         )
         if not isinstance(text, str):
             raise TypeError("text must be a string")
-        try:
-            font_value = None if font is None else os.fspath(font)
-        except TypeError as error:
-            raise TypeError("font must be str, PathLike[str], or None") from error
-        if font is not None and (not isinstance(font_value, str) or not font_value or font_value.isspace()):
-            raise ValueError("font must be a non-empty family name or file path")
+        font_value, font_is_path = (None, False) if font is None else _font_selector(font, "font")
+        if isinstance(fallback_fonts, str | bytes) or not isinstance(fallback_fonts, Sequence):
+            raise TypeError("fallback_fonts must be a sequence of font selectors")
         if align not in {"left", "center", "right"}:
             raise ValueError("align must be 'left', 'center', or 'right'")
         self._text = text
         self._font = font_value
-        self._font_is_path = font is not None and not isinstance(font, str)
+        self._font_is_path = font_is_path
+        self._fallback_fonts = tuple(
+            _font_selector(value, f"fallback_fonts[{index}]") for index, value in enumerate(fallback_fonts)
+        )
         self._font_size = _positive(font_size, "font_size")
         self._fill = color_to_canonical(fill)
         self._align = align
         self._max_width = None if max_width is None else _positive(max_width, "max_width")
         self._line_spacing = _positive(line_spacing, "line_spacing")
         self._letter_spacing = _finite(letter_spacing, "letter_spacing")
+        self._stroke_color = None if stroke_color is None else color_to_canonical(stroke_color)
+        self._stroke_width = _finite(stroke_width, "stroke_width")
+        if self._stroke_width < 0 or (self._stroke_width > 0) != (stroke_color is not None):
+            raise ValueError("text stroke requires stroke_color and a positive stroke_width")
+        self._background_color = None if background_color is None else color_to_canonical(background_color)
+        self._background_padding = _finite(background_padding, "background_padding")
+        if self._background_padding < 0 or (self._background_padding > 0 and background_color is None):
+            raise ValueError("background_padding must be non-negative and requires background_color")
 
     @property
     def text(self) -> str: return self._text
     @property
     def font(self) -> str | None: return self._font
+    @property
+    def fallback_fonts(self) -> tuple[str, ...]:
+        return tuple(selector for selector, _ in self._fallback_fonts)
     @property
     def font_size(self) -> float: return self._font_size
     @property
@@ -93,12 +124,29 @@ class Text(Source):
     @property
     def letter_spacing(self) -> float: return self._letter_spacing
 
+    @property
+    def stroke_color(self) -> str | None: return self._stroke_color
+    @property
+    def stroke_width(self) -> float: return self._stroke_width
+    @property
+    def background_color(self) -> str | None: return self._background_color
+    @property
+    def background_padding(self) -> float: return self._background_padding
+
     def to_canonical(self) -> dict[str, object]:
         data: dict[str, object] = {"type": "text", "text": self.text, "font": self.font,
                 "font_size": self.font_size, "fill": self.fill, "align": self.align,
                 "line_spacing": self.line_spacing, "letter_spacing": self.letter_spacing}
         if self.max_width is not None:
             data["max_width"] = self.max_width
+        if self._fallback_fonts:
+            data["fallback_fonts"] = list(self.fallback_fonts)
+        if self.stroke_color is not None:
+            data["stroke_color"] = self.stroke_color
+            data["stroke_width"] = self.stroke_width
+        if self.background_color is not None:
+            data["background_color"] = self.background_color
+            data["background_padding"] = self.background_padding
         return data
 
 

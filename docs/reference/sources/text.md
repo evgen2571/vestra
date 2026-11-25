@@ -1,16 +1,16 @@
 # Text source
 
-`Text` draws static text using a bundled font, an installed family or a font file.
-Use it for titles, labels and paragraphs; animate the layer to move or fade the
-prepared text. See [sources and layers](../../guides/python/sources-and-layers.md)
+`Text` draws titles, labels and captions using a bundled font, an installed
+family or a font file. Animate the layer to move or fade the prepared text. See [sources and layers](../../guides/python/sources-and-layers.md)
 to add it to a project and export the result.
 
 ## API signatures
 
 ```text title="Source signature summary (presentation keywords omitted)"
 Text(text: str, *, font: str | PathLike[str] | None = None,
-     font_size=48, fill="#ffffff", align="left", max_width=None,
-     line_spacing=1.0, letter_spacing=0.0)
+     fallback_fonts=(), font_size=48, fill="#ffffff", align="left", max_width=None,
+     line_spacing=1.0, letter_spacing=0.0, stroke_color=None, stroke_width=0,
+     background_color=None, background_padding=0)
 ```
 
 ```text title="Font discovery signature"
@@ -26,6 +26,7 @@ copied into each placement and individually overridable by `add()`.
 | --- | --- | --- |
 | `text` | Required | String; empty text is allowed. |
 | `font` | `None` | Bundled font, installed family name or file path; see below. |
+| `fallback_fonts` | `()` | Ordered sequence of additional family names or file paths. |
 | `font_size` | `48` | Pixels; finite and positive. |
 | `fill` | `"#ffffff"` | `Color` or a `#RRGGBB` / `#RRGGBBAA` string. |
 | `align` | `"left"` | `"left"`, `"center"` or `"right"` within the layout box. |
@@ -33,10 +34,27 @@ copied into each placement and individually overridable by `add()`.
 | `line_spacing` | `1.0` | Finite positive multiplier; line height is `font_size * line_spacing`. |
 | `letter_spacing` | `0.0` | Extra spacing in pixels; finite, including negative values. |
 
-The constructor canonicalizes `fill` to a hex color. Layout and raster data are
-created during preparation; they are not stored in JSON. Layers own placement
-timing, transforms, animation, effects and transitions. Text supports nesting
-and the ordinary CPU/WGPU raster presentation path once font preparation succeeds.
+With no `max_width`, each explicit line aligns inside the widest natural line.
+With a width, the layout box keeps that width and wraps at words or glyphs.
+
+The constructor canonicalizes colors to hex. Text layout and raster data are
+prepared before rendering. Layers own timing, placement, effects and transitions.
+Text supports nesting and the same raster presentation on CPU and WGPU.
+
+## Add a stroke and background
+
+| Parameter | Default | Units and accepted values |
+| --- | --- | --- |
+| `stroke_color` | `None` | Color of the outline outside glyph coverage. Requires a positive `stroke_width`. |
+| `stroke_width` | `0` | Finite positive thickness in pixels when a stroke color is supplied. |
+| `background_color` | `None` | Color of the box behind the text layout. |
+| `background_padding` | `0` | Finite non-negative pixels added on each side of the box. Positive values require a background color. |
+
+Both colors accept `Color` or a `#RRGGBB` / `#RRGGBBAA` string. A padded
+background follows the logical layout, including an explicit wrapping width.
+Padding rounds outward to the next whole pixel. Painting the stroke and box
+can extend the prepared raster past the layout box. The layer's anchor still
+uses the layout box, so adding these styles preserves text placement.
 
 ## Select a font
 
@@ -48,9 +66,13 @@ and the ordinary CPU/WGPU raster presentation path once font preparation succeed
 
 The bundled font needs no host setup and provides Latin, Greek, Cyrillic and
 other Unicode glyphs. An explicit font file is portable when the same licensed
-file is available. Installed families depend on the machine where a snapshot
-is created; the snapshot then references the resolved file. There is no automatic
-per-character font fallback.
+file is available. Installed families resolve on the machine where a snapshot
+is created. The snapshot references the selected files.
+
+Supply `fallback_fonts` for scripts missing from the primary. Each selector
+follows the same rules as `font`. Shaping tries the primary first and then the
+listed assets in order for missing glyphs. With no fallback list, shaping uses
+the primary file alone.
 
 ### Family or file
 
@@ -100,13 +122,13 @@ font is bundled in the package and does not need a writable cache.
 
 | Stage | Failure |
 | --- | --- |
-| Construction | Invalid text/font types, empty font selector, invalid color, alignment or numeric layout values. |
-| Snapshot creation | An unavailable installed family raises `ValueError`; there is no fallback. |
+| Construction | Invalid types, empty font selectors, invalid colors, or invalid layout or style values. |
+| Snapshot creation | An unavailable primary or fallback family raises `ValueError`. |
 | Preflight/preparation | A selected font file must exist and load successfully. |
 
 ## Canonical JSON
 
-The source tag is `text`. Fields are `text`, `font`, `font_size`, `fill`, `align`,
-optional `max_width`, `line_spacing` and `letter_spacing`. In a project snapshot,
-`font` is a registered **Font asset ID**, rather than the Python selector.
-See [project format](../project-format.md) for the surrounding asset and clip objects.
+The source tag is `text`. In a project snapshot, `font` and each entry in
+`fallback_fonts` are registered **Font asset IDs**. The source model uses the same
+layout and style field names shown above. See [project format](../project-format.md)
+for the surrounding asset and clip objects.

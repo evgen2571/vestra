@@ -1,0 +1,4 @@
+VestraFallbackFixture-Regular.ttf and VestraFallbackFixture-Bold.ttf are
+synthetic geometry fixtures created for Vestra and distributed under the
+repository MIT license. Each maps U+0E01 to a different geometric outline
+and leaves the missing glyph empty. The files deliberately share a family.

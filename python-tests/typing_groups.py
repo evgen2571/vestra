@@ -1,4 +1,4 @@
-from vestra import Project, Transform
+from vestra import Project, SubtitleCue, Subtitles, Transform
 from vestra.sources import Circle, Group, GroupChild, Image, Rectangle, Text, Video
 
 project = Project(size=(32, 32), fps=2, duration=5)
@@ -16,6 +16,11 @@ group.add(Text("V", font="font.ttf", font_size=8, position=(0.5, 0.5)))
 project.root.add(group, position=(0.25, 0.5))
 project.root.group().add(group, scale=0.5)
 project.root.add(group, transform=transform)
+
+subtitles = Subtitles([SubtitleCue(0.25, 0.75, "A caption"), (1, 2, "Another")])
+cues: tuple[SubtitleCue, ...] = subtitles.cues
+caption_group: Group = subtitles.to_group(max_width=24, stroke_width=2, stroke_color="#111111")
+project.root.add(caption_group, duration=subtitles.duration)
 
 from vestra import FrameRate
 from vestra import Editor, ResourceLimits

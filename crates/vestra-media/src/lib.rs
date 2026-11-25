@@ -13,6 +13,7 @@ mod output;
 mod probe;
 mod sink;
 mod still;
+mod subtitles;
 mod video;
 mod webp_animation;
 
@@ -43,6 +44,7 @@ pub use probe::{
 };
 pub use sink::{FrameSink, SinkResult};
 pub use still::save_frame;
+pub use subtitles::{SubtitleCue, SubtitleTrack};
 pub use video::{
     DecodedVideoFrame, MediaRational, VideoDecoder, VideoDecoderOptions, VideoMediaInfo,
     VideoTimestamp, probe_video,

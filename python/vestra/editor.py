@@ -413,6 +413,7 @@ class Project:
         quality: Quality | None = None,
         start: float = 0,
         end: float | None = None,
+        subtitles: Sequence[tuple[float, float, str]] | None = None,
         show_progress: bool = True,
         on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
@@ -428,8 +429,10 @@ class Project:
         ``show_progress=False``; ``on_progress`` receives ``RenderEvent``
         values instead. ``start``/``end`` select project sample times in
         ``[start, end)``; the encoded clip and trimmed audio start at zero.
-        An omitted end uses the project duration. FFmpeg is installed automatically; set
-        ``IMAGEIO_FFMPEG_EXE`` to select a different executable.
+        An omitted end uses the project duration. For MP4, ``subtitles``
+        takes a sequence of ``(start, end, text)`` cues in project seconds to
+        encode as a selectable track. FFmpeg is installed automatically.
+        Set ``IMAGEIO_FFMPEG_EXE`` to select a different executable.
         """
         request = _native.RenderRequest(
             _path(output, "output"),
@@ -441,6 +444,7 @@ class Project:
             quality=_quality_override(quality),
             start=start,
             end=end,
+            subtitles=subtitles,
         )
         return _native.Editor(resource_limits=self._resource_limits).render(
             self.snapshot(),
@@ -461,6 +465,7 @@ class Project:
         quality: Quality | None = None,
         start: float = 0,
         end: float | None = None,
+        subtitles: Sequence[tuple[float, float, str]] | None = None,
         show_progress: bool = True,
         on_progress: Callable[[_native.RenderEvent], object] | None = None,
         cancellation: _native.CancellationToken | None = None,
@@ -476,6 +481,7 @@ class Project:
             quality=quality,
             start=start,
             end=end,
+            subtitles=subtitles,
             show_progress=show_progress,
             on_progress=on_progress,
             cancellation=cancellation,

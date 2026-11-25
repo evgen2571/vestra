@@ -10,6 +10,7 @@ use std::{
 };
 
 use crate::output::OutputFormat;
+use crate::subtitles::{SubtitleTrack, TemporarySubtitleTrack};
 use crate::{EncoderSettings, FrameSink, MediaError, SinkResult, audio_graph, effective_parent};
 
 /// Keep the generated filtergraph comfortably below common command-line
@@ -58,6 +59,7 @@ pub struct FfmpegSink {
     expected_bytes: usize,
     state: SinkState,
     filtergraph_file: Option<TemporaryFiltergraph>,
+    subtitle_file: Option<TemporarySubtitleTrack>,
     static_image: Option<PathBuf>,
     static_frame_count: Option<u64>,
     animation_writer: Option<std::thread::JoinHandle<Result<(), MediaError>>>,
@@ -72,13 +74,14 @@ enum SinkState {
 
 impl FfmpegSink {
     pub fn start(settings: &EncoderSettings, output: &Path) -> Result<Self, MediaError> {
-        Self::start_with_executable(settings, output, None)
+        Self::start_with_executable(settings, output, None, None)
     }
 
     pub fn start_with_executable(
         settings: &EncoderSettings,
         output: &Path,
         executable: Option<&Path>,
+        subtitles: Option<&SubtitleTrack<'_>>,
     ) -> Result<Self, MediaError> {
         let format = OutputFormat::from_path(output);
         if format != OutputFormat::Mp4 {
@@ -126,6 +129,7 @@ impl FfmpegSink {
                 settings.frame_rate.0, settings.frame_rate.1
             ))
             .args(["-i", "pipe:0"]);
+        let subtitle_file = add_subtitle_input(&mut command, output, subtitles)?;
         if format != OutputFormat::Mp4 {
             match format {
                 OutputFormat::Gif => {
@@ -175,7 +179,7 @@ impl FfmpegSink {
                         .audio_range
                         .as_ref()
                         .map(|range| (range.start, range.end)),
-                    first_audio_input_index: 1,
+                    first_audio_input_index: 1 + usize::from(subtitle_file.is_some()),
                 },
             )?;
             debug_assert_eq!(audio.clip_branch_count, audio_mix.audible_clip_count());
@@ -185,12 +189,13 @@ impl FfmpegSink {
             command.args(["-map", "0:v:0"]);
         }
         if format == OutputFormat::Mp4 {
+            add_subtitle_output(&mut command, subtitle_file.as_ref());
             add_h264_video_output(&mut command, settings);
             if settings.audio_mix.is_some() {
                 command.args(["-c:a", "aac", "-b:a", "192k"]);
             }
         }
-        Self::spawn(
+        let mut sink = Self::spawn(
             command,
             settings,
             output,
@@ -198,7 +203,9 @@ impl FfmpegSink {
             None,
             true,
             false,
-        )
+        )?;
+        sink.subtitle_file = subtitle_file;
+        Ok(sink)
     }
 
     pub fn start_static(
@@ -206,6 +213,7 @@ impl FfmpegSink {
         output: &Path,
         image: PathBuf,
         executable: Option<&Path>,
+        subtitles: Option<&SubtitleTrack<'_>>,
     ) -> Result<Self, MediaError> {
         if crate::is_animated_output(output) {
             return Err(MediaError::AnimationEncoding(
@@ -233,6 +241,7 @@ impl FfmpegSink {
             ))
             .args(["-i"])
             .arg(&image);
+        let subtitle_file = add_subtitle_input(&mut command, output, subtitles)?;
         if let Some(audio_mix) = &settings.audio_mix {
             let audio = audio_graph::compile_with_options(
                 audio_mix,
@@ -242,7 +251,7 @@ impl FfmpegSink {
                         .audio_range
                         .as_ref()
                         .map(|range| (range.start, range.end)),
-                    first_audio_input_index: 1,
+                    first_audio_input_index: 1 + usize::from(subtitle_file.is_some()),
                 },
             )?;
             filtergraph_file =
@@ -250,6 +259,7 @@ impl FfmpegSink {
         } else {
             command.args(["-map", "0:v:0"]);
         }
+        add_subtitle_output(&mut command, subtitle_file.as_ref());
         if settings.audio_range.is_some() {
             command.args(["-frames:v", &settings.frame_count.to_string()]);
         }
@@ -257,7 +267,7 @@ impl FfmpegSink {
         if settings.audio_mix.is_some() {
             command.args(["-c:a", "aac", "-b:a", "192k"]);
         }
-        Self::spawn(
+        let mut sink = Self::spawn(
             command,
             settings,
             output,
@@ -265,7 +275,9 @@ impl FfmpegSink {
             Some(image),
             false,
             true,
-        )
+        )?;
+        sink.subtitle_file = subtitle_file;
+        Ok(sink)
     }
 
     /// Returns the latest frame count reported by FFmpeg's `-progress` stream
@@ -428,6 +440,7 @@ impl FfmpegSink {
             expected_bytes,
             state: SinkState::Active,
             filtergraph_file,
+            subtitle_file: None,
             static_image,
             static_frame_count,
             animation_writer,
@@ -454,7 +467,7 @@ impl FfmpegSink {
 
         self.child.take();
         self.state = SinkState::Aborted;
-        self.cleanup_filtergraph();
+        self.cleanup_auxiliary_inputs();
         self.cleanup_static_image();
         self.join_progress()?;
         // Aborted streams are deliberately incomplete; still join the writer before cleanup.
@@ -505,7 +518,7 @@ impl FfmpegSink {
             .trim()
             .to_owned();
         self.state = SinkState::Finished;
-        self.cleanup_filtergraph();
+        self.cleanup_auxiliary_inputs();
         let static_frame_count = self.static_frame_count;
         let reported_static_frames = self.static_progress_frames();
         self.cleanup_static_image();
@@ -543,8 +556,9 @@ impl FfmpegSink {
         }
     }
 
-    fn cleanup_filtergraph(&mut self) {
+    fn cleanup_auxiliary_inputs(&mut self) {
         self.filtergraph_file.take();
+        self.subtitle_file.take();
     }
 
     fn cleanup_static_image(&mut self) {
@@ -589,7 +603,7 @@ impl FrameSink for FfmpegSink {
                     .trim()
                     .to_owned();
                 self.state = SinkState::Aborted;
-                self.cleanup_filtergraph();
+                self.cleanup_auxiliary_inputs();
                 let _ = self.join_animation_writer();
                 return Err(MediaError::ProcessFailed {
                     program: "FFmpeg",
@@ -637,7 +651,7 @@ impl FrameSink for FfmpegSink {
 impl Drop for FfmpegSink {
     fn drop(&mut self) {
         let _ = self.abort();
-        self.cleanup_filtergraph();
+        self.cleanup_auxiliary_inputs();
         self.cleanup_static_image();
     }
 }
@@ -690,6 +704,26 @@ fn collect_stderr(mut stderr: impl Read) -> Vec<u8> {
         collected.extend_from_slice(TRUNCATED);
     }
     collected
+}
+
+fn add_subtitle_input(
+    command: &mut Command,
+    output: &Path,
+    subtitles: Option<&SubtitleTrack<'_>>,
+) -> Result<Option<TemporarySubtitleTrack>, MediaError> {
+    let file = subtitles
+        .map(|track| track.write_temporary(output))
+        .transpose()?;
+    if let Some(file) = &file {
+        command.arg("-i").arg(&file.path);
+    }
+    Ok(file)
+}
+
+fn add_subtitle_output(command: &mut Command, file: Option<&TemporarySubtitleTrack>) {
+    if file.is_some() {
+        command.args(["-map", "1:s:0", "-c:s", "copy"]);
+    }
 }
 
 fn add_audio(

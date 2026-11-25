@@ -67,6 +67,7 @@ fn test_sink(script: &str) -> FfmpegSink {
         expected_bytes: 4,
         state: SinkState::Active,
         filtergraph_file: None,
+        subtitle_file: None,
         static_image: None,
         static_frame_count: None,
         animation_writer: None,
@@ -684,8 +685,8 @@ fn static_sink_reports_progress_finishes_nonblocking_and_removes_image() {
     let output = directory.path().join("static.mp4");
     write_test_ppm(&image);
     let settings = static_settings(12);
-    let mut sink =
-        FfmpegSink::start_static(&settings, &output, image.clone(), None).expect("static FFmpeg");
+    let mut sink = FfmpegSink::start_static(&settings, &output, image.clone(), None, None)
+        .expect("static FFmpeg");
     let result = loop {
         match sink.try_finish_static().expect("polls static FFmpeg") {
             Some(result) => break result,
@@ -705,8 +706,8 @@ fn aborting_static_sink_removes_static_input() {
     let output = directory.path().join("static.mp4");
     write_test_ppm(&image);
     let settings = static_settings(3_000);
-    let mut sink =
-        FfmpegSink::start_static(&settings, &output, image.clone(), None).expect("static FFmpeg");
+    let mut sink = FfmpegSink::start_static(&settings, &output, image.clone(), None, None)
+        .expect("static FFmpeg");
     sink.abort().expect("aborts static FFmpeg");
     assert!(!image.exists(), "static input is cleaned after abort");
 }
@@ -762,6 +763,7 @@ fn finished_sink_rejects_further_writes_and_finishes() {
         expected_bytes: 4,
         state: SinkState::Finished,
         filtergraph_file: None,
+        subtitle_file: None,
         static_image: None,
         static_frame_count: None,
         animation_writer: None,

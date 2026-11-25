@@ -31,6 +31,7 @@ pub use render::{
 };
 pub use vestra_core::OperationId;
 pub use vestra_core::validation::ResourceLimits;
+pub use vestra_media::SubtitleCue;
 pub use vestra_progress::{
     CallbackProgress, NoProgress, ProgressMode, ProgressSink, RenderStage, TerminalEnvironment,
     TerminalOutput, TerminalProgress, TerminalWriter, terminal_output,

@@ -16,4 +16,8 @@ Try [phrase_remix.py](phrase_remix.py) for a stereo lead-in, chorus and
 turnaround using filter sweep, beat repeat, pitch shift and tape stop.
 [Run the phrase remix](../../docs/guides/python/audio.md#edit-into-a-chorus)
 
+Try [styled_subtitles.py](styled_subtitles.py) for SRT captions, word
+highlighting, a typewriter title and a selectable MP4 track.
+[Run the subtitle example](../../docs/guides/python/subtitles.md#run-the-subtitle-example)
+
 To regenerate previews, see [documentation media](../../docs/development/documentation-media.md#reproduce-tutorial-previews).

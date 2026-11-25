@@ -3,7 +3,7 @@
 use super::{
     frame_plan::TextureSlot,
     pipeline::GpuPipelines,
-    resources::{FrameResources, SourceResources},
+    resources::{FrameResources, RasterSource, SourceResources},
 };
 use crate::Diagnostic;
 
@@ -17,8 +17,8 @@ pub(super) struct FrameBindGroups {
     pub(super) spectrum2d_layer: wgpu::BindGroup,
     pub(super) particle_layer: wgpu::BindGroup,
     pub(super) particle_resolve: Option<wgpu::BindGroup>,
-    raster_layers: Vec<wgpu::BindGroup>,
-    mask_raster_layers: Vec<wgpu::BindGroup>,
+    raster_layers: Vec<Option<wgpu::BindGroup>>,
+    mask_raster_layers: Vec<Option<wgpu::BindGroup>>,
     mask_raster_source_layer: Option<wgpu::BindGroup>,
     surface_layers: Vec<(TextureSlot, wgpu::BindGroup)>,
     composites: Vec<(TextureSlot, TextureSlot, wgpu::BindGroup)>,
@@ -96,36 +96,34 @@ impl FrameBindGroups {
                 &frame.working.get(TextureSlot::Layer).view,
             )
         });
-        let raster_layers = sources
-            .raster_textures
-            .iter()
+        let rasters = || sources.rasters.iter().map(RasterSource::prepared_texture);
+        let raster_layers = rasters()
             .map(|source| {
-                layer_group(
-                    device,
-                    &pipelines.layer_bindings,
-                    &source.view,
-                    &frame
-                        .working
-                        .get(super::frame_plan::TextureSlot::Layer)
-                        .view,
-                    parameters,
-                )
+                source.map(|source| {
+                    layer_group(
+                        device,
+                        &pipelines.layer_bindings,
+                        &source.view,
+                        &frame.working.get(TextureSlot::Layer).view,
+                        parameters,
+                    )
+                })
             })
             .collect::<Vec<_>>();
         let mask_raster_layers =
             if frame.working.has_auxiliary() && frame.working.has_mask_coverage() {
-                sources
-                    .raster_textures
-                    .iter()
+                rasters()
                     .map(|source| {
-                        mask_raster_group(
-                            device,
-                            &pipelines.mask_raster_bindings,
-                            &source.view,
-                            &frame.working.get(TextureSlot::MaskCoverage).view,
-                            &frame.working.get(TextureSlot::Auxiliary).view,
-                            parameters,
-                        )
+                        source.map(|source| {
+                            mask_raster_group(
+                                device,
+                                &pipelines.mask_raster_bindings,
+                                &source.view,
+                                &frame.working.get(TextureSlot::MaskCoverage).view,
+                                &frame.working.get(TextureSlot::Auxiliary).view,
+                                parameters,
+                            )
+                        })
                     })
                     .collect::<Vec<_>>()
             } else {
@@ -264,7 +262,7 @@ impl FrameBindGroups {
                 }
             }
         }
-        let persistent_created = sources.raster_textures.len()
+        let persistent_created = sources.prepared_raster_count
             + 4
             + usize::from(particle_resolve.is_some())
             + usize::from(mask_raster_source_layer.is_some())
@@ -296,28 +294,38 @@ impl FrameBindGroups {
     }
 
     pub(super) fn raster_layer(&self, source_index: usize) -> Result<&wgpu::BindGroup, Diagnostic> {
-        self.raster_layers.get(source_index).ok_or_else(|| {
-            Diagnostic::error(
-                "WGPU-FRAME-PLAN",
-                crate::Category::Backend,
-                format!("GPU frame operation references missing raster bind group {source_index}"),
-                "",
-            )
-        })
+        self.raster_layers
+            .get(source_index)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-FRAME-PLAN",
+                    crate::Category::Backend,
+                    format!(
+                        "GPU frame operation references missing raster bind group {source_index}"
+                    ),
+                    "",
+                )
+            })
     }
 
     pub(super) fn mask_raster_layer(
         &self,
         source_index: usize,
     ) -> Result<&wgpu::BindGroup, Diagnostic> {
-        self.mask_raster_layers.get(source_index).ok_or_else(|| {
-            Diagnostic::error(
-                "WGPU-FRAME-PLAN",
-                crate::Category::Backend,
-                format!("GPU mask operation references missing raster bind group {source_index}"),
-                "",
-            )
-        })
+        self.mask_raster_layers
+            .get(source_index)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "WGPU-FRAME-PLAN",
+                    crate::Category::Backend,
+                    format!(
+                        "GPU mask operation references missing raster bind group {source_index}"
+                    ),
+                    "",
+                )
+            })
     }
 
     pub(super) fn mask_raster_source_layer(&self) -> Result<&wgpu::BindGroup, Diagnostic> {
@@ -502,7 +510,7 @@ fn mask_group<'a>(
     })
 }
 
-fn layer_group<'a>(
+pub(super) fn layer_group<'a>(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     source: &'a wgpu::TextureView,

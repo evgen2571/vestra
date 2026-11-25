@@ -10,12 +10,12 @@ use super::support::supports_kernel;
 use crate::Diagnostic;
 
 use super::{
-    bind_groups::{FrameBindGroups, composite_group},
+    bind_groups::{FrameBindGroups, composite_group, layer_group},
     frame_plan::{GpuFramePlan, GpuOperation, TextureSlot},
     layer_upload::LayerUpload,
     parameters::FrameParameterArena,
     pipeline::GpuPipelines,
-    resources::FrameResources,
+    resources::{FrameResources, PreparedRasterTexture},
     texture_pool::StaticLayerTexture,
 };
 
@@ -50,6 +50,7 @@ pub(super) fn encode_and_submit(
     pipelines: &GpuPipelines,
     frame: &FrameResources,
     bind_groups: &FrameBindGroups,
+    text_textures: &BTreeMap<usize, Arc<PreparedRasterTexture>>,
     plan: &GpuFramePlan,
     parameters: &FrameParameterArena,
     parameter_buffer: &wgpu::Buffer,
@@ -231,13 +232,28 @@ pub(super) fn encode_and_submit(
                 metrics.dispatches += 1;
             }
             GpuOperation::RenderRasterLayer {
+                layer_index,
                 source_index,
                 destination,
                 parameters_index,
-                ..
             } => {
-                debug_assert_eq!(*destination, super::frame_plan::TextureSlot::Layer);
-                let group = bind_groups.raster_layer(*source_index)?;
+                debug_assert_eq!(*destination, TextureSlot::Layer);
+                let text_group;
+                let group = if let Some(texture) = text_textures.get(layer_index) {
+                    text_group = layer_group(
+                        device,
+                        &pipelines.layer_bindings,
+                        &texture.view,
+                        &frame.working.get(*destination).view,
+                        parameter_buffer,
+                    );
+                    metrics.bind_groups_created += 1;
+                    metrics.bind_group_cache_misses += 1;
+                    &text_group
+                } else {
+                    metrics.bind_group_cache_hits += 1;
+                    bind_groups.raster_layer(*source_index)?
+                };
                 dispatch(
                     &mut encoder,
                     &pipelines.layer,
@@ -248,7 +264,6 @@ pub(super) fn encode_and_submit(
                 );
                 metrics.compute_passes += 1;
                 metrics.dispatches += 1;
-                metrics.bind_group_cache_hits += 1;
             }
             GpuOperation::RenderMask {
                 source_index,

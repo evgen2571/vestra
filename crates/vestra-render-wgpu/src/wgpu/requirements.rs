@@ -227,12 +227,6 @@ impl GpuRequirements {
                 .checked_add(image_bytes(image.width(), image.height())?)
                 .ok_or_else(|| resource_overflow("source texture total overflow"))?;
         }
-        for text in 0..plan.texts.len() {
-            let image = decoded.text(text).pixels().as_ref();
-            source_texture_bytes = source_texture_bytes
-                .checked_add(image_bytes(image.width(), image.height())?)
-                .ok_or_else(|| resource_overflow("source texture total overflow"))?;
-        }
         for atlas in decoded.glyph_atlases() {
             source_texture_bytes = source_texture_bytes
                 .checked_add(atlas.byte_len())
@@ -264,7 +258,6 @@ impl GpuRequirements {
             plan.images
                 .len()
                 .checked_add(plan.shapes.len())
-                .and_then(|count| count.checked_add(plan.texts.len()))
                 .and_then(|count| count.checked_add(plan.video_slot_count()))
                 .and_then(|count| count.checked_add(decoded.glyph_atlases().len()))
                 .ok_or_else(|| resource_overflow("source texture count overflow"))?,

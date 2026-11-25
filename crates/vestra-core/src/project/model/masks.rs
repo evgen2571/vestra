@@ -251,6 +251,8 @@ mod tests {
                 stroke_width: 0.0,
                 background_color: None,
                 background_padding: 0.0,
+                reveal: None,
+                word_highlight: None,
             })),
             mode: MaskCoverageMode::Alpha,
         };

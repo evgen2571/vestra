@@ -110,6 +110,13 @@ fn validate_with_depth(
             }
             crate::project::VisualSource::Text(text) => {
                 sources::validate_text(text, assets, &path, errors);
+                sources::validate_text_animation(
+                    text,
+                    clip.duration,
+                    maximum_keyframes_per_track,
+                    &path,
+                    errors,
+                );
             }
             crate::project::VisualSource::Spectrum2D(spectrum) => spectrum2d::validate_spectrum2d(
                 spectrum,

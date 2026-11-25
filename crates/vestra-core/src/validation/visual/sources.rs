@@ -195,6 +195,72 @@ pub(super) fn validate_text(
     }
 }
 
+pub(super) fn validate_text_animation(
+    text: &crate::project::TextSource,
+    duration: f64,
+    maximum_keyframes: usize,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if let Some(track) = &text.reveal {
+        validation::tracks::validate_track(
+            track,
+            duration,
+            &format!("{path}/source/reveal"),
+            maximum_keyframes,
+            errors,
+            |value| validation::unit(*value),
+        );
+    }
+    let Some(highlight) = &text.word_highlight else {
+        return;
+    };
+    let path = format!("{path}/source/word_highlight");
+    if crate::project::parse_colour(&highlight.colour).is_none() {
+        errors.push(Diagnostic::error(
+            "VESTRA-TEXT-HIGHLIGHT-COLOUR",
+            Category::Semantic,
+            "word highlight colour must use #RRGGBB or #RRGGBBAA",
+            format!("{path}/colour"),
+        ));
+    }
+    let path = format!("{path}/words");
+    validation::tracks::validate_keyframe_count(
+        highlight.words.len(),
+        maximum_keyframes,
+        &path,
+        errors,
+    );
+    let character_count = text.text.chars().count();
+    let mut previous_end = 0.0;
+    for (index, word) in highlight.words.iter().enumerate() {
+        let start = crate::timeline::seconds_to_nanos(word.start);
+        let end = crate::timeline::seconds_to_nanos(word.end);
+        if start.is_none()
+            || end.is_none()
+            || start >= end
+            || word.start < previous_end
+            || word.end > duration
+        {
+            errors.push(Diagnostic::error(
+                "VESTRA-TEXT-HIGHLIGHT-TIME",
+                Category::Semantic,
+                "word times must be nonempty, ordered, non-overlapping intervals inside the clip",
+                format!("{path}/{index}"),
+            ));
+        }
+        if word.text_start >= word.text_end || word.text_end > character_count {
+            errors.push(Diagnostic::error(
+                "VESTRA-TEXT-HIGHLIGHT-RANGE",
+                Category::Semantic,
+                "word range must select at least one character inside the text",
+                format!("{path}/{index}/text_end"),
+            ));
+        }
+        previous_end = word.end;
+    }
+}
+
 pub(super) fn validate_properties(
     clip: &crate::project::Clip,
     path: &str,

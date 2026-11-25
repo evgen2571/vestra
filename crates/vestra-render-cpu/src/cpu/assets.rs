@@ -6,6 +6,8 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use image::RgbaImage;
+use vestra_core::plan::TextAnimationFrame;
+use vestra_render_common::TextRasterState;
 
 use crate::render::{
     ByteLruCache,
@@ -207,8 +209,18 @@ impl PreparedAssets {
     }
 
     #[must_use]
-    pub(crate) fn text_source(&self, text: usize) -> PreparedRasterSource {
-        self.texts[text.saturating_sub(self.decoded.image_count() + self.shapes.len())].clone()
+    pub(crate) fn text_source(
+        &self,
+        text: usize,
+        animation: TextAnimationFrame,
+    ) -> PreparedRasterSource {
+        let index = text.saturating_sub(self.decoded.image_count() + self.shapes.len());
+        let prepared = self.decoded.text(index);
+        let state = prepared.raster_state(animation);
+        if state == TextRasterState::default() {
+            return self.texts[index].clone();
+        }
+        PreparedRasterSource::from_pixels(prepared.pixels_at(state), prepared.intrinsic_size())
     }
 
     pub(crate) fn video_source(

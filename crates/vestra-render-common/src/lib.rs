@@ -56,4 +56,4 @@ pub use vestra_core::timeline;
 #[doc(hidden)]
 pub use shape_raster::PreparedShape;
 #[doc(hidden)]
-pub use text::PreparedText;
+pub use text::{PreparedText, TextRasterState};

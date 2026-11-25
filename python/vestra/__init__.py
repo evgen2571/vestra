@@ -96,6 +96,8 @@ from .sources import (
     Spectrum2DStyle,
     Spectrum2DWave,
     Text,
+    WordHighlight,
+    WordTiming,
     Video,
 )
 from .flashes import Flash, FlashCollection
@@ -212,8 +214,6 @@ __all__ = [
     "Line",
     "Polygon",
     "Text",
-    "SubtitleCue",
-    "Subtitles",
     "Spectrum2D",
     "ParticleSystem",
     "ScalarProperty",
@@ -356,4 +356,8 @@ __all__ = [
     "FilterSweep",
     "PitchShift",
     "TapeStop",
+    "WordHighlight",
+    "WordTiming",
+    "SubtitleCue",
+    "Subtitles",
 ]

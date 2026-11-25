@@ -165,14 +165,36 @@ pub struct TextSource {
     pub line_spacing: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub letter_spacing: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "optional_non_null"
+    )]
     pub stroke_color: Option<String>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub stroke_width: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "optional_non_null"
+    )]
     pub background_color: Option<String>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub background_padding: f64,
+    /// Clip-local visibility progress, with a fully visible cue as the default.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "optional_non_null"
+    )]
+    pub reveal: Option<Track<f64>>,
+    /// Optional clip-local fill overrides for timed text ranges.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "optional_non_null"
+    )]
+    pub word_highlight: Option<super::WordHighlight>,
 }
 
 impl TextSource {
@@ -270,6 +292,8 @@ mod tests {
             stroke_width: 1.5,
             background_color: Some("#22222280".to_owned()),
             background_padding: 4.0,
+            reveal: None,
+            word_highlight: None,
         });
         let value = serde_json::to_value(&source).expect("text serializes");
         assert_eq!(value["type"], "text");

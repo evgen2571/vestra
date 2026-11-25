@@ -27,3 +27,5 @@ mod sized_group_tests;
 mod stylization_tests;
 #[path = "support/fixture_loader.rs"]
 mod test_support;
+#[path = "support/text_animation.rs"]
+mod text_animation_tests;

@@ -316,6 +316,7 @@ pub enum CompiledVisualSource {
     },
     Text {
         text_index: usize,
+        animation: Option<Box<super::CompiledTextAnimation>>,
     },
     Spectrum2D {
         band_signals: Vec<crate::plan::ScalarSignalId>,

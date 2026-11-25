@@ -36,7 +36,7 @@ a source or effect's backend support listed below.
 | Video | `Video` → `video` | direct | supported, requires media preflight | supported, requires media preflight |
 | Solid color | `Color`/`SolidColor` → `solid_color` | adapter-mediated | supported | supported |
 | Shape (including Line stroke masks) | Shape constructors → `shape` | direct | supported | supported |
-| Text | `Text` → `text`; primary and ordered fallback fonts, wrapping, outline and padded background | direct | supported, requires font preparation | supported, requires font preparation |
+| Text | `Text` → `text`; primary and ordered fallback fonts, wrapping, outline and padded background | direct | supported, including cluster reveal and timed highlight | supported, including cluster reveal and timed highlight |
 | Spectrum2D | `Spectrum2D` → `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | legacy bars use a shader. Paths and waves use a shared source raster |
 | Particle system | `ParticleSystem` → `particle_system`, including emitter keyframes and continuous pre-roll | adapter-mediated | supported | supported |
 | Nested composition | `Group` or `CompositionLayer` → `group` | direct | supported | supported |

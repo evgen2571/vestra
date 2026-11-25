@@ -360,7 +360,7 @@ class ShapeClip(TransitionCapableClip):
 
 
 class TextClip(TransitionCapableClip):
-    """A Text Source with ordinary Layer transform tracks."""
+    """A Text source with ordinary layer transform tracks."""
 
     __slots__ = ("_source", "_font", "_fallback_fonts", "_transform")
 

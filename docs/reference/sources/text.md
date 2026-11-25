@@ -1,7 +1,8 @@
 # Text source
 
 `Text` draws titles, labels and captions using a bundled font, an installed
-family or a font file. Animate the layer to move or fade the prepared text. See [sources and layers](../../guides/python/sources-and-layers.md)
+family or a font file. Animate the layer to move or fade the prepared text.
+See [sources and layers](../../guides/python/sources-and-layers.md)
 to add it to a project and export the result.
 
 ## API signatures
@@ -10,7 +11,7 @@ to add it to a project and export the result.
 Text(text: str, *, font: str | PathLike[str] | None = None,
      fallback_fonts=(), font_size=48, fill="#ffffff", align="left", max_width=None,
      line_spacing=1.0, letter_spacing=0.0, stroke_color=None, stroke_width=0,
-     background_color=None, background_padding=0)
+     background_color=None, background_padding=0, reveal=1.0, word_highlight=None)
 ```
 
 ```text title="Font discovery signature"
@@ -76,7 +77,7 @@ the primary file alone.
 
 ### Family or file
 
-`PathLike` values always mean files. Strings containing `/`, `\\`, or a filename
+`PathLike` values always mean files. Strings containing `/`, `\`, or a filename
 suffix (such as `Manrope.ttf`) mean files too, as do existing files relative to
 `base_directory`. Other strings mean family names. For an extensionless file
 that does not yet exist, use `Path("myfont")` or `"./myfont"`. For a family name
@@ -126,9 +127,53 @@ font is bundled in the package and does not need a writable cache.
 | Snapshot creation | An unavailable primary or fallback family raises `ValueError`. |
 | Preflight/preparation | A selected font file must exist and load successfully. |
 
+## Animate a title or caption
+
+Use the clip's layer properties for whole-text movement or opacity. Use
+`Text.reveal` to reveal individual shaped clusters and `word_highlight` to
+change the fill for a timed text range.
+
+```python
+from vestra import Text, WordHighlight, WordTiming
+
+title = Text("Office hours", reveal=0)
+title.reveal.keyframe(0, 0)
+title.reveal.keyframe(1.2, 1)
+
+caption = Text(
+    "go go",
+    word_highlight=WordHighlight(
+        "#ffd166",
+        [WordTiming(0, 0.25, 0, 2), WordTiming(0.25, 0.65, 3, 5)],
+    ),
+)
+```
+
+Reveal accepts a fraction in `[0, 1]` or a `ScalarProperty` with keyframes.
+At progress `p`, the first `floor(p * cluster_count)` shaped clusters are
+visible. Ligatures and combining marks appear with their cluster. Clusters
+follow logical Unicode order across paragraphs. This starts from the right
+for a right-to-left run, while the normal bidi layout keeps embedded
+left-to-right text in its final visual positions. The final wrapping, alignment,
+and anchor apply throughout. A styled background box keeps its full size and
+visibility. Place the last reveal keyframe within the visible frame interval
+of the clip to show the completed title.
+
+Word times are half-open intervals in clip-local seconds. They must fit
+inside the clip and be ordered without overlap. Gaps use the ordinary fill.
+Text offsets are zero-based Unicode character offsets with an exclusive end,
+the same as Python string slices. A cluster intersecting the active range
+uses the alternate fill as a whole. Repeated words can each have their own
+range. Subtitle cue start and end times set clip placement. Word times are
+authored separately.
+
 ## Canonical JSON
 
 The source tag is `text`. In a project snapshot, `font` and each entry in
 `fallback_fonts` are registered **Font asset IDs**. The source model uses the same
-layout and style field names shown above. See [project format](../project-format.md)
-for the surrounding asset and clip objects.
+layout and style field names shown above.
+
+Optional `reveal` is a scalar track object with `base_value` and optional
+`keyframes`. Optional `word_highlight` has a `colour` and an ordered `words`
+array, whose entries have `start`, `end`, `text_start`, and `text_end`.
+See [project format](../project-format.md) for the surrounding asset and clip objects.

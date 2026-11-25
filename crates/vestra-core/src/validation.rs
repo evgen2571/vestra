@@ -63,7 +63,7 @@ pub struct ResourceLimits {
     pub maximum_cache_bytes: u64,
     /// Conservative upper bound for one renderer-independent particle source.
     pub maximum_live_particles_per_system: u64,
-    /// Aggregate budget reserved for future simultaneous particle sources.
+    /// Aggregate budget for simultaneous visual and owned-mask particle sources.
     pub maximum_total_live_particles: u64,
 }
 
@@ -157,6 +157,13 @@ pub fn validate(project: &Project, limits_config: ResourceLimits) -> ValidationR
         },
         &mut errors,
         has_authored_audio,
+    );
+    particles::validate_aggregate(
+        project,
+        limits_config.maximum_keyframes_per_track,
+        has_authored_audio,
+        limits_config,
+        &mut errors,
     );
     transitions::validate(
         &project.visual,

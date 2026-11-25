@@ -34,13 +34,6 @@ pub(super) fn validate(
         has_authored_audio,
         0,
     );
-    super::particles::validate_aggregate(
-        &visual.clips,
-        maximum_keyframes_per_track,
-        has_authored_audio,
-        limits,
-        errors,
-    );
 }
 
 #[expect(

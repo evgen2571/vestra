@@ -1,18 +1,28 @@
 //! Validation for particle-system properties and aggregate live-particle accounting.
 
+use crate::project::{DurationMode, MaskInput, Project, VisualSource};
 use crate::{Category, Diagnostic};
 
 pub(super) fn validate_aggregate(
-    clips: &[crate::project::Clip],
+    project: &Project,
     maximum_keyframes_per_track: usize,
     has_authored_audio: bool,
     limits: crate::validation::ResourceLimits,
     errors: &mut Vec<Diagnostic>,
 ) {
+    let output_end = if project.output.duration_mode == DurationMode::Explicit {
+        project
+            .output
+            .duration
+            .and_then(crate::timeline::seconds_to_nanos)
+    } else {
+        None
+    };
     let mut particle_intervals = Vec::new();
     collect_particle_intervals(
-        clips,
-        None,
+        &project.visual.clips,
+        (0, output_end.unwrap_or(u128::MAX)),
+        0,
         maximum_keyframes_per_track,
         has_authored_audio,
         limits,
@@ -38,57 +48,64 @@ pub(super) fn validate_aggregate(
 
 fn collect_particle_intervals(
     clips: &[crate::project::Clip],
-    parent_interval: Option<(u128, u128)>,
+    parent_interval: (u128, u128),
+    group_depth: usize,
     maximum_keyframes_per_track: usize,
     has_authored_audio: bool,
     limits: crate::validation::ResourceLimits,
     intervals: &mut Vec<(u128, u128, u64)>,
 ) {
     for clip in clips {
-        let interval = clip_interval(clip, parent_interval);
-        match &clip.source {
-            crate::project::VisualSource::ParticleSystem(system) => {
-                let mut ignored_diagnostics = Vec::new();
-                if let Some(count) = validate_system(
-                    system,
-                    "",
-                    maximum_keyframes_per_track,
-                    has_authored_audio,
-                    limits,
-                    &mut ignored_diagnostics,
-                ) && let Some((start, end)) = interval
-                {
-                    intervals.push((start, end, count));
+        let Some(interval) = clip_interval(clip, parent_interval) else {
+            continue;
+        };
+        let mask_sources = clip.masks.iter().filter_map(|mask| match &mask.input {
+            MaskInput::Source { source, .. } => Some(source.as_ref()),
+            _ => None,
+        });
+        for source in std::iter::once(&clip.source).chain(mask_sources) {
+            match source {
+                VisualSource::ParticleSystem(system) => {
+                    let mut ignored_diagnostics = Vec::new();
+                    if let Some(count) = validate_system(
+                        system,
+                        "",
+                        maximum_keyframes_per_track,
+                        has_authored_audio,
+                        limits,
+                        &mut ignored_diagnostics,
+                    ) {
+                        intervals.push((interval.0, interval.1, count));
+                    }
                 }
+                VisualSource::Group(group)
+                    if group_depth < super::visual::MAX_GROUP_NESTING_DEPTH =>
+                {
+                    collect_particle_intervals(
+                        &group.clips,
+                        interval,
+                        group_depth + 1,
+                        maximum_keyframes_per_track,
+                        has_authored_audio,
+                        limits,
+                        intervals,
+                    );
+                }
+                _ => {}
             }
-            crate::project::VisualSource::Group(group) => collect_particle_intervals(
-                &group.clips,
-                interval,
-                maximum_keyframes_per_track,
-                has_authored_audio,
-                limits,
-                intervals,
-            ),
-            _ => {}
         }
     }
 }
 
 fn clip_interval(
     clip: &crate::project::Clip,
-    parent_interval: Option<(u128, u128)>,
+    (parent_start, parent_end): (u128, u128),
 ) -> Option<(u128, u128)> {
     let start = crate::timeline::seconds_to_nanos(clip.start)?;
     let duration = crate::timeline::seconds_to_nanos(clip.duration)?;
-    let end = start.checked_add(duration)?;
-    match parent_interval {
-        Some((parent_start, parent_end)) => {
-            let absolute_start = parent_start.checked_add(start)?.max(parent_start);
-            let absolute_end = parent_start.checked_add(end)?.min(parent_end);
-            (absolute_start < absolute_end).then_some((absolute_start, absolute_end))
-        }
-        None => (start < end).then_some((start, end)),
-    }
+    let absolute_start = parent_start.checked_add(start)?;
+    let absolute_end = absolute_start.checked_add(duration)?.min(parent_end);
+    (absolute_start < absolute_end).then_some((absolute_start, absolute_end))
 }
 
 pub(super) fn validate_system(

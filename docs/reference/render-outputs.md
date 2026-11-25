@@ -99,8 +99,9 @@ the original project.
 
 Pass plain-text cues to the export request to add a selectable `mov_text` track.
 Each cue carries its start and end in project seconds followed by UTF-8 text.
-MP4 players can display or hide this track independently of the video. Burned-in
-captions are part of the composition and appear whether this track is on or off.
+MP4 players can display or hide this track independently of the video. Players
+that auto-select subtitles may display both the selectable track and any
+burned-in captions from the composition.
 
 ```python
 cues = [(0.5, 1.4, "Waiting for the train."), (1.8, 2.7, "Here it comes.")]

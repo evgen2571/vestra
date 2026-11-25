@@ -52,6 +52,72 @@ fn static_frame(
 }
 
 #[test]
+fn gpu_bounds_textures_and_rereads_evicted_captions_with_frames_in_flight() {
+    let validated = load_and_validate(
+        std::path::Path::new("examples/projects/animation-effects.json"),
+        &ValidationOptions {
+            check_backend: false,
+        },
+    )
+    .expect("fixture validates");
+    let mut plan = compile(validated, CompileOptions::default()).expect("fixture compiles");
+    plan.fonts.push(vestra_core::plan::FontAsset {
+        id: "caption-font".into(),
+        path: std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/assets/VestraTest-Regular.ttf"),
+    });
+    for background in ["#d02020", "#2050d0"] {
+        plan.texts.push(
+            serde_json::from_value(serde_json::json!({
+                "text": "A caption",
+                "font": "caption-font",
+                "font_size": 24,
+                "fill": "#ffffff",
+                "max_width": 120,
+                "stroke_color": "#202020",
+                "stroke_width": 2,
+                "background_color": background,
+                "background_padding": 4
+            }))
+            .expect("valid text fixture"),
+        );
+    }
+    let decoded = crate::DecodedAssets::build(&plan).expect("fixture decodes");
+    let caption_bytes = decoded.text(0).pixels().as_raw().len() as u64;
+    plan.limits.maximum_cache_bytes = caption_bytes;
+    let first_text = plan.images.len() + plan.shapes.len();
+    let Some(mut gpu) = wgpu_backend_or_skip_depth(&plan, decoded, 3) else {
+        return;
+    };
+    let initial = gpu.stats();
+    assert_eq!(initial.source_texture_count, first_text);
+    let mut frame = static_frame(&plan, [0]);
+    frame.layers[0].content_dependency = TemporalDependency::Dynamic;
+    for (number, cue) in [(0, 0), (90, 1), (1, 0)] {
+        frame.layers[0].source = EvaluatedSource::Text {
+            text_index: first_text + cue,
+            animation: Default::default(),
+        };
+        gpu.submit_frame(number, &frame).expect("caption submits");
+        let stats = gpu.stats();
+        assert_eq!(stats.source_texture_count, initial.source_texture_count + 1);
+        assert_eq!(
+            stats.source_texture_bytes,
+            initial.source_texture_bytes + caption_bytes
+        );
+    }
+    assert_eq!(gpu.in_flight(), 3);
+    let frames: std::collections::BTreeMap<_, _> = gpu
+        .flush()
+        .expect("captions complete")
+        .into_iter()
+        .map(|frame| (frame.frame_number, frame.rgba))
+        .collect();
+    assert_ne!(frames[&0], frames[&90]);
+    assert_eq!(frames[&0], frames[&1]);
+}
+
+#[test]
 fn gpu_reuses_static_layer_texture_without_readback_when_an_adapter_is_available() {
     let validated = load_and_validate(
         std::path::Path::new("examples/projects/animation-effects.json"),

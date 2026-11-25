@@ -29,6 +29,7 @@ impl ParticleIdentity {
     fn random_parts(self) -> (u64, u64, u64) {
         match self {
             Self::Continuous { ordinal } => (0x434f_4e54_494e_554f, ordinal, 0),
+            Self::PreRoll { ordinal } => (0x5052_4552_4f4c_4c5f, ordinal, 0),
             Self::Burst {
                 burst_index,
                 particle_index,
@@ -91,13 +92,21 @@ impl CompiledParticleSystem {
     /// Reconstructs only the continuous and burst emissions in `[T-Lmax, T]`.
     /// Ranges are sampled from identity-and-salt domains, so evaluation is random-access.
     ///
-    /// The iterator emits continuous particles by ordinal, followed by bursts
-    /// in compiled order and each burst's particle index order.
+    /// The iterator emits pre-roll particles and then ordinary continuous
+    /// particles in birth order, followed by bursts in compiled order.
     #[must_use]
     pub fn evaluated_particles_at(&self, time_nanos: u128) -> ParticleIterator<'_> {
         let burst_range = self.burst_range(time_nanos);
         let lower = time_nanos.saturating_sub(self.lifetime_nanos);
+        // A negative birth is live only when its offset and current time sum
+        // to less than the maximum lifetime.
+        let live_pre_roll = self.pre_roll_nanos.min(
+            self.lifetime_nanos
+                .saturating_sub(time_nanos)
+                .saturating_sub(1),
+        );
         ParticleIterator {
+            pre_roll: (0..self.continuous_spawn_count(live_pre_roll)).rev(),
             system: self,
             time_nanos,
             continuous: self.continuous_spawn_count(lower)..self.continuous_spawn_count(time_nanos),
@@ -192,10 +201,14 @@ impl CompiledParticleSystem {
     fn instance(
         &self,
         identity: ParticleIdentity,
-        spawn_time_nanos: u128,
+        spawn_time_nanos: i128,
         time_nanos: u128,
     ) -> Option<EvaluatedParticleInstance> {
-        let age_nanos = time_nanos.checked_sub(spawn_time_nanos)?;
+        let age_nanos = if spawn_time_nanos < 0 {
+            time_nanos.checked_add(spawn_time_nanos.unsigned_abs())?
+        } else {
+            time_nanos.checked_sub(spawn_time_nanos.unsigned_abs())?
+        };
         let lifetime_seconds = self.sample_range(identity, self.lifetime_range, LIFETIME);
         let lifetime_nanos = timeline::seconds_to_nanos(lifetime_seconds)?;
         if age_nanos >= lifetime_nanos {
@@ -204,16 +217,20 @@ impl CompiledParticleSystem {
         let age = age_nanos as f64 / NANOS_PER_SECOND as f64;
         let normalized_lifetime =
             (age_nanos as f64 / lifetime_nanos as f64).min(1.0 - f64::EPSILON);
+        let origin = self.emitter_position.as_ref().map_or_else(
+            || self.emitter.origin(),
+            |track| track.evaluate(spawn_time_nanos.max(0) as u128),
+        );
         let initial_position = match &self.emitter {
-            ParticleEmitter::Point { position } => *position,
-            ParticleEmitter::Rectangle { center, size } => crate::domain::Point {
-                x: center.x + (self.random_unit(identity, EMITTER_RECT_X) - 0.5) * size.x,
-                y: center.y + (self.random_unit(identity, EMITTER_RECT_Y) - 0.5) * size.y,
+            ParticleEmitter::Point { .. } => origin,
+            ParticleEmitter::Rectangle { size, .. } => crate::domain::Point {
+                x: origin.x + (self.random_unit(identity, EMITTER_RECT_X) - 0.5) * size.x,
+                y: origin.y + (self.random_unit(identity, EMITTER_RECT_Y) - 0.5) * size.y,
             },
             ParticleEmitter::Circle {
-                center,
                 inner_radius,
                 outer_radius,
+                ..
             } => {
                 let angle =
                     2.0 * std::f64::consts::PI * self.random_unit(identity, EMITTER_CIRCLE_ANGLE);
@@ -223,8 +240,8 @@ impl CompiledParticleSystem {
                     self.random_unit(identity, EMITTER_CIRCLE_RADIUS),
                 );
                 crate::domain::Point {
-                    x: center.x + angle.cos() * radius,
-                    y: center.y + angle.sin() * radius,
+                    x: origin.x + angle.cos() * radius,
+                    y: origin.y + angle.sin() * radius,
                 }
             }
         };
@@ -289,6 +306,7 @@ impl CompiledParticleSystem {
 pub struct ParticleIterator<'a> {
     system: &'a CompiledParticleSystem,
     time_nanos: u128,
+    pre_roll: std::iter::Rev<std::ops::Range<u64>>,
     continuous: std::ops::Range<u64>,
     burst_index: usize,
     burst_end: usize,
@@ -341,8 +359,19 @@ impl Iterator for ParticleIterator<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
+            if let Some(ordinal) = self.pre_roll.next() {
+                let offset = i128::try_from(self.system.continuous_spawn_time(ordinal)?).ok()?;
+                if let Some(instance) = self.system.instance(
+                    ParticleIdentity::PreRoll { ordinal },
+                    -offset,
+                    self.time_nanos,
+                ) {
+                    return Some(instance);
+                }
+                continue;
+            }
             if let Some(ordinal) = self.continuous.next() {
-                let spawn = self.system.continuous_spawn_time(ordinal)?;
+                let spawn = i128::try_from(self.system.continuous_spawn_time(ordinal)?).ok()?;
                 if let Some(instance) = self.system.instance(
                     ParticleIdentity::Continuous { ordinal },
                     spawn,
@@ -369,7 +398,7 @@ impl Iterator for ParticleIterator<'_> {
                     burst_index: self.burst_index.try_into().ok()?,
                     particle_index,
                 },
-                burst.time_nanos,
+                i128::try_from(burst.time_nanos).ok()?,
                 self.time_nanos,
             ) {
                 return Some(instance);

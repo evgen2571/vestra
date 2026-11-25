@@ -1,6 +1,8 @@
 //! Compiled particle identities, parameters and resolved appearance.
 
 use crate::{
+    animation::Track,
+    domain::Point,
     plan::CompiledScalarProperty,
     project::{ParticleEmitter, ScalarLifetimeStop, ScalarRange},
 };
@@ -11,6 +13,9 @@ pub const RATE_SCALE: u64 = 1_000_000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParticleIdentity {
     Continuous {
+        ordinal: u64,
+    },
+    PreRoll {
         ordinal: u64,
     },
     Burst {
@@ -29,6 +34,8 @@ pub struct CompiledParticleBurst {
 pub struct CompiledParticleSystem {
     pub seed: u64,
     pub emitter: ParticleEmitter,
+    pub emitter_position: Option<Track<Point>>,
+    pub pre_roll_nanos: u128,
     pub rate_units_per_second: u64,
     pub lifetime_nanos: u128,
     pub lifetime_range: ScalarRange,
@@ -82,7 +89,8 @@ pub struct CompiledColourLifetimeStop {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EvaluatedParticleInstance {
     pub identity: ParticleIdentity,
-    pub spawn_time_nanos: u128,
+    /// Clip-local birth time, including negative times during pre-roll.
+    pub spawn_time_nanos: i128,
     pub age_nanos: u128,
     pub normalized_lifetime: f64,
     pub position: crate::domain::Point,

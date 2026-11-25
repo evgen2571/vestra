@@ -146,6 +146,8 @@ mod tests {
             emitter: ParticleEmitter::Point {
                 position: Point { x: 0.5, y: 0.5 },
             },
+            emitter_position: None,
+            pre_roll_nanos: 0,
             rate_units_per_second: 0,
             lifetime_nanos: 1_000_000_000,
             lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },

@@ -2,10 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Point, ScalarProperty};
+use super::{Keyframe, Point, ScalarProperty};
 
 fn default_particle_colour() -> String {
     "#ffffff".to_owned()
+}
+
+fn is_zero(value: &f64) -> bool {
+    *value == 0.0
 }
 
 const fn default_particle_rate() -> f64 {
@@ -100,6 +104,15 @@ pub enum ParticleEmitter {
     },
 }
 
+impl ParticleEmitter {
+    pub(crate) const fn origin(&self) -> Point {
+        match self {
+            Self::Point { position } => *position,
+            Self::Rectangle { center, .. } | Self::Circle { center, .. } => *center,
+        }
+    }
+}
+
 impl Default for ParticleEmitter {
     fn default() -> Self {
         Self::Point {
@@ -120,6 +133,9 @@ pub struct ParticleBurst {
 pub struct ParticleEmission {
     #[serde(default = "default_particle_rate")]
     pub rate: f64,
+    /// Seconds of continuous emission before clip-local time zero.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub pre_roll: f64,
     #[serde(default)]
     pub bursts: Vec<ParticleBurst>,
 }
@@ -128,6 +144,7 @@ impl Default for ParticleEmission {
     fn default() -> Self {
         Self {
             rate: default_particle_rate(),
+            pre_roll: 0.0,
             bursts: Vec::new(),
         }
     }
@@ -235,6 +252,9 @@ pub struct ParticleSystem {
     pub seed: u64,
     #[serde(default)]
     pub emitter: ParticleEmitter,
+    /// Clip-local keyframes for the point position or area emitter center.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub emitter_keyframes: Vec<Keyframe<Point>>,
     #[serde(default)]
     pub emission: ParticleEmission,
     #[serde(default)]
@@ -256,6 +276,7 @@ mod tests {
                     time: 0.0,
                     count: 3,
                 }],
+                ..Default::default()
             },
             ..ParticleSystem::default()
         });

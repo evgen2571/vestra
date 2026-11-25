@@ -21,6 +21,7 @@ fn system(rate: f64, lifetime: f64) -> CompiledParticleSystem {
             emission: ParticleEmission {
                 rate,
                 bursts: vec![],
+                ..Default::default()
             },
             particle: ParticleDefinition {
                 lifetime,
@@ -166,6 +167,7 @@ fn zero_rate_has_no_continuous_particles_but_keeps_bursts() {
                     time: 1.0,
                     count: 2,
                 }],
+                ..Default::default()
             },
             ..Default::default()
         },
@@ -242,6 +244,7 @@ fn evaluated_particle_at_spawn_has_zero_age_and_initial_state() {
                     time: 1.0,
                     count: 1,
                 }],
+                ..Default::default()
             },
             particle: ParticleDefinition {
                 lifetime: 4.0,
@@ -273,6 +276,7 @@ fn evaluated_particle_uses_analytic_motion_and_rotation() {
                     time: 0.0,
                     count: 1,
                 }],
+                ..Default::default()
             },
             particle: ParticleDefinition {
                 lifetime: 4.0,
@@ -306,6 +310,7 @@ fn normalized_lifetime_is_based_on_exact_timeline_duration() {
                     time: 0.0,
                     count: 1,
                 }],
+                ..Default::default()
             },
             particle: ParticleDefinition {
                 lifetime: 4.0,
@@ -351,6 +356,7 @@ fn evaluated_particle_order_is_continuous_then_canonical_bursts() {
                         count: 1,
                     },
                 ],
+                ..Default::default()
             },
             particle: ParticleDefinition {
                 lifetime: 2.0,
@@ -1188,4 +1194,116 @@ fn audio_appearance_changes_only_resolved_size_and_opacity() {
     assert_eq!(quiet[0].spawn_time_nanos, resolved[0].spawn_time_nanos);
     assert_eq!(quiet[0].lifetime_nanos, resolved[0].lifetime_nanos);
     assert_eq!(quiet[0].position, resolved[0].position);
+}
+
+#[test]
+fn emitter_keyframes_sample_birth_position_for_all_emitter_shapes() {
+    for emitter in [
+        serde_json::json!({"type":"point", "position":{"x":0.1,"y":0.8}}),
+        serde_json::json!({"type":"rectangle", "center":{"x":0.1,"y":0.8}, "size":{"x":0.0,"y":0.0}}),
+        serde_json::json!({"type":"circle", "center":{"x":0.1,"y":0.8}, "inner_radius":0,"outer_radius":0}),
+    ] {
+        let authored: ParticleSystem = serde_json::from_value(serde_json::json!({
+            "seed": 81,
+            "emitter": emitter,
+            "emitter_keyframes": [
+                {"time": 0.5, "value": {"x":0.25,"y":0.5}, "interpolation":"linear"},
+                {"time": 1.5, "value": {"x":0.75,"y":0.5}, "interpolation":"linear"}
+            ],
+            "emission": {"rate": 2, "bursts": [{"time": 0, "count": 1}, {"time": 0.75, "count": 1}]},
+            "particle": {"lifetime": 2.0},
+        }))
+        .expect("animated emitter JSON");
+        let system = compile(&authored, crate::project::parse_colour).expect("particle system");
+        let particles = |time| system.evaluated_particles_at(time).collect::<Vec<_>>();
+        let earlier = particles(750_000_000);
+        let later = particles(1_250_000_000);
+        assert_eq!(
+            later
+                .iter()
+                .map(|particle| (particle.spawn_time_nanos, particle.position.x))
+                .collect::<Vec<_>>(),
+            [
+                (500_000_000, 0.25),
+                (1_000_000_000, 0.5),
+                (0, 0.1),
+                (750_000_000, 0.375)
+            ]
+        );
+        assert_eq!(particles(750_000_000), earlier);
+        assert_eq!(particles(1_250_000_000), later);
+    }
+}
+
+#[test]
+fn pre_roll_reconstructs_only_live_negative_births_and_preserves_legacy_schedule() {
+    let mut authored: ParticleSystem = serde_json::from_value(serde_json::json!({
+        "seed": 57,
+        "emitter_keyframes": [
+            {"time": 0, "value": {"x":0.25,"y":0.5}, "interpolation":"linear"},
+            {"time": 1, "value": {"x":0.75,"y":0.5}, "interpolation":"linear"}
+        ],
+        "emission": {"rate": 2.5, "pre_roll": 1000000000, "bursts": [{"time": 0, "count": 1}]},
+        "particle": {"lifetime": 1.2, "size_range":{"min":0.01,"max":0.04}},
+    }))
+    .expect("pre-roll JSON");
+    let warm = compile(&authored, crate::project::parse_colour).expect("warm system");
+    authored.emission = ParticleEmission {
+        rate: 2.5,
+        bursts: vec![ParticleBurst {
+            time: 0.0,
+            count: 1,
+        }],
+        ..Default::default()
+    };
+    let cold = compile(&authored, crate::project::parse_colour).expect("cold system");
+    assert_eq!(warm.maximum_live_particles, cold.maximum_live_particles);
+    let warm_particles = |time| warm.evaluated_particles_at(time).collect::<Vec<_>>();
+    let first = warm_particles(0);
+    assert_eq!(first.len(), 3);
+    assert_eq!(
+        first
+            .iter()
+            .map(|particle| (
+                particle.spawn_time_nanos,
+                particle.age_nanos,
+                particle.position.x
+            ))
+            .collect::<Vec<_>>(),
+        [
+            (-800_000_000, 800_000_000, 0.25),
+            (-400_000_000, 400_000_000, 0.25),
+            (0, 0, 0.25)
+        ]
+    );
+    let crossing = warm_particles(400_000_000);
+    assert_eq!(
+        crossing
+            .iter()
+            .map(|particle| particle.spawn_time_nanos)
+            .collect::<Vec<_>>(),
+        [-400_000_000, 400_000_000, 0]
+    );
+    assert_eq!(
+        &crossing[1..],
+        &cold.evaluated_particles_at(400_000_000).collect::<Vec<_>>()
+    );
+    assert_eq!(warm_particles(0), first);
+    assert_eq!(warm_particles(400_000_000), crossing);
+    assert_eq!(
+        warm_particles(800_000_000),
+        cold.evaluated_particles_at(800_000_000).collect::<Vec<_>>()
+    );
+    authored.emission.pre_roll = 0.399_999_999;
+    let short = compile(&authored, crate::project::parse_colour).expect("short pre-roll");
+    assert_eq!(
+        short.evaluated_particles_at(0).collect::<Vec<_>>(),
+        first[2..]
+    );
+    authored.emission.pre_roll = 0.4;
+    let exact = compile(&authored, crate::project::parse_colour).expect("exact pre-roll");
+    assert_eq!(
+        exact.evaluated_particles_at(0).collect::<Vec<_>>(),
+        first[1..]
+    );
 }

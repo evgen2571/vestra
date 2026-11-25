@@ -1237,6 +1237,7 @@ fn particle_system_compiles_and_evaluates_from_clip_local_time() {
                 time: 0.0,
                 count: 2,
             }],
+            ..Default::default()
         },
         ..Default::default()
     });
@@ -1278,21 +1279,23 @@ fn particle_system_compiles_and_evaluates_from_clip_local_time() {
 }
 
 #[test]
-fn nested_particles_keep_local_age_and_random_access_determinism() {
+fn nested_particle_emitter_motion_keeps_local_births_and_is_seekable() {
     let mut project = canonical_project();
     project.visual.transitions.clear();
     let mut child = project.visual.clips[0].clone();
     child.id = "particle-child".into();
     child.start = 10.0;
     child.duration = 5.0;
-    child.source = VisualSource::ParticleSystem(ParticleSystem {
-        seed: 17,
-        emission: ParticleEmission {
-            rate: 2.0,
-            ..Default::default()
-        },
-        ..Default::default()
-    });
+    child.source = serde_json::from_value(serde_json::json!({
+        "type": "particle_system",
+        "seed": 17,
+        "emitter_keyframes": [
+            {"time": 0, "value": {"x":0.25,"y":0.5}, "interpolation":"linear"},
+            {"time": 1, "value": {"x":0.75,"y":0.5}, "interpolation":"linear"}
+        ],
+        "emission": {"rate": 2, "pre_roll": 1, "bursts": [{"time": 0.25, "count": 1}]},
+    }))
+    .expect("animated nested source");
     child.transform = None;
     let mut group = child.clone();
     group.id = "particle-group".into();
@@ -1311,9 +1314,6 @@ fn nested_particles_keep_local_age_and_random_access_determinism() {
         evaluate_with_context(&plan, &[super::ScheduledItem(0)], time, &context)
             .expect("nested particle frame")
     };
-    let direct = evaluate_nested(22_000_000_000);
-    let _ = evaluate_nested(20_000_000_000);
-    let repeated = evaluate_nested(22_000_000_000);
     let particles = |frame: &super::EvaluatedFrame| {
         let super::EvaluatedSource::Group { composition, .. } = &frame.layers[0].source else {
             panic!("expected Group");
@@ -1333,9 +1333,23 @@ fn nested_particles_keep_local_age_and_random_access_determinism() {
                 .collect::<Vec<_>>(),
         )
     };
-    let (time, direct_particles) = particles(&direct);
-    assert_eq!(time, 2_000_000_000);
-    assert_eq!(direct_particles, particles(&repeated).1);
+    let first = particles(&evaluate_nested(20_000_000_000));
+    assert_eq!(first.0, 0);
+    assert_eq!(first.1.len(), 1);
+    assert_eq!(first.1[0].spawn_time_nanos, -500_000_000);
+    assert_eq!(first.1[0].position.x, 0.25);
+    let later = particles(&evaluate_nested(20_750_000_000));
+    assert_eq!(later.0, 750_000_000);
+    assert_eq!(
+        later
+            .1
+            .iter()
+            .map(|particle| (particle.spawn_time_nanos, particle.position.x))
+            .collect::<Vec<_>>(),
+        [(500_000_000, 0.5), (250_000_000, 0.375)]
+    );
+    assert_eq!(particles(&evaluate_nested(20_000_000_000)), first);
+    assert_eq!(particles(&evaluate_nested(20_750_000_000)), later);
 }
 
 #[test]

@@ -894,6 +894,8 @@ fn particle_and_spectrum_sources_render_inside_groups_deterministically() {
     let particle_system = vestra_core::plan::CompiledParticleSystem {
         seed: 7,
         emitter: crate::project::ParticleEmitter::default(),
+        emitter_position: None,
+        pre_roll_nanos: 0,
         rate_units_per_second: 0,
         lifetime_nanos: 1_000_000_000,
         lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },
@@ -1269,6 +1271,8 @@ fn particle_sources_enter_the_effect_capable_compositor_path() {
         system: std::sync::Arc::new(vestra_core::plan::CompiledParticleSystem {
             seed: 0,
             emitter: crate::project::ParticleEmitter::default(),
+            emitter_position: None,
+            pre_roll_nanos: 0,
             rate_units_per_second: 0,
             lifetime_nanos: 1,
             lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },
@@ -1308,6 +1312,8 @@ fn particle_pixels_pass_through_the_cpu_effect_chain() {
     let system = vestra_core::plan::CompiledParticleSystem {
         seed: 0,
         emitter: crate::project::ParticleEmitter::default(),
+        emitter_position: None,
+        pre_roll_nanos: 0,
         rate_units_per_second: 0,
         lifetime_nanos: 1_000_000_000,
         lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },

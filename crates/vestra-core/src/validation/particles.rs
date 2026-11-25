@@ -124,6 +124,14 @@ pub(super) fn validate_system(
             format!("{path}/emission/rate"),
         ));
     }
+    if crate::timeline::seconds_to_nanos(system.emission.pre_roll).is_none() {
+        errors.push(Diagnostic::error(
+            "VESTRA-PARTICLE-PRE-ROLL",
+            Category::Semantic,
+            "particle pre-roll must be finite, non-negative, and representable as a timeline duration",
+            format!("{path}/emission/pre_roll"),
+        ));
+    }
     let lifetime = system.particle.lifetime;
     if !lifetime.is_finite()
         || lifetime <= 0.0
@@ -157,6 +165,22 @@ pub(super) fn validate_system(
             "particle lifetime range must be finite, ordered, positive, and representable as positive timeline durations",
             format!("{path}/particle/lifetime_range"),
         ));
+    }
+    if !system.emitter_keyframes.is_empty() {
+        let keyframe_path = format!("{path}/emitter_keyframes");
+        super::tracks::validate_keyframe_count(
+            system.emitter_keyframes.len(),
+            maximum_keyframes_per_track,
+            &keyframe_path,
+            errors,
+        );
+        super::tracks::validate_keyframes(
+            &system.emitter_keyframes,
+            None,
+            &keyframe_path,
+            errors,
+            |point| point.x.is_finite() && point.y.is_finite(),
+        );
     }
     let emitter_values = match &system.emitter {
         crate::project::ParticleEmitter::Point { position } => {

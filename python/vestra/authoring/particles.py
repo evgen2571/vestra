@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from ._internal import _number
+from .animation import PointKeyframe
 from .tracks import ModulatableScalarTrack
 from .values import Color, Point, color_to_canonical
 
@@ -244,12 +245,21 @@ class ParticleSystem:
     blend_mode: ParticleBlendMode = ParticleBlendMode.NORMAL
     lifetime_style: ParticleLifetimeStyle | None = None
     audio_reactive: ParticleAudioReactive | None = None
+    emitter_keyframes: tuple[PointKeyframe, ...] = ()
+    pre_roll: float = 0.0
 
     def __post_init__(self) -> None:
         if not isinstance(
             self.emitter, (PointEmitter, RectangleEmitter, CircleEmitter)
         ):
             raise TypeError("emitter must be a particle emitter")
+        keyframes = tuple(self.emitter_keyframes)
+        if any(not isinstance(frame, PointKeyframe) for frame in keyframes):
+            raise TypeError("emitter_keyframes must contain PointKeyframe objects")
+        if any(left.time >= right.time for left, right in zip(keyframes, keyframes[1:])):
+            raise ValueError("emitter keyframe times must be strictly increasing")
+        self.emitter_keyframes = keyframes
+        self.pre_roll = _non_negative(self.pre_roll, "pre_roll")
         bursts = self.bursts if isinstance(self.bursts, tuple) else tuple(self.bursts)
         if any(not isinstance(burst, ParticleBurst) for burst in bursts):
             raise TypeError("bursts must contain ParticleBurst objects")
@@ -330,13 +340,19 @@ class ParticleSystem:
             particle["lifetime_style"] = self.lifetime_style.to_canonical()
         if self.audio_reactive is not None:
             particle["audio_reactive"] = self.audio_reactive.to_canonical()
-        return {
+        emission: dict[str, object] = {
+            "rate": self.rate,
+            "bursts": [burst.to_canonical() for burst in self.bursts],
+        }
+        if self.pre_roll != 0.0:
+            emission["pre_roll"] = self.pre_roll
+        source: dict[str, object] = {
             "type": "particle_system",
             "seed": self.seed,
             "emitter": self.emitter.to_canonical(),
-            "emission": {
-                "rate": self.rate,
-                "bursts": [burst.to_canonical() for burst in self.bursts],
-            },
+            "emission": emission,
             "particle": particle,
         }
+        if self.emitter_keyframes:
+            source["emitter_keyframes"] = [frame.to_canonical() for frame in self.emitter_keyframes]
+        return source

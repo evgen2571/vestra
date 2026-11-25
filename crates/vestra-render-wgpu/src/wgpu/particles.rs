@@ -115,6 +115,8 @@ mod tests {
         let system = CompiledParticleSystem {
             seed: 7,
             emitter: crate::project::ParticleEmitter::default(),
+            emitter_position: None,
+            pre_roll_nanos: 0,
             rate_units_per_second: vestra_core::plan::RATE_SCALE,
             lifetime_nanos: 1_000_000_000,
             lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },
@@ -221,6 +223,8 @@ mod tests {
         CompiledParticleSystem {
             seed: 7,
             emitter: crate::project::ParticleEmitter::default(),
+            emitter_position: None,
+            pre_roll_nanos: 0,
             rate_units_per_second: vestra_core::plan::RATE_SCALE,
             lifetime_nanos: 1_000_000_000,
             lifetime_range: crate::project::ScalarRange { min: 1.0, max: 1.0 },

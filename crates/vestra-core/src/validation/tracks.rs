@@ -14,14 +14,13 @@ pub(super) fn validate_track<T>(
     errors: &mut Vec<Diagnostic>,
     valid: impl Fn(&T) -> bool,
 ) {
-    if track.keyframes.len() > maximum_keyframes {
-        errors.push(Diagnostic::error(
-            "VESTRA-LIMIT-KEYFRAMES",
-            Category::Semantic,
-            "track exceeds the keyframe limit",
-            format!("{path}/keyframes"),
-        ));
-    }
+    let keyframe_path = format!("{path}/keyframes");
+    validate_keyframe_count(
+        track.keyframes.len(),
+        maximum_keyframes,
+        &keyframe_path,
+        errors,
+    );
     if !valid(&track.base_value) {
         errors.push(Diagnostic::error(
             "VESTRA-TRACK-VALUE",
@@ -30,17 +29,56 @@ pub(super) fn validate_track<T>(
             format!("{path}/base_value"),
         ));
     }
+    validate_keyframes(
+        &track.keyframes,
+        Some(duration),
+        &keyframe_path,
+        errors,
+        valid,
+    );
+}
+
+pub(super) fn validate_keyframe_count(
+    count: usize,
+    maximum_keyframes: usize,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+) {
+    if count > maximum_keyframes {
+        errors.push(Diagnostic::error(
+            "VESTRA-LIMIT-KEYFRAMES",
+            Category::Semantic,
+            "track exceeds the keyframe limit",
+            path,
+        ));
+    }
+}
+
+pub(super) fn validate_keyframes<T>(
+    keyframes: &[crate::project::Keyframe<T>],
+    duration: Option<f64>,
+    path: &str,
+    errors: &mut Vec<Diagnostic>,
+    valid: impl Fn(&T) -> bool,
+) {
     let mut previous = None;
-    for (index, keyframe) in track.keyframes.iter().enumerate() {
+    for (index, keyframe) in keyframes.iter().enumerate() {
         if !nonnegative(keyframe.time)
-            || keyframe.time > duration
+            || duration.map_or_else(
+                || crate::timeline::seconds_to_nanos(keyframe.time).is_none(),
+                |duration| keyframe.time > duration,
+            )
             || previous.is_some_and(|time| keyframe.time <= time)
         {
             errors.push(Diagnostic::error(
                 "VESTRA-KEYFRAME-TIME",
                 Category::Semantic,
-                "keyframe times must be finite, strictly increasing, and inside the clip",
-                format!("{path}/keyframes/{index}/time"),
+                if duration.is_some() {
+                    "keyframe times must be finite, strictly increasing, and inside the clip"
+                } else {
+                    "keyframe times must be non-negative, strictly increasing, and representable on the timeline"
+                },
+                format!("{path}/{index}/time"),
             ));
         }
         if !valid(&keyframe.value) {
@@ -48,7 +86,7 @@ pub(super) fn validate_track<T>(
                 "VESTRA-KEYFRAME-VALUE",
                 Category::Semantic,
                 "keyframe value is invalid",
-                format!("{path}/keyframes/{index}/value"),
+                format!("{path}/{index}/value"),
             ));
         }
         if let crate::project::Interpolation::CubicBezier(bezier) = keyframe.interpolation
@@ -63,7 +101,7 @@ pub(super) fn validate_track<T>(
                 "VESTRA-BEZIER",
                 Category::Semantic,
                 "cubic Bézier controls must be finite and have x controls in 0..=1",
-                format!("{path}/keyframes/{index}/interpolation"),
+                format!("{path}/{index}/interpolation"),
             ));
         }
         previous = Some(keyframe.time);

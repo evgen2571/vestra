@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
+from ..authoring.animation import PointKeyframe
 from ..authoring.particles import (
     CircleEmitter,
     ColourLifetimeStop,
@@ -34,11 +35,15 @@ class ParticleSystem(Source):
     __slots__ = ("definition", "_audio_reactive")
 
     definition: AuthoringParticleSystem
+    emitter_keyframes: tuple[PointKeyframe, ...]
+    pre_roll: float
 
     _FIELD_NAMES = frozenset(
         {
             "emitter",
+            "emitter_keyframes",
             "rate",
+            "pre_roll",
             "bursts",
             "seed",
             "lifetime",
@@ -96,7 +101,9 @@ class ParticleSystem(Source):
         definition: AuthoringParticleSystem | None = None,
         *,
         emitter: PointEmitter | RectangleEmitter | CircleEmitter = PointEmitter(),
+        emitter_keyframes: tuple[PointKeyframe, ...] = (),
         rate: float = 0.0,
+        pre_roll: float = 0.0,
         bursts: tuple[ParticleBurst, ...] = (),
         seed: int = 0,
         lifetime: float = 1.0,
@@ -158,7 +165,9 @@ class ParticleSystem(Source):
         )
         self.definition = AuthoringParticleSystem(
             emitter=emitter,
+            emitter_keyframes=emitter_keyframes,
             rate=rate,
+            pre_roll=pre_roll,
             bursts=bursts,
             seed=seed,
             lifetime=lifetime,

@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from os import PathLike
 from pathlib import Path
 from typing import Callable, ClassVar, final
@@ -453,7 +453,7 @@ class CancellationToken:
 
 @final
 class PreparedVideoRenderRequest:
-    def __new__(cls, output: PathLike[str] | str, *, overwrite: bool = False, start: float | None = None, end: float | None = None) -> PreparedVideoRenderRequest: ...
+    def __new__(cls, output: PathLike[str] | str, *, overwrite: bool = False, start: float | None = None, end: float | None = None, subtitles: Sequence[tuple[float, float, str]] | None = None) -> PreparedVideoRenderRequest: ...
     @property
     def output(self) -> Path: ...
     @property
@@ -465,7 +465,7 @@ class PreparedVideoRenderRequest:
 
 @final
 class RenderRequest:
-    def __new__(cls, output: PathLike[str] | str, *, backend: BackendPreference | None = None, overwrite: bool = False, preview: bool = False, start: float | None = None, end: float | None = None, resolution: tuple[int, int] | None = None, fps: FrameRate | None = None, quality: str | None = None) -> RenderRequest: ...
+    def __new__(cls, output: PathLike[str] | str, *, backend: BackendPreference | None = None, overwrite: bool = False, preview: bool = False, start: float | None = None, end: float | None = None, resolution: tuple[int, int] | None = None, fps: FrameRate | None = None, quality: str | None = None, subtitles: Sequence[tuple[float, float, str]] | None = None) -> RenderRequest: ...
     @property
     def output(self) -> Path: ...
     @property

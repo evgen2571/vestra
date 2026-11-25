@@ -15,7 +15,7 @@ export helpers require version 0.1.5 or later.
 
 | Output | Selection | Encoding and alpha |
 | --- | --- | --- |
-| MP4 | `.mp4` render destination | H.264 with optional AAC audio. |
+| MP4 | `.mp4` render destination | H.264 with optional AAC audio and selectable text subtitles. |
 | GIF | `.gif` render destination | Per-frame palette; binary alpha; silent, infinite loop. |
 | Animated WebP | `.webp` render destination | Lossless frames with partial alpha; silent, infinite loop. |
 | PNG | `.png` still destination | Lossless RGBA. |
@@ -94,6 +94,35 @@ boundaries round to the nearest 48 kHz mixer sample. A final frame can extend
 beyond authored duration by less than one frame; the corresponding audio tail
 is silence. Progress counts selected frames; failure frame indices refer to
 the original project.
+
+## Selectable MP4 subtitles
+
+Pass plain-text cues to the export request to add a selectable `mov_text` track.
+Each cue carries its start and end in project seconds followed by UTF-8 text.
+MP4 players can display or hide this track independently of the video. Burned-in
+captions are part of the composition and appear whether this track is on or off.
+
+```python
+cues = [(0.5, 1.4, "Waiting for the train."), (1.8, 2.7, "Here it comes.")]
+project.render("captioned.mp4", subtitles=cues)
+```
+
+For prepared video, pass the same `subtitles` keyword to
+`PreparedVideoRenderRequest`. The Rust SDK takes a vector of `SubtitleCue`
+values via `RenderRequest::with_subtitles` or
+`PreparedVideoRenderRequest::with_subtitles`. These export settings are
+independent of the canonical project and its assets.
+
+Cues are sorted by start time and can touch at their boundaries. Overlaps,
+negative or non-finite timestamps, end times at or before starts, and blank
+text are refused. Text may contain newlines and has a 65,535 UTF-8 byte limit
+per cue. NUL characters are refused.
+
+For a selected range, the first selected frame is subtitle time zero. Cues
+are clipped through the end of the last frame or the end of the authored
+timeline, whichever is earlier. Times round to the nearest millisecond.
+Cues with no remaining interval are dropped. An empty list or a range that
+contains no cues produces an MP4 without a subtitle track.
 
 ## Frames and arrays
 

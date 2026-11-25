@@ -48,6 +48,10 @@ Continuous image sequences and selected video ranges report `VESTRA-RENDER-RANGE
 for reversed, out-of-timeline or empty frame ranges. These checks use the
 prepared rational frame grid before producing output.
 
+Selectable subtitle exports report `VESTRA-RENDER-SUBTITLES` for invalid cue
+data or an unsupported output format. Cue errors identify the original
+one-based cue number.
+
 ## Diagnostics, logs and progress
 
 Tracing/logging is operational observability. `RenderEvent` progress describes

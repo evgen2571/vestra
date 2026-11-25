@@ -3,8 +3,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{Category, Diagnostic, plan::RenderPlan};
-use vestra_media::{FfmpegSink, FrameSink, OutputTarget};
+use crate::{Category, Diagnostic, SubtitleCue, plan::RenderPlan};
+use vestra_core::timeline::{frame_time_nanos, seconds_to_nanos};
+use vestra_media::{FfmpegSink, FrameSink, OutputTarget, SubtitleTrack};
 use vestra_progress::RenderStage;
 
 use super::{
@@ -86,24 +87,64 @@ fn cancel_static_ffmpeg(
 pub(crate) fn render_prepared_with_lifecycle(
     prepared: &mut PreparedState,
     options: &RenderOptions,
+    cues: &[SubtitleCue],
     lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, RenderError> {
+    let plan = &prepared.plan;
+    let output_path = options
+        .output_override
+        .as_deref()
+        .unwrap_or(&plan.configured_output);
+    let subtitles = if cues.is_empty() {
+        None
+    } else {
+        let frames = options.frames(plan);
+        let error = |message| {
+            let mut context =
+                RenderFailureContext::before_render(RenderFailureStage::OutputPreparation, plan);
+            context.output_path = Some(output_path.to_path_buf());
+            context.total_frames = frames.end - frames.start;
+            RenderError {
+                diagnostic: Diagnostic::error(
+                    "VESTRA-RENDER-SUBTITLES",
+                    Category::Output,
+                    message,
+                    "/subtitles",
+                ),
+                warnings: Vec::new(),
+                temporary_removed: false,
+                context,
+                timings: RenderTimings::default(),
+            }
+        };
+        let (fps_num, fps_den) = plan.frame_rate;
+        let boundary = |index| {
+            frame_time_nanos(index, fps_num, fps_den).map_err(|_| {
+                error("subtitle frame boundary exceeds the supported timeline".to_owned())
+            })
+        };
+        let duration = seconds_to_nanos(plan.duration)
+            .ok_or_else(|| error("subtitle window exceeds the supported timeline".to_owned()))?;
+        let window = boundary(frames.start)?..boundary(frames.end)?.min(duration);
+        SubtitleTrack::prepare(cues, output_path, window)
+            .map_err(|cause| error(cause.to_string()))?
+    };
     // shortcut: ranged static video uses cached raw frames; add image-loop ranges if pipe writes dominate benchmarks.
     if prepared.plan.visual_dependency == vestra_core::plan::TemporalDependency::Static
         && !prepared.plan.canvas.preview
         && options.frame_range.is_none()
-        && !vestra_media::is_animated_output(
-            options
-                .output_override
-                .as_deref()
-                .unwrap_or(&prepared.plan.configured_output),
-        )
+        && !vestra_media::is_animated_output(output_path)
     {
-        return render_static_ffmpeg(prepared, options, lifecycle);
+        return render_static_ffmpeg(prepared, options, subtitles.as_ref(), lifecycle);
     }
     let executable = prepared.ffmpeg_executable.clone();
     render_raw(prepared, options, lifecycle, |settings, output| {
-        FfmpegSink::start_with_executable(settings, output, executable.as_deref())
+        FfmpegSink::start_with_executable(
+            settings,
+            output,
+            executable.as_deref(),
+            subtitles.as_ref(),
+        )
     })
 }
 
@@ -114,9 +155,10 @@ pub(crate) fn render_prepared_with_lifecycle(
 pub(super) fn render_static_ffmpeg(
     prepared: &mut PreparedState,
     options: &RenderOptions,
+    subtitles: Option<&SubtitleTrack<'_>>,
     lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, RenderError> {
-    render_static_ffmpeg_inner(prepared, options, lifecycle)
+    render_static_ffmpeg_inner(prepared, options, subtitles, lifecycle)
 }
 
 #[expect(
@@ -126,6 +168,7 @@ pub(super) fn render_static_ffmpeg(
 fn render_static_ffmpeg_inner(
     prepared: &mut PreparedState,
     options: &RenderOptions,
+    subtitles: Option<&SubtitleTrack<'_>>,
     lifecycle: &mut LifecycleEmitter<'_>,
 ) -> Result<RenderSummary, RenderError> {
     prepared.ensure_ready()?;
@@ -246,6 +289,7 @@ fn render_static_ffmpeg_inner(
         &output.temporary_path,
         image_path.clone(),
         prepared.ffmpeg_executable.as_deref(),
+        subtitles,
     ) {
         Ok(encoder) => encoder,
         Err(error) => {

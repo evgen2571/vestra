@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 
-use pyo3::{prelude::*, types::PyModule};
+use pyo3::{
+    exceptions::PyTypeError,
+    prelude::*,
+    types::{PyBool, PyModule},
+};
 use vestra::{
     CancellationToken as NativeCancellationToken, Editor as NativeEditor, EditorError,
     PreparedVideoRenderRequest as NativePreparedRequest, Project as NativeProject,
@@ -8,12 +12,39 @@ use vestra::{
     RenderFailureStage as NativeRenderFailureStage, RenderObserverControl,
     RenderPerformance as NativeRenderPerformance, RenderRequest as NativeRenderRequest,
     RenderResult as NativeRenderResult, RenderTimingScope as NativeRenderTimingScope,
-    RenderTimings as NativeRenderTimings,
+    RenderTimings as NativeRenderTimings, SubtitleCue,
 };
 
 use crate::{
     PyBackendPreference, PyDiagnostic, conversion, diagnostic_tuple, diagnostics, render_error,
 };
+
+type PySubtitleCue<'py> = (Bound<'py, PyAny>, Bound<'py, PyAny>, String);
+
+fn subtitle_cues(cues: Option<Vec<PySubtitleCue<'_>>>) -> PyResult<Vec<SubtitleCue>> {
+    cues.unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .map(|(index, (start, end, text))| {
+            let time = |value: Bound<'_, PyAny>| {
+                if !value.is_instance_of::<PyBool>()
+                    && let Ok(seconds) = value.extract::<f64>()
+                {
+                    return Ok(seconds);
+                }
+                Err(PyTypeError::new_err(format!(
+                    "subtitle cue {} start and end must be numbers",
+                    index + 1
+                )))
+            };
+            Ok(SubtitleCue {
+                start: time(start)?,
+                end: time(end)?,
+                text,
+            })
+        })
+        .collect()
+}
 
 /// Validates callback input while Python is still attached, before a prepared
 /// slot is acquired or a one-shot operation starts preparing native state.
@@ -85,12 +116,13 @@ impl PyPreparedVideoRenderRequest {
     }
 
     #[new]
-    #[pyo3(signature = (output, *, overwrite = false, start = None, end = None))]
+    #[pyo3(signature = (output, *, overwrite = false, start = None, end = None, subtitles = None))]
     fn new(
         output: &Bound<'_, PyAny>,
         overwrite: bool,
         start: Option<&Bound<'_, PyAny>>,
         end: Option<&Bound<'_, PyAny>>,
+        subtitles: Option<Vec<PySubtitleCue<'_>>>,
     ) -> PyResult<Self> {
         let output = conversion::path_from_python(output)?;
         Ok(Self {
@@ -103,7 +135,8 @@ impl PyPreparedVideoRenderRequest {
                         .unwrap_or_default(),
                     end.map(crate::prepared::duration_from_seconds)
                         .transpose()?,
-                ),
+                )
+                .with_subtitles(subtitle_cues(subtitles)?),
             output,
             overwrite,
         })
@@ -145,7 +178,7 @@ impl PyRenderRequest {
     }
 
     #[new]
-    #[pyo3(signature = (output, *, backend = None, overwrite = false, preview = false, start = None, end = None, resolution = None, fps = None, quality = None))]
+    #[pyo3(signature = (output, *, backend = None, overwrite = false, preview = false, start = None, end = None, resolution = None, fps = None, quality = None, subtitles = None))]
     #[allow(
         clippy::too_many_arguments,
         reason = "Python render options are keyword-only"
@@ -160,6 +193,7 @@ impl PyRenderRequest {
         resolution: Option<&Bound<'_, PyAny>>,
         fps: Option<&crate::prepared::PyFrameRate>,
         quality: Option<&str>,
+        subtitles: Option<Vec<PySubtitleCue<'_>>>,
     ) -> PyResult<Self> {
         let output = conversion::path_from_python(output)?;
         let backend = backend.copied().unwrap_or(PyBackendPreference::Auto);
@@ -184,6 +218,7 @@ impl PyRenderRequest {
                 end: end
                     .map(crate::prepared::duration_from_seconds)
                     .transpose()?,
+                subtitles: subtitle_cues(subtitles)?,
             },
             output,
             backend,

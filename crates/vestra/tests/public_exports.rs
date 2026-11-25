@@ -9,7 +9,7 @@ use vestra::{
     PreparationTimings, PrepareOptions, PreparedProject, PreparedVideoRenderRequest, Project,
     RenderEvent, RenderFailureContext, RenderFailureStage, RenderObserverControl,
     RenderPerformance, RenderRequest, RenderResult, RenderTimingScope, RenderTimings, Severity,
-    ValidateResult, ValidationReport, VersionResult,
+    SubtitleCue, ValidateResult, ValidationReport, VersionResult,
 };
 
 #[test]
@@ -27,6 +27,7 @@ fn supported_sdk_exports_are_importable_by_an_external_crate() {
     assert_sized::<PrepareOptions>();
     assert_sized::<PreparedVideoRenderRequest>();
     assert_sized::<RenderRequest>();
+    assert_sized::<SubtitleCue>();
     assert_sized::<Frame>();
     assert_sized::<PixelFormat>();
     assert_sized::<FrameRate>();

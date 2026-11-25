@@ -2,8 +2,8 @@
 //!
 //! All public working textures use `Rgba8Unorm` with straight-alpha channel
 //! values, not linear-light values. `ParticleAccumulation` is the one private
-//! exception: it holds premultiplied Normal-particle data until its resolve
-//! pass writes `Layer`. Compute shaders clamp before each write, which matches
+//! exception: it holds premultiplied Normal-particle data in `Rgba16Float` until
+//! its resolve pass writes `Layer`. Compute shaders clamp before each write, which matches
 //! the CPU renderer's byte-oriented semantics.
 
 use vestra_core::plan::RenderPlan;
@@ -11,6 +11,8 @@ use vestra_core::plan::RenderPlan;
 use super::{frame_plan::TextureSlot, topology::PlanTopology};
 
 pub(super) const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+pub(super) const PARTICLE_ACCUMULATION_FORMAT: wgpu::TextureFormat =
+    wgpu::TextureFormat::Rgba16Float;
 pub(super) const WORKING_TEXTURE_USAGE: wgpu::TextureUsages = wgpu::TextureUsages::TEXTURE_BINDING
     .union(wgpu::TextureUsages::STORAGE_BINDING)
     .union(wgpu::TextureUsages::RENDER_ATTACHMENT)
@@ -78,7 +80,7 @@ pub(super) struct TexturePool {
     canvas_a: WorkingTexture,
     canvas_b: WorkingTexture,
     layer: WorkingTexture,
-    particle_accumulation: WorkingTexture,
+    particle_accumulation: Option<WorkingTexture>,
     effect_a: Option<WorkingTexture>,
     effect_b: Option<WorkingTexture>,
     auxiliary: Option<WorkingTexture>,
@@ -113,11 +115,18 @@ impl TexturePool {
             canvas_a: create_texture(device, canvas_descriptor, "vestra canvas A"),
             canvas_b: create_texture(device, canvas_descriptor, "vestra canvas B"),
             layer: create_texture(device, descriptor, "vestra layer"),
-            particle_accumulation: create_texture(
-                device,
-                descriptor,
-                "vestra particle premultiplied accumulation",
-            ),
+            particle_accumulation: topology.has_normal_particles().then(|| {
+                create_texture(
+                    device,
+                    WorkingTextureDescriptor {
+                        format: PARTICLE_ACCUMULATION_FORMAT,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                        ..descriptor
+                    },
+                    "vestra particle premultiplied accumulation",
+                )
+            }),
             effect_a: (effect_pass_count > 0 || requires_auxiliary)
                 .then(|| create_texture(device, descriptor, "vestra effect A")),
             effect_b: (effect_pass_count > 1 || requires_auxiliary)
@@ -156,7 +165,10 @@ impl TexturePool {
             TextureSlot::CanvasA => &self.canvas_a,
             TextureSlot::CanvasB => &self.canvas_b,
             TextureSlot::Layer => &self.layer,
-            TextureSlot::ParticleAccumulation => &self.particle_accumulation,
+            TextureSlot::ParticleAccumulation => self
+                .particle_accumulation
+                .as_ref()
+                .expect("normal particle plan requires prepared accumulation texture"),
             TextureSlot::EffectA => self
                 .effect_a
                 .as_ref()
@@ -192,7 +204,10 @@ impl TexturePool {
         self.canvas_a.estimated_bytes
             + self.canvas_b.estimated_bytes
             + self.layer.estimated_bytes
-            + self.particle_accumulation.estimated_bytes
+            + self
+                .particle_accumulation
+                .as_ref()
+                .map_or(0, |texture| texture.estimated_bytes)
             + self
                 .effect_a
                 .as_ref()
@@ -245,8 +260,13 @@ impl TexturePool {
         self.mask_feather.is_some()
     }
 
+    pub(super) fn particle_accumulation(&self) -> Option<&WorkingTexture> {
+        self.particle_accumulation.as_ref()
+    }
+
     pub(super) fn texture_count(&self) -> usize {
-        4 + self.group_canvas_a.len() * 2
+        3 + self.group_canvas_a.len() * 2
+            + usize::from(self.particle_accumulation.is_some())
             + usize::from(self.effect_a.is_some())
             + usize::from(self.effect_b.is_some())
             + usize::from(self.auxiliary.is_some())
@@ -294,7 +314,14 @@ fn create_texture(
         texture,
         view,
         _descriptor: descriptor,
-        estimated_bytes: u64::from(descriptor.width) * u64::from(descriptor.height) * 4,
+        estimated_bytes: u64::from(descriptor.width)
+            * u64::from(descriptor.height)
+            * u64::from(
+                descriptor
+                    .format
+                    .block_copy_size(None)
+                    .expect("uncompressed working format"),
+            ),
     }
 }
 

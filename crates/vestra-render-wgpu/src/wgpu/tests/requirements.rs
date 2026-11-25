@@ -380,6 +380,38 @@ fn particle_requirements_include_groups_source_masks_and_repeated_mattes() {
 }
 
 #[test]
+fn normal_particle_group_masks_reserve_one_half_float_accumulation_texture() {
+    let mut project = particle_project(1);
+    let clip = &mut project["visual"]["clips"][0];
+    let child = clip.clone();
+    clip["source"] = serde_json::json!({"type": "solid_color", "colour": "#FFFFFF"});
+    clip["masks"] = serde_json::json!([{
+        "id": "particle-group-mask",
+        "input": {
+            "type": "source",
+            "source": {"type": "group", "clips": [child]},
+            "mode": "alpha"
+        },
+        "operation": "replace"
+    }]);
+    let (_, additive) = particle_requirements(project.clone());
+    project["visual"]["clips"][0]["masks"][0]["input"]["source"]["clips"][0]["source"]["particle"]
+        ["blend_mode"] = serde_json::json!("normal");
+    let (plan, normal) = particle_requirements(project);
+    let additive = additive.resource_estimates(256).expect("additive estimate");
+    let normal = normal.resource_estimates(256).expect("normal estimate");
+    assert_eq!(
+        normal.working_texture_count,
+        additive.working_texture_count + 1
+    );
+    assert_eq!(
+        normal.working_texture_bytes,
+        additive.working_texture_bytes
+            + u64::from(plan.canvas.width) * u64::from(plan.canvas.height) * 8
+    );
+}
+
+#[test]
 fn particle_requirements_cap_conservative_peak_at_adapter_buffer_limit() {
     let mut project = particle_project(2);
     // These uploads never coexist, so their summed bound must not cause an
@@ -456,8 +488,6 @@ fn requirements_retain_resource_estimates_for_the_selected_alignment() {
         estimates.working_texture_bytes,
         estimates.canvas_texture_bytes
             + estimates.layer_texture_bytes
-            + estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)
-                .expect("particle accumulation bytes")
             + estimates.effect_texture_bytes
     );
     assert_eq!(
@@ -507,12 +537,10 @@ fn plans_without_visual_effect_passes_do_not_reserve_effect_textures() {
     let estimates = requirements
         .resource_estimates(256)
         .expect("effect-free estimate calculates");
-    let one_texture = estimated_texture_bytes(plan.canvas.width, plan.canvas.height, 1)
-        .expect("particle accumulation estimate");
     assert_eq!(estimates.effect_texture_bytes, 0);
     assert_eq!(
         estimates.working_texture_bytes,
-        estimates.canvas_texture_bytes + estimates.layer_texture_bytes + one_texture
+        estimates.canvas_texture_bytes + estimates.layer_texture_bytes
     );
 }
 
@@ -534,7 +562,7 @@ fn one_pass_plan_reserves_only_effect_a() {
     assert_eq!(estimates.effect_texture_bytes, one_texture);
     assert_eq!(
         estimates.working_texture_bytes,
-        estimates.canvas_texture_bytes + estimates.layer_texture_bytes + one_texture + one_texture
+        estimates.canvas_texture_bytes + estimates.layer_texture_bytes + one_texture
     );
 }
 
@@ -573,14 +601,13 @@ fn multipass_original_effects_allocate_auxiliary_and_report_all_resource_roles()
     );
     assert_eq!(estimates.effect_texture_count, 2);
     assert_eq!(estimates.auxiliary_texture_count, 1);
-    assert_eq!(estimates.working_texture_count, 7);
+    assert_eq!(estimates.working_texture_count, 6);
     assert_eq!(estimates.effect_texture_bytes, full_frame * 2);
     assert_eq!(estimates.auxiliary_texture_bytes, full_frame);
     assert_eq!(
         estimates.working_texture_bytes,
         estimates.canvas_texture_bytes
             + estimates.layer_texture_bytes
-            + full_frame
             + estimates.effect_texture_bytes
             + estimates.auxiliary_texture_bytes
     );

@@ -14,7 +14,7 @@ use crate::{Category, Diagnostic, render::DecodedAssets};
 use super::topology::PlanTopology;
 
 const RGBA8_BYTES_PER_PIXEL: u64 = 4;
-const BASE_WORKING_TEXTURE_COUNT: u64 = 4;
+const BASE_WORKING_TEXTURE_COUNT: u64 = 3;
 
 /// Conservative allocation estimates for resources the renderer owns for one
 /// prepared WGPU backend. They exclude driver metadata, row-padding inside
@@ -186,6 +186,7 @@ impl GpuRequirements {
         let auxiliary_texture_count = u64::from(requires_auxiliary);
         let mask_coverage_texture_count = u64::from(has_masks);
         let mask_feather_texture_count = u64::from(topology.has_mask_feather());
+        let particle_accumulation_texture_count = u64::from(topology.has_normal_particles());
         let group_texture_count = u64::try_from(topology.required_group_depth())
             .ok()
             .and_then(|depth| depth.checked_mul(2))
@@ -194,6 +195,8 @@ impl GpuRequirements {
             working_width,
             working_height,
             BASE_WORKING_TEXTURE_COUNT - 2
+                // The particle accumulation texture is Rgba16Float.
+                + particle_accumulation_texture_count * 2
                 + effect_texture_count
                 + auxiliary_texture_count
                 + mask_coverage_texture_count
@@ -275,6 +278,7 @@ impl GpuRequirements {
         let resource_estimates = ResourceEstimates {
             source_texture_count,
             working_texture_count: BASE_WORKING_TEXTURE_COUNT
+                + particle_accumulation_texture_count
                 + effect_texture_count
                 + auxiliary_texture_count
                 + mask_coverage_texture_count

@@ -356,7 +356,8 @@ fn particle_pipeline(
     });
     // Normal particle fragments are straight RGB plus alpha. This pass writes
     // the premultiplied source-over representation into the dedicated
-    // ParticleAccumulation texture. A resolve pass converts it before effects.
+    // ParticleAccumulation texture. Half-float precision preserves faint RGB
+    // through premultiplication; resolve converts back to bytes before effects.
     let blend = wgpu::BlendState {
         color: wgpu::BlendComponent {
             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -398,7 +399,7 @@ fn particle_pipeline(
             entry_point: Some("fragment"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
-                format: super::texture_pool::WORKING_FORMAT,
+                format: super::texture_pool::PARTICLE_ACCUMULATION_FORMAT,
                 blend: Some(blend),
                 write_mask: wgpu::ColorWrites::ALL,
             })],

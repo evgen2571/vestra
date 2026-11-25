@@ -214,7 +214,10 @@ pub(super) fn encode_and_submit(
                 source,
                 destination,
             } => {
-                let group = &bind_groups.particle_resolve;
+                let group = bind_groups
+                    .particle_resolve
+                    .as_ref()
+                    .expect("normal particle plan requires prepared resolve bindings");
                 debug_assert_eq!(*source, TextureSlot::ParticleAccumulation);
                 debug_assert_eq!(*destination, TextureSlot::Layer);
                 dispatch_without_dynamic_offset(

@@ -18,8 +18,10 @@ pub(super) fn pack_into(
     system: &CompiledParticleSystem,
     time_nanos: u128,
     appearance: EvaluatedParticleAppearance,
+    (width, height): (u32, u32),
 ) -> Result<std::ops::Range<usize>, crate::Diagnostic> {
     let start = destination.len();
+    let scale = f64::from(width.min(height));
     for particle in system.evaluated_particles_at_with_appearance(time_nanos, appearance) {
         if particle.size <= 0.0 || particle.opacity <= 0.0 {
             continue;
@@ -41,9 +43,10 @@ pub(super) fn pack_into(
         }
         let instance = GpuParticleInstance {
             position_size_rotation: [
-                particle.position.x as f32,
-                particle.position.y as f32,
-                particle.size as f32,
+                // Scale before narrowing so exact pixel centres survive non-power-of-two canvases.
+                (particle.position.x * f64::from(width)) as f32,
+                (particle.position.y * f64::from(height)) as f32,
+                (particle.size * scale) as f32,
                 // Square coverage repeats every quarter-turn, including exact axes.
                 (particle.rotation_degrees % 90.0) as f32,
             ],
@@ -153,6 +156,7 @@ mod tests {
             &system,
             0,
             EvaluatedParticleAppearance::default(),
+            (200, 100),
         )
         .unwrap();
         let mut second = Vec::new();
@@ -161,9 +165,11 @@ mod tests {
             &system,
             0,
             EvaluatedParticleAppearance::default(),
+            (200, 100),
         )
         .unwrap();
         assert_eq!(first[first_range], second[second_range]);
+        assert_eq!(first[0].position_size_rotation, [100.0, 50.0, 10.0, 45.0]);
     }
 
     #[test]
@@ -176,6 +182,7 @@ mod tests {
             &system,
             0,
             EvaluatedParticleAppearance::default(),
+            (200, 100),
         )
         .unwrap();
         assert_eq!(range.start, 1);

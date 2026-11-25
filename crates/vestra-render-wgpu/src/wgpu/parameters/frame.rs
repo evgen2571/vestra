@@ -337,8 +337,13 @@ pub(in crate::wgpu) fn encode_parameters(
                     arena.push(&parameters::particles(frame, system.primitive))?;
                     continue;
                 }
-                let range =
-                    particles::pack_into(particle_instances, system, *time_nanos, *appearance)?;
+                let range = particles::pack_into(
+                    particle_instances,
+                    system,
+                    *time_nanos,
+                    *appearance,
+                    (frame.width, frame.height),
+                )?;
                 *instance_count = u32::try_from(range.len()).map_err(|_| {
                     Diagnostic::error(
                         "WGPU-PARTICLE-COUNT",

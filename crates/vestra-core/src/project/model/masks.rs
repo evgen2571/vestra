@@ -240,12 +240,17 @@ mod tests {
             source: Box::new(super::super::VisualSource::Text(super::super::TextSource {
                 text: "VESTRA".to_owned(),
                 font: "font".to_owned(),
+                fallback_fonts: Vec::new(),
                 font_size: 16.0,
                 fill: "#ffffff".to_owned(),
                 align: Default::default(),
                 max_width: None,
                 line_spacing: 1.0,
                 letter_spacing: 0.0,
+                stroke_color: None,
+                stroke_width: 0.0,
+                background_color: None,
+                background_padding: 0.0,
             })),
             mode: MaskCoverageMode::Alpha,
         };

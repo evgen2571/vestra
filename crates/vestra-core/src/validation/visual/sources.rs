@@ -105,6 +105,16 @@ pub(super) fn validate_text(
             format!("{path}/source/font"),
         ));
     }
+    for (index, font) in text.fallback_fonts.iter().enumerate() {
+        if assets.get(font) != Some(&crate::project::AssetType::Font) {
+            errors.push(Diagnostic::error(
+                "VESTRA-TEXT-FONT",
+                Category::Semantic,
+                format!("text source references invalid fallback font asset '{font}'"),
+                format!("{path}/source/fallback_fonts/{index}"),
+            ));
+        }
+    }
     if !validation::positive(text.font_size) {
         errors.push(Diagnostic::error(
             "VESTRA-TEXT-FONT-SIZE",
@@ -146,6 +156,41 @@ pub(super) fn validate_text(
             Category::Semantic,
             "text letter_spacing must be finite",
             format!("{path}/source/letter_spacing"),
+        ));
+    }
+    for (name, colour) in [
+        ("stroke_color", text.stroke_color.as_deref()),
+        ("background_color", text.background_color.as_deref()),
+    ] {
+        if colour.is_some_and(|colour| crate::project::parse_colour(colour).is_none()) {
+            errors.push(Diagnostic::error(
+                "VESTRA-TEXT-STYLE-COLOUR",
+                Category::Semantic,
+                "text style color must use #RRGGBB or #RRGGBBAA",
+                format!("{path}/source/{name}"),
+            ));
+        }
+    }
+    if !text.stroke_width.is_finite()
+        || text.stroke_width < 0.0
+        || (text.stroke_width > 0.0) != text.stroke_color.is_some()
+    {
+        errors.push(Diagnostic::error(
+            "VESTRA-TEXT-STROKE",
+            Category::Semantic,
+            "text stroke requires a color and a finite positive width",
+            format!("{path}/source/stroke_width"),
+        ));
+    }
+    if !text.background_padding.is_finite()
+        || text.background_padding < 0.0
+        || (text.background_padding > 0.0 && text.background_color.is_none())
+    {
+        errors.push(Diagnostic::error(
+            "VESTRA-TEXT-BACKGROUND",
+            Category::Semantic,
+            "text background padding must be finite and non-negative and requires a color",
+            format!("{path}/source/background_padding"),
         ));
     }
 }

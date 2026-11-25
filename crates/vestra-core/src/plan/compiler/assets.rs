@@ -133,7 +133,7 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
     ) {
         match source {
             crate::project::VisualSource::Text(text) => {
-                ids.insert(text.font.as_str());
+                ids.extend(text.font_ids());
             }
             crate::project::VisualSource::Group(group) => {
                 collect_fonts(&group.clips, ids);
@@ -158,16 +158,7 @@ pub(super) fn build(validated: &PlanCompileInput<'_>, project: &Project) -> Imag
                     collect_font_source(source, ids);
                 }
             }
-            match &clip.source {
-                crate::project::VisualSource::Text(text) => {
-                    ids.insert(text.font.as_str());
-                }
-                crate::project::VisualSource::Group(group) => {
-                    collect_fonts(&group.clips, ids);
-                    collect_transition_fonts(&group.transitions, ids);
-                }
-                _ => {}
-            }
+            collect_font_source(&clip.source, ids);
         }
     }
     fn collect_transition_fonts<'a>(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from ._internal import _IdAllocator, _Owner, _group_size, _number
-from .assets import ImageAsset, VideoAsset
+from .assets import FontAsset, ImageAsset, VideoAsset
 from .effects import ClipEffectCollection
 from .tracks import CropTrack, ModulatableScalarTrack, Transform
 from .presets import PresetCollection
@@ -360,15 +360,16 @@ class ShapeClip(TransitionCapableClip):
 
 
 class TextClip(TransitionCapableClip):
-    """A static Text Source with ordinary Layer transform tracks."""
+    """A Text Source with ordinary Layer transform tracks."""
 
-    __slots__ = ("_source", "_font", "_transform")
+    __slots__ = ("_source", "_font", "_fallback_fonts", "_transform")
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         raise TypeError("TextClip objects must be created by ProjectBuilder")
 
     @classmethod
-    def _create(cls, owner: _Owner, identifier: str, source: dict[str, object], font: object, *,
+    def _create(cls, owner: _Owner, identifier: str, source: dict[str, object], font: FontAsset,
+                fallback_fonts: tuple[FontAsset, ...], *,
                 start: int | float, duration: int | float, layer: int, visible: bool,
                 opacity: int | float) -> "TextClip":
         instance = object.__new__(cls)
@@ -376,7 +377,10 @@ class TextClip(TransitionCapableClip):
                              visible=visible, opacity=opacity)
         instance._source = dict(source)
         instance._source["font"] = font.id
+        if fallback_fonts:
+            instance._source["fallback_fonts"] = [asset.id for asset in fallback_fonts]
         instance._font = font
+        instance._fallback_fonts = fallback_fonts
         instance._transform = Transform._create(owner)
         return instance
 
@@ -384,7 +388,9 @@ class TextClip(TransitionCapableClip):
     def source(self) -> dict[str, object]: return self._source
 
     @property
-    def font(self) -> object: return self._font
+    def font(self) -> FontAsset: return self._font
+    @property
+    def fallback_fonts(self) -> tuple[FontAsset, ...]: return self._fallback_fonts
 
     @property
     def transform(self) -> Transform: return self._transform

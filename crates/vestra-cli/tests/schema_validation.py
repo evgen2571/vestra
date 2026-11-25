@@ -153,6 +153,26 @@ text_with_transform = copy.deepcopy(text_without_transform)
 text_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
 assert not errors(text_with_transform), "text clips may include transforms"
 
+styled_text = copy.deepcopy(text_with_transform)
+text_style = {
+    "fallback_fonts": ["font"],
+    "stroke_color": "#22222280", "stroke_width": 1.5,
+    "background_color": "#00114488", "background_padding": 5,
+}
+styled_text["visual"]["clips"][0]["source"].update(text_style)
+assert not errors(styled_text), "styled text with fallback font IDs must validate"
+for fields in [
+    {"fallback_fonts": [None]},
+    {"fallback_fonts": [""]},
+    {"stroke_color": "#222222", "stroke_width": 0},
+    {"stroke_width": 1},
+    {"background_color": "red"},
+    {"background_padding": 5},
+]:
+    invalid = copy.deepcopy(text_with_transform)
+    invalid["visual"]["clips"][0]["source"].update(fields)
+    assert errors(invalid), f"invalid text style {fields} must be rejected"
+
 solid_with_transform = copy.deepcopy(solid_colour)
 solid_with_transform["visual"]["clips"][0]["transform"] = project["visual"]["clips"][0]["transform"]
 assert errors(solid_with_transform), "solid colours must not accept transforms"

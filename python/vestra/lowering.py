@@ -316,7 +316,9 @@ class LoweringContext:
         elif isinstance(source, Video):
             value["asset"] = self.video_asset(source).id
         elif isinstance(source, Text):
-            value["font"] = self.font_asset(source).id
+            value["font"] = self.font_asset(source.font, source._font_is_path).id
+            if source._fallback_fonts:
+                value["fallback_fonts"] = [asset.id for asset in self.fallback_font_assets(source)]
         elif isinstance(source, Group):
             for transition in cast(list[dict[str, object]], value.get("transitions", [])):
                 self._register_transition_effect_fonts(cast(dict[str, object], transition["definition"]))
@@ -342,12 +344,15 @@ class LoweringContext:
             self._video_asset_ids[source_key] = asset
         return asset
 
-    def font_asset(self, source: Text) -> FontAsset:
+    def font_asset(self, selector: str | None, explicit_path: bool) -> FontAsset:
         from ._fonts import resolve_font
 
-        path = resolve_font(source.font, explicit_path=source._font_is_path,
+        path = resolve_font(selector, explicit_path=explicit_path,
                             base_directory=self.builder.base_directory)
         return self._font_path_asset(path)
+
+    def fallback_font_assets(self, source: Text) -> tuple[FontAsset, ...]:
+        return tuple(self.font_asset(selector, explicit_path) for selector, explicit_path in source._fallback_fonts)
 
     def _font_path_asset(self, path: str) -> FontAsset:
         key = os.path.normpath(path)
@@ -570,7 +575,8 @@ def _lower_text(
 ) -> VisualClip:
     source = cast(Text, layer.source)
     return context.builder.add_text_clip(
-        source=source.to_canonical(), font=context.font_asset(source), start=placement.start,
+        source=source.to_canonical(), font=context.font_asset(source.font, source._font_is_path),
+        fallback_fonts=context.fallback_font_assets(source), start=placement.start,
         duration=placement.duration, layer=placement.layer, visible=placement.visible,
         opacity=placement.opacity, id=native_id,
     )

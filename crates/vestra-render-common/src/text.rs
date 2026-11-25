@@ -5,7 +5,7 @@ use std::{path::Path, sync::Arc};
 use cosmic_text::{
     Align, Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, SwashCache, Wrap,
 };
-use image::{Rgba, RgbaImage};
+use image::RgbaImage;
 use vestra_core::{
     Category, Diagnostic,
     project::{TextAlignment, TextSource, parse_colour},
@@ -13,6 +13,10 @@ use vestra_core::{
 };
 
 use crate::geometry::IntrinsicSize;
+
+mod style;
+
+use style::TextPainter;
 
 #[derive(Clone, Debug)]
 pub struct PreparedText {
@@ -29,27 +33,63 @@ impl PreparedText {
     }
 }
 
-pub(crate) fn load_font(font_path: &Path) -> Result<FontSystem, Diagnostic> {
-    let bytes = std::fs::read(font_path).map_err(|error| {
-        Diagnostic::error(
-            "VESTRA-TEXT-FONT",
-            Category::Media,
-            format!("cannot read font: {error}"),
-            "",
-        )
-    })?;
+pub(crate) fn load_fonts<'a>(
+    paths: impl IntoIterator<Item = &'a Path>,
+    ordered_fallback: bool,
+) -> Result<FontSystem, Diagnostic> {
     let mut database = fontdb::Database::new();
-    database.load_font_source(fontdb::Source::Binary(Arc::new(bytes)));
-    let font_system = FontSystem::new_with_locale_and_db("en-US".to_owned(), database);
-    if font_system.db().faces().next().is_none() {
-        return Err(Diagnostic::error(
-            "VESTRA-TEXT-FONT",
-            Category::Media,
-            "font contains no supported faces",
-            "",
-        ));
+    for font_path in paths {
+        let bytes = std::fs::read(font_path).map_err(|error| {
+            font_error(format!(
+                "cannot read font '{}': {error}",
+                font_path.display()
+            ))
+        })?;
+        let source = fontdb::Source::Binary(Arc::new(bytes));
+        if !ordered_fallback {
+            if database.load_font_source(source).is_empty() {
+                return Err(font_error(format!(
+                    "font '{}' has no supported faces",
+                    font_path.display()
+                )));
+            }
+            continue;
+        }
+        let mut asset = fontdb::Database::new();
+        asset.load_font_source(source);
+        let Some(first_face) = asset.faces().next() else {
+            return Err(font_error(format!(
+                "font '{}' has no supported faces",
+                font_path.display()
+            )));
+        };
+        let family = &first_face.families[0].0;
+        let preferred = asset.query(&fontdb::Query {
+            families: &[Family::Name(family)],
+            ..fontdb::Query::default()
+        });
+        let mut faces: Vec<_> = asset.faces().cloned().collect();
+        faces.sort_by_key(|face| Some(face.id) != preferred);
+        // Equal matching metadata lets Cosmic Text 0.19 try the isolated faces in
+        // fontdb insertion order, independent of its platform fallback tables.
+        for mut face in faces {
+            face.families.truncate(1);
+            face.families[0].0 = format!("Vestra font {}", database.len());
+            face.post_script_name.clone_from(&face.families[0].0);
+            face.weight = fontdb::Weight::NORMAL;
+            face.stretch = fontdb::Stretch::Normal;
+            face.style = fontdb::Style::Normal;
+            database.push_face_info(face);
+        }
     }
-    Ok(font_system)
+    Ok(FontSystem::new_with_locale_and_db(
+        "en-US".to_owned(),
+        database,
+    ))
+}
+
+pub(crate) fn font_error(message: impl Into<String>) -> Diagnostic {
+    Diagnostic::error("VESTRA-TEXT-FONT", Category::Media, message, "")
 }
 
 pub(crate) fn prepare(
@@ -87,15 +127,16 @@ pub(crate) fn prepare(
     )?;
     let metrics = Metrics::new(font_size, configured_line_height);
     let mut buffer = Buffer::new(font_system, metrics);
-    let mut buffer = buffer.borrow_with(font_system);
     let max_width = source
         .max_width
         .map(|value| finite_metric(value, "max width"))
         .transpose()?;
     buffer.set_size(max_width, None);
-    if source.max_width.is_some() {
-        buffer.set_wrap(Wrap::WordOrGlyph);
-    }
+    buffer.set_wrap(if max_width.is_some() {
+        Wrap::WordOrGlyph
+    } else {
+        Wrap::None
+    });
     let align = match source.align {
         TextAlignment::Left => Align::Left,
         TextAlignment::Center => Align::Center,
@@ -107,61 +148,54 @@ pub(crate) fn prepare(
         .metrics(metrics)
         .letter_spacing((source.letter_spacing / source.font_size) as f32);
     buffer.set_text(&source.text, &attrs, Shaping::Advanced, Some(align));
-    buffer.shape_until_scroll(false);
-    let runs: Vec<_> = buffer
-        .layout_runs()
-        .map(|run| (run.line_top, run.line_height, run.line_w))
-        .collect();
+    buffer.shape_until_scroll(font_system, false);
     let logical_width = source.max_width.unwrap_or_else(|| {
-        runs.iter()
-            .map(|(_, _, width)| *width as f64)
-            .fold(0.0, f64::max)
+        let widest = buffer
+            .layout_runs()
+            .map(|run| run.line_w)
+            .fold(0.0, f32::max);
+        if align != Align::Left && widest > 0.0 {
+            buffer.set_size(Some(widest), None);
+            buffer.shape_until_scroll(font_system, false);
+        }
+        f64::from(widest)
     });
-    let logical_height = runs
-        .iter()
-        .map(|(top, height, _)| f64::from(*top + *height))
+    let logical_height = buffer
+        .layout_runs()
+        .map(|run| f64::from(run.line_top + run.line_height))
         .fold(0.0, f64::max)
         .max(line_height(source.font_size, source.line_spacing));
+    let fill = Color::rgba(colour[0], colour[1], colour[2], colour[3]);
     let mut bounds = RasterBounds::default();
-    buffer.draw(
-        cache,
-        Color::rgba(colour[0], colour[1], colour[2], colour[3]),
-        |x, y, _, _, pixel| {
-            let _ = pixel;
-            bounds.include(x, y);
-        },
-    );
-    let (min_x, min_y, width, height) = bounds.dimensions()?;
-    validate_raster_allocation(width, height, existing_decoded_bytes, limits)?;
-    let mut image = RgbaImage::new(width, height);
-    buffer.draw(
-        cache,
-        Color::rgba(colour[0], colour[1], colour[2], colour[3]),
-        |x, y, _, _, pixel| {
-            let x = i64::from(x);
-            let y = i64::from(y);
-            if x >= min_x && y >= min_y {
-                image.put_pixel(
-                    (x - min_x) as u32,
-                    (y - min_y) as u32,
-                    Rgba(pixel.as_rgba()),
-                );
+    buffer.draw(font_system, cache, fill, |x, y, _, _, _| {
+        bounds.include(i64::from(x), i64::from(y));
+    });
+    let painter = TextPainter::new(
+        source,
+        bounds,
+        (logical_width.max(1.0), logical_height.max(1.0)),
+        existing_decoded_bytes,
+        limits,
+    )?;
+    let styled = painter.styled();
+    let pixels = painter.paint(|emit| {
+        buffer.draw(font_system, cache, fill, |x, y, _, _, pixel| {
+            let mut rgba = pixel.as_rgba();
+            let coverage = rgba[3];
+            if styled {
+                rgba[3] = ((u16::from(coverage) * u16::from(colour[3]) + 127) / 255) as u8;
             }
-        },
-    );
+            emit(x, y, rgba, coverage);
+        });
+    });
     Ok(PreparedText {
-        pixels: Arc::new(image),
-        intrinsic_size: IntrinsicSize::with_logical_bounds_and_anchor(
-            width,
-            height,
-            logical_width.max(1.0),
-            logical_height.max(1.0),
-            min_x as f64,
-            min_y as f64,
-            0.0,
-            0.0,
-        ),
+        pixels: Arc::new(pixels),
+        intrinsic_size: painter.size,
     })
+}
+
+fn text_size_error(message: &str) -> Diagnostic {
+    Diagnostic::error("VESTRA-TEXT-SIZE", Category::Media, message, "")
 }
 
 fn line_height(font_size: f64, line_spacing: f64) -> f64 {
@@ -191,13 +225,19 @@ struct RasterBounds {
 }
 
 impl RasterBounds {
-    fn include(&mut self, x: i32, y: i32) {
-        let x = i64::from(x);
-        let y = i64::from(y);
+    fn include(&mut self, x: i64, y: i64) {
         self.min_x = Some(self.min_x.map_or(x, |value| value.min(x)));
         self.min_y = Some(self.min_y.map_or(y, |value| value.min(y)));
         self.max_x = Some(self.max_x.map_or(x, |value| value.max(x)));
         self.max_y = Some(self.max_y.map_or(y, |value| value.max(y)));
+    }
+
+    fn expand(&mut self, pixels: u32) {
+        let pixels = i64::from(pixels);
+        self.min_x = self.min_x.map(|x| x - pixels);
+        self.min_y = self.min_y.map(|y| y - pixels);
+        self.max_x = self.max_x.map(|x| x + pixels);
+        self.max_y = self.max_y.map(|y| y + pixels);
     }
 
     fn dimensions(&self) -> Result<(i64, i64, u32, u32), Diagnostic> {
@@ -340,17 +380,22 @@ mod tests {
     fn prepared_multiline_text_uses_configured_line_height() {
         let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/assets/VestraTest-Regular.ttf");
-        let mut font_system = load_font(&font_path).expect("test font");
+        let mut font_system = load_fonts([font_path.as_path()], false).expect("test font");
         let mut cache = SwashCache::new();
         let source = TextSource {
             text: "A\nA".to_owned(),
             font: "font".to_owned(),
+            fallback_fonts: Vec::new(),
             font_size: 40.0,
             fill: "#ffffff".to_owned(),
             align: TextAlignment::Left,
             max_width: None,
             line_spacing: 1.5,
             letter_spacing: 0.0,
+            stroke_color: None,
+            stroke_width: 0.0,
+            background_color: None,
+            background_padding: 0.0,
         };
 
         let prepared = prepare(
@@ -369,17 +414,22 @@ mod tests {
     fn prepared_text_checks_source_limits_before_final_raster_allocation() {
         let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/assets/VestraTest-Regular.ttf");
-        let mut font_system = load_font(&font_path).expect("test font");
+        let mut font_system = load_fonts([font_path.as_path()], false).expect("test font");
         let mut cache = SwashCache::new();
         let source = TextSource {
             text: "A".to_owned(),
             font: "font".to_owned(),
+            fallback_fonts: Vec::new(),
             font_size: 40.0,
             fill: "#ffffff".to_owned(),
             align: TextAlignment::Left,
             max_width: None,
             line_spacing: 1.0,
             letter_spacing: 0.0,
+            stroke_color: None,
+            stroke_width: 0.0,
+            background_color: None,
+            background_padding: 0.0,
         };
         let limits = ResourceLimits {
             maximum_source_pixels: 1,

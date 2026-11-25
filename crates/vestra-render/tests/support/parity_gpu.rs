@@ -879,6 +879,21 @@ fn gpu_particles_include_pixel_centres_on_primitive_boundaries() {
 }
 
 #[test]
+fn gpu_particles_include_exact_edges_on_non_power_of_two_canvas() {
+    let mut project = small_particle_project(
+        "#00000000",
+        (0.075, 0.075),
+        json!({"size": 0.08, "primitive": "square"}),
+        json!([{"time": 0, "count": 1}]),
+    );
+    project.output.width = 100;
+    project.output.height = 100;
+    if let Some(output) = render_project_parity(project, 0, 0) {
+        assert_eq!(output.pixels().filter(|pixel| pixel[3] != 0).count(), 81);
+    }
+}
+
+#[test]
 fn gpu_particles_preserve_additive_overlap_bytes() {
     let project = small_particle_project(
         "#00000000",

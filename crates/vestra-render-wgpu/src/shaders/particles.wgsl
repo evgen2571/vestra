@@ -35,8 +35,8 @@ fn vertex(
     @location(3) colour: vec4<f32>,
 ) -> VertexOutput {
     let canvas_size = vec2<f32>(f32(params.canvas_width), f32(params.canvas_height));
-    let centre = position_size_rotation.xy * canvas_size;
-    let half_size = position_size_rotation.z * 0.5 * min(canvas_size.x, canvas_size.y);
+    let centre = position_size_rotation.xy;
+    let half_size = position_size_rotation.z * 0.5;
     var rotation = vec2<f32>(1.0, 0.0);
     if (params.primitive != 0u) {
         let angle = radians(position_size_rotation.w);

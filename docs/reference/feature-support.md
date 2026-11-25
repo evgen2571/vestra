@@ -38,7 +38,7 @@ a source or effect's backend support listed below.
 | Shape (including Line stroke masks) | Shape constructors → `shape` | direct | supported | supported |
 | Text | `Text` → `text`; bundled, installed or file fonts | direct | supported, requires font preparation | supported, requires font preparation |
 | Spectrum2D | `Spectrum2D` → `spectrum2d` | adapter-mediated | supported, requires prepared audio analysis | legacy bars use a shader. Paths and waves use a shared source raster |
-| Particle system | `ParticleSystem` → `particle_system` | adapter-mediated | supported | not fully verified |
+| Particle system | `ParticleSystem` → `particle_system`, including emitter keyframes and continuous pre-roll | adapter-mediated | supported | supported |
 | Nested composition | `Group` or `CompositionLayer` → `group` | direct | supported | supported |
 | Local group canvas | `Group(size=(width, height))` → optional group `size` | clipped local canvas; unsized inherits parent | supported | supported |
 
@@ -58,7 +58,7 @@ All supported forms below use schema-v1 `masks` or `matte` fields. See
 | Text alpha masks | `layer.masks` + `Text`; owned source presentation | supported | supported |
 | Video alpha/luma masks | `layer.masks` + `Video`; owner-local source timing | supported | supported |
 | Spectrum2D masks | `layer.masks` + `Spectrum2D`; audio-reactive owned source | supported | supported |
-| Particle system masks | `layer.masks` + `ParticleSystem`; simulation-local source timing | supported | supported |
+| Particle system masks | `layer.masks` + `ParticleSystem`; owner-local timing and audio-reactive appearance | supported | supported |
 | Group masks | owned `Group` source; nested owned composition | supported | supported |
 | Soft feather on masks | `mask.feather`; layer-local, output-pixel units | supported | supported |
 | Dynamic mask properties | keyframes, modifiers, signals; layer-local transform and coverage | supported | supported |

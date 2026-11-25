@@ -3682,6 +3682,11 @@
               },
               "type": "array"
             },
+            "pre_roll": {
+              "default": 0.0,
+              "minimum": 0,
+              "type": "number"
+            },
             "rate": {
               "default": 0.0,
               "minimum": 0,
@@ -3692,6 +3697,12 @@
         },
         "emitter": {
           "$ref": "#/$defs/particle_emitter"
+        },
+        "emitter_keyframes": {
+          "items": {
+            "$ref": "#/$defs/point_keyframe"
+          },
+          "type": "array"
         },
         "particle": {
           "$ref": "#/$defs/particle_definition"

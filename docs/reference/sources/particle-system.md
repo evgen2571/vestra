@@ -7,8 +7,9 @@ system emits nothing: `rate=0.0` and `bursts=()`.
 ## API signature
 
 ```text title="Source signature summary (presentation keywords omitted)"
-ParticleSystem(definition=None, *, emitter=PointEmitter(), rate=0.0, bursts=(), seed=0,
-               lifetime=1.0, lifetime_range=None, size=1.0, size_range=None,
+ParticleSystem(definition=None, *, emitter=PointEmitter(), emitter_keyframes=(),
+               rate=0.0, pre_roll=0.0, bursts=(), seed=0, lifetime=1.0,
+               lifetime_range=None, size=1.0, size_range=None,
                colour="#ffffff", opacity=1.0, initial_velocity=Point(0, 0),
                speed=0.0, speed_range=None, direction=0.0, spread=0.0,
                acceleration=Point(0, 0), rotation=0.0, rotation_range=None,
@@ -33,15 +34,61 @@ Emitter coordinates are not shape pixels. Velocity and speed use normalized
 canvas units per second; acceleration uses those units per second squared.
 Direction uses +X right and +Y down.
 
+Import `PointKeyframe` from `vestra.authoring` and set `emitter_keyframes` to an
+ordered sequence of `PointKeyframe(time, value, interpolation=Interpolation.LINEAR)`
+values. Time
+is measured in clip-local seconds and value is a normalized `Point`. Keyframes
+control the point emitter's position or the rectangle or circle emitter's
+center. The static position or center holds until the first keyframe. Each
+particle samples the emitter at its birth time, including when the containing
+group starts later in the project. Its subsequent motion follows its own
+velocity and acceleration.
+
 ## Emission and lifetime
 
 | Fields | Default | Units and rule |
 | --- | --- | --- |
 | `rate` | `0.0` | Finite non-negative particles per second. |
+| `pre_roll` | `0.0` | Finite non-negative seconds of continuous emission before the clip starts. |
 | `bursts` | `()` | Iterable of `ParticleBurst(time, count)`; non-negative layer-local seconds and non-negative integer count. |
 | `seed` | `0` | Deterministic unsigned authored seed. |
 | `lifetime` | `1.0` | Positive seconds. |
 | `lifetime_range` | `None` | Optional `ScalarRange` of lifetimes in seconds. |
+
+Pre-roll puts particles on the first visible frame when their lifetimes overlap
+clip time zero. Pre-rolled particles sample the emitter origin at clip time
+zero. After zero, continuous births keep the same schedule and seeded identities
+as a system with no pre-roll. Continuous emission has no birth at zero. Explicit
+bursts can occur there, and their times remain clip-local. Evaluation
+reconstructs only the births that could still be alive at the requested time.
+
+## Bursts from beat or onset data
+
+Pass prepared event times in project seconds to
+`ParticleBurst.from_project_times(times, clip_start=..., clip_duration=..., count=...)`.
+For a particle clip inside a group, use its absolute start and effective
+duration in the project. The helper rounds the project times, clip start, and duration to
+nanoseconds using the engine's rounding rule, then subtracts the clip start.
+Events outside the resulting half-open clip interval are discarded. Coincident
+local births have their counts added together. The result is a sorted sequence
+of `ParticleBurst` values. The ordinary burst and live-particle
+validation applies when the system is placed.
+
+```python
+bursts = ParticleBurst.from_project_times(
+    onset_times, clip_start=0.5, clip_duration=1.0, count=12
+)
+project.root.add(ParticleSystem(bursts=bursts), start=0.5, duration=1.0)
+```
+
+The event timestamps can come from a beat or onset analyzer, or from known
+onsets in generated audio. Seeking evaluates the resulting schedule directly.
+For a runnable example with a synthetic click track, a moving emitter, and
+snow pre-roll, run the following from the source checkout.
+
+```bash
+uv run python examples/python/high-level/08_particle_emission.py target/particle-emission.mp4
+```
 
 ## Motion
 
@@ -78,15 +125,26 @@ audio analysis for appearance only; it does not reconstruct past emission or
 motion from audio. Without audio-reactive bindings, this source needs no media
 asset preparation.
 
+Owned particle masks use the owning clip's effective time interval. Particles
+inside an owned group mask use their own clip-local time inside that group.
+Both contribute to the aggregate live-particle limit.
+
 The canonical tag is `particle_system`, with `emitter`, `emission` and `particle`
-objects. Python `direction`, `spread`, `rotation` and `angular_velocity` lower to
-`direction_degrees`, `direction_spread_degrees`, `rotation_degrees` and
+objects. Optional `emitter_keyframes` sits beside `emitter`, and optional
+`pre_roll` sits inside `emission`. Omitted fields select a static emitter and
+zero pre-roll. In the Rust SDK, these fields are `ParticleSystem::emitter_keyframes`
+and `ParticleEmission::pre_roll`. Python `direction`, `spread`, `rotation` and `angular_velocity`
+lower to `direction_degrees`, `direction_spread_degrees`, `rotation_degrees` and
 `angular_velocity_degrees` inside `particle`.
 
 Particle systems can live in nested compositions. They are not direct canonical
 transform or transition endpoints; high-level Python adapts presentation when
-needed. CPU and WGPU have render paths, but full backend parity is not verified.
-See [feature support](../feature-support.md) and [signals](../signals.md).
+needed. CPU and WGPU support normal and additive particles. Both use
+pixel-centre coverage with inclusive disc and square edges. Near-edge coverage
+can differ at floating-point precision. CPU rounds normal blends after each
+particle, and WGPU rounds after a higher-precision accumulation. Alpha can
+differ visibly where many very faint particles overlap. See
+[feature support](../feature-support.md) and [signals](../signals.md).
 
 `rotation` above is particle orientation. Use `rotation_degrees` for layer
 presentation. The constructor also accepts [presentation transform defaults](../../guides/python/sources-and-layers.md),

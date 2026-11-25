@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from math import modf
 
 from ._internal import _number
 from .animation import PointKeyframe
@@ -127,6 +129,50 @@ class ParticleBurst:
             raise TypeError("count must be an integer")
         if self.count < 0:
             raise ValueError("count must be non-negative")
+
+    @classmethod
+    def from_project_times(
+        cls,
+        times: Iterable[float],
+        *,
+        clip_start: float,
+        clip_duration: float,
+        count: int,
+    ) -> tuple[ParticleBurst, ...]:
+        """Convert prepared beat or onset times into an ordinary burst schedule.
+
+        Times and placement are in project seconds. The clip interval is
+        half-open. Events that round to the same clip-local nanosecond have
+        their counts added together.
+        """
+        nanos_per_second = 1_000_000_000
+        maximum_nanos = 2**128 - 1
+
+        def timeline_nanos(seconds: float) -> int | None:
+            scaled = seconds * nanos_per_second
+            if not 0.0 <= scaled <= float(maximum_nanos):
+                return None
+            fraction, whole = modf(scaled)
+            return min(int(whole) + (fraction >= 0.5), maximum_nanos)
+
+        # The engine rounds placement and duration independently.
+        start = timeline_nanos(_non_negative(clip_start, "clip_start"))
+        duration = timeline_nanos(_non_negative(clip_duration, "clip_duration"))
+        if start is None or duration is None or start + duration > maximum_nanos:
+            raise ValueError("clip interval is outside the supported timeline")
+        count = cls(0.0, count).count
+
+        schedule: dict[int, tuple[float, int]] = {}
+        for time in times:
+            event = timeline_nanos(_number(time, "event time"))
+            if event is None or not start <= event < start + duration:
+                continue
+            local = (event - start) / nanos_per_second
+            nanos = timeline_nanos(local)
+            if nanos is not None and nanos < duration:
+                first, total = schedule.get(nanos, (local, 0))
+                schedule[nanos] = (min(first, local), total + count)
+        return tuple(cls(*schedule[nanos]) for nanos in sorted(schedule))
 
     def to_canonical(self) -> dict[str, float | int]:
         return {"time": self.time, "count": self.count}

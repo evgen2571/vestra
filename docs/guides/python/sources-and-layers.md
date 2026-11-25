@@ -73,8 +73,9 @@ see [timeline and time](../../concepts/timeline-and-time.md).
 
 `Color` (also `SolidColor`) fills the canvas. Shape classes include `Rectangle`,
 `Ellipse`, `Circle`, `Line` and `Polygon`. `Text` uses font layout. `Spectrum2D`
-and `ParticleSystem` generate content over time. Reusable `Group` sources combine
-children; see [nested compositions](nested-compositions.md).
+and [`ParticleSystem`](../../reference/sources/particle-system.md) generate
+content over time. Reusable `Group` sources combine children; see
+[nested compositions](nested-compositions.md).
 
 Procedural shapes can use default geometry and style:
 

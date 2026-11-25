@@ -29,6 +29,16 @@ Owned video masks point to `/masks/{index}/input/source` under their owning clip
 Children of owned Group masks continue through `/input/source/clips/{index}`,
 including any further nested groups or masks.
 
+## Particle source errors
+
+`VESTRA-PARTICLE-PRE-ROLL` points to `/emission/pre_roll` within the particle
+source when the authored seconds are negative, non-finite, or outside the
+representable timeline. Emitter animation uses the standard keyframe validation
+at `/emitter_keyframes`. `VESTRA-LIMIT-PARTICLES` points to a particle source
+over its per-system budget, including sources owned by layer masks.
+`VESTRA-LIMIT-PARTICLES-TOTAL` reports when concurrently active sources exceed
+the aggregate budget.
+
 ## Frame and range errors
 
 Still-image saving reports `VESTRA-FRAME-OUTPUT` through Python's

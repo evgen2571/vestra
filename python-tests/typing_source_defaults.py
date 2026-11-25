@@ -1,7 +1,7 @@
 from vestra import (
-    Circle, Color, Ellipse, Line, ParticleSystem, Point, PointKeyframe, Polygon, Rectangle, Source,
+    Circle, Color, Ellipse, Line, ParticleSystem, Point, Polygon, Rectangle, Source,
 )
-from vestra.authoring import ParticleSystem as AdvancedParticleSystem
+from vestra.authoring import ParticleSystem as AdvancedParticleSystem, PointKeyframe
 from vestra.sources import SolidColor
 
 sources: list[Source] = [

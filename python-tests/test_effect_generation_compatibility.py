@@ -396,6 +396,23 @@ def test_generated_schema_preserves_baseline_with_documented_extensions():
         name = f"{effect}_audio_effect"
         assert definitions.pop(name)["properties"]["type"] == {"const": effect}
         definitions["audio_clip_effect"]["oneOf"].remove({"$ref": f"#/$defs/{name}"})
+    text = definitions["text"]
+    assert text["properties"].pop("fallback_fonts") == {
+        "type": "array", "items": {"type": "string", "minLength": 1},
+    }
+    for field in ("stroke_color", "background_color"):
+        assert text["properties"].pop(field) == {"$ref": "#/$defs/colour"}
+    for field in ("stroke_width", "background_padding"):
+        assert text["properties"].pop(field) == {
+            "default": 0.0, "minimum": 0, "type": "number",
+        }
+    assert len(text.pop("allOf")) == 2
+    assert text["properties"].pop("reveal") == {"$ref": "#/$defs/opacity_track"}
+    assert text["properties"].pop("word_highlight") == {"$ref": "#/$defs/word_highlight"}
+    assert definitions.pop("word_highlight")["properties"]["words"] == {
+        "type": "array", "items": {"$ref": "#/$defs/word_timing"},
+    }
+    assert definitions.pop("word_timing")["required"] == ["start", "end", "text_start", "text_end"]
     baseline = (json.dumps(schema, indent=2, sort_keys=True) + "\n").encode()
     assert sha256(baseline).hexdigest() == JSON_V1["schema_sha256"]
 

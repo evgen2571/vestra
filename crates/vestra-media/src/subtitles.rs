@@ -1,6 +1,7 @@
 use std::{
     fmt::Display,
-    fs,
+    fs::{self, File},
+    io::Write,
     ops::Range,
     path::{Path, PathBuf},
 };
@@ -106,11 +107,11 @@ impl<'a> SubtitleTrack<'a> {
         &self,
         output: &Path,
     ) -> Result<TemporarySubtitleTrack, MediaError> {
-        let track = TemporarySubtitleTrack {
-            path: effective_parent(output)
-                .join(format!(".vestra-{}.subtitles.mp4", Uuid::new_v4())),
-        };
-        track.write(&self.samples)?;
+        let path =
+            effective_parent(output).join(format!(".vestra-{}.subtitles.mp4", Uuid::new_v4()));
+        let description = File::create_new(&path).map_err(track_error)?;
+        let track = TemporarySubtitleTrack { path };
+        track.write(description, &self.samples)?;
         Ok(track)
     }
 }
@@ -128,7 +129,11 @@ pub(crate) struct TemporarySubtitleTrack {
 }
 
 impl TemporarySubtitleTrack {
-    fn write(&self, samples: &[SubtitleSample<'_>]) -> Result<(), MediaError> {
+    fn write(
+        &self,
+        mut description: File,
+        samples: &[SubtitleSample<'_>],
+    ) -> Result<(), MediaError> {
         let path = self
             .path
             .to_str()
@@ -139,7 +144,10 @@ impl TemporarySubtitleTrack {
         init_ffmpeg()?;
         // The safe FFmpeg bindings obtain codec extradata through demuxing.
         // Read a tx3g sample description before replacing the staging file with packets.
-        fs::write(path, tx3g_description()).map_err(track_error)?;
+        description
+            .write_all(&tx3g_description())
+            .map_err(track_error)?;
+        drop(description);
         let parameters = {
             let input = ffmpeg::format::input(path).map_err(track_error)?;
             input

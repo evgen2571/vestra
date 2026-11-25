@@ -363,6 +363,10 @@ class TextClip(TransitionCapableClip):
     """A Text source with ordinary layer transform tracks."""
 
     __slots__ = ("_source", "_font", "_fallback_fonts", "_transform")
+    _source: dict[str, object]
+    _font: FontAsset
+    _fallback_fonts: tuple[FontAsset, ...]
+    _transform: Transform
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         raise TypeError("TextClip objects must be created by ProjectBuilder")

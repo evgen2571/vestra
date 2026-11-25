@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ..authoring.particles import (
     CircleEmitter,
@@ -216,7 +216,11 @@ class ParticleSystem(Source):
         return native
 
     def to_canonical(self) -> dict[str, object]:
-        return {"type": "particle_system", **self.definition.to_canonical()}
+        value = self.definition.to_canonical()
+        if self._audio_reactive is not None:
+            particle = cast(dict[str, object], value["particle"])
+            particle["audio_reactive"] = self._audio_reactive.to_canonical()
+        return value
 
     def snapshot(self) -> "ParticleSystem":
         copied = object.__new__(type(self))

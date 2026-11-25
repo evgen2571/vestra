@@ -1269,6 +1269,86 @@ fn particle_clip_end_and_start_at_same_time_do_not_overlap() {
     assert!(accepted(&project, limits));
 }
 
+#[test]
+fn owned_particle_mask_sources_share_the_aggregate_live_particle_limit() {
+    let mut particle_source =
+        serde_json::to_value(&particle_project().visual.clips[0].source).expect("particle source");
+    particle_source["emission"] = json!({"rate": 0.0, "bursts": [{"time": 0.0, "count": 220_000}]});
+    let mask = |source: Value| {
+        json!({
+            "id": "mask",
+            "input": {"type": "source", "mode": "alpha", "source": source},
+        })
+    };
+
+    for placement in ["direct", "group child", "group child mask"] {
+        let source_mask = match placement {
+            "direct" => mask(particle_source.clone()),
+            _ => {
+                let mut child = solid_clip("child", 0.5, 10.0);
+                if placement == "group child" {
+                    child["source"] = particle_source.clone();
+                } else {
+                    child["masks"] = json!([mask(particle_source.clone())]);
+                }
+                mask(json!({"type": "group", "clips": [child]}))
+            }
+        };
+        let make_project = |spacing: f64| {
+            grouped_project(
+                (0..5)
+                    .map(|index| {
+                        let mut owner =
+                            solid_clip(&format!("owner-{index}"), f64::from(index) * spacing, 1.0);
+                        owner["masks"] = json!([source_mask]);
+                        owner
+                    })
+                    .collect(),
+            )
+        };
+        let overlapping = make_project(0.0);
+        assert!(
+            has(&overlapping, "VESTRA-LIMIT-PARTICLES-TOTAL"),
+            "{placement}"
+        );
+        assert!(!has(&overlapping, "VESTRA-LIMIT-PARTICLES"), "{placement}");
+
+        let sequential = make_project(1.0);
+        assert!(
+            accepted(&sequential, ResourceLimits::default()),
+            "{placement}"
+        );
+        let limits = ResourceLimits {
+            maximum_live_particles_per_system: 219_999,
+            ..ResourceLimits::default()
+        };
+        assert!(
+            validate(&sequential, limits)
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "VESTRA-LIMIT-PARTICLES"),
+            "{placement}"
+        );
+
+        // The remaining four mask owners start after the explicit output ends.
+        let mut output_clipped = make_project(1.0);
+        output_clipped.output.duration = Some(1.0);
+        for clip in &mut output_clipped.visual.clips[1..] {
+            clip.start = 1.0;
+        }
+        assert!(
+            accepted(
+                &output_clipped,
+                ResourceLimits {
+                    maximum_total_live_particles: 220_000,
+                    ..ResourceLimits::default()
+                }
+            ),
+            "{placement}"
+        );
+    }
+}
+
 fn accepted(project: &Project, limits: ResourceLimits) -> bool {
     validate(project, limits)
         .diagnostics()

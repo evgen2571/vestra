@@ -13,7 +13,7 @@ import vestra
 
 from vestra.effects import GaussianBlur
 from vestra.authoring.values import BlendMode, Crop, Sizing
-from vestra.sources import ParticleSystem, Spectrum2D
+from vestra.sources import ParticleAudioReactive, ParticleBurst, ParticleSystem, Spectrum2D
 from vestra import (
     AudioGainKeyframe,
     Circle,
@@ -439,6 +439,56 @@ def test_video_and_particle_masks_lower_through_their_normal_source_models() -> 
     assert masks[0]["input"]["source"] == {"type": "video", "asset": "video-000001"}
     assert masks[0]["input"]["mode"] == "luma"
     assert masks[1]["input"]["source"]["type"] == "particle_system"
+
+
+@pytest.mark.parametrize(
+    "placement", ["direct", "group child", "transformed group child", "group child mask"],
+)
+def test_particle_mask_preserves_reactive_tracks_and_zero_size_coverage(placement: str) -> None:
+    project = Project(size=(32, 32), fps=2, duration=1, base_directory=ROOT)
+    project.audio.track("tone").add("assets/fixtures/tone.wav", trim_end=1)
+    layer = project.root.add(Rectangle(width=32, height=32, fill="#ff0000"))
+    size = vestra.BindableScalarProperty(0)
+    size.keyframe(0.5, 1)
+    opacity = vestra.BindableScalarProperty(0.75).bind(
+        project.audio.signal.rms(), operation="multiply",
+    )
+    opacity.keyframe(0.5, 0.5)
+    intensity = vestra.BindableScalarProperty(0.5)
+    intensity.keyframe(0.5, 1)
+    reactive = ParticleAudioReactive(size=size, opacity=opacity, intensity=intensity)
+    particles = ParticleSystem(
+        bursts=(ParticleBurst(0, 1),), size=0.5, audio_reactive=reactive,
+    )
+    mask_source: ParticleSystem | Group = particles
+    if placement != "direct":
+        group = Group()
+        if placement == "group child":
+            group.add(particles)
+        elif placement == "transformed group child":
+            group.add(particles, position=(0.75, 0.5))
+        else:
+            child = group.add(Rectangle(width=32, height=32, fill="#ffffff"))
+            child.masks.add(particles, operation=MaskOperation.REPLACE)
+        mask_source = group
+    layer.masks.add(mask_source, operation=MaskOperation.REPLACE)
+
+    source = project.snapshot().to_dict()["visual"]["clips"][0]["masks"][0]["input"]["source"]
+    if placement == "group child":
+        source = source["clips"][0]["source"]
+    elif placement == "transformed group child":
+        source = source["clips"][0]["source"]["clips"][0]["source"]
+    elif placement == "group child mask":
+        source = source["clips"][0]["masks"][0]["input"]["source"]
+    assert source["particle"]["audio_reactive"] == reactive.to_canonical()
+
+    prepared = _prepare(project, "cpu")
+    assert max(prepared.render_frame_seconds(0).to_bytes()[0::4]) == 0
+    visible = prepared.render_frame_seconds(0.5).to_bytes()[0::4]
+    assert 0 < max(visible) < 128
+    if placement == "transformed group child":
+        assert visible[16 * 32 + 24] > 0
+        assert visible[16 * 32 + 12] == 0
 
 
 def test_video_mask_uses_owner_local_time_and_cpu_wgpu_parity(tmp_path: Path) -> None:

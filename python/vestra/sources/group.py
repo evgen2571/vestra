@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from ..properties.transform import TransformPoint, TransformScale
 from .base import Source
 from .image import Image
+from .particles import ParticleSystem
 from .video import Video
 from ..authoring.values import BlendMode
 from ..authoring._internal import _group_size
@@ -232,8 +233,25 @@ class Group(Source):
                 "opacity": lower_scalar_property(child.opacity),
                 "effects": effects,
                 "source": source,
-                "transform": lower_transform(child.transform),
             }
+            is_particle = isinstance(child.source, ParticleSystem)
+            if not is_particle or not child.transform.is_default():
+                clip["transform"] = lower_transform(child.transform)
+                if is_particle:
+                    # Canonical particle clips apply presentation through a group.
+                    clip["source"] = {
+                        "type": "group",
+                        "clips": [
+                            {
+                                "id": clip["id"],
+                                "start": 0.0,
+                                "duration": duration,
+                                "layer": 0,
+                                "opacity": {"base_value": 1.0},
+                                "source": source,
+                            },
+                        ],
+                    }
             if child.blend_mode is not BlendMode.NORMAL:
                 clip["blend_mode"] = child.blend_mode.to_canonical()
             if isinstance(child.source, (Image, Video)):

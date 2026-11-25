@@ -53,5 +53,7 @@ python examples/tutorials/styled_subtitles.py
 
 The example includes the burned-in group and passes `subtitles=subtitles.cues`
 to opt into a [selectable MP4 track](../../reference/render-outputs.md).
+Players that automatically enable the selectable track can show both sets of
+captions. Turn it off in the player to view the burned-in styles by themselves.
 The selectable track uses project-local seconds. Offset its cues explicitly
 when the burned-in group is placed at a different start.

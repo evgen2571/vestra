@@ -16,12 +16,12 @@ from vestra import (
 
 SRT = """1
 00:00:00,250 --> 00:00:01,350
-The title appears one cluster at a time.
+Watch the title.
 
 2
 00:00:01,350 --> 00:00:02,550
-The caption box grows upward
-when the text needs two lines.
+Two lines,
+same bottom.
 
 3
 00:00:02,750 --> 00:00:04,250

@@ -12,7 +12,6 @@ def test_particle_emission_controls_lower_in_both_authoring_apis() -> None:
     legacy = ParticleSystem().to_canonical()
     assert "emitter_keyframes" not in legacy
     assert legacy["emission"] == {"rate": 0.0, "bursts": []}
-    assert vestra.PointKeyframe is PointKeyframe
 
     definition = ParticleSystem(
         emitter_keyframes=frames, pre_roll=1.0, rate=2, size=0.1

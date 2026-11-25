@@ -196,6 +196,21 @@ particle["visual"]["clips"][0]["source"] = {
                   "colour": "#ffffff"},
 }
 assert not errors(particle), "ParticleSystem source must validate"
+animated_particle = copy.deepcopy(particle)
+animated_source = animated_particle["visual"]["clips"][0]["source"]
+animated_source["emitter_keyframes"] = [
+    {"time": 0, "value": {"x": 0.25, "y": 0.5}, "interpolation": "linear"},
+    {"time": 1, "value": {"x": 0.75, "y": 0.5}, "interpolation": "linear"},
+]
+animated_source["emission"]["pre_roll"] = 1
+assert not errors(animated_particle), "animated emitters and pre-roll must validate"
+for invalid in (-1, None, "1"):
+    animated_source["emission"]["pre_roll"] = invalid
+    assert errors(animated_particle), "invalid particle pre-roll must not validate"
+animated_source["emission"]["pre_roll"] = 0
+for invalid in (None, [{"time": -1, "value": {"x": 0.25, "y": 0.5}}]):
+    animated_source["emitter_keyframes"] = invalid
+    assert errors(animated_particle), "invalid emitter keyframes must not validate"
 particle_explicit = copy.deepcopy(particle)
 particle_explicit["visual"]["clips"][0]["source"]["particle"].update({
     "primitive": "square",

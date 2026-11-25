@@ -58,7 +58,7 @@ pub use vestra_core::project::{
     Spectrum2DGradientDirection, Spectrum2DLayout, Spectrum2DLinearAnchor, Spectrum2DLinearLayout,
     Spectrum2DPathBandMapping, Spectrum2DPathDirection, Spectrum2DPathLayout,
     Spectrum2DRadialDirection, Spectrum2DRadialLayout, Spectrum2DStereo, Spectrum2DStyle,
-    Spectrum2DWave, TextAlignment, TextSource, Track,
+    Spectrum2DWave, TextAlignment, TextSource, Track, WordHighlight, WordTiming,
 };
 pub use vestra_core::{Category, Diagnostic, Severity};
 #[cfg(feature = "wgpu")]

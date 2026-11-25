@@ -18,6 +18,7 @@ mod signals;
 mod spectrum2d;
 mod transitions;
 mod visual;
+mod word_highlight;
 
 pub use animation::{
     ActiveInterval, CubicBezier, CubicBezierKind, Interpolation, InterpolationName, Keyframe, Track,
@@ -66,6 +67,7 @@ pub use visual::{
     BlendMode, Clip, Group, GroupSize, ShapeGeometry, ShapeSource, Sizing, TextAlignment,
     TextSource, Transform, Visual, VisualSource,
 };
+pub use word_highlight::{WordHighlight, WordTiming};
 
 pub use crate::domain::{Crop, Point};
 

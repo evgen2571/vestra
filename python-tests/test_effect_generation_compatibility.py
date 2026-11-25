@@ -83,6 +83,7 @@ def test_effect_exports_signatures_annotations_and_properties_match_baseline(
         exports += [
             "FilteredDelay", "RoomReverb", "AudioFilterKeyframe", "AudioFilterMode",
             "BeatRepeat", "FilterSweep", "PitchShift", "TapeStop",
+            "WordHighlight", "WordTiming", "SubtitleCue", "Subtitles",
         ]
     if module_name == "vestra.authoring":
         exports += [

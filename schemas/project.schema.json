@@ -5284,6 +5284,9 @@
           "exclusiveMinimum": 0,
           "type": "number"
         },
+        "reveal": {
+          "$ref": "#/$defs/opacity_track"
+        },
         "stroke_color": {
           "$ref": "#/$defs/colour"
         },
@@ -5297,6 +5300,9 @@
         },
         "type": {
           "const": "text"
+        },
+        "word_highlight": {
+          "$ref": "#/$defs/word_highlight"
         }
       },
       "required": [
@@ -5739,6 +5745,53 @@
       },
       "required": [
         "clips"
+      ],
+      "type": "object"
+    },
+    "word_highlight": {
+      "additionalProperties": false,
+      "properties": {
+        "colour": {
+          "$ref": "#/$defs/colour"
+        },
+        "words": {
+          "items": {
+            "$ref": "#/$defs/word_timing"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "colour",
+        "words"
+      ],
+      "type": "object"
+    },
+    "word_timing": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "text_end": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "text_start": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "text_start",
+        "text_end"
       ],
       "type": "object"
     },

@@ -53,6 +53,7 @@ pub(super) fn validate(
             crate::project::MaskInput::Source { source, .. } => {
                 validate_owned_mask_source(
                     source,
+                    clip.duration,
                     &mask_path,
                     assets,
                     maximum_keyframes_per_track,
@@ -230,6 +231,7 @@ fn visit_matte<'a>(
 )]
 fn validate_owned_mask_source(
     source: &crate::project::VisualSource,
+    owner_duration: f64,
     mask_path: &str,
     assets: &std::collections::BTreeMap<String, crate::project::AssetType>,
     maximum_keyframes_per_track: usize,
@@ -247,7 +249,11 @@ fn validate_owned_mask_source(
             id: "owned-mask-source".to_owned(),
             source: source.clone(),
             start: 0.0,
-            duration: 1.0,
+            duration: if matches!(source, crate::project::VisualSource::Text(_)) {
+                owner_duration
+            } else {
+                1.0
+            },
             source_start: 0.0,
             playback_rate: 1.0,
             layer: 0,

@@ -13,6 +13,7 @@ use std::{
 #[cfg(all(test, feature = "adapter-tests"))]
 use image::RgbaImage;
 use vestra_core::plan::{EvaluatedFrame, EvaluatedSource, RenderPlan};
+use vestra_render_common::{PreparedText, TextRasterState};
 
 use crate::{
     Diagnostic,
@@ -66,6 +67,7 @@ pub struct WgpuBackend {
     static_cache_population_renders: u64,
     pending_static_layers: PendingStaticLayers,
     temporary_texture_reuses: u64,
+    animated_texts: BTreeMap<usize, AnimatedTextTexture>,
     video_pool: VideoPool,
     video_pts: BTreeMap<usize, i64>,
     video_upload_count: u64,
@@ -74,6 +76,11 @@ pub struct WgpuBackend {
     // them. Rust drops fields in declaration order; resources must outlive
     // their parent WGPU context.
     context: GpuContext,
+}
+
+struct AnimatedTextTexture {
+    prepared: PreparedText,
+    uploaded: TextRasterState,
 }
 
 struct FrameSlotResources {
@@ -336,6 +343,20 @@ impl WgpuBackend {
             static_cache_population_renders: 0,
             pending_static_layers: PendingStaticLayers::default(),
             temporary_texture_reuses: 0,
+            animated_texts: (0..plan.texts.len())
+                .filter_map(|index| {
+                    let text = decoded.text(index);
+                    text.is_animated().then(|| {
+                        (
+                            plan.images.len() + plan.shapes.len() + index,
+                            AnimatedTextTexture {
+                                prepared: text.clone(),
+                                uploaded: TextRasterState::default(),
+                            },
+                        )
+                    })
+                })
+                .collect(),
             video_pool,
             video_pts: video_slot_assets
                 .iter()
@@ -401,20 +422,35 @@ impl WgpuBackend {
         Some(ready)
     }
 
-    fn upload_video_sources(&mut self, plan: &GpuFramePlan) -> Result<(), Diagnostic> {
+    fn upload_dynamic_sources(&mut self, plan: &GpuFramePlan) -> Result<(), Diagnostic> {
         let mut requested = BTreeMap::new();
         for operation in &plan.operations {
             let GpuOperation::RenderRasterLayer { layer_index, .. } = operation else {
                 continue;
             };
-            if let EvaluatedSource::Video {
-                asset_index,
-                source_index,
-                source_time,
-                ..
-            } = &plan.layers[*layer_index].source
-            {
-                requested.insert(*source_index, (*asset_index, *source_time));
+            match &plan.layers[*layer_index].source {
+                EvaluatedSource::Video {
+                    asset_index,
+                    source_index,
+                    source_time,
+                    ..
+                } => {
+                    requested.insert(*source_index, (*asset_index, *source_time));
+                }
+                EvaluatedSource::Text {
+                    text_index,
+                    animation,
+                } if let Some(text) = self.animated_texts.get_mut(text_index) => {
+                    let state = text.prepared.raster_state(*animation);
+                    if text.uploaded != state {
+                        let pixels = text.prepared.pixels_at(state);
+                        // Queue writes are ordered before this frame's submission and after earlier frames.
+                        self.sources.raster_textures[*text_index]
+                            .upload(&self.context.queue, &pixels);
+                        text.uploaded = state;
+                    }
+                }
+                _ => {}
             }
         }
         for (source_index, frame) in self.video_pool.frames(requested)? {
@@ -519,7 +555,7 @@ impl RenderBackend for WgpuBackend {
         );
         let upload_result = plan
             .validate(self.sources.raster_textures.len())
-            .and_then(|()| self.upload_video_sources(&plan));
+            .and_then(|()| self.upload_dynamic_sources(&plan));
         let slot = &mut self.slots[token.slot_index];
         if slot.uses > 0 {
             self.staged.parameter_slot_reuse_count += 1;

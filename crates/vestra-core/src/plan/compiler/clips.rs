@@ -195,7 +195,10 @@ pub(super) fn compile(
             // populated the shape table. Its final offset is not known yet.
             let text_index = context.texts.len();
             context.texts.push(text.clone());
-            CompiledVisualSource::Text { text_index }
+            CompiledVisualSource::Text {
+                text_index,
+                animation: crate::plan::CompiledTextAnimation::compile(text, &clip.id)?,
+            }
         }
         VisualSource::Spectrum2D(spectrum) => {
             context.compilation.parsed_colour_count += 1;

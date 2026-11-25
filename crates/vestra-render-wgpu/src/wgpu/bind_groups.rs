@@ -16,7 +16,7 @@ pub(super) struct FrameBindGroups {
     pub(super) solid_layer: wgpu::BindGroup,
     pub(super) spectrum2d_layer: wgpu::BindGroup,
     pub(super) particle_layer: wgpu::BindGroup,
-    pub(super) particle_resolve: wgpu::BindGroup,
+    pub(super) particle_resolve: Option<wgpu::BindGroup>,
     raster_layers: Vec<wgpu::BindGroup>,
     mask_raster_layers: Vec<wgpu::BindGroup>,
     mask_raster_source_layer: Option<wgpu::BindGroup>,
@@ -88,12 +88,14 @@ impl FrameBindGroups {
             parameters,
         );
         let particle_layer = particle_group(device, &pipelines.particle_bindings, parameters);
-        let particle_resolve = resolve_particle_group(
-            device,
-            &pipelines.particle_resolve_bindings,
-            &frame.working.get(TextureSlot::ParticleAccumulation).view,
-            &frame.working.get(TextureSlot::Layer).view,
-        );
+        let particle_resolve = frame.working.particle_accumulation().map(|source| {
+            resolve_particle_group(
+                device,
+                &pipelines.particle_resolve_bindings,
+                &source.view,
+                &frame.working.get(TextureSlot::Layer).view,
+            )
+        });
         let raster_layers = sources
             .raster_textures
             .iter()
@@ -263,7 +265,8 @@ impl FrameBindGroups {
             }
         }
         let persistent_created = sources.raster_textures.len()
-            + 5
+            + 4
+            + usize::from(particle_resolve.is_some())
             + usize::from(mask_raster_source_layer.is_some())
             + clear_group_canvases.len()
             + surface_layers.len()

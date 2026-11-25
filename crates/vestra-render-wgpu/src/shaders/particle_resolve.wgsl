@@ -10,6 +10,9 @@ fn compose(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let pixel = textureLoad(source, vec2<i32>(id.xy), 0);
-    let rgb = select(vec3<f32>(0.0), pixel.rgb / pixel.a, pixel.a > 0.000001);
+    var rgb = vec3<f32>(0.0);
+    if (pixel.a > 0.0) {
+        rgb = pixel.rgb / pixel.a;
+    }
     textureStore(destination, vec2<i32>(id.xy), vec4<f32>(rgb, pixel.a));
 }

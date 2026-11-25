@@ -6,6 +6,7 @@
 //! texture allocation from growing subtly different notions of the plan.
 
 use vestra_core::plan::{CompiledLayer, CompiledMaskInput, CompiledVisualSource, RenderPlan};
+use vestra_core::project::ParticleBlendMode;
 
 use crate::render::effects::compiled_effect_pass_requirements;
 
@@ -24,6 +25,7 @@ pub(super) struct PlanTopology {
     requires_auxiliary: bool,
     has_masks: bool,
     has_mask_feather: bool,
+    has_normal_particles: bool,
     maximum_extent: (u32, u32),
 }
 
@@ -49,6 +51,7 @@ impl PlanTopology {
                 }),
             has_masks: summary.has_masks,
             has_mask_feather: summary.has_mask_feather,
+            has_normal_particles: summary.has_normal_particles,
             maximum_extent: (
                 plan.canvas.width.max(maximum_extent.0),
                 plan.canvas.height.max(maximum_extent.1),
@@ -91,6 +94,10 @@ impl PlanTopology {
     pub(super) const fn has_mask_feather(self) -> bool {
         self.has_mask_feather
     }
+
+    pub(super) const fn has_normal_particles(self) -> bool {
+        self.has_normal_particles
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -103,6 +110,7 @@ struct TopologySummary {
     requires_auxiliary: bool,
     has_masks: bool,
     has_mask_feather: bool,
+    has_normal_particles: bool,
     maximum_extent: (u32, u32),
 }
 
@@ -145,6 +153,7 @@ fn summarize_layers(layers: &[CompiledLayer]) -> TopologySummary {
             owned_mask_summary.requires_auxiliary |= source.requires_auxiliary;
             owned_mask_summary.has_masks |= source.has_masks;
             owned_mask_summary.has_mask_feather |= source.has_mask_feather;
+            owned_mask_summary.has_normal_particles |= source.has_normal_particles;
             owned_mask_summary.maximum_extent.0 = owned_mask_summary
                 .maximum_extent
                 .0
@@ -209,6 +218,8 @@ fn summarize_layers(layers: &[CompiledLayer]) -> TopologySummary {
 
         let layer_has_masks = !layer.masks.is_empty() || layer.matte.is_some();
         summary.has_masks |= layer_has_masks || source.has_masks || owned_mask_summary.has_masks;
+        summary.has_normal_particles |=
+            source.has_normal_particles || owned_mask_summary.has_normal_particles;
         summary.has_mask_feather |= source.has_mask_feather
             || owned_mask_summary.has_mask_feather
             || layer.masks.iter().any(|mask| {
@@ -237,7 +248,13 @@ fn summarize_layers(layers: &[CompiledLayer]) -> TopologySummary {
 
 fn summarize_source(source: &CompiledVisualSource) -> TopologySummary {
     let CompiledVisualSource::Group(composition) = source else {
-        return TopologySummary::default();
+        return TopologySummary {
+            has_normal_particles: matches!(
+                source,
+                CompiledVisualSource::ParticleSystem(system) if system.blend_mode == ParticleBlendMode::Normal
+            ),
+            ..TopologySummary::default()
+        };
     };
 
     let mut summary = summarize_layers(&composition.layers);

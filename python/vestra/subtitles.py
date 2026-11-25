@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from itertools import groupby, pairwise
 from math import modf
 from pathlib import Path
@@ -136,8 +136,13 @@ class Subtitles:
         position: Point | tuple[float, float] = (0.5, 0.9),
         max_width: float | None = None,
         font: str | os.PathLike[str] | None = None,
+        fallback_fonts: Sequence[str | os.PathLike[str]] = (),
         font_size: float = 48,
         fill: Color | str = "#ffffff",
+        stroke_color: Color | str | None = None,
+        stroke_width: float = 0.0,
+        background_color: Color | str | None = None,
+        background_padding: float = 0.0,
         align: TextAlignment = "center",
         line_spacing: float = 1.0,
         letter_spacing: float = 0.0,
@@ -148,8 +153,13 @@ class Subtitles:
                 Text(
                     cue.text,
                     font=font,
+                    fallback_fonts=fallback_fonts,
                     font_size=font_size,
                     fill=fill,
+                    stroke_color=stroke_color,
+                    stroke_width=stroke_width,
+                    background_color=background_color,
+                    background_padding=background_padding,
                     align=align,
                     max_width=max_width,
                     line_spacing=line_spacing,

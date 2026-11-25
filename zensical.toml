@@ -32,6 +32,7 @@ nav = [
       { "Set up a composition" = "guides/python/projects-and-compositions.md" },
       { "Add text, shapes and media" = "guides/python/sources-and-layers.md" },
       { "Move layers together" = "guides/python/nested-compositions.md" },
+      { "Style and export subtitles" = "guides/python/subtitles.md" },
       { "Reveal content with masks" = "guides/python/masks.md" },
       { "Animate properties" = "guides/python/animation.md" },
       { "Effects" = [

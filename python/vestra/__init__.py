@@ -99,6 +99,7 @@ from .sources import (
     Video,
 )
 from .flashes import Flash, FlashCollection
+from .subtitles import SubtitleCue, Subtitles
 from .presets import Preset, PresetCollection
 from .transitions import (
     Animate,
@@ -211,6 +212,8 @@ __all__ = [
     "Line",
     "Polygon",
     "Text",
+    "SubtitleCue",
+    "Subtitles",
     "Spectrum2D",
     "ParticleSystem",
     "ScalarProperty",

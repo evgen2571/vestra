@@ -2103,3 +2103,50 @@ fn explicit_clipping_does_not_hide_invalid_authored_times() {
     project.output.duration = Some(f64::MAX);
     assert!(has(&project, "VESTRA-TIMELINE-OVERFLOW"));
 }
+
+#[test]
+fn emitter_motion_and_pre_roll_validate_with_precise_diagnostics() {
+    use crate::project::{InterpolationName, Keyframe, Point, VisualSource};
+
+    let mut project = particle_project();
+    let VisualSource::ParticleSystem(system) = &mut project.visual.clips[0].source else {
+        panic!("expected particle system");
+    };
+    system.emission.pre_roll = -0.5;
+    system.emitter_keyframes = vec![
+        Keyframe {
+            time: 1.0,
+            value: Point { x: 0.0, y: 0.5 },
+            interpolation: Interpolation::Named(InterpolationName::Linear),
+        },
+        Keyframe {
+            time: 1.0,
+            value: Point {
+                x: f64::INFINITY,
+                y: 0.5,
+            },
+            interpolation: Interpolation::Named(InterpolationName::Linear),
+        },
+    ];
+    let report = validate(
+        &project,
+        ResourceLimits {
+            maximum_keyframes_per_track: 1,
+            ..ResourceLimits::default()
+        },
+    );
+    for (code, field) in [
+        ("VESTRA-PARTICLE-PRE-ROLL", "emission/pre_roll"),
+        ("VESTRA-LIMIT-KEYFRAMES", "emitter_keyframes"),
+        ("VESTRA-KEYFRAME-TIME", "emitter_keyframes/1/time"),
+        ("VESTRA-KEYFRAME-VALUE", "emitter_keyframes/1/value"),
+    ] {
+        let pointer = format!("/visual/clips/0/source/{field}");
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == code && diagnostic.pointer.as_deref() == Some(pointer.as_str())
+            }),
+            "missing {code} at {pointer}"
+        );
+    }
+}

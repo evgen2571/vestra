@@ -26,6 +26,19 @@ pub(in crate::plan) fn compile_with_signals(
     scalar_signal_interner: &mut ScalarSignalInterner,
 ) -> Result<CompiledParticleSystem, Diagnostic> {
     let rate_units = normalize_rate(system.emission.rate)?;
+    let pre_roll_nanos =
+        crate::plan::time::to_nanos(system.emission.pre_roll, "particle pre-roll")?;
+    let emitter_position = if system.emitter_keyframes.is_empty() {
+        None
+    } else {
+        Some(crate::plan::tracks::compile(
+            &crate::project::Track {
+                base_value: system.emitter.origin(),
+                keyframes: system.emitter_keyframes.clone(),
+            },
+            "particle emitter",
+        )?)
+    };
     let lifetime_range = system.particle.lifetime_range.unwrap_or(ScalarRange {
         min: system.particle.lifetime,
         max: system.particle.lifetime,
@@ -98,6 +111,8 @@ pub(in crate::plan) fn compile_with_signals(
     Ok(CompiledParticleSystem {
         seed: system.seed,
         emitter: system.emitter.clone(),
+        emitter_position,
+        pre_roll_nanos,
         rate_units_per_second: rate_units,
         lifetime_nanos,
         lifetime_range,

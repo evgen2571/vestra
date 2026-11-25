@@ -291,3 +291,38 @@ fn preflight_preserves_pure_warnings_when_asset_resolution_fails() {
             .any(|item| item.code == "VESTRA-ASSET-UNUSED")
     );
 }
+
+#[test]
+fn typed_emitter_controls_round_trip_through_sdk_project() {
+    use vestra::{
+        Interpolation, InterpolationName, Keyframe, ParticleEmission, ParticleSystem, Point,
+    };
+
+    let mut source = serde_json::to_value(ParticleSystem {
+        emitter_keyframes: vec![Keyframe {
+            time: 0.0,
+            value: Point { x: 0.25, y: 0.5 },
+            interpolation: Interpolation::Named(InterpolationName::Hold),
+        }],
+        emission: ParticleEmission {
+            rate: 2.0,
+            pre_roll: 1.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .expect("source is serializable");
+    source["type"] = serde_json::json!("particle_system");
+
+    let fixture = vestra::Project::load(fixture("examples/particles/basic-point.json"))
+        .expect("particle project");
+    let mut data = fixture.to_value().expect("fixture values");
+    data["visual"]["clips"][0]["source"] = source.clone();
+    let project = vestra::Project::from_value(data, fixture.base_directory())
+        .expect("emitter controls parse");
+    assert!(Editor::new().validate(&project).is_valid());
+    assert_eq!(
+        project.to_value().expect("project round trip")["visual"]["clips"][0]["source"],
+        source
+    );
+}

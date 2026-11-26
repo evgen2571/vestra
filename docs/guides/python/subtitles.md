@@ -4,6 +4,8 @@ description: Import a plain-text SRT, style caption clips and export a selectabl
 
 # Style and export subtitles
 
+This guide requires Vestra 0.1.6 or later.
+
 `Subtitles.from_srt("captions.srt")` reads numbered, plain-text UTF-8 cues.
 Cue blocks use blank-line separators and `HH:MM:SS,mmm --> HH:MM:SS,mmm`
 timing. Text can span multiple lines. Tags in the cue body are treated as text.

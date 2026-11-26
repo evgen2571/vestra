@@ -16,6 +16,7 @@ and replace its final render call with the example you want to run.
 | You need | Use | Destination |
 | --- | --- | --- |
 | A finished video with sound | [Encode one video](#encode-one-video) | `.mp4` |
+| A video with selectable subtitles | [Export a subtitle track](../../reference/render-outputs.md#selectable-mp4-subtitles) | `.mp4` |
 | A smaller draft | [Render a preview](#render-a-preview-or-change-output-settings) | `.mp4` |
 | A section of the timeline | [Export a range](#export-part-of-the-timeline) | `.mp4`, `.gif` or `.webp` |
 | A looping animation | [Export GIF or animated WebP](#export-gif-or-animated-webp) | `.gif` or `.webp`, without sound |
@@ -24,7 +25,8 @@ and replace its final render call with the example you want to run.
 | Repeated requests in an application | [Reuse prepared state](#application-integration) | Frames or encoded files |
 
 The basic MP4 example below works on Vestra 0.1.4. The preview helper, render
-overrides, and export helpers in the rest of this guide use Vestra 0.1.5 APIs.
+overrides, and still and animation exports require Vestra 0.1.5 or later.
+Selectable MP4 subtitles require Vestra 0.1.6 or later.
 See [Render outputs](../../reference/render-outputs.md) for format details.
 
 ## Encode one video

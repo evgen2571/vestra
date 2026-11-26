@@ -210,7 +210,7 @@ Agent workflow and tool checks are documented in the
 ## CI coverage
 
 The [CI workflow](https://github.com/evgen2571/vestra/blob/develop/.github/workflows/ci.yml)
-runs on pull requests, pushes to `main`, and manual dispatches:
+runs on pull requests, pushes to `develop` or `main`, and manual dispatches.
 
 | Job | Checks | When it runs |
 | --- | --- | --- |
@@ -218,12 +218,14 @@ runs on pull requests, pushes to `main`, and manual dispatches:
 | Rust CPU | Dependency isolation; common, CPU, CPU-only and no-backend facade tests | Native changes; after Style |
 | Rust Integration | WGPU-only isolation/tests, workspace Clippy/tests, strict software WGPU, CLI help and schema freshness | Native changes; after Style |
 | Python | Native package tests, schema validation, canonical examples, showcase smoke and script regressions | Native changes; after Style |
-| Installed wheel (Python job) | Build, clean install, import/typing and short AAC render/probe | Pushes to `main` and manual runs |
+| Installed wheel (Python job) | Build, clean install, native APIs and encoded media checks | Native changes pushed to `develop` or `main`, and manual runs |
+| Native | CLI tests, packaged executable and render verification on macOS and Windows | After Style for native changes |
+| Release packaging | Cross-platform wheels, CLI archives, sdist and artifact inventory | Packaging changes and manual runs |
 | CI Success | Require successful checks; accept only the intended native-job skips | Every run |
 
-Changes limited to Markdown, `docs/`, and `LICENSE` skip the native jobs. Any
-other path triggers them, including manifests, lockfiles, fixtures, scripts and
-workflows. Manual runs execute all checks. Failed or cancelled jobs fail the gate.
+Documentation-only changes skip the native jobs. The workflow defines the
+excluded documentation paths and the paths that trigger release packaging.
+Manual runs execute all checks. Failed or cancelled jobs fail the gate.
 
 CI's WGPU evidence is [software correctness](gpu-validation.md#verify-software-safe-correctness).
 Hardware validation and visual inspection remain separate checks.

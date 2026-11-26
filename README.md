@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/vestra/"><img src="https://img.shields.io/pypi/v/vestra.svg" alt="Vestra version on PyPI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/evgen2571/vestra" alt="MIT license"></a>
+  <a href="https://github.com/evgen2571/vestra/blob/main/LICENSE"><img src="https://img.shields.io/github/license/evgen2571/vestra" alt="MIT license"></a>
   <a href="https://github.com/evgen2571/vestra/actions/workflows/ci.yml"><img src="https://github.com/evgen2571/vestra/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
 </p>
 
@@ -13,8 +13,8 @@
 </p>
 
 <p align="center">
-  <a href="docs/assets/hero/reel.mp4">Full video</a> ·
-  <a href="examples/showcase/readme-hero/main.py">Demo source</a> ·
+  <a href="https://evgen2571.github.io/vestra/assets/hero/reel.mp4">Full video</a> ·
+  <a href="https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-hero/main.py">Demo source</a> ·
   <a href="https://evgen2571.github.io/vestra/">Documentation</a>
 </p>
 
@@ -84,6 +84,8 @@ And now I can actually use it for the project that started all of this.
 - [Masks and track mattes](https://evgen2571.github.io/vestra/guides/python/masks/)
 - [Blend modes](https://evgen2571.github.io/vestra/benchmarks/workloads/#blend_modes) and [transitions](https://evgen2571.github.io/vestra/guides/python/transitions-flashes-and-presets/)
 - [Visual effects](https://evgen2571.github.io/vestra/guides/python/effects/)
+- [Text layers](https://evgen2571.github.io/vestra/reference/sources/text/)
+- [Audio editing and mixing](https://evgen2571.github.io/vestra/guides/python/audio/)
 - [Audio-reactive animation](https://evgen2571.github.io/vestra/guides/python/signals-and-audio-reactivity/)
 - [Export MP4, GIF, animated WebP, and still images](https://evgen2571.github.io/vestra/reference/render-outputs/#formats)
 - [Convert rendered frames to NumPy arrays](https://evgen2571.github.io/vestra/guides/python/rendering-and-preparation/#use-frames-with-numpy)
@@ -111,13 +113,13 @@ example. That helps me understand the problem and improve the code.
 
 ## Contributing
 
-See the [contribution guide](CONTRIBUTING.md) for reporting issues and submitting
+See the [contribution guide](https://github.com/evgen2571/vestra/blob/main/CONTRIBUTING.md) for reporting issues and submitting
 changes. The development docs cover [building from source](https://evgen2571.github.io/vestra/development/source-builds/)
 and [running checks](https://evgen2571.github.io/vestra/development/testing/).
 
 ## License
 
-Vestra is released under the [MIT License](LICENSE). See the
-[third-party notices](THIRD_PARTY_NOTICES.md) and
-[hero video credits](examples/showcase/readme-hero/README.md#credits) for
+Vestra is released under the [MIT License](https://github.com/evgen2571/vestra/blob/main/LICENSE). See the
+[third-party notices](https://github.com/evgen2571/vestra/blob/main/THIRD_PARTY_NOTICES.md) and
+[hero video credits](https://github.com/evgen2571/vestra/blob/main/examples/showcase/readme-hero/README.md#credits) for
 third-party software and assets.

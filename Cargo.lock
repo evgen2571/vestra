@@ -2669,7 +2669,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vestra"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "image",
  "serde",
@@ -2685,7 +2685,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-cli"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -2703,7 +2703,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-core"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "serde",
  "serde_json",
@@ -2712,7 +2712,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-media"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "ffmpeg-next",
  "image",
@@ -2728,7 +2728,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-observability"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -2741,7 +2741,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-progress"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "serde",
  "serde_json",
@@ -2750,7 +2750,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-python"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "fontdb",
  "pyo3",
@@ -2762,7 +2762,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-render"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "image",
  "serde_json",
@@ -2774,7 +2774,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-render-common"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "cosmic-text",
  "fontdb",
@@ -2788,7 +2788,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-render-cpu"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "image",
  "serde_json",
@@ -2800,7 +2800,7 @@ dependencies = [
 
 [[package]]
 name = "vestra-render-wgpu"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bytemuck",
  "image",

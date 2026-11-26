@@ -97,6 +97,8 @@ the original project.
 
 ## Selectable MP4 subtitles
 
+Selectable subtitle tracks require Vestra 0.1.6 or later.
+
 Pass plain-text cues to the export request to add a selectable `mov_text` track.
 Each cue carries its start and end in project seconds followed by UTF-8 text.
 MP4 players can display or hide this track independently of the video. Players

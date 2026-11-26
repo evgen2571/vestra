@@ -10,6 +10,7 @@ Use these guides when you want to do something specific with a project.
 ## Build and animate a project
 
 - [Set up a composition](python/projects-and-compositions.md) and [add text, shapes, or footage](python/sources-and-layers.md).
+- [Style and export subtitles](python/subtitles.md).
 - [Animate properties with keyframes](python/animation.md) or [move layers together](python/nested-compositions.md).
 - [Reveal content with masks](python/masks.md), [add visual effects](python/effects.md), or [connect two shots](python/transitions-flashes-and-presets.md).
 - [Mix a soundtrack](python/audio.md) or [make graphics react to sound](python/signals-and-audio-reactivity.md).
